@@ -1,0 +1,1219 @@
+<!-- START OF FILE HOT_v30_Shear_Supply_Fix.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aluminium Hot Rolling Simulator (v30 Improved)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    /* CSSに変更はありません */
+    body { margin: 0; overflow: hidden; font-family: "Meiryo", "Yu Gothic", sans-serif; background-color: #eceff1; color: #333; }
+    #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; background: radial-gradient(circle at center, #f5f7fa 0%, #cfd8dc 100%); }
+    
+    #sidebar {
+        position: absolute; top: 0; left: 0; bottom: 0; width: 340px;
+        background: rgba(255, 255, 255, 0.9); border-right: 1px solid #b2dfdb;
+        display: flex; flex-direction: column; z-index: 10;
+        box-shadow: 2px 0 20px rgba(0,0,0,0.05); overflow-y: auto;
+        backdrop-filter: blur(8px);
+    }
+    .brand-header { padding: 20px 15px; background: linear-gradient(135deg, #263238, #212121); color: #fff; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+    .brand-title { font-weight: 800; font-size: 18px; letter-spacing: 1px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+    
+    .panel-section { padding: 15px; border-bottom: 1px solid #e0f2f1; }
+    .section-title { font-size: 12px; font-weight: 700; color: #37474f; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    .toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .toggle-label { font-size: 13px; font-weight: 600; color: #546e7a; }
+    .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cfd8dc; transition: .4s; border-radius: 20px; }
+    .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    input:checked + .slider { background-color: #546e7a; }
+    input:checked + .slider:before { transform: translateX(20px); }
+    
+    .control-group { margin-bottom: 15px; }
+    .control-label { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #455a64; }
+    input[type=range] { width: 100%; cursor: pointer; accent-color: #455a64; height: 4px; background: #b0bec5; border-radius: 2px; appearance: none; }
+    input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; background: #37474f; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: transform 0.1s; }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+    
+    .btn { border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.3s; width: 100%; margin-top: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .btn-primary { background: linear-gradient(135deg, #546e7a, #37474f); color: white; }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(55,71,79,0.3); }
+    .btn-danger { background: linear-gradient(135deg, #ef5350, #c62828); color: white; }
+    .btn-secondary { background: #fff; color: #37474f; border: 1px solid #b0bec5; }
+    .btn-secondary:hover { background: #eceff1; }
+    
+    .pass-list { list-style: none; padding: 0; margin: 0; font-size: 11px; }
+    .pass-item { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #f1f8e9; border-radius: 6px; margin-bottom: 4px; background: rgba(255,255,255,0.5); transition: 0.2s; }
+    .pass-item.active { background: #eceff1; color: #263238; font-weight: bold; border-left: 4px solid #546e7a; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .pass-item.done { color: #b0bec5; text-decoration: line-through; opacity: 0.7; }
+    
+    #status-bar {
+        position: absolute; bottom: 20px; left: 360px; right: 20px;
+        display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px;
+        z-index: 10; pointer-events: none;
+    }
+    .metric-card {
+        background: rgba(255, 255, 255, 0.85); padding: 15px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.8);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05); text-align: center;
+        backdrop-filter: blur(5px); transition: transform 0.2s;
+    }
+    .metric-card:hover { transform: translateY(-5px); }
+    .metric-label { font-size: 11px; color: #78909c; font-weight: 800; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .metric-value { font-family: "Segoe UI", sans-serif; font-size: 24px; font-weight: 800; color: #37474f; }
+    .metric-unit { font-size: 12px; color: #90a4ae; font-weight: 600; }
+    
+    .overlay-msg {
+        position: absolute; top: 30px; right: 30px; padding: 15px 30px;
+        background: rgba(38, 50, 56, 0.9); color: #fff; border-radius: 50px; font-size: 14px; font-weight: 600;
+        opacity: 0; transition: opacity 0.5s, transform 0.5s; z-index: 20; pointer-events: none;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2); transform: translateY(-20px);
+        backdrop-filter: blur(5px);
+    }
+    .show-msg { opacity: 1; transform: translateY(0); }
+    
+    #control-hint {
+        position: absolute; top: 10px; left: 360px; font-size: 11px; color: #90a4ae; z-index: 5;
+        background: rgba(255,255,255,0.6); padding: 5px 10px; border-radius: 15px;
+    }
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div id="control-hint"><i class="fa-solid fa-mouse"></i> 左ドラッグ: 回転 | 右ドラッグ: 平行移動 | ホイール: ズーム</div>
+
+<div id="sidebar">
+    <div class="brand-header"><i class="fa-solid fa-industry"></i><span class="brand-title">HYPER MILL v30</span></div>
+    
+    <div class="panel-section">
+        <div class="section-title"><i class="fa-solid fa-ruler-combined"></i> スラブ初期サイズ</div>
+        <div class="control-group">
+            <div class="control-label"><span>厚み (Initial Th.)</span> <span id="lbl-init-th">400 mm</span></div>
+            <input type="range" id="rng-init-th" min="200" max="600" value="400" step="10">
+        </div>
+        <div class="control-group">
+            <div class="control-label"><span>幅 (Width)</span> <span id="lbl-init-wid">1500 mm</span></div>
+            <input type="range" id="rng-init-wid" min="800" max="2200" value="1500" step="50">
+        </div>
+        <div class="control-group">
+            <div class="control-label"><span>長さ (Length)</span> <span id="lbl-init-len">4000 mm</span></div>
+            <input type="range" id="rng-init-len" min="2000" max="6000" value="4000" step="100">
+        </div>
+        <button class="btn btn-secondary" id="btn-apply-size"><i class="fa-solid fa-check"></i> サイズ適用＆リセット</button>
+    </div>
+
+    <div class="panel-section">
+        <div class="section-title"><i class="fa-solid fa-microchip"></i> 操作モード</div>
+        <div class="toggle-row">
+            <span class="toggle-label">自動スケジュール</span>
+            <label class="switch"><input type="checkbox" id="chk-auto" checked><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row" style="margin-bottom:15px;">
+            <span class="toggle-label" style="font-weight:400; font-size:12px;">供給アニメーション</span>
+            <label class="switch" style="transform:scale(0.8);"><input type="checkbox" id="chk-supply-anim" checked><span class="slider"></span></label>
+        </div>
+        <div id="auto-controls">
+            <button class="btn btn-primary" id="btn-start"><i class="fa-solid fa-play"></i> 圧延サイクル開始</button>
+            <div style="margin-top:15px; max-height: 150px; overflow-y:auto; border:1px solid #f1f8e9; border-radius:8px;">
+                <ul class="pass-list" id="pass-list-ul"></ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-section" id="manual-controls" style="display:none; background:#f9fbe7; border-radius: 8px; margin: 10px;">
+        <div class="section-title"><i class="fa-solid fa-sliders"></i> 手動操作</div>
+        <div class="control-group">
+            <div class="control-label"><span>ロールギャップ</span> <span id="lbl-gap">400 mm</span></div>
+            <input type="range" id="rng-gap" min="10" max="600" value="400" step="1">
+        </div>
+        <div class="control-group">
+            <div class="control-label"><span>ライン速度</span> <span id="lbl-speed">0 mpm</span></div>
+            <input type="range" id="rng-speed" min="-300" max="300" value="0" step="10">
+            <div style="font-size:10px; color:#90a4ae; text-align:center; margin-top:4px;">
+                <i class="fa-solid fa-backward"></i> REV <span style="margin:0 10px">0</span> FWD <i class="fa-solid fa-forward"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel-section">
+        <div class="section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> エフェクト</div>
+        <div class="toggle-row">
+            <span class="toggle-label">クーラントスプレー</span>
+            <label class="switch"><input type="checkbox" id="chk-coolant" checked><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+            <span class="toggle-label">水蒸気演出</span>
+            <label class="switch"><input type="checkbox" id="chk-steam" checked><span class="slider"></span></label>
+        </div>
+    </div>
+
+    <div class="panel-section" style="border:none;">
+        <button class="btn btn-danger" id="btn-reset"><i class="fa-solid fa-rotate-right"></i> 初期状態に戻す</button>
+    </div>
+</div>
+
+<div id="status-bar">
+    <div class="metric-card">
+        <div class="metric-label">Gap Center Height</div>
+        <div><span class="metric-value" id="val-center-h">200.0</span> <span class="metric-unit">mm</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Slab Length</div>
+        <div><span class="metric-value" id="val-length">4.0</span> <span class="metric-unit">m</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Line Speed</div>
+        <div><span class="metric-value" id="val-speed">0</span> <span class="metric-unit">mpm</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Roll Force</div>
+        <div><span class="metric-value" id="val-force">0</span> <span class="metric-unit">ton</span></div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-label">Slab Temp</div>
+        <div><span class="metric-value" id="val-temp" style="color:#ff7043;">450</span> <span class="metric-unit">°C</span></div>
+    </div>
+</div>
+
+<div id="msg-box" class="overlay-msg"><i class="fa-solid fa-circle-info"></i> <span id="msg-text">System Ready</span></div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// --- 1. CONFIGURATION ---
+const CONFIG = {
+    SCALE: 0.02,
+    MACHINE: {
+        WR_DIAMETER: 900,
+        BR_DIAMETER: 1500,
+        ROLL_WIDTH: 3200,
+        MAX_GAP: 600,
+        MIN_GAP: 10,
+        GUIDE_DISTANCE: 2500,
+        GUIDE_HEIGHT: 600,
+        TABLE_ROLL_DIAMETER: 400
+    },
+    SUPPLY: {
+        ENTRY_X: -5500,     
+        SIDE_Z: -3500, // FIX: Moved to Near Side (Operator Side)
+        TRANSFER_OFFSET: 7500 
+    },
+    PHYSICS: {
+        DENSITY: 2.7,
+        DEFORMATION_RESISTANCE: 50,
+        COOLING_RATE_AIR: 0.1,
+        COOLING_RATE_WATER: 0.3,
+        ACCEL_AUTO: 150,
+        ACCEL_MANUAL: 200,
+        GAP_SPEED: 15,
+        GUIDE_SPEED: 600
+    },
+    COLORS: {
+        BG: 0xf0f4f5,
+        HOUSING: 0x455a64, 
+        SLAB: 0xe0e0e0,
+        ROLL_FACE: 0xffffff,
+        ROLL_CORE: 0x455a64,
+        COOLANT: 0xb2ebf2,
+        GRID: 0xb0bec5,
+        GUIDE_FRAME: 0x90a4ae,
+        GUIDE_ROLLER: 0xb0bec5,
+        TABLE_FRAME: 0x78909c,
+        SHEAR_FRAME: 0x455a64,
+        SHEAR_BLADE: 0xffeb3b,
+        SHEAR_CYL: 0xcfcfcf
+    },
+    SCHEDULE: [
+        { pass: 1, gap: 350, speed: 80, dir: 1 },
+        { pass: 2, gap: 300, speed: 120, dir: -1 },
+        { pass: 3, gap: 250, speed: 160, dir: 1 },
+        { pass: 4, gap: 200, speed: 200, dir: -1 },
+        { pass: 5, gap: 150, speed: 250, dir: 1 },
+        { pass: 6, gap: 100, speed: 280, dir: -1 },
+        { pass: 7, gap: 60, speed: 300, dir: 1 }
+    ]
+};
+
+// --- 2. UTILITIES ---
+class EventBus {
+    constructor() { this.listeners = {}; }
+    on(event, callback) { (this.listeners[event] = this.listeners[event] || []).push(callback); }
+    emit(event, data) { if (this.listeners[event]) this.listeners[event].forEach(cb => cb(data)); }
+}
+
+const SimUtils = {
+    S: CONFIG.SCALE,
+    scale: (val) => val * CONFIG.SCALE,
+    toRad: (deg) => deg * (Math.PI / 180)
+};
+
+class ShapeHelpers {
+    static drawRoundedBox(shape, x, y, w, h, r) {
+        shape.moveTo(x + r, y);
+        shape.lineTo(x + w - r, y);
+        shape.quadraticCurveTo(x + w, y, x + w, y + r);
+        shape.lineTo(x + w, y + h - r);
+        shape.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        shape.lineTo(x + r, y + h);
+        shape.quadraticCurveTo(x, y + h, x, y + h - r);
+        shape.lineTo(x, y + r);
+        shape.quadraticCurveTo(x, y, x + r, y);
+    }
+}
+
+class TextureGenerator {
+    static getBrushedMetal() {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,size,size);
+        for(let i=0; i<8; i++) {
+            ctx.fillStyle = (i%2===0) ? '#e0e0e0' : '#f5f5f5';
+            ctx.fillRect(0, i*(size/8), size, size/8);
+        }
+        for(let i=0; i<2000; i++) {
+            const y = Math.random() * size;
+            const len = Math.random() * 100 + 20;
+            const offset = Math.random() * size;
+            ctx.fillStyle = '#bdbdbd';
+            ctx.globalAlpha = 0.1; 
+            ctx.fillRect(offset, y, len, 1);
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+        return tex;
+    }
+}
+
+// --- 3. LOGIC ---
+class SlabState {
+    constructor(thickness = 400, width = 1500, length = 4000) {
+        this.reset(thickness, width, length);
+    }
+    reset(thickness, width, length) {
+        this.thickness = thickness;
+        this.width = width;
+        this.length = length;
+        this.initialThickness = thickness;
+        const entryX_M = CONFIG.SUPPLY.ENTRY_X / 1000;
+        const len_M = length / 1000;
+        this.xMax = entryX_M + (len_M / 2.0); 
+        this.xMin = this.xMax - len_M;        
+        this.inBite = false;
+        this.rollingActive = false;
+        this.temperature = 450;
+        this.rollForce = 0;
+        this.currentSpeed = 0;
+        this.visible = true; 
+    }
+    clone() {
+        const s = new SlabState();
+        Object.assign(s, this);
+        return s;
+    }
+}
+
+class MillState {
+    constructor() {
+        this.gap = CONFIG.MACHINE.MAX_GAP;
+        this.targetGap = CONFIG.MACHINE.MAX_GAP;
+        this.targetSpeed = 0;
+        this.currentSpeed = 0;
+        this.mode = 'AUTO';
+        this.passIndex = -1;
+        this.tableHeightL = 0;
+        this.tableHeightR = 0;
+        this.centerHeight = 0;
+        this.guideGap = 2500;
+    }
+}
+
+class SupplyState {
+    constructor() {
+        this.isActive = false;
+        this.phase = 'IDLE'; 
+        this.tiltAngle = 0; 
+        this.runInDist = 0; 
+        this.crossDist = 0; 
+        this.enableAnimation = true;
+    }
+}
+
+class SupplyController {
+    constructor(eventBus, supplyState) {
+        this.eventBus = eventBus;
+        this.state = supplyState;
+        this._setupListeners();
+    }
+    _setupListeners() {
+        this.eventBus.on('CMD_START_SUPPLY', () => {
+            if (this.state.enableAnimation) this.startSequence();
+            else this.eventBus.emit('SYS_SUPPLY_COMPLETE');
+        });
+        this.eventBus.on('CMD_SET_SUPPLY_OPTS', (opts) => {
+            if(opts.anim !== undefined) this.state.enableAnimation = opts.anim;
+        });
+        this.eventBus.on('CMD_RESET', () => {
+            this.state.phase = 'IDLE';
+            this.state.tiltAngle = 0;
+            this.state.runInDist = 0;
+            this.state.crossDist = 0;
+            this.state.isActive = false;
+        });
+    }
+    startSequence() {
+        this.state.isActive = true;
+        this.state.phase = 'TILTING';
+        this.state.tiltAngle = 0;
+        this.state.runInDist = 0;
+        this.state.crossDist = 0;
+        this.eventBus.emit('SYS_MESSAGE', '供給: 1. 転倒 (Down-ending)');
+    }
+    update(dt) {
+        if (!this.state.isActive) return;
+        if (this.state.phase === 'TILTING') {
+            this.state.tiltAngle += 0.5 * dt;
+            if (this.state.tiltAngle >= 1.0) {
+                this.state.tiltAngle = 1.0;
+                this.state.phase = 'RUN_IN';
+                this.eventBus.emit('SYS_MESSAGE', '供給: 2. 縦送り (Run-In)');
+            }
+        } else if (this.state.phase === 'RUN_IN') {
+            this.state.runInDist += 0.4 * dt;
+            if (this.state.runInDist >= 1.0) {
+                this.state.runInDist = 1.0;
+                this.state.phase = 'CROSS_TRANSFER';
+                this.eventBus.emit('SYS_MESSAGE', '供給: 3. 横送り (Cross Transfer)');
+            }
+        } else if (this.state.phase === 'CROSS_TRANSFER') {
+            this.state.crossDist += 0.3 * dt;
+            if (this.state.crossDist >= 1.0) {
+                this.state.crossDist = 1.0;
+                this.state.phase = 'IDLE';
+                this.eventBus.emit('SYS_SUPPLY_COMPLETE');
+                this.state.isActive = false;
+            }
+        }
+    }
+}
+
+class MillController {
+    constructor(eventBus, millState, slabState) {
+        this.eventBus = eventBus;
+        this.mill = millState;
+        this.slab = slabState;
+        this._setupListeners();
+    }
+    _setupListeners() {
+        this.eventBus.on('CMD_START_AUTO', () => this.eventBus.emit('CMD_START_SUPPLY'));
+        this.eventBus.on('SYS_SUPPLY_COMPLETE', () => this.startRolling());
+        this.eventBus.on('CMD_SET_MODE', (mode) => this.mill.mode = mode);
+        this.eventBus.on('CMD_MANUAL_CTRL', (data) => {
+            if (data.gap !== undefined) this.mill.targetGap = data.gap;
+            if (data.speed !== undefined) this.mill.targetSpeed = data.speed;
+        });
+    }
+    startRolling() {
+        this.slab.visible = true; 
+        this.mill.mode = 'AUTO';
+        this.mill.passIndex = 0;
+        this.eventBus.emit('SYS_MESSAGE', '圧延開始 (Rolling Started)');
+        this.eventBus.emit('STATE_PASS_CHANGED', 0);
+    }
+    update() {
+        if (this.mill.mode !== 'AUTO' || this.mill.passIndex < 0) return;
+        const schedule = CONFIG.SCHEDULE[this.mill.passIndex];
+        if (!schedule) return;
+        this.mill.targetGap = schedule.gap;
+        if (Math.abs(this.mill.gap - schedule.gap) < 5.0) {
+            this.mill.targetSpeed = schedule.dir * schedule.speed;
+        }
+        const safeDistance = 6.0; 
+        let isClear = false;
+        if (schedule.dir === 1 && this.slab.xMin > safeDistance) isClear = true;
+        if (schedule.dir === -1 && this.slab.xMax < -safeDistance) isClear = true;
+        if (isClear) this.advancePass();
+    }
+    advancePass() {
+        this.mill.targetSpeed = 0;
+        this.mill.passIndex++;
+        if (this.mill.passIndex >= CONFIG.SCHEDULE.length) {
+            this.mill.passIndex = -1;
+            this.eventBus.emit('SYS_MESSAGE', '全パス完了！');
+            this.eventBus.emit('STATE_FINISHED');
+        } else {
+            this.eventBus.emit('STATE_PASS_CHANGED', this.mill.passIndex);
+        }
+    }
+}
+
+class PhysicsEngine {
+    constructor(eventBus) {
+        this.eventBus = eventBus;
+        this.slab = new SlabState();
+        this.mill = new MillState();
+        this.supply = new SupplyState();
+        this.millCtrl = new MillController(eventBus, this.mill, this.slab);
+        this.supplyCtrl = new SupplyController(eventBus, this.supply);
+        this.env = { coolantOn: true, steamOn: true };
+        this._setupListeners();
+    }
+    _setupListeners() {
+        this.eventBus.on('CMD_RESET', () => this.reset());
+        this.eventBus.on('CMD_SET_SLAB_SIZE', (d) => this.slab.reset(d.th, d.wid, d.len));
+        this.eventBus.on('CMD_SET_ENV', (d) => Object.assign(this.env, d));
+        this.eventBus.on('CMD_START_SUPPLY', () => { if(this.supply.enableAnimation) this.slab.visible = false; });
+    }
+    reset() {
+        this.mill.targetGap = this.slab.initialThickness;
+        this.mill.gap = this.slab.initialThickness;
+        this.mill.passIndex = -1;
+        this.mill.targetSpeed = 0;
+        this.mill.currentSpeed = 0;
+        this.slab.reset(this.slab.initialThickness, this.slab.width, this.slab.length);
+        this.mill.guideGap = this.slab.width + 500;
+        if (this.supply.enableAnimation) this.slab.visible = false;
+        this.eventBus.emit('STATE_RESET', this.getSnapshot());
+    }
+    update(dt) {
+        this.supplyCtrl.update(dt);
+        this.millCtrl.update();
+        this._updateActuators(dt);
+        if (this.slab.visible) {
+            this._updateDynamics(dt);
+            this._updateSideGuides(dt);
+            this._updateThermal(dt);
+        }
+        this.eventBus.emit('STATE_UPDATE', this.getSnapshot());
+    }
+    _updateActuators(dt) {
+        const gapDiff = this.mill.targetGap - this.mill.gap;
+        if (Math.abs(gapDiff) > 0.05) this.mill.gap += gapDiff * CONFIG.PHYSICS.GAP_SPEED * dt;
+        else this.mill.gap = this.mill.targetGap;
+        const accel = (this.mill.mode === 'AUTO' ? CONFIG.PHYSICS.ACCEL_AUTO : CONFIG.PHYSICS.ACCEL_MANUAL) * dt;
+        if (this.mill.currentSpeed < this.mill.targetSpeed) this.mill.currentSpeed = Math.min(this.mill.targetSpeed, this.mill.currentSpeed + accel);
+        else if (this.mill.currentSpeed > this.mill.targetSpeed) this.mill.currentSpeed = Math.max(this.mill.targetSpeed, this.mill.currentSpeed - accel);
+        this.mill.centerHeight = this.slab.initialThickness / 2.0;
+    }
+    _updateSideGuides(dt) {
+        const guideCenterM = CONFIG.MACHINE.GUIDE_DISTANCE / 1000;
+        const clampGap = this.slab.width;
+        let target = this.slab.width + 600;
+        const guideZoneMin = guideCenterM - 1.0;
+        const guideZoneMax = guideCenterM + 1.0;
+        if ((this.slab.xMax > guideZoneMin && this.slab.xMin < guideZoneMax) && Math.abs(this.mill.currentSpeed) > 10 && this.mill.targetSpeed > 0) {
+            target = clampGap;
+        }
+        const diff = target - this.mill.guideGap;
+        const moveSpeed = CONFIG.PHYSICS.GUIDE_SPEED * dt;
+        if (Math.abs(diff) < moveSpeed) this.mill.guideGap = target; 
+        else this.mill.guideGap += Math.sign(diff) * moveSpeed;
+    }
+    _updateDynamics(dt) {
+        const isForward = this.mill.targetSpeed >= 0;
+        const hSlab = this.slab.thickness;
+        const hGap = this.mill.gap;
+        const centerOffset = this.mill.centerHeight;
+        let targetTableL, targetTableR;
+        if (isForward) { targetTableL = centerOffset - (hSlab / 2.0); targetTableR = centerOffset - (hGap / 2.0); } 
+        else { targetTableR = centerOffset - (hSlab / 2.0); targetTableL = centerOffset - (hGap / 2.0); }
+        this.mill.tableHeightL += (targetTableL - this.mill.tableHeightL) * 0.1;
+        this.mill.tableHeightR += (targetTableR - this.mill.tableHeightR) * 0.1;
+
+        const vMillMPS = this.mill.currentSpeed / 60;
+        const currentGap = Math.max(this.mill.gap, 1.0);
+        const inBite = (this.slab.xMin < 0 && this.slab.xMax > 0);
+        this.slab.inBite = inBite;
+        this.slab.rollForce = 0;
+        if (inBite && this.slab.thickness > currentGap) {
+            this.slab.rollingActive = true;
+            const hIn = this.slab.thickness;
+            const hOut = currentGap;
+            const vOut = vMillMPS; const vIn = vMillMPS * (hOut / hIn);
+            if (vMillMPS > 0) { this.slab.xMax += vOut * dt; this.slab.xMin += vIn * dt; } 
+            else { this.slab.xMin += vOut * dt; this.slab.xMax += vIn * dt; }
+            const R = CONFIG.MACHINE.WR_DIAMETER / 2;
+            const contactLength = Math.sqrt(R * (hIn - hOut));
+            this.slab.rollForce = (CONFIG.PHYSICS.DEFORMATION_RESISTANCE * this.slab.width * contactLength) / 9800;
+            this.slab.currentSpeed = Math.abs(vOut) * 60;
+        } else {
+            if (this.slab.rollingActive) {
+                if (this.slab.xMin > 0 || this.slab.xMax < 0) {
+                    const newLengthM = Math.abs(this.slab.xMax - this.slab.xMin);
+                    this.slab.length = newLengthM * 1000;
+                    this.slab.thickness = currentGap; this.slab.rollingActive = false;
+                }
+            }
+            this.slab.xMin += vMillMPS * dt; this.slab.xMax += vMillMPS * dt;
+            this.slab.currentSpeed = Math.abs(vMillMPS) * 60;
+        }
+    }
+    _updateThermal(dt) {
+        const rate = this.env.coolantOn ? CONFIG.PHYSICS.COOLING_RATE_WATER : CONFIG.PHYSICS.COOLING_RATE_AIR;
+        this.slab.temperature -= dt * rate;
+    }
+    getSnapshot() { 
+        return { slab: this.slab.clone(), mill: { ...this.mill }, supply: { ...this.supply }, env: { ...this.env } }; 
+    }
+}
+
+// --- 5. VISUALIZATION ---
+class MaterialFactory {
+    static init() {
+        const metalTex = TextureGenerator.getBrushedMetal();
+        const brightMetal = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, map: metalTex, roughnessMap: metalTex, roughness: 0.20, metalness: 0.60 
+        });
+        const steelHousing = new THREE.MeshPhysicalMaterial({ 
+            color: CONFIG.COLORS.HOUSING, metalness: 0.7, roughness: 0.6, 
+            transparent: true, opacity: 0.45, side: THREE.DoubleSide, flatShading: false
+        });
+        this.mats = {
+            rollFace: brightMetal,
+            rollNeck: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.ROLL_CORE, roughness: 0.5 }),
+            housing: steelHousing,
+            slab: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SLAB, roughness: 0.4, metalness: 0.3 }),
+            supplySlab: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SLAB, roughness: 0.4, metalness: 0.3 }),
+            nozzle: new THREE.MeshStandardMaterial({ color: 0x90a4ae }),
+            guideFrame: new THREE.MeshPhysicalMaterial({ color: CONFIG.COLORS.GUIDE_FRAME, transparent: true, opacity: 0.6 }),
+            guideRoller: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.GUIDE_ROLLER }),
+            tableFrame: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.TABLE_FRAME, roughness: 0.8 }),
+            tilterFrame: new THREE.MeshStandardMaterial({ color: 0xffcc80, roughness: 0.7 }),
+            shearFrame: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SHEAR_FRAME, roughness: 0.6 }),
+            shearBlade: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SHEAR_BLADE, metalness: 0.6, roughness: 0.3 }),
+            shearCyl: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SHEAR_CYL, metalness: 0.8, roughness: 0.2 })
+        };
+    }
+    static get(name) { return this.mats[name]; }
+}
+
+class DeformableSlabMesh {
+    constructor(materialName) {
+        this.geometry = new THREE.BoxGeometry(1, 1, 1, 40, 5, 9);
+        this.basePositions = this.geometry.attributes.position.clone();
+        this.mesh = new THREE.Mesh(this.geometry, MaterialFactory.get(materialName));
+    }
+
+    update(length, thickness, width, initialThickness, centerX, centerY) {
+        const S = SimUtils.S;
+        const L = length * S; const T = thickness * S; const W = width * S;
+        const reductionRatio = Math.max(0, 1.0 - (thickness / initialThickness));
+        
+        const waniguchiFactor = 0.27 * reductionRatio; 
+        const tongueFactor = 1.2 * reductionRatio;    
+
+        const pos = this.geometry.attributes.position;
+        const base = this.basePositions;
+        const count = pos.count;
+
+        for (let i = 0; i < count; i++) {
+            const ix = base.getX(i); const iy = base.getY(i); const iz = base.getZ(i);
+            let finalX = ix * L; let finalY = iy * T; let finalZ = iz * W;
+
+            const distFromCenter = Math.abs(ix * 2); 
+            if (distFromCenter > 0.85) {
+                const ramp = Math.pow((distFromCenter - 0.85) / 0.15, 2);
+                const dir = Math.sign(ix); 
+                const normZ = iz * 2;
+                const wProfile = 1.0 - (normZ * normZ); 
+                const wExt = (W * 0.15) * tongueFactor * ramp * wProfile;
+                finalX += dir * wExt;
+
+                const normY = iy * 2;
+                const tProfile = (normY * normY); 
+                const tExt = (L * 0.05) * waniguchiFactor * ramp * tProfile;
+                finalX += dir * tExt;
+            }
+            pos.setXYZ(i, finalX, finalY, finalZ);
+        }
+        pos.needsUpdate = true;
+        this.mesh.geometry.computeVertexNormals();
+        this.mesh.position.set(centerX, centerY, 0); 
+    }
+    
+    setVisible(visible) { this.mesh.visible = visible; }
+    getMesh() { return this.mesh; }
+}
+
+class MeshFactory {
+    static createRoll(diameter) {
+        const radius = (diameter * SimUtils.S) / 2;
+        const width = CONFIG.MACHINE.ROLL_WIDTH * SimUtils.S;
+        const group = new THREE.Group();
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, width, 64), MaterialFactory.get('rollFace'));
+        barrel.rotation.x = Math.PI / 2; barrel.castShadow = true;
+        const neckRadius = radius * 0.6; const neckLen = width * 0.2;
+        const neckMat = MaterialFactory.get('rollNeck');
+        const neckL = new THREE.Mesh(new THREE.CylinderGeometry(neckRadius, neckRadius, neckLen, 32), neckMat);
+        neckL.rotation.x = Math.PI / 2; neckL.position.z = -(width + neckLen) / 2;
+        const neckR = neckL.clone();
+        neckR.rotation.x = Math.PI / 2; neckR.position.z = (width + neckLen) / 2;
+        const tipW = neckRadius * 0.6; const tipH = neckRadius * 1.4; const tipLen = width * 0.08;
+        const tipGeo = new THREE.BoxGeometry(tipW, tipH, tipLen);
+        const tipL = new THREE.Mesh(tipGeo, MaterialFactory.get('rollFace'));
+        tipL.position.z = -(width/2 + neckLen + tipLen/2);
+        const tipR = tipL.clone();
+        tipR.position.z = (width/2 + neckLen + tipLen/2);
+        group.add(barrel, neckL, neckR, tipL, tipR);
+        return group;
+    }
+
+    static createHousing() {
+        const S = SimUtils.S;
+        const gap = (CONFIG.MACHINE.ROLL_WIDTH * S / 2) + 12; 
+        const group = new THREE.Group();
+        const mat = MaterialFactory.get('housing');
+        const postW = 1200 * S; const winW = 1400 * S; const totalW = postW*2 + winW;
+        const totalH = 8500 * S; const thick = 1500 * S; const cornerR = 300 * S; 
+        
+        const shape = new THREE.Shape();
+        ShapeHelpers.drawRoundedBox(shape, -totalW/2, -totalH/2, totalW, totalH, cornerR/2);
+        const hole = new THREE.Path();
+        const winH = totalH * 0.65;
+        ShapeHelpers.drawRoundedBox(hole, -winW/2, -winH/2, winW, winH, cornerR);
+        shape.holes.push(hole);
+
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: true, bevelThickness: 5 * S, bevelSize: 5 * S, bevelSegments: 2 });
+        geo.translate(0, 0, -thick/2);
+
+        const frameDrive = new THREE.Mesh(geo, mat); frameDrive.position.z = -gap - thick/2;
+        const frameOp = new THREE.Mesh(geo, mat); frameOp.position.z = gap + thick/2;
+        const capGeo = new THREE.CylinderGeometry(400*S, 400*S, 800*S, 32);
+        const cap1 = new THREE.Mesh(capGeo, mat); cap1.position.set(0, totalH/2 + 400*S, -gap - thick/2);
+        const cap2 = new THREE.Mesh(capGeo, mat); cap2.position.set(0, totalH/2 + 400*S, gap + thick/2);
+        group.add(frameDrive, frameOp, cap1, cap2);
+        return group;
+    }
+    
+    static createSideGuide() {
+        const group = new THREE.Group();
+        const length = 40; const height = 12; const depth = 5;   
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(length, height, depth), MaterialFactory.get('guideFrame'));
+        frame.position.y = height / 2; group.add(frame);
+        const rollerGeo = new THREE.CylinderGeometry(1.5, 1.5, height + 2, 16);
+        const rollerMat = MaterialFactory.get('guideRoller');
+        const startX = -length/2 + 3; const stepX = (length - 6) / 5;
+        for(let i=0; i<6; i++) {
+            const r = new THREE.Mesh(rollerGeo, rollerMat);
+            r.position.set(startX + stepX * i, height/2, depth/2 + 1.6); group.add(r);
+        }
+        return group;
+    }
+
+    static createTilter() {
+        const S = SimUtils.S;
+        const group = new THREE.Group();
+        const L = 5000 * S; const W = 2500 * S; const frameThick = 200 * S; const rRad = 120 * S;
+        const arm = new THREE.Group(); arm.name = "TilterArm";
+        const bed = new THREE.Mesh(new THREE.BoxGeometry(L, frameThick, W), MaterialFactory.get('tilterFrame'));
+        bed.position.set(L/2, -frameThick/2 - rRad, 0); 
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(frameThick, 800*S, W), MaterialFactory.get('tilterFrame'));
+        seat.position.set(-frameThick/2, 400*S - rRad, 0);
+        const rGeo = new THREE.CylinderGeometry(rRad, rRad, W, 16); rGeo.rotateX(Math.PI / 2); 
+        const rMat = MaterialFactory.get('rollFace');
+        const rollers = new THREE.Group(); rollers.name = "TilterRollers";
+        const stepX = (L * 0.8) / 5; const startX = L * 0.1;
+        for(let i=0; i<6; i++) {
+            const r = new THREE.Mesh(rGeo, rMat); r.position.set(startX + i*stepX, -rRad, 0); rollers.add(r);
+        }
+        arm.add(bed, seat, rollers); arm.rotation.z = Math.PI / 2; group.add(arm);
+        return group;
+    }
+
+    static createTransferTable() {
+        const S = SimUtils.S;
+        const group = new THREE.Group();
+        const L = 5000 * S; const W = 2500 * S; const H = 200 * S; const rRad = 120 * S;
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(L, H, W), MaterialFactory.get('tableFrame'));
+        frame.position.y = -H/2 - rRad; group.add(frame);
+        const rMat = MaterialFactory.get('rollFace');
+        const rGeoZ = new THREE.CylinderGeometry(rRad, rRad, W*0.35, 16); rGeoZ.rotateX(Math.PI / 2); 
+        const zRollers = new THREE.Group(); zRollers.name = "TransferRollersZ";
+        const rGeoX = new THREE.CylinderGeometry(rRad, rRad, 600*S, 16); rGeoX.rotateZ(Math.PI / 2); 
+        const xRollers = new THREE.Group(); xRollers.name = "TransferRollersX"; 
+        const stepX = (L * 0.85) / 5; const startX = -(L * 0.85) / 2;
+        const stepZ = (W * 0.6) / 2; const startZ = -(W * 0.6) / 2;
+        for(let c=0; c<6; c++) {
+            const xPos = startX + c*stepX;
+            const rz = new THREE.Mesh(rGeoZ, rMat); rz.position.set(xPos, -rRad, 0); zRollers.add(rz);
+            if (c === 0 || c === 5) continue;
+            for(let r=0; r<3; r++) {
+                const zPos = startZ + r*stepZ; if(Math.abs(zPos) < 10) continue; 
+                const rx = new THREE.Mesh(rGeoX, rMat); rx.position.set(xPos + stepX*0.5, -rRad, zPos); xRollers.add(rx);
+            }
+        }
+        group.add(zRollers, xRollers);
+        return group;
+    }
+
+    // UPDATED: High Quality Shear in Standby Position
+    static createShear() {
+        const S = SimUtils.S;
+        const W = CONFIG.MACHINE.ROLL_WIDTH * S;
+        const group = new THREE.Group();
+        const fMat = MaterialFactory.get('shearFrame');
+        const bMat = MaterialFactory.get('shearBlade');
+        const cMat = MaterialFactory.get('shearCyl');
+
+        // Main Columns
+        const colGeo = new THREE.BoxGeometry(800 * S, 4000 * S, 1000 * S);
+        const colL = new THREE.Mesh(colGeo, fMat); colL.position.set(0, 1800*S, -W/2 - 700*S);
+        const colR = new THREE.Mesh(colGeo, fMat); colR.position.set(0, 1800*S, W/2 + 700*S);
+        
+        // Top Crosshead
+        const headGeo = new THREE.BoxGeometry(800 * S, 1000 * S, W + 3000 * S);
+        const head = new THREE.Mesh(headGeo, fMat); head.position.set(0, 4200*S, 0);
+
+        // Bottom Base
+        const baseGeo = new THREE.BoxGeometry(1200 * S, 800 * S, W + 3000 * S);
+        const base = new THREE.Mesh(baseGeo, fMat); base.position.set(0, -1000*S, 0);
+
+        // Blade Holders & Blades (Standby Position: Wide Open)
+        // Top Blade: Parked High
+        const holderGeo = new THREE.BoxGeometry(400 * S, 600 * S, W + 200 * S);
+        const topHolder = new THREE.Mesh(holderGeo, fMat); topHolder.position.set(0, 1500*S, 0);
+        const bladeGeo = new THREE.BoxGeometry(100 * S, 200 * S, W);
+        const topBlade = new THREE.Mesh(bladeGeo, bMat); topBlade.position.set(0, 1100*S, 0); // Y > 1000
+
+        // Bottom Blade: Parked Low (Upcut style)
+        const botHolder = new THREE.Mesh(holderGeo, fMat); botHolder.position.set(0, -500*S, 0);
+        const botBlade = new THREE.Mesh(bladeGeo, bMat); botBlade.position.set(0, -100*S, 0); // Y < 0
+
+        // Hydraulic Cylinders (Visual)
+        const cylGeo = new THREE.CylinderGeometry(150*S, 150*S, 1000*S, 16);
+        const cyl1 = new THREE.Mesh(cylGeo, cMat); cyl1.position.set(0, 3000*S, -W/2 - 300*S);
+        const cyl2 = new THREE.Mesh(cylGeo, cMat); cyl2.position.set(0, 3000*S, W/2 + 300*S);
+
+        group.add(colL, colR, head, base, topHolder, topBlade, botHolder, botBlade, cyl1, cyl2);
+        return group;
+    }
+}
+
+// --- 6. VISUALIZATION VIEWS ---
+class CoolantParticleSystem {
+    constructor(scene) {
+        this.maxParticles = 1500;
+        this.particles = new Float32Array(this.maxParticles * 3);
+        this.velocities = [];
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(this.particles, 3));
+        const material = new THREE.PointsMaterial({
+            color: 0xffffff, size: 1.5, transparent: true, opacity: 0.6,
+            blending: THREE.AdditiveBlending, depthWrite: false
+        });
+        this.mesh = new THREE.Points(geometry, material);
+        scene.add(this.mesh);
+        for(let i=0; i<this.maxParticles; i++) {
+            this.velocities.push({ vx: 0, vy: 0, vz: 0, active: false, onSlab: false, life: 0 });
+            this.particles[i*3] = 0; this.particles[i*3+1] = -500; this.particles[i*3+2] = 0;
+        }
+    }
+    update(dt, state) {
+        if (!state.env.coolantOn || !state.slab.inBite) { this.mesh.visible = false; return; }
+        this.mesh.visible = true;
+        const S = SimUtils.S;
+        const slabY = state.mill.centerHeight * S + (state.slab.thickness * S / 2);
+        const passLine = state.mill.centerHeight * S;
+        for(let i=0; i<this.maxParticles; i++) {
+            const p = this.velocities[i];
+            const idx = i*3;
+            if(!p.active) {
+                if(Math.random()<0.1) {
+                    p.active=true; p.life=1.0; p.onSlab=false;
+                    this.particles[idx] = 14 + (Math.random()-0.5)*2;
+                    this.particles[idx+1] = passLine + 20;
+                    this.particles[idx+2] = (Math.random()-0.5)*40;
+                    p.vx = (Math.random()-0.5)*20; p.vy = -150 - Math.random()*50; p.vz = (Math.random()-0.5)*10;
+                }
+            } else {
+                let px=this.particles[idx], py=this.particles[idx+1], pz=this.particles[idx+2];
+                if (!p.onSlab && py < slabY) { py = slabY; p.onSlab = true; p.vy = 0; p.vx *= 0.5; p.vz *= 0.5; }
+                else if (!p.onSlab) { py += p.vy*dt; px += p.vx*dt; pz += p.vz*dt; }
+                else { px += p.vx*dt; pz += p.vz*dt; p.life -= dt*2; }
+                if (p.life<=0 || py < -100) { p.active=false; py=-500; }
+                this.particles[idx]=px; this.particles[idx+1]=py; this.particles[idx+2]=pz;
+            }
+        }
+        this.mesh.geometry.attributes.position.needsUpdate = true;
+    }
+}
+
+class MillStandView {
+    constructor(scene) {
+        this.rolls = {
+            workTop: MeshFactory.createRoll(CONFIG.MACHINE.WR_DIAMETER),
+            workBot: MeshFactory.createRoll(CONFIG.MACHINE.WR_DIAMETER),
+            backupTop: MeshFactory.createRoll(CONFIG.MACHINE.BR_DIAMETER),
+            backupBot: MeshFactory.createRoll(CONFIG.MACHINE.BR_DIAMETER)
+        };
+        Object.values(this.rolls).forEach(r => scene.add(r));
+        
+        this.sprays = [];
+        [{y: 25, r: 0}, {y: -25, r: Math.PI}].forEach(conf => {
+            const s = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, CONFIG.MACHINE.ROLL_WIDTH*SimUtils.S, 16), MaterialFactory.get('nozzle'));
+            s.rotation.x = Math.PI / 2; s.position.set(14, conf.y, 0); s.rotation.z = conf.r;
+            scene.add(s); this.sprays.push(s);
+        });
+
+        this.guides = new THREE.Group(); 
+        const g = new THREE.Group();
+        const g1 = MeshFactory.createSideGuide(); g1.rotation.y = Math.PI; g1.name = "Front";
+        const g2 = MeshFactory.createSideGuide(); g2.name = "Back";
+        g.add(g1, g2);
+        this.guideComponents = { front: g1, back: g2 };
+        this.guides.add(g);
+        scene.add(this.guides);
+    }
+    update(state, dt) {
+        const S = SimUtils.S;
+        const centerH = state.mill.centerHeight * S;
+        const gap = state.mill.gap * S;
+        const wrRad = (CONFIG.MACHINE.WR_DIAMETER * S) / 2;
+        const brRad = (CONFIG.MACHINE.BR_DIAMETER * S) / 2;
+        const wrY_Top = centerH + gap / 2 + wrRad;
+        const wrY_Bot = centerH - gap / 2 - wrRad;
+        
+        this.rolls.workTop.position.y = wrY_Top;
+        this.rolls.workBot.position.y = wrY_Bot;
+        this.rolls.backupTop.position.y = wrY_Top + wrRad + brRad;
+        this.rolls.backupBot.position.y = wrY_Bot - wrRad - brRad;
+
+        // FIXED: Sync Rotation with Slab Direction
+        // Determine physical direction: 1 (FWD), -1 (REV), or 0
+        const dir = Math.sign(state.mill.targetSpeed) || 1;
+        // Use slab speed magnitude but apply direction
+        const speedMPS = (state.slab.currentSpeed / 60) * dir; 
+        
+        const wrCirc = (CONFIG.MACHINE.WR_DIAMETER / 1000) * Math.PI;
+        const wrRotDelta = (speedMPS / wrCirc) * 2 * Math.PI * dt;
+        
+        // Logic: if moving +X (Right), Top roll bottom moves +X -> Top roll rotates -Z (CW viewed from +Z)
+        this.rolls.workTop.rotation.z -= wrRotDelta;
+        this.rolls.workBot.rotation.z += wrRotDelta;
+        this.rolls.backupTop.rotation.z += wrRotDelta;
+        this.rolls.backupBot.rotation.z -= wrRotDelta;
+
+        this.guides.position.x = (CONFIG.MACHINE.GUIDE_DISTANCE * S);
+        this.guides.position.y = centerH;
+        const guideZ = (state.mill.guideGap * S / 2) + 5.6;
+        this.guideComponents.front.position.z = guideZ;
+        this.guideComponents.back.position.z = -guideZ;
+
+        this.sprays[0].position.y = wrY_Top + 14 * S;
+        this.sprays[1].position.y = wrY_Bot - 14 * S;
+    }
+}
+
+class TableRollerView {
+    constructor(scene) {
+        this.tableL = new THREE.Group(); this.tableR = new THREE.Group();
+        for (let z = -150; z <= 60; z += 0.8) { 
+            if (Math.abs(z) < 1.05) continue; 
+            const tr = MeshFactory.createRoll(CONFIG.MACHINE.TABLE_ROLL_DIAMETER); 
+            tr.position.set(z * 20, -CONFIG.MACHINE.TABLE_ROLL_DIAMETER * SimUtils.S / 2, 0);
+            if (z < 0) this.tableL.add(tr); else this.tableR.add(tr);
+        }
+        scene.add(this.tableL, this.tableR);
+    }
+    update(state, dt) {
+        const S = SimUtils.S;
+        this.tableL.position.y = state.mill.tableHeightL * S;
+        this.tableR.position.y = state.mill.tableHeightR * S;
+        
+        // FIXED: Sync Rotation
+        const dir = Math.sign(state.mill.targetSpeed) || 1;
+        const speedMPS = (state.slab.currentSpeed / 60) * dir;
+        const trCirc = (CONFIG.MACHINE.TABLE_ROLL_DIAMETER / 1000) * Math.PI;
+        const trRotDelta = (speedMPS / trCirc) * 2 * Math.PI * dt;
+        
+        // If moving +X, top of table roll moves +X -> Rotate -Z
+        const apply = (grp) => { grp.children.forEach(r => r.rotation.z -= trRotDelta); };
+        apply(this.tableL); apply(this.tableR);
+    }
+}
+
+class SupplySystemView {
+    constructor(scene) {
+        const S = SimUtils.S;
+        const entryX = CONFIG.SUPPLY.ENTRY_X * S;
+        const tilterX = (CONFIG.SUPPLY.ENTRY_X - CONFIG.SUPPLY.TRANSFER_OFFSET) * S;
+        const sideZ = CONFIG.SUPPLY.SIDE_Z * S; 
+        const pivotY = 0; 
+
+        this.tilterRoot = MeshFactory.createTilter();
+        this.tilterRoot.position.set(tilterX, pivotY, sideZ);
+        this.tilterArm = this.tilterRoot.getObjectByName("TilterArm");
+        this.tilterRollers = this.tilterRoot.getObjectByName("TilterRollers");
+        scene.add(this.tilterRoot);
+
+        this.transferTable = MeshFactory.createTransferTable();
+        this.transferTable.position.set(entryX, pivotY, sideZ);
+        this.transferRollersZ = this.transferTable.getObjectByName("TransferRollersZ");
+        this.transferRollersX = this.transferTable.getObjectByName("TransferRollersX");
+        scene.add(this.transferTable);
+
+        this.supplySlab = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), MaterialFactory.get('supplySlab'));
+        scene.add(this.supplySlab);
+    }
+    update(state) {
+        const S = SimUtils.S;
+        const tiltDeg = (1.0 - state.supply.tiltAngle) * (Math.PI / 2);
+        this.tilterArm.rotation.z = tiltDeg; 
+
+        const showSupplySlab = state.supply.isActive || !state.slab.visible;
+        this.supplySlab.visible = showSupplySlab;
+
+        if (showSupplySlab) {
+            const gTh = state.slab.thickness * S;
+            const gW = state.slab.width * S;
+            const gL = state.slab.length * S;
+            const tilterX = this.tilterRoot.position.x;
+            const transferX = this.transferTable.position.x;
+            const sideZ = CONFIG.SUPPLY.SIDE_Z * S;
+            const pivY = this.tilterRoot.position.y;
+            const millCenterY = state.mill.centerHeight * S;
+
+            let phase = state.supply.phase;
+            if (!state.supply.isActive && !state.slab.visible) phase = 'TILTING'; 
+
+            if (phase === 'TILTING') {
+                const localX = gL/2; const localY = gTh/2;
+                const cos = Math.cos(tiltDeg); const sin = Math.sin(tiltDeg);
+                const rX = localX*cos - localY*sin; const rY = localX*sin + localY*cos;
+                this.supplySlab.position.set(tilterX + rX, pivY + rY, sideZ);
+                this.supplySlab.rotation.set(0, 0, tiltDeg); 
+                this.supplySlab.scale.set(gL, gTh, gW);
+            } else if (phase === 'RUN_IN') {
+                const startX = tilterX + gL/2; const endX = transferX; 
+                const curX = startX + (endX - startX) * state.supply.runInDist;
+                this.supplySlab.position.set(curX, pivY + gTh/2, sideZ);
+                this.supplySlab.rotation.set(0, 0, 0); 
+                this.supplySlab.scale.set(gL, gTh, gW);
+                this.tilterRollers.children.forEach(r => r.rotation.z -= 0.2); 
+                this.transferRollersZ.children.forEach(r => r.rotation.z -= 0.2);
+            } else if (phase === 'CROSS_TRANSFER') {
+                const curZ = sideZ + (0 - sideZ) * state.supply.crossDist;
+                this.supplySlab.position.set(transferX, millCenterY, curZ);
+                this.supplySlab.rotation.set(0, 0, 0);
+                this.supplySlab.scale.set(gL, gTh, gW);
+                this.transferRollersX.children.forEach(r => r.rotation.x -= 0.2); 
+            }
+        }
+    }
+}
+
+class World3D {
+    constructor(container, eventBus) {
+        this.eventBus = eventBus;
+        MaterialFactory.init();
+        this._initScene(container);
+        
+        this.scene.add(MeshFactory.createHousing());
+        const grid = new THREE.GridHelper(6000, 150, CONFIG.COLORS.GRID, 0xffffff);
+        grid.position.y = -50; grid.material.opacity = 0.4; grid.material.transparent = true;
+        this.scene.add(grid);
+
+        // Improved Shear
+        const shear = MeshFactory.createShear();
+        shear.position.x = 15000 * CONFIG.SCALE;
+        this.scene.add(shear);
+
+        this.millView = new MillStandView(this.scene);
+        this.tableView = new TableRollerView(this.scene);
+        this.supplyView = new SupplySystemView(this.scene);
+        this.coolantSystem = new CoolantParticleSystem(this.scene);
+
+        this.deformSlabLeft = new DeformableSlabMesh('slab');
+        this.deformSlabRight = new DeformableSlabMesh('slab');
+        this.scene.add(this.deformSlabLeft.getMesh(), this.deformSlabRight.getMesh());
+
+        this._setupEvents();
+    }
+
+    _initScene(container) {
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 1, 8000);
+        // FIX: Adjusted camera to see the new Supply System location clearly
+        this.camera.position.set(300, 250, -4500);
+        this.camera.lookAt(-100, 50, 0);
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        container.appendChild(this.renderer.domElement);
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.target.set(-50, 50, 0);
+        this.controls.enableDamping = true;
+        this.scene.add(new THREE.HemisphereLight(0xffffff, 0xd7ccc8, 0.8));
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1.8);
+        mainLight.position.set(100, 300, 150); mainLight.castShadow = true;
+        this.scene.add(mainLight);
+    }
+
+    _setupEvents() {
+        this.eventBus.on('STATE_UPDATE', (state) => this.render(state));
+        window.addEventListener('resize', () => {
+            this.camera.aspect = window.innerWidth / window.innerHeight;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    }
+
+    render(state) {
+        const dt = 0.016; 
+        
+        this.millView.update(state, dt);
+        this.tableView.update(state, dt);
+        this.supplyView.update(state);
+        this.coolantSystem.update(dt, state);
+        this._updateSlabVisuals(state);
+
+        this.controls.update();
+        this.renderer.render(this.scene, this.camera);
+    }
+
+    _updateSlabVisuals(state) {
+        const S = SimUtils.S;
+        const centerH = state.mill.centerHeight * S;
+        this.deformSlabLeft.setVisible(false);
+        this.deformSlabRight.setVisible(false);
+        
+        if (state.slab.visible) {
+            const xm = state.slab.xMin * 20; const xM = state.slab.xMax * 20;
+            if (xm < 0) {
+                const len = Math.min(0, xM) - xm;
+                if(len > 0.01) {
+                    this.deformSlabLeft.setVisible(true);
+                    let drawThick = state.slab.thickness;
+                    if (state.slab.inBite && state.mill.currentSpeed <= 0) drawThick = state.mill.gap;
+                    this.deformSlabLeft.update(len/S, drawThick, state.slab.width, state.slab.initialThickness, xm + len/2, centerH);
+                }
+            }
+            if (xM > 0 || (xM <= 0 && xm > -9999)) {
+                const end = xM;
+                if (end > 0) {
+                    const len = end - Math.max(0, xm);
+                    if(len > 0.01) {
+                        this.deformSlabRight.setVisible(true);
+                        let drawThick = state.slab.thickness;
+                        if (state.slab.inBite && state.mill.currentSpeed > 0) drawThick = state.mill.gap;
+                        this.deformSlabRight.update(len/S, drawThick, state.slab.width, state.slab.initialThickness, Math.max(0, xm) + len/2, centerH);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- 7. UI MANAGER ---
+class UIManager {
+    constructor(eventBus) {
+        this.eventBus = eventBus;
+        this.dom = {
+            btnStart: document.getElementById('btn-start'),
+            btnReset: document.getElementById('btn-reset'),
+            chkAuto: document.getElementById('chk-auto'),
+            chkSupply: document.getElementById('chk-supply-anim'),
+            rngGap: document.getElementById('rng-gap'),
+            rngSpeed: document.getElementById('rng-speed'),
+            chkCoolant: document.getElementById('chk-coolant'),
+            passList: document.getElementById('pass-list-ul'),
+            msgBox: document.getElementById('msg-box'),
+            msgText: document.getElementById('msg-text'),
+            panelAuto: document.getElementById('auto-controls'),
+            panelManual: document.getElementById('manual-controls')
+        };
+        this._bindEvents();
+        this._setupListeners();
+        this._renderPassList(-1);
+    }
+    _bindEvents() {
+        const on = (id, evt, fn) => document.getElementById(id)?.addEventListener(evt, fn);
+        on('btn-start', 'click', () => { this.eventBus.emit('CMD_START_AUTO'); this._setBusyState(true); });
+        on('btn-reset', 'click', () => this.eventBus.emit('CMD_RESET'));
+        on('chk-auto', 'change', (e) => {
+            const isAuto = e.target.checked;
+            this.dom.panelAuto.style.display = isAuto ? 'block' : 'none';
+            this.dom.panelManual.style.display = !isAuto ? 'block' : 'none';
+            this.eventBus.emit('CMD_SET_MODE', isAuto ? 'AUTO' : 'MANUAL');
+        });
+        on('chk-supply-anim', 'change', (e) => this.eventBus.emit('CMD_SET_SUPPLY_OPTS', { anim: e.target.checked }));
+        on('rng-gap', 'input', (e) => this.eventBus.emit('CMD_MANUAL_CTRL', { gap: +e.target.value }));
+        on('rng-speed', 'input', (e) => this.eventBus.emit('CMD_MANUAL_CTRL', { speed: +e.target.value }));
+        on('chk-coolant', 'change', (e) => this.eventBus.emit('CMD_SET_ENV', { coolantOn: e.target.checked }));
+        const updateDims = () => {
+             const d = { th: +document.getElementById('rng-init-th').value, wid: +document.getElementById('rng-init-wid').value, len: +document.getElementById('rng-init-len').value };
+            document.getElementById('lbl-init-th').innerText = d.th + " mm";
+            document.getElementById('lbl-init-wid').innerText = d.wid + " mm";
+            document.getElementById('lbl-init-len').innerText = d.len + " mm";
+            return d;
+        };
+        ['rng-init-th','rng-init-wid','rng-init-len'].forEach(id => on(id, 'input', updateDims));
+        on('btn-apply-size', 'click', () => { this.eventBus.emit('CMD_SET_SLAB_SIZE', updateDims()); this.eventBus.emit('CMD_RESET'); });
+    }
+    _setupListeners() {
+        this.eventBus.on('STATE_UPDATE', (s) => this._updateMetrics(s));
+        this.eventBus.on('STATE_PASS_CHANGED', (i) => this._renderPassList(i));
+        this.eventBus.on('STATE_FINISHED', () => { this._setBusyState(false); this._renderPassList(999); });
+        this.eventBus.on('SYS_MESSAGE', (txt) => this._showMessage(txt));
+        this.eventBus.on('STATE_RESET', () => { this._setBusyState(false); this._renderPassList(-1); this._showMessage("Ready to Start"); });
+    }
+    _renderPassList(currentIndex) {
+        this.dom.passList.innerHTML = '';
+        CONFIG.SCHEDULE.forEach(sch => {
+            const li = document.createElement('li');
+            let status = '';
+            if (sch.pass < currentIndex + 1) status = 'done'; if (sch.pass === currentIndex + 1) status = 'active';
+            li.className = `pass-item ${status}`;
+            li.innerHTML = `<span>#${sch.pass}</span><span>${sch.gap}mm</span><span>${sch.dir>0?'FWD':'REV'}</span>`;
+            this.dom.passList.appendChild(li);
+        });
+    }
+    _updateMetrics(state) {
+        document.getElementById('val-center-h').textContent = state.mill.centerHeight.toFixed(1);
+        document.getElementById('val-speed').textContent = state.slab.currentSpeed.toFixed(0);
+        document.getElementById('val-force').textContent = state.slab.rollForce.toFixed(0);
+        document.getElementById('val-temp').textContent = state.slab.temperature.toFixed(0);
+        document.getElementById('val-length').textContent = (state.slab.length/1000).toFixed(1);
+    }
+    _setBusyState(isBusy) {
+        this.dom.btnStart.className = isBusy ? 'btn btn-danger' : 'btn btn-primary';
+        this.dom.btnStart.innerHTML = isBusy ? '<i class="fa-solid fa-spinner fa-spin"></i> 運転中...' : '<i class="fa-solid fa-play"></i> 圧延サイクル開始';
+    }
+    _showMessage(text) {
+        this.dom.msgText.textContent = text;
+        this.dom.msgBox.classList.add('show-msg');
+        setTimeout(() => this.dom.msgBox.classList.remove('show-msg'), 2500);
+    }
+}
+
+class App {
+    constructor() {
+        const bus = new EventBus();
+        this.physics = new PhysicsEngine(bus);
+        this.ui = new UIManager(bus);
+        this.world = new World3D(document.getElementById('canvas-container'), bus);
+        this.clock = new THREE.Clock();
+        bus.emit('CMD_RESET');
+        this.animate();
+    }
+    animate() {
+        requestAnimationFrame(() => this.animate());
+        this.physics.update(this.clock.getDelta());
+    }
+}
+new App();
+</script>
+</body>
+</html>
