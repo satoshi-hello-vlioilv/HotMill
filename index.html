@@ -181,7 +181,7 @@ input[type=range]:disabled { opacity:.45; cursor:not-allowed; }
 .mc .val { font-size:22px; font-weight:800; color:var(--ink-1); line-height:1.15; margin-top:3px;
   font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
 .mc .val u { text-decoration:none; font-size:11px; font-weight:700; color:var(--ink-3); margin-left:2px; }
-.mc .sub { font-size:10px; color:var(--ink-3); margin-top:auto; padding-top:4px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mc .sub { font-size:9.5px; color:var(--ink-3); margin-top:auto; padding-top:4px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .mc .bar { height:4px; border-radius:2px; background:var(--s-3); margin-top:6px; overflow:hidden; }
 .mc .bar i { display:block; height:100%; width:0; background:var(--ramp-4); border-radius:2px; transition:width .12s linear; }
 .mc.is-warn .bar i { background:var(--warn); } .mc.is-crit .bar i { background:var(--crit); }
@@ -565,11 +565,17 @@ const CONFIG = {
    *   シャー 5,875 mm → デフレクタ 6,900 mm → リール中心 8,350 mm。
    * リールはパスラインより上に置かれ、最大外径 Φ1800 でもコイル下端がパスラインより
    * 800 mm 上に留まる。これにより可逆パス中の板がリール下を素通りできる。 */
+  /* 巻取機: 4セグメント・コラプシブルウェッジ式、アウトボードベアリング付き。
+   * モータ 550 kW（直流）0/300/900 rpm、減速比 8.5:1。
+   * マンドレル軸の最大トルク = 550 kW ÷ 300 rpm × 8.5 ≒ 148.8 kN·m。
+   * 張力はトルク ÷ コイル半径なので、コイルが太るほど下がる（Φ1900 で約 16 t）。 */
   COILER: {
     X: 8350, Y_ABOVE: 1700, DEFLECTOR_X: 6900, DEFLECTOR_D: 420,
-    MANDREL_D: 610, OD_MAX: 1800,
-    WIDTH_MIN: 760, WIDTH_MAX: 1800, WEIGHT_MAX: 9000,
-    TENSION_MAX_T: 22.5, SPEED_MAX: 163, ROLL_SPEED_MAX: 123,
+    MANDREL_D: 610, SEGMENTS: 4, OD_MIN: 760, OD_MAX: 1900,
+    WIDTH_MIN: 760, WIDTH_MAX: 2100, WEIGHT_MAX: 9000,
+    MOTOR_KW: 550, RPM_BASE: 300, RPM_MAX: 900, GEAR: 8.5,
+    TENSION_MAX_KG: 14480, TENSION_LIMIT_KG: 20500,   // 設定変更で 20,500 kg まで
+    SPEED_MAX: 185, ROLL_SPEED_MAX: 123,
     TH_MIN: 6, TH_MAX: 10, T_THREAD: 1.6,
   },
 
@@ -580,8 +586,15 @@ const CONFIG = {
 
   /* サイドトリマー。上下軸の円板刃で板の両耳を切り落として幅を仕上げる。
    * ミル中心から 5,875 mm（図面）。厚板パス中は刃を開いて板を素通りさせる。 */
+  /* サイドトリマ: スタータイプスクラップチョッパー付きクイックオープン型。
+   * 刃物 Φ510〜498 × 厚 40〜30 mm、モータ 110 kW（直流）0/500/600 rpm、周速 208 mpm。
+   * 被せん断材は トリム前巾 2,350 / トリム後巾 760〜2,300 / 厚 7.0 mm 連続・9.5 mm 非常最大。 */
   TRIMMER: {
-    X: 5875, KNIFE_D: 450, KNIFE_T: 26, TRIM_MIN: 10, TRIM_MAX: 30, TRIM_DEFAULT: 15,
+    X: 5875, KNIFE_D: 510, KNIFE_D_MIN: 498, KNIFE_T: 40, KNIFE_T_MIN: 30,
+    TRIM_MIN: 10, TRIM_MAX: 30, TRIM_DEFAULT: 15,
+    WIDTH_IN_MAX: 2350, WIDTH_OUT_MIN: 760, WIDTH_OUT_MAX: 2300,
+    TH_CONT: 7.0, TH_EMERGENCY: 9.5,
+    MOTOR_KW: 110, RPM_BASE: 500, RPM_MAX: 600, SPEED_MAX: 208,
     OPEN: 700, T_SET: 1.2,
   },
 
@@ -618,7 +631,9 @@ const CONFIG = {
     // 強制対流としては扱わない（材料に直接かけるモデルは温度を過剰に下げる）。
     EMISSIVITY: 0.18, H_AIR: 14, H_ROLL: 30000,
     T_ROLL: 80, T_AMBIENT: 30,
-    T_MIN_ROLLABLE: 350,                                // これ未満は熱間圧延域外
+    // 温度下限は工程で変わる。粗〜中間パスは熱間域(350 ℃)を保つ必要があるが、
+    // 薄板をコイルに仕上げる最終パス〜巻取りでは 300 ℃ 前後まで下がるのが正常。
+    T_MIN_ROLLABLE: 350, T_MIN_FINISH: 280,
   },
   PROCESS: { MU: 0.25, TORQUE_ARM: 0.45, HEAT_EFF: 0.95,
              ACCEL: 110, BITE_ANGLE_MAX: 0.42, PASS_TIME_MAX: 150 },  // mpm/s, rad(24°), s
@@ -651,7 +666,7 @@ const CONFIG = {
     { id:'bite',     name:'ロールバイト', icon:'fa-magnifying-glass', pos:[  6600,  2000,  2200], tgt:[   200,  1150,     0] },
     { id:'drive',    name:'駆動側',     icon:'fa-gears',            pos:[ 34000, 13000,-16000], tgt:[     0,  1400, -9500] },
     { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[-26000, 11000, 21000], tgt:[-10000,   700,  2200] },
-    { id:'coiler',   name:'巻取設備',   icon:'fa-arrows-spin',      pos:[ 20000,  5200, 12000], tgt:[  7000,  1900,     0] },
+    { id:'coiler',   name:'巻取設備',   icon:'fa-arrows-spin',      pos:[ 15500,  4600,  9500], tgt:[  8000,  2500,     0] },
   ],
 };
 
@@ -786,11 +801,21 @@ const Rolling = {
     return (lenMm + 2 * CONFIG.SAFE_CLEAR) / Math.max(Math.abs(speedMpm) / 60 * 1000, 1) + 30;
   },
 
-  /** 巻取張力 [MPa]。装置の最大張力を板断面積で割った値で頭打ちにする。 */
-  coilTension(hOut, width) {
+  /** マンドレル軸に出せる最大トルク [N·m]（550 kW ÷ 基底 300 rpm × 減速比 8.5） */
+  coilerTorque() {
     const C = CONFIG.COILER;
+    return (C.MOTOR_KW * 1000) / (C.RPM_BASE * Math.PI / 30) * C.GEAR;
+  },
+  /** そのコイル外径で出せる最大張力 [kgf]。コイルが太るほどトルク一定ぶん張力は下がる。 */
+  coilTensionKg(od) {
+    const C = CONFIG.COILER;
+    const byTorque = Rolling.coilerTorque() / (od / 2000) / 9.80665;  // N·m → kgf
+    return Math.min(byTorque, C.TENSION_MAX_KG);
+  },
+  /** 前方張力 [MPa]。板断面積で割った見かけの応力。 */
+  coilTension(hOut, width, od = CONFIG.COILER.MANDREL_D) {
     const area = Math.max(hOut * width, 1);                          // mm²
-    return Math.min(C.TENSION_MAX_T * 9806.65 / area, 30);           // 実用上 30 MPa 程度で頭打ち
+    return Math.min(Rolling.coilTensionKg(od) * 9.80665 / area, 40);
   },
 
   /** コイル外径 [mm]。巻き取った長さと板厚から求める（内径 Φ610 から成長する）。 */
@@ -1006,6 +1031,7 @@ class FinishState {
     this.cropStage = 'IDLE'; this.cropBlade = 0; this.cropDone = false;
     this.cropVisible = false; this.cropX = 0; this.cropY = 0; this.cropVY = 0; this.cropLen = 0;
     this.gripped = false; this.thread = 0; this.coiledLen = 0; this.od = CONFIG.COILER.MANDREL_D;
+    this.tensionKg = 0;
     this.mandrelAngle = 0; this.tension = 0; this.winding = false; this.done = false;
     this.phase = 'IDLE';
   }
@@ -1219,7 +1245,8 @@ class FinishController {
       s.coiledLen = Math.max(0, F * (this._head() - CO.DEFLECTOR_X));
       s.od = Rolling.coilOD(s.coiledLen, sl.thickness);
       s._mass = Rolling.coilMass(s.coiledLen, sl.thickness, s.finishedWidth(sl.width));
-      s.tension = Rolling.coilTension(sl.thickness, sl.width);
+      s.tension = Rolling.coilTension(sl.thickness, s.finishedWidth(sl.width), s.od);
+      s.tensionKg = Rolling.coilTensionKg(s.od);
       const v = Math.abs(m.currentSpeed) / 60 * 1000;                 // mm/s
       s.mandrelAngle += (v / (s.od / 2)) * dt * F;
     }
@@ -1409,13 +1436,29 @@ class PhysicsEngine {
     m.tableAngle += (surf / (CONFIG.TABLE.ROLL_D_END / 2)) * dt;
   }
 
+  /**
+   * その時点で成立すべき材料温度の下限。コイル仕上げの最終パス以降は薄板が急速に
+   * 冷えるのが正常な工程なので、粗パスと同じ 350 ℃ を当てると常時警告になる。
+   */
+  get tempFloor() {
+    const M = CONFIG.MATERIAL;
+    const finishing = this.finish.mode === 'COIL' &&
+      (this.mill.passIndex < 0 || this.mill.passIndex >= CONFIG.SCHEDULE.length - 1);
+    return finishing ? M.T_MIN_FINISH : M.T_MIN_ROLLABLE;
+  }
+
+  /** 残パスがあるあいだだけ「冷え」は問題になる。仕上げ・巻取り中は対象外。 */
+  get stillRolling() {
+    return this.mill.mode === 'MANUAL' || this.mill.passIndex >= 0;
+  }
+
   _diagnose() {
     const s = this.slab, m = this.mill, C = CONFIG.MILL;
     let w = null;
     if (s.rollForce > C.RATED_FORCE_T)            w = { kind: 'crit', text: `圧延荷重が定格 ${C.RATED_FORCE_T} t を超過しています` };
     else if (s.rollPower > C.RATED_POWER_KW)      w = { kind: 'crit', text: `主電動機動力が定格 ${(C.RATED_POWER_KW / 1000).toFixed(1)} MW を超過しています` };
-    else if (s.onLine && s.temperature < CONFIG.MATERIAL.T_MIN_ROLLABLE)
-                                                  w = { kind: 'warn', text: `材料温度が熱間圧延域 ${CONFIG.MATERIAL.T_MIN_ROLLABLE} ℃ を下回りました` };
+    else if (s.onLine && this.stillRolling && !this.finish.winding && s.temperature < this.tempFloor)
+                                                  w = { kind: 'warn', text: `材料温度が圧延下限 ${this.tempFloor} ℃ を下回りました` };
     else if (s.inBite && s.biteOk === false) w = { kind: 'warn', text: '噛み込み角が限界を超えています（圧下量過大）' };
     if ((w && w.text) !== (this.warn && this.warn.text)) { this.warn = w; this.bus.emit('STATE_WARN', w); }
   }
@@ -1766,12 +1809,18 @@ const Parts = {
     parts.push(G.at(G.box(1400, 400, W + 3000), 0, cy + 1500, 0));            // 上部梁
     return G.merge(parts);
   },
+  /** 4セグメント・コラプシブルウェッジ式マンドレル（外周を4分割したセグメントで構成） */
   mandrel() {
-    const C = CONFIG.COILER, W = CONFIG.TABLE.BARREL;
-    return G.merge([
-      G.cyl(C.MANDREL_D, W + 300, 'z', 20),
-      G.at(G.box(80, C.MANDREL_D + 60, W + 300), 0, 0, 0),                    // セグメント割の目印
-    ]);
+    const C = CONFIG.COILER, W = CONFIG.TABLE.BARREL, parts = [];
+    const r = C.MANDREL_D / 2;
+    for (let i = 0; i < C.SEGMENTS; i++) {                                    // セグメント
+      const a = (i + 0.5) * Math.PI * 2 / C.SEGMENTS;
+      const g = G.box(r * 0.86, r * 0.62, W + 260);
+      parts.push(G.at(g, Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7, 0, 0, 0, a));
+    }
+    parts.push(G.cyl(C.MANDREL_D * 0.5, W + 300, 'z', 16));                   // 芯軸
+    parts.push(G.at(G.cyl(C.MANDREL_D * 0.62, 420, 'z', 16), 0, 0, (W + 900) / 2));  // アウトボードベアリング
+    return G.merge(parts);
   },
   wrapperRoll() { return G.cyl(320, CONFIG.TABLE.BARREL + 100, 'z', 12); },
 
@@ -2868,12 +2917,18 @@ class UIManager {
       ['常用 / 非常最大圧延荷重', `${M.RATED_FORCE_T.toLocaleString()} / ${M.LIMIT_FORCE_T.toLocaleString()} ton`],
       ['入側 / 出側テーブル長', `${(ent / 1000).toFixed(1)} / ${(ext / 1000).toFixed(1)} m`],
       ['テーブルローラ', `胴長 ${T.BARREL}、胴端 Φ${T.ROLL_D_END} → 中央 Φ${T.ROLL_D_MID}`],
-      ['サイドトリマー', `ミル中心から ${Math.abs(TR.X).toLocaleString()} mm`],
+      ['サイドトリマ', `スタータイプスクラップチョッパー付きクイックオープン型`],
+      ['トリマ 刃物 / モータ', `Φ${TR.KNIFE_D}〜${TR.KNIFE_D_MIN} × 厚 ${TR.KNIFE_T}〜${TR.KNIFE_T_MIN} ／ ${TR.MOTOR_KW} kW D.C.`],
+      ['トリマ 被せん断材', `巾 ${TR.WIDTH_IN_MAX} → ${TR.WIDTH_OUT_MIN}〜${TR.WIDTH_OUT_MAX} ／ 厚 ${TR.TH_CONT}（非常 ${TR.TH_EMERGENCY}）mm`],
+      ['トリマ 位置', `ミル中心から ${Math.abs(TR.X).toLocaleString()} mm`],
       ['スリーロール', `ミル中心から ${Math.abs(C.DEFLECTOR_X).toLocaleString()} mm（下2・上1）`],
-      ['巻取リール', `ミル中心から ${Math.abs(C.X).toLocaleString()} mm ／ パスライン上 ${C.Y_ABOVE} mm`],
-      ['コイル諸元', `板厚 ${C.TH_MIN}〜${C.TH_MAX} / 巾 ${C.WIDTH_MIN}〜${C.WIDTH_MAX} mm`],
-      ['コイル外径 / 内径', `最大 Φ${C.OD_MAX} / Φ${C.MANDREL_D} mm`],
-      ['コイル重量 / 張力', `最大 ${(C.WEIGHT_MAX / 1000)} t / ${C.TENSION_MAX_T} ton`],
+      ['巻取機', `${C.SEGMENTS} セグメント コラプシブルウェッジ式（アウトボードベアリング付）`],
+      ['巻取機 位置', `ミル中心から ${Math.abs(C.X).toLocaleString()} mm ／ パスライン上 ${C.Y_ABOVE} mm`],
+      ['コイル寸法', `板厚 ${C.TH_MIN}〜${C.TH_MAX} ／ 巾 ${C.WIDTH_MIN}〜${C.WIDTH_MAX} mm`],
+      ['コイル径 / 重量', `Φ${C.OD_MIN}〜Φ${C.OD_MAX}（内径 Φ${C.MANDREL_D}）／ 最大 ${C.WEIGHT_MAX.toLocaleString()} kg`],
+      ['巻取モータ', `${C.MOTOR_KW} kW D.C. ／ 0 / ${C.RPM_BASE} / ${C.RPM_MAX} rpm ／ 減速比 ${C.GEAR}:1`],
+      ['巻取張力', `最大 ${C.TENSION_MAX_KG.toLocaleString()} kg（設定変更で ${C.TENSION_LIMIT_KG.toLocaleString()} kg）` +
+                  ` <span style="color:var(--ink-3)">Φ${C.OD_MAX} で ${(Rolling.coilTensionKg(C.OD_MAX) / 1000).toFixed(1)} t</span>`],
       ['巻取速度', `${C.SPEED_MAX} mpm（巻取パス圧延速度 ${C.ROLL_SPEED_MAX} mpm）`],
       ['クロップシャー', `75 mm 対応 ／ ミル中心から ${Math.abs(CS.X).toLocaleString()} mm`],
       ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
@@ -2946,16 +3001,23 @@ class UIManager {
       const C = CONFIG.COILER;
       const od = Rolling.coilOD(outLen, d.target), coilKg = Rolling.coilMass(outLen, d.target, finW);
       $('der-trim').textContent = `仕上げ幅 ${finW} mm（板幅 ${d.width} − 両耳 2×${d.trim}）`;
-      const warn = [];
+      const T2 = CONFIG.TRIMMER, warn = [], note = [];
       if (Math.abs(reached - d.target) > 0.6) warn.push(`テーブル長の制約で ${reached.toFixed(1)} mm までしか到達できません`);
+      if (d.width > T2.WIDTH_IN_MAX) warn.push(`トリム前巾が最大 ${T2.WIDTH_IN_MAX} mm を超えます`);
+      if (finW < T2.WIDTH_OUT_MIN || finW > T2.WIDTH_OUT_MAX)
+        warn.push(`トリム後巾 ${T2.WIDTH_OUT_MIN}〜${T2.WIDTH_OUT_MAX} mm を外れます`);
+      if (d.target > T2.TH_EMERGENCY) warn.push(`トリマ被せん断厚の非常最大 ${T2.TH_EMERGENCY} mm を超えます`);
+      else if (d.target > T2.TH_CONT) note.push(`板厚 ${d.target} mm はトリマの連続使用範囲（${T2.TH_CONT} mm）を超えます`);
       if (coil) {
         if (finW < C.WIDTH_MIN || finW > C.WIDTH_MAX) warn.push(`コイル巾 ${C.WIDTH_MIN}〜${C.WIDTH_MAX} mm を外れます`);
-        if (od > C.OD_MAX) warn.push(`コイル外径 Φ${od.toFixed(0)} が最大 Φ${C.OD_MAX} を超えます`);
+        if (od > C.OD_MAX || od < C.OD_MIN) warn.push(`コイル外径 Φ${od.toFixed(0)} が Φ${C.OD_MIN}〜Φ${C.OD_MAX} を外れます`);
         if (coilKg > C.WEIGHT_MAX) warn.push(`コイル重量 ${(coilKg / 1000).toFixed(1)} t が最大 ${C.WEIGHT_MAX / 1000} t を超えます`);
       }
       $('der-slab').innerHTML =
         `スラブ質量 ${mass.toFixed(1)} t ／ ${sch.length} パス ／ 最終長 ${(outLen / 1000).toFixed(1)} m（伸び ${(th / d.target).toFixed(1)} 倍）` +
-        (coil ? `<br>コイル: 外径 Φ${od.toFixed(0)} ／ 内径 Φ${C.MANDREL_D} ／ ${(coilKg / 1000).toFixed(1)} t` : '') +
+        (coil ? `<br>コイル: 外径 Φ${od.toFixed(0)} ／ 内径 Φ${C.MANDREL_D} ／ ${(coilKg / 1000).toFixed(1)} t` +
+                `／ 巻取張力 ${(Rolling.coilTensionKg(od) / 1000).toFixed(1)} t` : '') +
+        (note.length ? `<br><span style="color:#8a5b00">△ ${note.join(' / ')}</span>` : '') +
         (warn.length ? `<br><span style="color:var(--crit);font-weight:700">※ ${warn.join(' / ')}</span>` : '');
       return d;
     };
@@ -3082,7 +3144,7 @@ class UIManager {
     this._meter('m-power', s.rollPower / 1000, Drive.ratedPowerKW / 1000, (s.rollPower / 1000).toFixed(1),
       t => `定格の ${(t * 100).toFixed(0)} % ／ ${m.motorRpm.toFixed(0)} rpm`);
     $('m-temp-v').textContent  = s.temperature.toFixed(0);
-    $('m-temp-s').textContent  = s.temperature < CONFIG.MATERIAL.T_MIN_ROLLABLE ? '熱間域を下回る' : '熱間圧延域';
+    $('m-temp-s').textContent  = s.temperature < p.tempFloor ? '圧延下限を下回る' : (p.tempFloor === CONFIG.MATERIAL.T_MIN_FINISH ? '仕上げ・巻取域' : '熱間圧延域');
     $('m-gap-v').textContent   = m.gap.toFixed(0);
     $('m-gap-s').textContent   = `目標 ${m.targetGap.toFixed(0)} mm`;
     this._banner();
@@ -3115,7 +3177,7 @@ class UIManager {
         hint = step ? step[3] : '';
       }
       else if (p.finish.winding) { cls = 'is-run'; ic = 'fa-arrows-spin'; st = 'コイル巻取中';
-        hint = `外径 Φ${p.finish.od.toFixed(0)} mm ／ ${(p.finish.coilMass / 1000).toFixed(1)} t`; }
+        hint = `外径 Φ${p.finish.od.toFixed(0)} mm ／ ${(p.finish.coilMass / 1000).toFixed(1)} t ／ 張力 ${(p.finish.tensionKg / 1000).toFixed(1)} t`; }
       else if (m.passIndex >= 0) {
         const sch = CONFIG.SCHEDULE[m.passIndex];
         cls = 'is-run'; ic = 'fa-arrows-left-right'; st = `第 ${sch.pass} パス ${m.passPhase === 'SETUP' ? 'セットアップ' : '圧延中'}`;
