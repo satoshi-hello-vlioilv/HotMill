@@ -480,7 +480,7 @@ const CONFIG = {
     BR_BARREL:     2450,             // バックアップロール胴長
     WR_NECK_D:      520,  BR_NECK_D: 850,
     GAP_MIN:          4,  GAP_MAX:   600,   // コイル最薄 6 mm を作れる下限にする
-    MAX_SPEED:      161,             // 最大圧延速度 mpm
+    // 最大圧延速度はモータ最高回転数・減速比・ロール径から決まる従属値（Drive.maxSpeed）
     GAP_RATE:        70,             // 圧下シリンダ速度 mm/s ※推定値
     PASSLINE_ADJ_RANGE: 120,         // パスライン調整装置(ステップウェッジ)の可動量
     // ハウジング（オペレータ側/駆動側の2枚。窓の中にチョックが収まる）
@@ -496,6 +496,9 @@ const CONFIG = {
   },
 
   DRIVE: {                                  // 駆動側 (−Z)
+    // 主電動機 1,900 kW × 2 台（直流）。0/150/330 rpm、減速比 5.96:1。
+    // 150 rpm までは定トルク、そこから 330 rpm までは定出力という直流機の特性を持つ。
+    MOTOR_KW: 1900, MOTOR_N: 2, RPM_BASE: 150, RPM_MAX: 330, GEAR: 5.96,
     COUPLING_Z: -3400,                      // スピンドル継手（ロール側）
     PINION_Z:   -9500,                      // ピニオンスタンド出力軸
     PINION_SPAN: 1800,
@@ -702,6 +705,33 @@ class EventBus {
   emit(ev, data) { const l = this.map.get(ev); if (l) for (let i = 0; i < l.length; i++) l[i](data); }
 }
 
+/**
+ * 主駆動系の包絡線。直流電動機は基底回転数まで定トルク、それ以上は定出力になる。
+ * 最大圧延速度もロール径から決まるため、研削で径が小さくなると最高速度も下がる。
+ */
+const Drive = {
+  /** ロール軸に出せる最大トルク [N·m]（2ロール合計） */
+  get maxTorque() {
+    const D = CONFIG.DRIVE;
+    return (D.MOTOR_KW * 1000 * D.MOTOR_N) / (D.RPM_BASE * Math.PI / 30) * D.GEAR;
+  },
+  get ratedPowerKW() { return CONFIG.DRIVE.MOTOR_KW * CONFIG.DRIVE.MOTOR_N; },
+  rollRpm(speedMpm, dia) { return Math.abs(speedMpm) / (Math.PI * dia / 1000); },
+  motorRpm(speedMpm, dia) { return Drive.rollRpm(speedMpm, dia) * CONFIG.DRIVE.GEAR; },
+  /** ロール径から決まる最高圧延速度 [mpm] */
+  maxSpeed(dia = CONFIG.MILL.WR_D) {
+    const D = CONFIG.DRIVE;
+    return Math.PI * (dia / 1000) * (D.RPM_MAX / D.GEAR);
+  },
+  /** 所要トルク M [N·m] を出せる最高速度 [mpm]。定出力域では速度と反比例する。 */
+  speedLimit(torqueNm, dia) {
+    const D = CONFIG.DRIVE, vMax = Drive.maxSpeed(dia);
+    if (!(torqueNm > 1)) return vMax;
+    const vBase = Math.PI * (dia / 1000) * (D.RPM_BASE / D.GEAR);
+    return Num.clamp(vBase * Drive.maxTorque / torqueNm, 5, vMax);
+  },
+};
+
 /* =============================================================================
  * 3. ROLLING MODEL —— 圧延理論（純関数。状態を持たない＝単体で検証できる）
  * ========================================================================== */
@@ -798,7 +828,8 @@ const Rolling = {
     hTarget = Math.max(hTarget, CONFIG.MILL.GAP_MIN);        // 装置の圧下下限を下回らない
     const M = CONFIG.MILL, P = CONFIG.PROCESS, R = M.WR_D / 2;
     const dBite = 2 * R * (1 - Math.cos(P.BITE_ANGLE_MAX));
-    const fLimit = M.RATED_FORCE_T * 0.88, pLimit = M.RATED_POWER_KW * 0.84;  // 実圧延時の温度ばらつき分の余裕
+    const vMax = Drive.maxSpeed();
+    const fLimit = M.RATED_FORCE_T * 0.88, pLimit = Drive.ratedPowerKW * 0.84;  // 温度ばらつき分の余裕
     // 圧延が進むと材料温度が下がり変形抵抗が上がる。生成時にもその推移を織り込む。
     const drafts = [], temps = [];
     let h = h0, T = temp;
@@ -809,7 +840,7 @@ const Rolling = {
     let coilPass = -1;
     while (h > hTarget + 0.5 && drafts.length < 30) {
       const idx = drafts.length, dir = CONFIG.FLIP * (idx % 2 === 0 ? 1 : -1);
-      const vRef = Num.lerp(60, M.MAX_SPEED, Num.clamp(1 - (h - hTarget) / (h0 - hTarget), 0, 1));
+      const vRef = Num.lerp(60, vMax, Num.clamp(1 - (h - hTarget) / (h0 - hTarget), 0, 1));
       const capRatio = coil ? 0.50 : 0.40;                     // 張力をかける巻取パスは大圧下できる
       const dFin = h - hTarget;
       let d;
@@ -830,7 +861,7 @@ const Rolling = {
         // 超えるなら圧下量を落とす。長いパスほど速く通す必要があるので後段で効く。
         for (let k = 0; k < 14 && d > 2; k++) {
           const hOut2 = h - d, L2 = L0 * h0 / hOut2;
-          const vNeed = Num.clamp((L2 + 2 * CONFIG.SAFE_CLEAR) / P.PASS_TIME_MAX / 1000 * 60, 25, M.MAX_SPEED);
+          const vNeed = Num.clamp((L2 + 2 * CONFIG.SAFE_CLEAR) / P.PASS_TIME_MAX / 1000 * 60, 25, vMax);
           if (Rolling.solve(h, hOut2, width, vNeed, T).powerKW <= pLimit) break;
           d *= 0.85;
         }
@@ -857,7 +888,7 @@ const Rolling = {
     const n = drafts.length || 1;
     // 速度は質量流に合わせて上げ、主機動力の定格で頭打ちにする。ただし温度は選んだ速度に
     // 依存する（低速ほどロールに熱を奪われる）ので、速度→温度→速度 を反復して収束させる。
-    let speeds = drafts.map((d, i) => Math.round(Num.lerp(55, M.MAX_SPEED, n > 1 ? i / (n - 1) : 1) / 5) * 5);
+    let speeds = drafts.map((d, i) => Math.round(Num.lerp(55, vMax, n > 1 ? i / (n - 1) : 1) / 5) * 5);
     for (let it = 0; it < 5; it++) {
       let hh = h0, TT = temp;
       speeds = drafts.map((d, i) => {
@@ -934,7 +965,8 @@ class MillState {
     this.mode = 'AUTO'; this.passIndex = -1; this.passPhase = 'IDLE';
     this.guideGap = 2600;
     this.wrDia = CONFIG.MILL.WR_D; this.brDia = CONFIG.MILL.BR_D;  // 研削による現在径
-    this.powerCap = CONFIG.MILL.MAX_SPEED;     // 主機動力から決まる速度上限
+    this.powerCap = 161;                       // 駆動包絡線から決まる速度上限
+    this.motorRpm = 0;
     this.rollAngle = 0; this.tableAngle = 0;
     this.bendingForce = 0;
   }
@@ -1138,7 +1170,8 @@ class FinishController {
       case 'OPEN_HEAD': case 'OPEN_TAIL':
         s.cropBlade = Math.max(0, s.cropBlade - dt / S.T_OPEN);
         if (s.cropBlade <= 0) {
-          if (s.cropStage === 'OPEN_HEAD') s.cropStage = 'RUN_TAIL';
+          // シャーは出側のみ。出側に出た先端だけを切る。
+          if (false) s.cropStage = 'RUN_TAIL';
           else { s.cropStage = 'DONE'; s.cropDone = true; sl.cropped = true;
                  this.bus.emit('SYS_MESSAGE', { text: '75 mm シャー: 端部切断完了', kind: 'info' }); }
         }
@@ -1265,7 +1298,7 @@ class PhysicsEngine {
                         { coil: this.finish.mode === 'COIL', length: spec.length });
     this.mill.gap = this.mill.targetGap = th;
     this.mill.currentSpeed = this.mill.targetSpeed = 0;
-    this.mill.powerCap = CONFIG.MILL.MAX_SPEED;
+    this.mill.powerCap = Drive.maxSpeed(this.mill.wrDia);
     this.mill.passIndex = -1; this.mill.passPhase = 'IDLE';
     this.mill.guideGap = spec.width + CONFIG.TABLE.GUIDE.OPEN_MARGIN;
     const keepMode = d.mode ?? this.finish.mode, keepTrim = d.trim ?? this.finish.trim;
@@ -1301,11 +1334,10 @@ class PhysicsEngine {
     m.gap = Num.rateTo(m.gap, m.targetGap, CONFIG.MILL.GAP_RATE, dt);
     // 主機は定格以上のトルクを出せない。動力が定格を超えるなら速度で頭打ちにする。
     // 実機の駆動系と同じ挙動で、重圧下・低温のパスでは自然に減速する。
-    // 主機は連続定格を超えると減速する。ただし短時間は過負荷（定格の1.6倍）に耐えるので、
-    // その範囲で頭打ちにし、下限速度を設けて減速の悪循環に入らないようにする。
-    const P = this.slab.rollPower, LIM = CONFIG.MILL.RATED_POWER_KW * 1.6;
-    const cap = P > 1 ? Math.abs(m.currentSpeed) * LIM / P : CONFIG.MILL.MAX_SPEED;
-    m.powerCap = Num.approach(m.powerCap, Num.clamp(cap, 35, CONFIG.MILL.MAX_SPEED), 0.5, dt);
+    // 主機の駆動包絡線（基底回転数まで定トルク、以上は定出力）で速度を頭打ちにする。
+    // 圧延トルクが大きいパスほど出せる速度が下がるという、直流主機そのものの挙動。
+    m.powerCap = Num.approach(m.powerCap, Drive.speedLimit(this.slab.rollTorque, m.wrDia), 0.5, dt);
+    m.motorRpm = Drive.motorRpm(m.currentSpeed, m.wrDia);
     m.currentSpeed = Num.rateTo(m.currentSpeed, m.targetSpeed, CONFIG.PROCESS.ACCEL, dt);
     // ロールベンディングは圧延荷重に追従（形状制御の可視化用）
     m.bendingForce = Num.approach(m.bendingForce, this.slab.rollForce > 0 ? 1 : 0, 0.35, dt);
@@ -2829,10 +2861,11 @@ class UIManager {
       ['ワークロール', `Φ${M.WR_D} × ${M.BARREL} mm（最小 Φ${M.WR_D_MIN}）`],
       ['バックアップロール', `Φ${M.BR_D} × ${M.BR_BARREL} mm（最小 Φ${M.BR_D_MIN}）`],
       ['BUR 硬度 / 粗度', `${M.BR_HARDNESS} / ${M.BR_ROUGHNESS}`],
-      ['BUR ロールクラウン', `${M.BR_CROWN} μm（凹）`],
-      ['最大圧延速度', `${M.MAX_SPEED} mpm`],
+      ['主電動機', '1,900 kW × 2 台（直流）'],
+      ['回転数 / 減速比', `0 / ${CONFIG.DRIVE.RPM_BASE} / ${CONFIG.DRIVE.RPM_MAX} rpm ／ ${CONFIG.DRIVE.GEAR}:1`],
+      ['最大圧延速度', `${Drive.maxSpeed().toFixed(0)} mpm <span style="color:var(--ink-3)">(= π·D·${CONFIG.DRIVE.RPM_MAX}/${CONFIG.DRIVE.GEAR})</span>`],
+      ['ロール軸 最大トルク', `${(Drive.maxTorque / 1000).toFixed(0)} kN·m <span style="color:var(--ink-3)">(基底 ${CONFIG.DRIVE.RPM_BASE} rpm まで)</span>`],
       ['常用 / 非常最大圧延荷重', `${M.RATED_FORCE_T.toLocaleString()} / ${M.LIMIT_FORCE_T.toLocaleString()} ton`],
-      ['主電動機容量', '1,900 kW × 2 台'],
       ['入側 / 出側テーブル長', `${(ent / 1000).toFixed(1)} / ${(ext / 1000).toFixed(1)} m`],
       ['テーブルローラ', `胴長 ${T.BARREL}、胴端 Φ${T.ROLL_D_END} → 中央 Φ${T.ROLL_D_MID}`],
       ['サイドトリマー', `ミル中心から ${Math.abs(TR.X).toLocaleString()} mm`],
@@ -2869,7 +2902,7 @@ class UIManager {
     on('mode-manual', 'click', () => setMode(false));
 
     const gap = $('rng-gap'), spd = $('rng-speed');
-    spd.min = -CONFIG.MILL.MAX_SPEED; spd.max = CONFIG.MILL.MAX_SPEED;
+    spd.min = -Math.round(Drive.maxSpeed()); spd.max = Math.round(Drive.maxSpeed());
     gap.min = CONFIG.MILL.GAP_MIN; gap.max = CONFIG.MILL.GAP_MAX;
     gap.min = CONFIG.MILL.GAP_MIN;
     on('rng-gap', 'input', e => { this.bus.emit('CMD_MANUAL', { gap: +e.target.value }); this._manualLabels(); });
@@ -3046,7 +3079,8 @@ class UIManager {
     $('m-speed-v').textContent = (Math.abs(m.currentSpeed)).toFixed(0);
     $('m-speed-s').textContent = m.currentSpeed > 1 ? '前進 ▶' : m.currentSpeed < -1 ? '◀ 逆行' : '停止';
     this._meter('m-force', s.rollForce, M.RATED_FORCE_T, s.rollForce.toFixed(0), t => `常用最大の ${(t * 100).toFixed(0)} %`);
-    this._meter('m-power', s.rollPower / 1000, M.RATED_POWER_KW / 1000, (s.rollPower / 1000).toFixed(1), t => `定格の ${(t * 100).toFixed(0)} %`);
+    this._meter('m-power', s.rollPower / 1000, Drive.ratedPowerKW / 1000, (s.rollPower / 1000).toFixed(1),
+      t => `定格の ${(t * 100).toFixed(0)} % ／ ${m.motorRpm.toFixed(0)} rpm`);
     $('m-temp-v').textContent  = s.temperature.toFixed(0);
     $('m-temp-s').textContent  = s.temperature < CONFIG.MATERIAL.T_MIN_ROLLABLE ? '熱間域を下回る' : '熱間圧延域';
     $('m-gap-v').textContent   = m.gap.toFixed(0);
