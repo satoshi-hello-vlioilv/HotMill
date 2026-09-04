@@ -280,8 +280,8 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
           </div>
           <div class="fld" style="margin-top:13px;">
             <div class="top"><span class="k">シミュレーション速度</span><span class="v" id="lbl-timescale">1.0<em>×</em></span></div>
-            <input type="range" id="rng-timescale" min="0.25" max="4" value="1" step="0.25">
-            <div class="derived">実時間比。物理計算は速度に依らず同一結果になります。</div>
+            <input type="range" id="rng-timescale" min="0.25" max="8" value="1" step="0.25">
+            <div class="derived">実時間比。実機の1サイクルは10分規模なので、早送りで通して見られます。物理計算は速度に依らず同一結果です。</div>
           </div>
         </div>
 
@@ -337,6 +337,22 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
           <input type="range" id="rng-init-temp" min="400" max="540" value="500" step="5">
           <div class="derived">アルミの熱間圧延域は概ね 400–540 ℃。この温度域では可視発光しません。</div>
         </div>
+        <div class="fld">
+          <div class="top"><span class="k">仕上げ</span></div>
+          <div class="seg" role="group" aria-label="仕上げ形態">
+            <button id="fin-plate" aria-pressed="false">板材（放出）</button>
+            <button id="fin-coil"  aria-pressed="true">コイル（巻取）</button>
+          </div>
+        </div>
+        <div class="fld">
+          <div class="top"><span class="k">目標板厚</span><span class="v" id="lbl-target">8<em>mm</em></span></div>
+          <input type="range" id="rng-target" min="6" max="10" value="8" step="0.5">
+        </div>
+        <div class="fld">
+          <div class="top"><span class="k">トリム量（片側）</span><span class="v" id="lbl-trim">15<em>mm</em></span></div>
+          <input type="range" id="rng-trim" min="10" max="30" value="15" step="1">
+          <div class="derived" id="der-trim"></div>
+        </div>
         <div class="derived" id="der-slab" style="margin-bottom:9px;"></div>
         <button class="btn btn-ghost" id="btn-apply-size"><i class="fa-solid fa-check"></i>適用してリセット</button>
       </div>
@@ -387,6 +403,11 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
     <details class="sec">
       <summary><i class="fa-solid fa-gears"></i> 設備諸元<i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
+        <div class="fld">
+          <div class="top"><span class="k">ロール研削状態</span><span class="v" id="lbl-roll">新品</span></div>
+          <input type="range" id="rng-roll" min="0" max="100" value="0" step="5">
+          <div class="derived" id="der-roll"></div>
+        </div>
         <table class="sched"><tbody id="spec-body"></tbody></table>
       </div>
     </details>
@@ -450,12 +471,15 @@ const CONFIG = {
 
   MILL: {
     PASS_LINE:      900,             // 床からパスライン(下ワークロール上面)まで ※推定値
-    WR_D:           935,             // ワークロール胴径  Φ935 × 2500L
-    BR_D:          1430,             // バックアップロール胴径 Φ1430 × 2450L
+    // ロールは研削のたびに径が小さくなる。新品径と最小径（研削限度）の差は
+    // パスライン調整ウェッジが吸収し、パスライン高さは一定に保たれる。
+    WR_D:           930,  WR_D_MIN:  885,   // ワークロール Φ930 × 2500L
+    BR_D:          1430,  BR_D_MIN: 1350,   // バックアップロール Φ1430 × 2450L
+    BR_HARDNESS: '45〜50 HS', BR_ROUGHNESS: '0.60〜0.20 μmRa', BR_CROWN: -50,  // μm（凹クラウン）
     BARREL:        2500,             // ワークロール胴長
     BR_BARREL:     2450,             // バックアップロール胴長
     WR_NECK_D:      520,  BR_NECK_D: 850,
-    GAP_MIN:         10,  GAP_MAX:   600,
+    GAP_MIN:          4,  GAP_MAX:   600,   // コイル最薄 6 mm を作れる下限にする
     MAX_SPEED:      161,             // 最大圧延速度 mpm
     GAP_RATE:        70,             // 圧下シリンダ速度 mm/s ※推定値
     PASSLINE_ADJ_RANGE: 120,         // パスライン調整装置(ステップウェッジ)の可動量
@@ -531,9 +555,31 @@ const CONFIG = {
     ['CROSS',    'cross',    3.4, '横送りでミルラインへ移載しています'],
   ],
 
-  SHEAR: {                                   // 出側クロップシャー(油圧アップカット・ギロチン)
-    X: 46000, CROP_LEN: 400, RAKE: 0.045,
-    OPEN: 1400, STROKE: 1500, T_CUT: 1.1, T_OPEN: 1.4, APPROACH_SPEED: 150,
+  /* 巻取機（出側リール）—— 板材放出だけでなくコイル巻取ができる。
+   * 板厚 6〜10 mm、コイル巾 760〜1800、外径最大 Φ1800、内径 Φ610、最大 9000 kg、
+   * 巻取速度 163 mpm、張力最大 22.5 t。 */
+  /* 出側の巻取設備。図面よりミル中心からの距離は
+   *   シャー 5,875 mm → デフレクタ 6,900 mm → リール中心 8,350 mm。
+   * リールはパスラインより上に置かれ、最大外径 Φ1800 でもコイル下端がパスラインより
+   * 800 mm 上に留まる。これにより可逆パス中の板がリール下を素通りできる。 */
+  COILER: {
+    X: 8350, Y_ABOVE: 1700, DEFLECTOR_X: 6900, DEFLECTOR_D: 420,
+    MANDREL_D: 610, OD_MAX: 1800,
+    WIDTH_MIN: 760, WIDTH_MAX: 1800, WEIGHT_MAX: 9000,
+    TENSION_MAX_T: 22.5, SPEED_MAX: 163, ROLL_SPEED_MAX: 123,
+    TH_MIN: 6, TH_MAX: 10, T_THREAD: 1.6,
+  },
+
+  /* 75 mm クロップシャー。出側のかなり遠方に置かれ、板厚が 75 mm 以下になった
+   * パスで端部のワニ口（不整形な先尾端）を切り落とす。 */
+  // ワークロール出側から約 30.6 m（実測・精度は低い）
+  CROP_SHEAR: { X: 30600, MAX_TH: 75, CROP_LEN: 300, OPEN: 900, T_CUT: 1.0, T_OPEN: 1.2, SPEED: 70 },
+
+  /* サイドトリマー。上下軸の円板刃で板の両耳を切り落として幅を仕上げる。
+   * ミル中心から 5,875 mm（図面）。厚板パス中は刃を開いて板を素通りさせる。 */
+  TRIMMER: {
+    X: 5875, KNIFE_D: 450, KNIFE_T: 26, TRIM_MIN: 10, TRIM_MAX: 30, TRIM_DEFAULT: 15,
+    OPEN: 700, T_SET: 1.2,
   },
 
   BUILDING: { X0: -132000, X1: 92000, Z: 34000, PIT: { X: 6000, Z: 6000, DEPTH: 3800 } },
@@ -555,18 +601,24 @@ const CONFIG = {
     LEN_MIN: 2000, LEN_MAX: 4200, LEN_DEFAULT: 4200,
     WID_MIN: 900,  WID_MAX: 2200, WID_DEFAULT: 1500,
     TEMP_MIN: 400, TEMP_MAX: 540, TEMP_DEFAULT: 500,
-    TARGET_TH: 60,                                   // 圧延目標厚
+    // 仕上げ形態。板材は出側テーブルへ放出、コイルは最終パスで巻取機へ巻き取る。
+    TARGET_TH: 8,
+    FINISH: { PLATE: { th: [20, 60], def: 30 }, COIL: { th: [6, 10], def: 8 } },
+    MODE_DEFAULT: 'COIL',
   },
 
   MATERIAL: {
     NAME: 'アルミニウム合金', RHO: 2700, CP: 1050,     // kg/m³, J/(kg·K)
     KF: { C: 55, TREF: 450, B: 0.0055, M: 0.10 },      // 変形抵抗モデル(Al-Mg系相当)
-    EMISSIVITY: 0.18, H_AIR: 12, H_WATER: 900, H_ROLL: 30000,
+        // 可逆圧延で材料温度を決める主因はロール抜熱。接触熱伝達率は熱間圧延の実測域
+    // （20〜100 kW/m²K）の上側を採る。クーラントはロール面への噴射なので、材料側の
+    // 強制対流としては扱わない（材料に直接かけるモデルは温度を過剰に下げる）。
+    EMISSIVITY: 0.18, H_AIR: 14, H_ROLL: 30000,
     T_ROLL: 80, T_AMBIENT: 30,
     T_MIN_ROLLABLE: 350,                                // これ未満は熱間圧延域外
   },
   PROCESS: { MU: 0.25, TORQUE_ARM: 0.45, HEAT_EFF: 0.95,
-             ACCEL: 110, BITE_ANGLE_MAX: 0.42 },        // mpm/s, rad(24°)
+             ACCEL: 110, BITE_ANGLE_MAX: 0.42, PASS_TIME_MAX: 150 },  // mpm/s, rad(24°), s
 
   // パススケジュールは板厚・板幅から Rolling.buildSchedule() が生成する（初期値は空）
   SCHEDULE: [],
@@ -596,7 +648,7 @@ const CONFIG = {
     { id:'bite',     name:'ロールバイト', icon:'fa-magnifying-glass', pos:[  6600,  2000,  2200], tgt:[   200,  1150,     0] },
     { id:'drive',    name:'駆動側',     icon:'fa-gears',            pos:[ 34000, 13000,-16000], tgt:[     0,  1400, -9500] },
     { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[-26000, 11000, 21000], tgt:[-10000,   700,  2200] },
-    { id:'shear',    name:'クロップシャー', icon:'fa-scissors',      pos:[ 66000,  8000, 17000], tgt:[ 51000,  1800,     0] },
+    { id:'coiler',   name:'巻取設備',   icon:'fa-arrows-spin',      pos:[ 20000,  5200, 12000], tgt:[  7000,  1900,     0] },
   ],
 };
 
@@ -609,7 +661,10 @@ const CONFIG = {
   const C = CONFIG, neg = v => -v;
   [C.TABLE.X_MIN, C.TABLE.X_MAX] = [-C.TABLE.X_MAX, -C.TABLE.X_MIN];
   [C.BUILDING.X0, C.BUILDING.X1] = [-C.BUILDING.X1, -C.BUILDING.X0];
-  C.SHEAR.X = neg(C.SHEAR.X);
+  C.TRIMMER.X = neg(C.TRIMMER.X);
+  C.CROP_SHEAR.X = neg(C.CROP_SHEAR.X);
+  C.COILER.X = neg(C.COILER.X);
+  C.COILER.DEFLECTOR_X = neg(C.COILER.DEFLECTOR_X);
   C.SUPPLY.ENTRY_X = neg(C.SUPPLY.ENTRY_X);
   C.SUPPLY.TILTER_X = neg(C.SUPPLY.TILTER_X);
   C.SUPPLY.RUNIN_X = C.SUPPLY.RUNIN_X.map(neg).sort((a, b) => a - b);
@@ -667,7 +722,11 @@ const Rolling = {
     return x < 1e-6 ? 1 : (Math.exp(x) - 1) / x;
   },
   /** 1パスの力学量をまとめて算出 */
-  solve(hIn, hOut, width, speedMpm, temp) {
+  /**
+   * 1パスの力学量。tensionMPa は前方（巻取）張力による見かけの変形抵抗低下。
+   * 張力をかけると平均面圧が下がり、同じ圧下量でも圧延荷重が小さくなる。
+   */
+  solve(hIn, hOut, width, speedMpm, temp, tensionMPa = 0) {
     const dh = hIn - hOut;
     if (dh <= 0 || width <= 0)
       return { force: 0, forceTon: 0, torque: 0, power: 0, powerKW: 0, Ld: 0, kf: 0, pm: 0,
@@ -678,7 +737,8 @@ const Rolling = {
     const v = Math.abs(speedMpm) / 60 * 1000;                       // mm/s
     const strain = Math.log(hIn / hOut);
     const strainRate = Ld > 0 ? (v / Ld) * strain : 0;
-    const kf = Rolling.flowStress(temp, strainRate);
+    const kf0 = Rolling.flowStress(temp, strainRate);
+    const kf = Math.max(kf0 - tensionMPa, kf0 * 0.35);              // 張力による見かけの低下
     const pm = 1.155 * kf * Rolling.frictionHill(Ld, hMean);        // MPa
     const force = pm * width * Ld;                                  // N
     const torque = 2 * force * (CONFIG.PROCESS.TORQUE_ARM * Ld / 1000);   // N·m
@@ -690,17 +750,39 @@ const Rolling = {
              forceTon: force / 9806.65, powerKW: power / 1000,
              biteAngle, biteOk: biteAngle <= CONFIG.PROCESS.BITE_ANGLE_MAX };
   },
+  /** 1パスに要する時間 [s]（板長＋噛み出し余裕を速度で割る）。 */
+  passTime(lenMm, speedMpm) {
+    // 圧下設定・加減速・反転の段取り時間を一定分見込む（実測に近づけるため）
+    return (lenMm + 2 * CONFIG.SAFE_CLEAR) / Math.max(Math.abs(speedMpm) / 60 * 1000, 1) + 30;
+  },
+
+  /** 巻取張力 [MPa]。装置の最大張力を板断面積で割った値で頭打ちにする。 */
+  coilTension(hOut, width) {
+    const C = CONFIG.COILER;
+    const area = Math.max(hOut * width, 1);                          // mm²
+    return Math.min(C.TENSION_MAX_T * 9806.65 / area, 30);           // 実用上 30 MPa 程度で頭打ち
+  },
+
+  /** コイル外径 [mm]。巻き取った長さと板厚から求める（内径 Φ610 から成長する）。 */
+  coilOD(coiledLen, th) {
+    const id = CONFIG.COILER.MANDREL_D;
+    return Math.sqrt(id * id + 4 * coiledLen * th / Math.PI);
+  },
+  coilMass(coiledLen, th, width) {                                   // kg
+    return coiledLen * th * width * 1e-9 * CONFIG.MATERIAL.RHO;
+  },
+
   /** 1パスでの材料平均温度の変化 [K]（加工発熱 − ロール抜熱 − パス間の表面放熱）。 */
-  passTempChange(hIn, hOut, speedMpm, T) {
+  passTempChange(hIn, hOut, speedMpm, T, passTime = 30) {
     const M = CONFIG.MATERIAL;
     const r = Rolling.solve(hIn, hOut, 1000, speedMpm, T);
     const v = Math.max(Math.abs(speedMpm) / 60 * 1000, 1);          // mm/s
     const tc = r.Ld / v;
-    const chill = 2 * M.H_ROLL * (T - M.T_ROLL) * tc / (M.RHO * M.CP * (hOut / 1000));
+    const x = 2 * M.H_ROLL * tc / (M.RHO * M.CP * (hOut / 1000));
+    const chill = (T - M.T_ROLL) * (1 - Math.exp(-x));
     // パス時間 ≒ 材長 / 速度。板厚が薄いほど表面放熱で冷えやすい。
     const Tk = T + 273.15, Ak = M.T_AMBIENT + 273.15;
     const q = M.EMISSIVITY * 5.67e-8 * (Tk ** 4 - Ak ** 4) + M.H_AIR * (T - M.T_AMBIENT);
-    const passTime = 30;                                            // 概算のパス周期 [s]
     const surface = 2 * q * passTime / (M.RHO * M.CP * (hOut / 1000));
     return r.heat - chill - surface;
   },
@@ -711,32 +793,66 @@ const Rolling = {
    * 速度は質量流に合わせて上げたうえで主機動力の定格で頭打ちにする。
    * 可逆圧延なので、最終材が出側に残るようパス数を奇数にそろえる。
    */
-  buildSchedule(h0, hTarget, width, temp) {
+  buildSchedule(h0, hTarget, width, temp, opts = {}) {
+    const coil = opts.coil === true, L0 = opts.length ?? CONFIG.SLAB.LEN_DEFAULT;
+    hTarget = Math.max(hTarget, CONFIG.MILL.GAP_MIN);        // 装置の圧下下限を下回らない
     const M = CONFIG.MILL, P = CONFIG.PROCESS, R = M.WR_D / 2;
     const dBite = 2 * R * (1 - Math.cos(P.BITE_ANGLE_MAX));
     const fLimit = M.RATED_FORCE_T * 0.88, pLimit = M.RATED_POWER_KW * 0.84;  // 実圧延時の温度ばらつき分の余裕
     // 圧延が進むと材料温度が下がり変形抵抗が上がる。生成時にもその推移を織り込む。
     const drafts = [], temps = [];
     let h = h0, T = temp;
+    // 各パスが終わる側のテーブルに板が載りきる必要がある（載らない厚みまでは薄くできない）。
+    // コイルモードでは最終パスだけがこの制約から外れ、巻取機へ巻き取る。
+    const sideUsable = (dir) => (dir > 0 ? Math.abs(CONFIG.TABLE.X_MAX) : Math.abs(CONFIG.TABLE.X_MIN))
+                                - CONFIG.SAFE_CLEAR - 4000;
+    let coilPass = -1;
     while (h > hTarget + 0.5 && drafts.length < 30) {
+      const idx = drafts.length, dir = CONFIG.FLIP * (idx % 2 === 0 ? 1 : -1);
       const vRef = Num.lerp(60, M.MAX_SPEED, Num.clamp(1 - (h - hTarget) / (h0 - hTarget), 0, 1));
-      let d = Math.min(dBite, h * 0.40, h - hTarget);
-      if (Rolling.solve(h, h - d, width, vRef, T).forceTon > fLimit) {
-        let lo = 1, hi = d;                                    // 荷重上限に収まる圧下量を二分探索
-        for (let k = 0; k < 22; k++) {
-          const mid = (lo + hi) / 2;
-          if (Rolling.solve(h, h - mid, width, vRef, T).forceTon > fLimit) hi = mid; else lo = mid;
+      const capRatio = coil ? 0.50 : 0.40;                     // 張力をかける巻取パスは大圧下できる
+      const dFin = h - hTarget;
+      let d;
+      if (dFin <= Math.min(dBite, h * capRatio)) { d = dFin; if (coil) coilPass = idx; }
+      else {
+        d = Math.min(dBite, h * 0.40, dFin);
+        if (Rolling.solve(h, h - d, width, vRef, T).forceTon > fLimit) {
+          let lo = 1, hi = d;                                  // 荷重上限に収まる圧下量を二分探索
+          for (let k = 0; k < 22; k++) {
+            const mid = (lo + hi) / 2;
+            if (Rolling.solve(h, h - mid, width, vRef, T).forceTon > fLimit) hi = mid; else lo = mid;
+          }
+          d = lo;
         }
-        d = lo;
+        const hMin = L0 * h0 / sideUsable(dir);                // これ以上薄くするとテーブルに載らない
+        d = Math.min(d, h - hMin);
+        // 各パスは所定時間内に通し切る必要がある。そのために必要な速度で定格動力を
+        // 超えるなら圧下量を落とす。長いパスほど速く通す必要があるので後段で効く。
+        for (let k = 0; k < 14 && d > 2; k++) {
+          const hOut2 = h - d, L2 = L0 * h0 / hOut2;
+          const vNeed = Num.clamp((L2 + 2 * CONFIG.SAFE_CLEAR) / P.PASS_TIME_MAX / 1000 * 60, 25, M.MAX_SPEED);
+          if (Rolling.solve(h, hOut2, width, vNeed, T).powerKW <= pLimit) break;
+          d *= 0.85;
+        }
+        if (d < 1) {                                           // 行き詰まり → 残りを最終パスで巻き取る
+          if (coil) { temps.push(T); drafts.push(dFin); coilPass = drafts.length - 1; }
+          break;
+        }
       }
-      if (d < 1) break;
       temps.push(T); drafts.push(d);
-      T += Rolling.passTempChange(h, h - d, vRef, T);
+      let extra = 0;
+      if (h > CONFIG.CROP_SHEAR.MAX_TH && (h - d) <= CONFIG.CROP_SHEAR.MAX_TH)
+        extra = 150;                                          // 75 mm シャーへの往復ぶん
+      T += Rolling.passTempChange(h, h - d, vRef, T,
+             Rolling.passTime(L0 * h0 / (h - d), vRef) + extra);
       h -= d;
+      if (coilPass === idx) break;
     }
     if (drafts.length && drafts.length % 2 === 0) {             // 偶数なら最大圧下パスを2分割
       const i = drafts.indexOf(Math.max(...drafts));
       drafts.splice(i, 1, drafts[i] / 2, drafts[i] / 2);
+      temps.splice(i, 0, temps[i]);
+      if (coilPass >= i) coilPass++;
     }
     const n = drafts.length || 1;
     // 速度は質量流に合わせて上げ、主機動力の定格で頭打ちにする。ただし温度は選んだ速度に
@@ -748,7 +864,7 @@ const Rolling = {
         const hOut = hh - d;
         let v = speeds[i];
         while (v > 10 && Rolling.solve(hh, hOut, width, v, TT).powerKW > pLimit) v -= 5;
-        TT += Rolling.passTempChange(hh, hOut, v, TT);
+        TT += Rolling.passTempChange(hh, hOut, v, TT, Rolling.passTime(L0 * h0 / hOut, v));
         hh = hOut;
         return v;
       });
@@ -757,7 +873,9 @@ const Rolling = {
     h = h0;
     drafts.forEach((d, i) => {
       const hOut = Math.round((h - d) * 10) / 10;
-      out.push({ pass: i + 1, gap: hOut, speed: speeds[i], dir: CONFIG.FLIP * (i % 2 === 0 ? 1 : -1) });
+      const isCoil = coil && i === (coilPass >= 0 ? coilPass : drafts.length - 1);
+      out.push({ pass: i + 1, gap: hOut, dir: CONFIG.FLIP * (i % 2 === 0 ? 1 : -1), coil: isCoil,
+                 speed: isCoil ? Math.min(speeds[i], CONFIG.COILER.ROLL_SPEED_MAX) : speeds[i] });
       h = hOut;
     });
     return out;
@@ -801,6 +919,7 @@ class SlabState {
     this.xMin = this.xCenter - length / 2; this.xMax = this.xCenter + length / 2;
     this.temperature = temp;
     this.inBite = false; this.rollingActive = false; this.onLine = false; this.biteOk = true;
+    this.cropped = false;
     this.rollForce = 0; this.rollTorque = 0; this.rollPower = 0; this.contactLength = 0;
     this.currentSpeed = 0; this.strainRate = 0; this.flowStress = 0;
     this.dir = 1;
@@ -813,16 +932,22 @@ class MillState {
     this.gap = CONFIG.MILL.GAP_MAX; this.targetGap = CONFIG.MILL.GAP_MAX;
     this.currentSpeed = 0; this.targetSpeed = 0;
     this.mode = 'AUTO'; this.passIndex = -1; this.passPhase = 'IDLE';
-    this.guideGap = 2600; this.passLineAdj = 0;
+    this.guideGap = 2600;
+    this.wrDia = CONFIG.MILL.WR_D; this.brDia = CONFIG.MILL.BR_D;  // 研削による現在径
+    this.powerCap = CONFIG.MILL.MAX_SPEED;     // 主機動力から決まる速度上限
     this.rollAngle = 0; this.tableAngle = 0;
     this.bendingForce = 0;
   }
-  get passLine() { return CONFIG.MILL.PASS_LINE + this.passLineAdj; }
-  /** 下ワークロール上面 = パスライン（下ロールは調整装置の上で固定） */
-  get wrBotY() { return this.passLine - CONFIG.MILL.WR_D / 2; }
-  get wrTopY() { return this.passLine + this.gap + CONFIG.MILL.WR_D / 2; }
-  get brBotY() { return this.wrBotY - (CONFIG.MILL.WR_D + CONFIG.MILL.BR_D) / 2; }
-  get brTopY() { return this.wrTopY + (CONFIG.MILL.WR_D + CONFIG.MILL.BR_D) / 2; }
+  get passLine() { return CONFIG.MILL.PASS_LINE; }
+  /** 下ワークロール上面 = パスライン（下ロールはパスライン調整装置の上で固定） */
+  get wrBotY() { return this.passLine - this.wrDia / 2; }
+  get wrTopY() { return this.passLine + this.gap + this.wrDia / 2; }
+  get brBotY() { return this.wrBotY - (this.wrDia + this.brDia) / 2; }
+  get brTopY() { return this.wrTopY + (this.wrDia + this.brDia) / 2; }
+  /** 研削で細くなった分をウェッジが持ち上げる量 */
+  get passLineAdj() {
+    return (CONFIG.MILL.WR_D - this.wrDia) / 2 + (CONFIG.MILL.BR_D - this.brDia) / 2;
+  }
 }
 
 class SupplyState {
@@ -834,10 +959,27 @@ class SupplyState {
   }
 }
 
-class ShearState {
+/**
+ * 出側の仕上げ設備の状態（ドラムシャーによる先端クロップ ＋ リールへの巻取）。
+ * 巻取機は出側1基なので、コイル巻取は最終パスでのみ行う。
+ */
+class FinishState {
   constructor() { this.reset(); }
-  reset() { this.phase = 'IDLE'; this.blade = 0; this.cropVisible = false;
-            this.cropY = 0; this.cropVY = 0; this.cropX = 0; this.cropLen = 0; }
+  reset() {
+    this.mode = CONFIG.SLAB.MODE_DEFAULT;      // 'PLATE' | 'COIL'
+    this.trim = CONFIG.TRIMMER.TRIM_DEFAULT;   // 片側トリム量 [mm]
+    this.trimming = false; this.knifeClose = 0; this.knifeAngle = 0;
+    this.trimmedWidth = 0;
+    // 75 mm クロップシャーによる端部ワニ口切断
+    this.cropStage = 'IDLE'; this.cropBlade = 0; this.cropDone = false;
+    this.cropVisible = false; this.cropX = 0; this.cropY = 0; this.cropVY = 0; this.cropLen = 0;
+    this.gripped = false; this.thread = 0; this.coiledLen = 0; this.od = CONFIG.COILER.MANDREL_D;
+    this.mandrelAngle = 0; this.tension = 0; this.winding = false; this.done = false;
+    this.phase = 'IDLE';
+  }
+  get coilMass() { return this._mass ?? 0; }
+  /** 仕上げ幅（トリミング後）。トリマーを通していなければ元の板幅のまま。 */
+  finishedWidth(slabWidth) { return this.trimmedWidth || slabWidth; }
 }
 
 /* =============================================================================
@@ -892,9 +1034,13 @@ class MillController {
     this.bus.emit('SYS_MESSAGE', { text: '圧延開始', kind: 'info' });
     this.bus.emit('STATE_PASS', 0);
   }
-  update() {
+  update(finish) {
     const m = this.mill, s = this.slab;
     if (m.mode !== 'AUTO' || m.passIndex < 0) return;
+    if (finish) {                                     // 75 mm シャーによる端部切断を優先する
+      if (finish.s.cropStage !== 'IDLE' && finish.s.cropStage !== 'DONE') return;
+      if (m.passPhase === 'SETUP' && finish.wantCrop()) { finish.beginCrop(); return; }
+    }
     const sch = CONFIG.SCHEDULE[m.passIndex];
     if (!sch) return;
     m.targetGap = sch.gap;
@@ -902,9 +1048,10 @@ class MillController {
     if (m.passPhase === 'SETUP') {
       // 圧下完了までライン停止。実機の「セットアップ→噛み込み」の順序を守る。
       m.targetSpeed = 0;
-      if (Math.abs(m.gap - sch.gap) < 0.5 && Math.abs(m.currentSpeed) < 1) m.passPhase = 'RUN';
+      // 到達可能な目標（クランプ後）と比較する。装置の下限に張り付いても待ち続けない。
+      if (Math.abs(m.gap - m.targetGap) < 0.5 && Math.abs(m.currentSpeed) < 1) m.passPhase = 'RUN';
     } else if (m.passPhase === 'RUN') {
-      m.targetSpeed = sch.dir * sch.speed;
+      m.targetSpeed = sch.dir * Math.min(sch.speed, m.powerCap);
       const cleared = sch.dir > 0 ? s.xMin > CONFIG.SAFE_CLEAR : s.xMax < -CONFIG.SAFE_CLEAR;
       if (cleared) { m.passPhase = 'CLEAR'; m.targetSpeed = 0; }
     } else if (m.passPhase === 'CLEAR') {
@@ -917,9 +1064,10 @@ class MillController {
     m.passIndex++;
     if (m.passIndex >= CONFIG.SCHEDULE.length) {
       m.passIndex = -1; m.passPhase = 'IDLE';
-      this.bus.emit('SYS_MESSAGE', { text: '全パス完了 — クロップシャーへ搬送します', kind: 'info' });
+      this.bus.emit('SYS_MESSAGE', { text: '全パス完了', kind: 'info' });
       this.bus.emit('STATE_PASS', -1);
-      this.bus.emit('CMD_START_CROP');
+      this.bus.emit('CMD_START_WIND');
+      this.bus.emit('STATE_LAST_PASS_DONE');
     } else {
       m.passPhase = 'SETUP';
       this.bus.emit('STATE_PASS', m.passIndex);
@@ -927,49 +1075,133 @@ class MillController {
   }
 }
 
-class ShearController {
+/**
+ * 仕上げ工程の制御。最終パス中に
+ *   先端がドラムシャーを通過 → 走間クロップ
+ *   先端がデフレクタを通過   → リールへ通板・把持し、以後は巻き取る
+ *   尾端がミルを抜けた後      → 残りをリールが引き込む
+ * という順で進む。板材モードではクロップのみ行い、出側テーブルへ放出する。
+ */
+class FinishController {
   constructor(bus, state, slab, mill) {
     this.bus = bus; this.s = state; this.slab = slab; this.mill = mill;
-    bus.on('CMD_START_CROP', () => {
-      if (!this.slab.onLine) return;
-      this.s.phase = 'APPROACH';
-      bus.emit('SYS_MESSAGE', { text: 'クロップシャー: 先端を切断位置まで送っています', kind: 'info' });
-    });
     bus.on('CMD_RESET', () => this.s.reset());
+    bus.on('CMD_SET_FINISH', (m) => { this.s.mode = m; });
+    bus.on('CMD_START_WIND', () => {
+      if (this.s.gripped) this.s.winding = true;          // コイルモード: 残りを巻き取る
+      else { this.s.done = true; bus.emit('STATE_FINISHED'); }   // 板材モード: 出側へ放出して完了
+    });
   }
-  update(dt) {
-    const s = this.s, sl = this.slab, C = CONFIG.SHEAR;
-    if (s.phase === 'IDLE' || s.phase === 'DONE') {
-      if (s.cropVisible) {   // 切り落とした先端がシュートへ落下
-        s.cropVY -= 9810 * dt; s.cropY += s.cropVY * dt;
-        if (s.cropY < -CONFIG.BUILDING.PIT.DEPTH) s.cropVisible = false;
+  /** 進行方向の先端座標 */
+  _head() { return CONFIG.FLIP > 0 ? this.slab.xMax : this.slab.xMin; }
+  _tail() { return CONFIG.FLIP > 0 ? this.slab.xMin : this.slab.xMax; }
+
+  /** クロップ開始条件: 板厚が 75 mm 以下になり、材料が出側にある最初の機会 */
+  wantCrop() {
+    const s = this.s, sl = this.slab, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
+    return !s.cropDone && s.cropStage === 'IDLE' && sl.thickness <= S.MAX_TH
+        && F * this._tail() > 0 && !sl.inBite;
+  }
+  beginCrop() { this.s.cropStage = 'RUN_HEAD';
+    this.bus.emit('SYS_MESSAGE', { text: `75 mm シャー: 端部のワニ口を切断します（板厚 ${this.slab.thickness.toFixed(0)} mm）`, kind: 'info' }); }
+
+  /**
+   * 端部ワニ口の切断。先端をシャーまで送って切り、続けて尾端を送って切る。
+   * 切断後は端部の張り出し（舌・ワニ口）が無くなる。
+   */
+  _crop(dt) {
+    const s = this.s, sl = this.slab, m = this.mill, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
+    const cut = (which) => {
+      s.cropLen = S.CROP_LEN;
+      s.cropX = S.X + F * S.CROP_LEN / 2; s.cropY = 0; s.cropVY = 0; s.cropVisible = true;
+      if (which === 'head') { if (F > 0) sl.xMax -= S.CROP_LEN; else sl.xMin += S.CROP_LEN; }
+      else                  { if (F > 0) sl.xMin += S.CROP_LEN; else sl.xMax -= S.CROP_LEN; }
+      sl.length = sl.xMax - sl.xMin;
+    };
+    switch (s.cropStage) {
+      case 'RUN_HEAD':
+        m.targetSpeed = F * S.SPEED;
+        if (F * (this._head() - S.X) > S.CROP_LEN) { m.targetSpeed = 0; m.currentSpeed = 0; s.cropStage = 'CUT_HEAD'; }
+        break;
+      case 'RUN_TAIL':
+        m.targetSpeed = F * S.SPEED;
+        if (F * (this._tail() - S.X) > S.CROP_LEN) { m.targetSpeed = 0; m.currentSpeed = 0; s.cropStage = 'CUT_TAIL'; }
+        break;
+      case 'CUT_HEAD': case 'CUT_TAIL': {
+        s.cropBlade = Math.min(1, s.cropBlade + dt / S.T_CUT);
+        if (s.cropBlade >= 1) {
+          cut(s.cropStage === 'CUT_HEAD' ? 'head' : 'tail');
+          s.cropStage = s.cropStage === 'CUT_HEAD' ? 'OPEN_HEAD' : 'OPEN_TAIL';
+        }
+        break;
       }
-      return;
+      case 'OPEN_HEAD': case 'OPEN_TAIL':
+        s.cropBlade = Math.max(0, s.cropBlade - dt / S.T_OPEN);
+        if (s.cropBlade <= 0) {
+          if (s.cropStage === 'OPEN_HEAD') s.cropStage = 'RUN_TAIL';
+          else { s.cropStage = 'DONE'; s.cropDone = true; sl.cropped = true;
+                 this.bus.emit('SYS_MESSAGE', { text: '75 mm シャー: 端部切断完了', kind: 'info' }); }
+        }
+        break;
     }
-    const F = CONFIG.FLIP;
-    if (s.phase === 'APPROACH') {
-      this.mill.targetSpeed = F * C.APPROACH_SPEED;
-      const head = F > 0 ? sl.xMax : sl.xMin;                 // 進行方向の先端
-      if (F * head >= F * C.X + C.CROP_LEN) {
-        this.mill.targetSpeed = 0; this.mill.currentSpeed = 0;
-        s.phase = 'CUT';
-        this.bus.emit('SYS_MESSAGE', { text: 'クロップシャー: 切断', kind: 'info' });
+  }
+
+  update(dt) {
+    const s = this.s, sl = this.slab, m = this.mill, F = CONFIG.FLIP;
+    const SH = CONFIG.TRIMMER, CO = CONFIG.COILER;
+
+    // 切り落とした端材の落下
+    if (s.cropVisible) {
+      s.cropVY -= 9810 * dt; s.cropY += s.cropVY * dt;
+      if (s.cropY < -CONFIG.BUILDING.PIT.DEPTH) s.cropVisible = false;
+    }
+    if (!sl.onLine) return;
+    this._crop(dt);
+    if (s.cropStage !== 'IDLE' && s.cropStage !== 'DONE') return;   // クロップ中はライン制御を占有
+    const finalPass = this.mill.passIndex === CONFIG.SCHEDULE.length - 1;
+    const head = this._head();
+
+    // --- サイドトリミング（最終パスのみ。刃を閉じて両耳を切り落とす）---
+    const wantTrim = finalPass && F * (head - SH.X) > 0;
+    s.knifeClose = Num.approach(s.knifeClose, wantTrim ? 1 : 0, SH.T_SET / 3, dt);
+    if (wantTrim && !s.trimming && s.knifeClose > 0.9) {
+      s.trimming = true;
+      s.trimmedWidth = Math.max(sl.width - 2 * s.trim, 100);
+      this.bus.emit('SYS_MESSAGE', {
+        text: `サイドトリマー: 両耳 ${s.trim} mm ずつ切断 → 仕上げ幅 ${s.trimmedWidth} mm`, kind: 'info' });
+    }
+    if (s.trimming && Math.abs(m.currentSpeed) > 1) s.knifeAngle += (Math.abs(m.currentSpeed) / 60 * 1000) / (SH.KNIFE_D / 2) * dt;
+
+    // --- リールへの通板と把持 ---
+    if (s.mode === 'COIL' && finalPass && !s.gripped && F * (this._head() - CO.DEFLECTOR_X) > 0) {
+      s.thread = Math.min(1, s.thread + dt / CO.T_THREAD);
+      if (s.thread >= 1) {
+        s.gripped = true;
+        this.bus.emit('SYS_MESSAGE', { text: 'リール: 先端を把持しました（張力付与開始）', kind: 'info' });
       }
-    } else if (s.phase === 'CUT') {
-      s.blade = Math.min(1, s.blade + dt / C.T_CUT);
-      if (s.blade >= 1) {
-        if (F > 0) { s.cropLen = sl.xMax - C.X; sl.xMax = C.X; }
-        else       { s.cropLen = C.X - sl.xMin; sl.xMin = C.X; }
-        s.cropX = C.X + F * s.cropLen / 2; s.cropY = 0; s.cropVY = 0; s.cropVisible = true;
-        sl.length = sl.xMax - sl.xMin;
-        s.phase = 'RETRACT';
-        this.bus.emit('STATE_CROPPED');
-      }
-    } else if (s.phase === 'RETRACT') {
-      s.blade = Math.max(0, s.blade - dt / C.T_OPEN);
-      if (s.blade <= 0) {
-        s.phase = 'DONE';
-        this.bus.emit('SYS_MESSAGE', { text: `完了: 板厚 ${sl.thickness.toFixed(0)} mm × 長さ ${(sl.length / 1000).toFixed(1)} m`, kind: 'info' });
+    }
+
+    // --- 巻取中の諸量 ---
+    if (s.gripped) {
+      s.coiledLen = Math.max(0, F * (this._head() - CO.DEFLECTOR_X));
+      s.od = Rolling.coilOD(s.coiledLen, sl.thickness);
+      s._mass = Rolling.coilMass(s.coiledLen, sl.thickness, s.finishedWidth(sl.width));
+      s.tension = Rolling.coilTension(sl.thickness, sl.width);
+      const v = Math.abs(m.currentSpeed) / 60 * 1000;                 // mm/s
+      s.mandrelAngle += (v / (s.od / 2)) * dt * F;
+    }
+
+    // --- 尾端がミルを抜けた後、残りをリールが引き込む ---
+    if (s.winding) {
+      const v = CO.ROLL_SPEED_MAX / 60 * 1000;
+      const tail = F > 0 ? sl.xMin : sl.xMax;
+      if (F * (CO.DEFLECTOR_X - tail) > 0) {
+        sl.xMin += F * v * dt; sl.xMax += F * v * dt;
+      } else if (!s.done) {
+        s.winding = false; s.done = true;
+        this.bus.emit('SYS_MESSAGE', {
+          text: `巻取完了: 板厚 ${sl.thickness.toFixed(1)} mm × 幅 ${s.finishedWidth(sl.width)} mm ／ 外径 Φ${s.od.toFixed(0)} ／ ${(s._mass / 1000).toFixed(1)} t`,
+          kind: 'info' });
         this.bus.emit('STATE_FINISHED');
       }
     }
@@ -987,11 +1219,11 @@ class PhysicsEngine {
   constructor(bus) {
     this.bus = bus;
     this.slab = new SlabState(); this.mill = new MillState();
-    this.supply = new SupplyState(); this.shear = new ShearState();
+    this.supply = new SupplyState(); this.finish = new FinishState();
     this.env = { coolant: true, steam: true };
     this.millCtrl   = new MillController(bus, this.mill, this.slab);
     this.supplyCtrl = new SupplyController(bus, this.supply);
-    this.shearCtrl  = new ShearController(bus, this.shear, this.slab, this.mill);
+    this.finishCtrl = new FinishController(bus, this.finish, this.slab, this.mill);
     this.paused = false; this.elapsed = 0;
     this.warn = null;
     this._acc = 0;
@@ -1001,12 +1233,18 @@ class PhysicsEngine {
     bus.on('CMD_SET_SUPPLY_ANIM', (v) => { this.supply.enabled = v; });
     bus.on('CMD_PAUSE', (v) => { this.paused = v; });
     bus.on('CMD_STOP_LINE', () => { this.mill.targetSpeed = 0; });
+    bus.on('CMD_SET_ROLLS', (t) => {                 // t=0:新品径 / t=1:研削限度
+      const M = CONFIG.MILL;
+      this.mill.wrDia = Num.lerp(M.WR_D, M.WR_D_MIN, t);
+      this.mill.brDia = Num.lerp(M.BR_D, M.BR_D_MIN, t);
+    });
     bus.on('CMD_START_SUPPLY', () => { if (this.supply.enabled) this.slab.onLine = false; });
     this.reset();
   }
 
   reset() {
     const sl = this.slab, d = this._pending ?? {};
+    void d;
     const spec = {
       cast:   d.cast   ?? sl.cast,
       scalp:  d.scalp  ?? sl.scalp,
@@ -1014,16 +1252,25 @@ class PhysicsEngine {
       length: d.length ?? sl.length,
       temp:   d.temp   ?? sl.initialTemp,
     };
+    if (d.mode) this.finish.mode = d.mode;
+    if (d.trim !== undefined) this.finish.trim = d.trim;
+    if (d.target !== undefined) CONFIG.SLAB.TARGET_TH = d.target;
     this._pending = null;
     this.slab.reset(spec);
     const th = this.slab.thickness;
     // 板厚・板幅が変われば圧下スケジュールも変わる。ここで作り直す。
-    CONFIG.SCHEDULE = Rolling.buildSchedule(th, CONFIG.SLAB.TARGET_TH, spec.width, spec.temp);
+    const fin = CONFIG.SLAB.FINISH[this.finish.mode];
+    CONFIG.SLAB.TARGET_TH = Num.clamp(CONFIG.SLAB.TARGET_TH, fin.th[0], fin.th[1]);
+    CONFIG.SCHEDULE = Rolling.buildSchedule(th, CONFIG.SLAB.TARGET_TH, spec.width, spec.temp,
+                        { coil: this.finish.mode === 'COIL', length: spec.length });
     this.mill.gap = this.mill.targetGap = th;
     this.mill.currentSpeed = this.mill.targetSpeed = 0;
+    this.mill.powerCap = CONFIG.MILL.MAX_SPEED;
     this.mill.passIndex = -1; this.mill.passPhase = 'IDLE';
     this.mill.guideGap = spec.width + CONFIG.TABLE.GUIDE.OPEN_MARGIN;
-    this.shear.reset(); this.supply.reset();
+    const keepMode = d.mode ?? this.finish.mode, keepTrim = d.trim ?? this.finish.trim;
+    this.finish.reset(); this.finish.mode = keepMode; this.finish.trim = keepTrim;
+    this.supply.reset();
     this.slab.onLine = !this.supply.enabled;
     this.paused = false; this.elapsed = 0; this.warn = null;
     this.bus.emit('STATE_RESET');
@@ -1040,8 +1287,8 @@ class PhysicsEngine {
   step(dt) {
     this.elapsed += dt;
     this.supplyCtrl.update(dt);
-    this.millCtrl.update();
-    this.shearCtrl.update(dt);
+    this.millCtrl.update(this.finishCtrl);
+    this.finishCtrl.update(dt);
     this._actuators(dt);
     if (this.slab.onLine) { this._dynamics(dt); this._guides(dt); this._thermal(dt); }
     this._rollKinematics(dt);
@@ -1052,6 +1299,13 @@ class PhysicsEngine {
     const m = this.mill;
     m.targetGap = Num.clamp(m.targetGap, CONFIG.MILL.GAP_MIN, CONFIG.MILL.GAP_MAX);
     m.gap = Num.rateTo(m.gap, m.targetGap, CONFIG.MILL.GAP_RATE, dt);
+    // 主機は定格以上のトルクを出せない。動力が定格を超えるなら速度で頭打ちにする。
+    // 実機の駆動系と同じ挙動で、重圧下・低温のパスでは自然に減速する。
+    // 主機は連続定格を超えると減速する。ただし短時間は過負荷（定格の1.6倍）に耐えるので、
+    // その範囲で頭打ちにし、下限速度を設けて減速の悪循環に入らないようにする。
+    const P = this.slab.rollPower, LIM = CONFIG.MILL.RATED_POWER_KW * 1.6;
+    const cap = P > 1 ? Math.abs(m.currentSpeed) * LIM / P : CONFIG.MILL.MAX_SPEED;
+    m.powerCap = Num.approach(m.powerCap, Num.clamp(cap, 35, CONFIG.MILL.MAX_SPEED), 0.5, dt);
     m.currentSpeed = Num.rateTo(m.currentSpeed, m.targetSpeed, CONFIG.PROCESS.ACCEL, dt);
     // ロールベンディングは圧延荷重に追従（形状制御の可視化用）
     m.bendingForce = Num.approach(m.bendingForce, this.slab.rollForce > 0 ? 1 : 0, 0.35, dt);
@@ -1070,7 +1324,8 @@ class PhysicsEngine {
       if (v > 0) { s.xMax += v * dt; s.xMin += v * r * dt; }
       else       { s.xMin += v * dt; s.xMax += v * r * dt; }
       s.rollingActive = true;
-      const res = Rolling.solve(s.thickness, gap, s.width, m.currentSpeed, s.temperature);
+      const tension = this.finish.gripped ? this.finish.tension : 0;
+      const res = Rolling.solve(s.thickness, gap, s.width, m.currentSpeed, s.temperature, tension);
       s.rollForce = res.forceTon; s.rollTorque = res.torque; s.rollPower = res.powerKW;
       s.contactLength = res.Ld; s.strainRate = res.strainRate; s.flowStress = res.kf;
       s.currentSpeed = Math.abs(v) / 1000 * 60;
@@ -1079,9 +1334,11 @@ class PhysicsEngine {
       s.temperature += res.heat * passedFrac;
       // ロール抜熱: 接触弧における熱伝達
       const M = CONFIG.MATERIAL;
+      // ロール抜熱は指数形（飽和する集中定数解）で求める。線形式は低速・厚板で
+      // 発散し、材料温度が非現実的に下がる。
       const contactTime = res.Ld / Math.max(Math.abs(v), 1e-3);
-      const dTroll = 2 * M.H_ROLL * (s.temperature - M.T_ROLL) * contactTime
-                   / (M.RHO * M.CP * (gap / 1000));
+      const x = 2 * M.H_ROLL * contactTime / (M.RHO * M.CP * (gap / 1000));
+      const dTroll = (s.temperature - M.T_ROLL) * (1 - Math.exp(-x));
       s.temperature -= dTroll * passedFrac;
       s.biteOk = res.biteOk;
     } else {
@@ -1107,8 +1364,7 @@ class PhysicsEngine {
   _thermal(dt) {
     const s = this.slab, M = CONFIG.MATERIAL;
     const T = s.temperature, Tk = T + 273.15, Ak = M.T_AMBIENT + 273.15;
-    const hConv = M.H_AIR + (this.env.coolant && s.inBite ? M.H_WATER * 0.15 : 0);
-    const q = M.EMISSIVITY * 5.67e-8 * (Tk ** 4 - Ak ** 4) + hConv * (T - M.T_AMBIENT); // W/m²
+    const q = M.EMISSIVITY * 5.67e-8 * (Tk ** 4 - Ak ** 4) + M.H_AIR * (T - M.T_AMBIENT); // W/m²
     s.temperature -= 2 * q * dt / (M.RHO * M.CP * (s.thickness / 1000));
   }
 
@@ -1117,7 +1373,7 @@ class PhysicsEngine {
     // 回転が表示フレームレートに依存しないようにする。
     const m = this.mill, s = this.slab;
     const surf = (s.inBite ? Math.sign(m.currentSpeed) * s.currentSpeed : m.currentSpeed) / 60 * 1000; // mm/s
-    m.rollAngle  += (surf / (CONFIG.MILL.WR_D / 2)) * dt;
+    m.rollAngle  += (surf / (m.wrDia / 2)) * dt;
     m.tableAngle += (surf / (CONFIG.TABLE.ROLL_D_END / 2)) * dt;
   }
 
@@ -1396,32 +1652,98 @@ const Parts = {
   },
   sideGuideRoll() { const g = CONFIG.TABLE.GUIDE; return G.cyl(g.ROLL_D, g.H * 0.92, 'y', 14); },
 
-  /* --- クロップシャー（油圧アップカット・ギロチン） ----------------------- */
-  shearStatic() {
-    const S = CONFIG.SHEAR, W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE;
+  /* --- 75 mm クロップシャー（油圧アップカット・ギロチン） --------------------- */
+  cropShearFrame() {
+    const S = CONFIG.CROP_SHEAR, W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP;
     const parts = [];
-    for (const s of [-1, 1]) {
-      parts.push(G.at(G.box(1000, 5200, 1100), 0, P + 1600, s * (W / 2 + 750)));   // 柱
-      parts.push(G.at(G.cyl(420, 1500, 'y', 16), 0, P + 4000, s * (W / 2 + 750))); // 油圧シリンダ
+    for (const sz of [-1, 1]) {
+      parts.push(G.at(G.box(1000, 4400, 1000), 0, P + 1200, sz * (W / 2 + 700)));
+      parts.push(G.at(G.cyl(420, 1400, 'y', 16), 0, P + 3400, sz * (W / 2 + 700)));
     }
-    parts.push(G.at(G.box(1200, 900, W + 3400), 0, P + 3750, 0));                  // 上部クロスヘッド
-    parts.push(G.at(G.box(1500, 1000, W + 3400), 0, P - 700, 0));                  // ベース
-    const F = CONFIG.FLIP;
-    parts.push(G.at(G.box(240, 260, W + 200), F * 120, P - 130, 0));               // 下刃（上面＝パスライン）
-    parts.push(G.at(G.box(2600, 900, W + 3400), F * 1900, P - 1900, 0));           // クロップシュート
+    parts.push(G.at(G.box(1200, 900, W + 3200), 0, P + 3200, 0));                 // 上部クロスヘッド
+    parts.push(G.at(G.box(1500, 1000, W + 3200), 0, P - 700, 0));                 // ベース
+    parts.push(G.at(G.box(240, 260, W + 200), F * 110, P - 130, 0));              // 下刃（上面＝パスライン）
+    parts.push(G.at(G.box(2400, 900, W + 3200), F * 1800, P - 1900, 0));          // クロップシュート
     return G.merge(parts);
   },
-  shearRam() {
-    const S = CONFIG.SHEAR, W = CONFIG.TABLE.BARREL;
-    return G.merge([G.at(G.box(500, 800, W + 400), 0, 480, 0), G.at(G.cyl(300, 1100, 'y', 14), 0, 1300, 0)]);
+  cropShearRam() {
+    const W = CONFIG.TABLE.BARREL;
+    return G.merge([
+      G.at(G.box(480, 760, W + 400), 0, 460, 0),
+      G.at(G.cyl(300, 1000, 'y', 14), 0, 1250, 0),
+      G.at((() => { const g = G.box(220, 300, W + 200); g.rotateX(0.045); return g; })(), 0, -80, 0),
+    ]);
   },
-  shearBlade() {   // 斜め刃（レーキ角つき）
-    const W = CONFIG.TABLE.BARREL, S = CONFIG.SHEAR;
-    const g = G.box(220, 300, W + 200); g.rotateX(S.RAKE); return g;
-  },
-  shearHoldDown() { const W = CONFIG.TABLE.BARREL; return G.box(420, 420, W + 100); },
 
-  /* --- 装入設備: 転倒装置 / 縦送りテーブル / 横送りローラ ------------------ */
+  /* --- サイドトリマー。上下軸の円板刃が板の両耳を切り落として幅を仕上げる ------ */
+  trimmerFrame() {
+    const W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE, parts = [];
+    for (const sz of [-1, 1]) {
+      parts.push(G.at(G.box(1200, 3000, 800), 0, P + 400, sz * (W / 2 + 650)));
+      parts.push(G.at(G.box(1600, 600, 1100), 0, P - 1400, sz * (W / 2 + 650)));
+      // 耳くずスクラップチョッパー（切り落とした耳を細断して落とす）と受けシュート
+      parts.push(G.at(G.box(900, 800, 900), 0, P - 250, sz * (W / 2 + 1450)));
+      parts.push(G.at(G.cyl(320, 700, 'x', 12), 0, P + 160, sz * (W / 2 + 1450)));
+      parts.push(G.at(G.cyl(320, 700, 'x', 12), 0, P - 220, sz * (W / 2 + 1450)));
+      parts.push(G.at(G.box(1100, 900, 1100), 0, P - 1250, sz * (W / 2 + 1450)));
+    }
+    parts.push(G.at(G.box(1200, 450, W + 2400), 0, P + 1800, 0));                 // 上部梁
+    return G.merge(parts);
+  },
+  /** トリマー軸（円板刃 2 枚つき）。刃位置は板幅に合わせて Z 方向へ移動する。 */
+  trimmerShaft() {
+    const T = CONFIG.TRIMMER, W = CONFIG.TABLE.BARREL;
+    return G.cyl(T.KNIFE_D * 0.42, W + 1400, 'z', 12);
+  },
+  trimmerKnife() {
+    const T = CONFIG.TRIMMER;
+    return G.merge([
+      G.cyl(T.KNIFE_D, T.KNIFE_T, 'z', 24),
+      G.at(G.cyl(T.KNIFE_D * 0.55, T.KNIFE_T + 90, 'z', 14), 0, 0, 0),            // 刃物ホルダ
+    ]);
+  },
+
+  /* --- スリーロール（下2本・上1本）。板の先端を上方へ曲げてリールへ導く ------ */
+  threeRollFrame() {
+    const C = CONFIG.COILER, W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE, parts = [];
+    for (const sz of [-1, 1]) {
+      parts.push(G.at(G.box(1700, 2200, 700), 0, P + 200, sz * (W / 2 + 560)));
+      parts.push(G.at(G.box(2100, 500, 1000), 0, P - 1050, sz * (W / 2 + 560)));
+    }
+    parts.push(G.at(G.box(1700, 400, W + 2200), 0, P + 1400, 0));
+    return G.merge(parts);
+  },
+  deflectorRoll() {
+    const C = CONFIG.COILER, W = CONFIG.TABLE.BARREL;
+    return G.merge([
+      G.cyl(C.DEFLECTOR_D, W + 100, 'z', 16),
+      G.at(G.cyl(C.DEFLECTOR_D * 0.4, 560, 'z', 8), 0, 0,  (W + 660) / 2),
+      G.at(G.cyl(C.DEFLECTOR_D * 0.4, 560, 'z', 8), 0, 0, -(W + 660) / 2),
+    ]);
+  },
+
+  /* --- 巻取リール。パスラインより上に置かれ、コイル下端がパスラインを侵さない ---- */
+  coilerFrame() {
+    const C = CONFIG.COILER, P = CONFIG.MILL.PASS_LINE, W = CONFIG.TABLE.BARREL;
+    const cy = P + C.Y_ABOVE, parts = [];
+    for (const sz of [-1, 1]) {
+      parts.push(G.at(G.box(1600, cy, 1000), 0, cy / 2, sz * (W / 2 + 800)));
+      parts.push(G.at(G.box(2000, 500, 1300), 0, 250, sz * (W / 2 + 800)));
+      parts.push(G.at(G.cyl(900, 700, 'z', 16), 0, cy, sz * (W / 2 + 800)));  // 軸受
+    }
+    parts.push(G.at(G.box(1400, 400, W + 3000), 0, cy + 1500, 0));            // 上部梁
+    return G.merge(parts);
+  },
+  mandrel() {
+    const C = CONFIG.COILER, W = CONFIG.TABLE.BARREL;
+    return G.merge([
+      G.cyl(C.MANDREL_D, W + 300, 'z', 20),
+      G.at(G.box(80, C.MANDREL_D + 60, W + 300), 0, 0, 0),                    // セグメント割の目印
+    ]);
+  },
+  wrapperRoll() { return G.cyl(320, CONFIG.TABLE.BARREL + 100, 'z', 12); },
+
+  /* --- 装入設備: 転倒装置 / 縦送りテーブル / 横送りローラ ------------------ */  /* --- 装入設備: 転倒装置 / 縦送りテーブル / 横送りローラ ------------------ */
   /**
    * 転倒装置(down-ender)の腕。縦置きインゴットを立ち上がり面で受け、90°倒して
    * 自身のローラベッドへ寝かせる。ベッド上面は倒した状態でパスラインと一致する。
@@ -1657,7 +1979,10 @@ class MillStandView {
     this.zC = zC;
   }
   update(mill) {
-    const M = CONFIG.MILL, H = M.HOUSING, zC = this.zC, ratio = M.WR_D / M.BR_D;
+    const M = CONFIG.MILL, H = M.HOUSING, zC = this.zC, ratio = mill.wrDia / mill.brDia;
+    const kw = mill.wrDia / M.WR_D, kb = mill.brDia / M.BR_D;      // 研削による径の縮み
+    this.rolls.workTop.scale.set(kw, kw, 1);   this.rolls.workBot.scale.set(kw, kw, 1);
+    this.rolls.backupTop.scale.set(kb, kb, 1); this.rolls.backupBot.scale.set(kb, kb, 1);
     const wt = mill.wrTopY, wb = mill.wrBotY, bt = mill.brTopY, bb = mill.brBotY;
     // 材料が +X のとき: 上ロールは接触点が下面 → +Z 回転、下ロールは −Z 回転。
     // バックアップロールはワークロールと外接するので符号が反転する。
@@ -1676,8 +2001,11 @@ class MillStandView {
     this.capRod.near.set(0, 0, (rodTop + rodBot) / 2,  zC, 0, 0, 0, 1, len / 1000, 1).commit();
     this.capRod.far .set(0, 0, (rodTop + rodBot) / 2, -zC, 0, 0, 0, 1, len / 1000, 1).commit();
 
-    const wedgeTop = bb - M.CHOCK.BR.y / 2;
-    for (const [k, s] of [1, -1].entries()) this.wedge.set(k, 0, wedgeTop - M.WEDGE.H / 2, s * zC);
+    // パスライン調整ウェッジは、研削で細くなった分だけ厚みを増して下BURチョックを支える
+    const wedgeTop = bb - M.CHOCK.BR.y / 2, seatY = H.WIN_BOT + 200;
+    const fill = Math.max(wedgeTop - seatY, 120);
+    for (const [k, s] of [1, -1].entries())
+      this.wedge.set(k, 0, (wedgeTop + seatY) / 2, s * zC, 0, 0, 0, 1, fill / M.WEDGE.H, 1);
     this.wedge.commit();
 
     let i = 0;
@@ -1757,7 +2085,9 @@ class TableView {
     const T = CONFIG.TABLE, P = CONFIG.MILL.PASS_LINE;
     // ローラピッチはミル近傍を密に、遠方を粗に取る（実機同様、かつインスタンス数を抑える）。
     // 圧延機直下とクロップシャー直下は設備が占有するのでローラを置かない。
-    const blocked = [{ x: 0, half: T.CLEAR }, { x: CONFIG.SHEAR.X, half: 1400 }];
+    const blocked = [{ x: 0, half: T.CLEAR }, { x: CONFIG.TRIMMER.X, half: 1100 },
+                     { x: CONFIG.COILER.DEFLECTOR_X, half: 1100 },
+                     { x: CONFIG.CROP_SHEAR.X, half: 1300 }];
     const free = x => blocked.every(b => Math.abs(x - b.x) > b.half);
     this.xs = [];
     for (let x = 0; x >= T.X_MIN; x -= (Math.abs(x) < T.NEAR_ZONE ? T.PITCH_NEAR : T.PITCH_FAR))
@@ -1834,31 +2164,119 @@ class GuideView {
   }
 }
 
-class ShearView {
+/**
+ * 出側仕上げ設備（サイドトリマー → スリーロール → 巻取リール）。
+ * 図面よりミル中心からの距離は 5,875 / 6,900 / 8,350 mm。
+ * リールはパスラインより 1,700 mm 上にあり、最大外径 Φ1800 でもコイル下端が
+ * パスラインより 800 mm 上に留まるため、可逆パス中の板がリール下を通過できる。
+ */
+class FinishView {
   constructor(scene) {
-    const S = CONFIG.SHEAR, P = CONFIG.MILL.PASS_LINE;
-    this.group = new THREE.Group(); this.group.position.x = u(S.X); scene.add(this.group);
-    const body = new THREE.Mesh(Parts.shearStatic(), MAT.shearBody);
-    body.castShadow = body.receiveShadow = true; this.group.add(body);
-    this.ram = new THREE.Mesh(Parts.shearRam(), MAT.shearBody); this.ram.castShadow = true; this.group.add(this.ram);
-    this.blade = new THREE.Mesh(Parts.shearBlade(), MAT.blade); this.blade.castShadow = true; this.group.add(this.blade);
-    this.hold = new THREE.Mesh(Parts.shearHoldDown(), MAT.shearBody); this.group.add(this.hold);
-    this.crop = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces); this.crop.castShadow = true;
-    this.crop.visible = false; scene.add(this.crop);
+    const T = CONFIG.TRIMMER, C = CONFIG.COILER, P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP;
     this.P = P;
+
+    // --- サイドトリマー ---
+    this.trimmer = new THREE.Group(); this.trimmer.position.x = u(T.X); scene.add(this.trimmer);
+    const tf = new THREE.Mesh(Parts.trimmerFrame(), MAT.shearBody);
+    tf.castShadow = tf.receiveShadow = true; this.trimmer.add(tf);
+    this.knifeShafts = [1, -1].map(sy => {
+      const m = new THREE.Mesh(Parts.trimmerShaft(), MAT.rollNeck); this.trimmer.add(m); return m;
+    });
+    // 円板刃は 上下 × 両耳 の 4 枚。板幅とトリム量に合わせて Z 位置が動く。
+    this.knives = new Instances(Parts.trimmerKnife(), MAT.blade, 4, { dynamic: true, cull: false });
+    this.trimmer.add(this.knives.mesh);
+
+    // --- スリーロール（下2本・上1本）---
+    this.three = new THREE.Group(); this.three.position.x = u(C.DEFLECTOR_X); scene.add(this.three);
+    const trf = new THREE.Mesh(Parts.threeRollFrame(), MAT.shearBody);
+    trf.castShadow = trf.receiveShadow = true; this.three.add(trf);
+    const dRoll = Parts.deflectorRoll();
+    this.lowerRolls = [-1, 1].map(sx => {
+      const m = new THREE.Mesh(dRoll, MAT.rollFace);
+      m.position.set(u(sx * 520), u(P - C.DEFLECTOR_D / 2), 0); m.castShadow = true;
+      this.three.add(m); return m;
+    });
+    this.upperRoll = new THREE.Mesh(dRoll, MAT.rollFace); this.upperRoll.castShadow = true;
+    this.three.add(this.upperRoll);
+
+    // --- 巻取リール ---
+    this.coiler = new THREE.Group(); this.coiler.position.x = u(C.X); scene.add(this.coiler);
+    const cf = new THREE.Mesh(Parts.coilerFrame(), MAT.shearBody);
+    cf.castShadow = cf.receiveShadow = true; this.coiler.add(cf);
+    this.mandrelY = P + C.Y_ABOVE;
+    this.mandrel = new THREE.Mesh(Parts.mandrel(), MAT.rollNeck);
+    this.mandrel.position.y = u(this.mandrelY); this.mandrel.castShadow = true; this.coiler.add(this.mandrel);
+    this.coil = new THREE.Mesh(G.cyl(1000, 1000, 'z', 32), MAT.slabFaces[0]);
+    this.coil.position.y = u(this.mandrelY); this.coil.castShadow = true;
+    this.coil.visible = false; this.coiler.add(this.coil);
+    this.wrappers = [0, 1, 2].map(i => {                    // ラッパーロール（先端の巻き付け用）
+      const a = Math.PI * (0.75 + i * 0.30) * -F;
+      const m = new THREE.Mesh(Parts.wrapperRoll(), MAT.rollNeck);
+      m.position.set(u(Math.cos(a) * 700), u(this.mandrelY + Math.sin(a) * 700), 0);
+      this.coiler.add(m); return m;
+    });
+    // 三本ロールからコイルまでの渡り（上方へ偏向された板）
+    this.bridge = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces[0]);
+    this.bridge.visible = false; scene.add(this.bridge);
+
+    // --- 75 mm クロップシャー（出側の遠方。端部のワニ口を切り落とす）---
+    const CS = CONFIG.CROP_SHEAR;
+    this.cropShear = new THREE.Group(); this.cropShear.position.x = u(CS.X); scene.add(this.cropShear);
+    const csf = new THREE.Mesh(Parts.cropShearFrame(), MAT.shearBody);
+    csf.castShadow = csf.receiveShadow = true; this.cropShear.add(csf);
+    this.cropRam = new THREE.Mesh(Parts.cropShearRam(), MAT.blade);
+    this.cropRam.castShadow = true; this.cropShear.add(this.cropRam);
+    this.cropPiece = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
+    this.cropPiece.castShadow = true; this.cropPiece.visible = false; scene.add(this.cropPiece);
   }
-  update(shear, slab, mill) {
-    const S = CONFIG.SHEAR, P = mill.passLine;
-    const open = S.OPEN, drop = shear.blade * (open + slab.thickness + 120);
-    const y = P + open + 320 - drop;
-    this.ram.position.y = u(y + 520); this.blade.position.y = u(y);
-    this.hold.position.y = u(P + slab.thickness + 210 - shear.blade * 200);
-    this.hold.position.x = u(-CONFIG.FLIP * 900);
-    this.crop.visible = shear.cropVisible;
-    if (shear.cropVisible) {
-      this.crop.scale.set(u(Math.max(shear.cropLen, 1)), u(slab.thickness), u(slab.width));
-      this.crop.position.set(u(shear.cropX), u(P + shear.cropY + slab.thickness / 2), 0);
-      this.crop.rotation.z = Num.clamp(shear.cropY / 900, -0.9, 0);
+
+  update(fin, slab, mill) {
+    const T = CONFIG.TRIMMER, C = CONFIG.COILER, P = mill.passLine, F = CONFIG.FLIP;
+
+    // トリマー: 刃は板幅・トリム量に合わせて Z、開閉は Y で表す
+    const half = Math.max(slab.width / 2 - fin.trim, 60);
+    const openY = Num.lerp(T.OPEN, T.KNIFE_T * 0.4, fin.knifeClose);
+    this.knifeShafts[0].position.y = u(P + openY);
+    this.knifeShafts[1].position.y = u(P - openY + slab.thickness);
+    let i = 0;
+    for (const sy of [1, -1]) for (const sz of [-1, 1])
+      this.knives.set(i++, 0, P + (sy > 0 ? openY : -openY + slab.thickness), sz * half, 0, 0, sy * fin.knifeAngle);
+    this.knives.commit();
+
+    // スリーロール: 通板時に上ロールが降りて先端を上方へ曲げる
+    this.upperRoll.position.y = u(P + slab.thickness + C.DEFLECTOR_D / 2 + Num.lerp(500, 30, fin.thread));
+    const a = -mill.tableAngle;
+    this.lowerRolls.forEach(m => { m.rotation.z = a; });
+    this.upperRoll.rotation.z = -a;
+
+    // コイル: 巻き取った長さから外径が決まる
+    const wound = fin.gripped && fin.coiledLen > 1;
+    this.coil.visible = wound;
+    this.mandrel.rotation.z = fin.mandrelAngle;
+    if (wound) {
+      const w = fin.finishedWidth(slab.width);
+      this.coil.scale.set(u(fin.od) / u(1000), u(fin.od) / u(1000), u(w) / u(1000));
+      this.coil.rotation.z = fin.mandrelAngle;
+    }
+    // 75 mm シャー: 刃の昇降と切り落とし片の落下
+    const CS = CONFIG.CROP_SHEAR;
+    this.cropRam.position.y = u(P + CS.OPEN + 300 - fin.cropBlade * (CS.OPEN + slab.thickness + 150));
+    this.cropPiece.visible = fin.cropVisible;
+    if (fin.cropVisible) {
+      this.cropPiece.scale.set(u(Math.max(fin.cropLen, 1)), u(slab.thickness), u(slab.width));
+      this.cropPiece.position.set(u(fin.cropX), u(P + fin.cropY + slab.thickness / 2), 0);
+      this.cropPiece.rotation.z = Num.clamp(fin.cropY / 900, -0.9, 0);
+    }
+
+    // 渡り板（スリーロール上端 → コイル下面）
+    this.bridge.visible = wound;
+    if (wound) {
+      const ax = C.DEFLECTOR_X, ay = P + slab.thickness / 2;
+      const bx = C.X - F * fin.od * 0.35, by = this.mandrelY - fin.od * 0.35;
+      const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy);
+      this.bridge.scale.set(u(len), u(slab.thickness), u(fin.finishedWidth(slab.width)));
+      this.bridge.position.set(u((ax + bx) / 2), u((ay + by) / 2), 0);
+      this.bridge.rotation.z = Math.atan2(dy, dx);
     }
   }
 }
@@ -2077,7 +2495,7 @@ class SlabView {
       let x = this._map ? this._mapX(bx) : slab.xMin + bx * L, h = hIn, dip = 0;
       if (rolling) { const p = Rolling.profile(x, hIn, gap, slab.dir); h = p.h; dip = p.dip; }
       // 端部の張り出し（舌＝幅中央が伸び、ワニ口＝表裏が伸びる）
-      const e = (Math.abs(bx * 2 - 1) - 0.88) / 0.12;
+      const e = slab.cropped ? -1 : (Math.abs(bx * 2 - 1) - 0.88) / 0.12;
       if (e > 0) {
         const ramp = e * e, sgn = bx > 0.5 ? 1 : -1, nz = bz * 2, ny = by * 2 - 1;
         x += sgn * (w * 0.09 * red * ramp * (1 - nz * nz) + L * 0.025 * red * ramp * ny * ny);
@@ -2147,7 +2565,10 @@ class LabelView {
       ['出側テーブル',                   F * 26000,  1600,        0, 95000],
       ['転倒装置',                        S.TILTER_X,  3600, S.SIDE_Z,  75000],
       ['横送り設備',                        S.ENTRY_X,  2300, S.SIDE_Z / 2, 55000],
-      ['クロップシャー',              CONFIG.SHEAR.X,  6400,        0, 95000],
+      ['サイドトリマー',            CONFIG.TRIMMER.X,  4200,        0, 40000],
+      ['75 mm クロップシャー',   CONFIG.CROP_SHEAR.X,  6200,        0, 95000],
+      ['スリーロール',      CONFIG.COILER.DEFLECTOR_X,  3000,        0, 30000],
+      ['巻取リール',                  CONFIG.COILER.X, CONFIG.MILL.PASS_LINE + CONFIG.COILER.Y_ABOVE + 1800, 0, 45000],
       ['ピット炉',                        S.TILTER_X,  1800, CONFIG.FURNACE.Z, 80000],
       ['装入クレーン',                    S.TILTER_X, CONFIG.CRANE.GIRDER_Y + 1500, CONFIG.FURNACE.Z, 90000],
     ].map(([t, x, y, z, maxD]) => {
@@ -2248,7 +2669,7 @@ class World3D {
     this.driveView = new DriveView(this.scene);
     this.tableView = new TableView(this.scene);
     this.guideView = new GuideView(this.scene);
-    this.shearView = new ShearView(this.scene);
+    this.finishView = new FinishView(this.scene);
     this.supplyView= new SupplyView(this.scene);
     this.slabView  = new SlabView(this.scene);
     this.sprayView = new SprayView(this.scene);
@@ -2289,12 +2710,12 @@ class World3D {
   }
 
   render(phys, dt) {
-    const { slab, mill, supply, shear } = phys;
+    const { slab, mill, supply, finish } = phys;
     this.millView.update(mill);
     this.driveView.update(mill);
     this.tableView.update(mill);
     this.guideView.update(mill);
-    this.shearView.update(shear, slab, mill);
+    this.finishView.update(finish, slab, mill);
     this.supplyView.update(supply, slab, mill, dt);
     this.slabView.update(slab, mill);
     this.sprayView.update(dt, phys);
@@ -2342,7 +2763,7 @@ class UIManager {
     this._acc = 0;
     this._buildViews(); this._buildSpec(); this._buildLegend(); this._buildCast();
     this._bind(); this._listen();
-    this.dims(); this.renderSchedule(); this._banner('idle');
+    this.dims(); this._rollState(); this.renderSchedule(); this._banner('idle');
   }
 
   /* ---- 静的な表の構築 ---- */
@@ -2400,17 +2821,28 @@ class UIManager {
     ].map(([c, t]) => `<span><em style="background:${hex(c)};border:1px solid rgba(0,0,0,.15)"></em>${t}</span>`).join('');
   }
   _buildSpec() {
-    const M = CONFIG.MILL, T = CONFIG.TABLE;
+    const M = CONFIG.MILL, T = CONFIG.TABLE, C = CONFIG.COILER, TR = CONFIG.TRIMMER, CS = CONFIG.CROP_SHEAR;
+    const F = CONFIG.FLIP, ent = F > 0 ? Math.abs(T.X_MIN) : Math.abs(T.X_MAX);
+    const ext = F > 0 ? Math.abs(T.X_MAX) : Math.abs(T.X_MIN);
     const rows = [
       ['形式', '4段可逆式熱間圧延機'],
-      ['ワークロール', `Φ${M.WR_D} × ${M.BARREL} mm`],
-      ['バックアップロール', `Φ${M.BR_D} × ${M.BR_BARREL} mm`],
+      ['ワークロール', `Φ${M.WR_D} × ${M.BARREL} mm（最小 Φ${M.WR_D_MIN}）`],
+      ['バックアップロール', `Φ${M.BR_D} × ${M.BR_BARREL} mm（最小 Φ${M.BR_D_MIN}）`],
+      ['BUR 硬度 / 粗度', `${M.BR_HARDNESS} / ${M.BR_ROUGHNESS}`],
+      ['BUR ロールクラウン', `${M.BR_CROWN} μm（凹）`],
       ['最大圧延速度', `${M.MAX_SPEED} mpm`],
-      ['常用最大圧延荷重', `${M.RATED_FORCE_T.toLocaleString()} ton`],
-      ['非常最大圧延荷重', `${M.LIMIT_FORCE_T.toLocaleString()} ton`],
-      ['入側テーブル長', `${(Math.abs(T.X_MIN) / 1000).toFixed(1)} m`],
-      ['出側テーブル長', `${(T.X_MAX / 1000).toFixed(1)} m`],
-      ['主電動機容量', `1,900 kW × 2 台`],
+      ['常用 / 非常最大圧延荷重', `${M.RATED_FORCE_T.toLocaleString()} / ${M.LIMIT_FORCE_T.toLocaleString()} ton`],
+      ['主電動機容量', '1,900 kW × 2 台'],
+      ['入側 / 出側テーブル長', `${(ent / 1000).toFixed(1)} / ${(ext / 1000).toFixed(1)} m`],
+      ['テーブルローラ', `胴長 ${T.BARREL}、胴端 Φ${T.ROLL_D_END} → 中央 Φ${T.ROLL_D_MID}`],
+      ['サイドトリマー', `ミル中心から ${Math.abs(TR.X).toLocaleString()} mm`],
+      ['スリーロール', `ミル中心から ${Math.abs(C.DEFLECTOR_X).toLocaleString()} mm（下2・上1）`],
+      ['巻取リール', `ミル中心から ${Math.abs(C.X).toLocaleString()} mm ／ パスライン上 ${C.Y_ABOVE} mm`],
+      ['コイル諸元', `板厚 ${C.TH_MIN}〜${C.TH_MAX} / 巾 ${C.WIDTH_MIN}〜${C.WIDTH_MAX} mm`],
+      ['コイル外径 / 内径', `最大 Φ${C.OD_MAX} / Φ${C.MANDREL_D} mm`],
+      ['コイル重量 / 張力', `最大 ${(C.WEIGHT_MAX / 1000)} t / ${C.TENSION_MAX_T} ton`],
+      ['巻取速度', `${C.SPEED_MAX} mpm（巻取パス圧延速度 ${C.ROLL_SPEED_MAX} mpm）`],
+      ['クロップシャー', `75 mm 対応 ／ ミル中心から ${Math.abs(CS.X).toLocaleString()} mm`],
       ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
     ];
     $('spec-body').innerHTML = rows.map(([k, v]) =>
@@ -2439,15 +2871,30 @@ class UIManager {
     const gap = $('rng-gap'), spd = $('rng-speed');
     spd.min = -CONFIG.MILL.MAX_SPEED; spd.max = CONFIG.MILL.MAX_SPEED;
     gap.min = CONFIG.MILL.GAP_MIN; gap.max = CONFIG.MILL.GAP_MAX;
+    gap.min = CONFIG.MILL.GAP_MIN;
     on('rng-gap', 'input', e => { this.bus.emit('CMD_MANUAL', { gap: +e.target.value }); this._manualLabels(); });
     on('rng-speed', 'input', e => { this.bus.emit('CMD_MANUAL', { speed: +e.target.value }); this._manualLabels(); });
+
+    const rollState = () => {
+      const t = +$('rng-roll').value / 100, M = CONFIG.MILL;
+      const wr = Num.lerp(M.WR_D, M.WR_D_MIN, t), br = Num.lerp(M.BR_D, M.BR_D_MIN, t);
+      const lift = (M.WR_D - wr) / 2 + (M.BR_D - br) / 2;
+      $('lbl-roll').textContent = t === 0 ? '新品' : t >= 1 ? '研削限度' : `研削 ${(t * 100).toFixed(0)} %`;
+      $('der-roll').innerHTML =
+        `WR Φ${wr.toFixed(0)} ／ BUR Φ${br.toFixed(0)}<br>` +
+        `減径ぶん <b>${lift.toFixed(1)} mm</b> をパスライン調整ウェッジが持ち上げ、パスラインは ${M.PASS_LINE} mm で一定に保たれます。`;
+      this.bus.emit('CMD_SET_ROLLS', t);
+    };
+    on('rng-roll', 'input', rollState);
+    this._rollState = rollState;
 
     on('rng-timescale', 'input', e => { this.timeScale = +e.target.value; $('lbl-timescale').innerHTML = this.timeScale.toFixed(2).replace(/0$/, '') + '<em>×</em>'; });
 
     this.dims = () => {
       const d = { cast: this.cast, scalp: +$('rng-init-scalp').value,
                   width: +$('rng-init-wid').value, length: +$('rng-init-len').value,
-                  temp: +$('rng-init-temp').value };
+                  temp: +$('rng-init-temp').value,
+                  mode: this.finishMode, target: +$('rng-target').value, trim: +$('rng-trim').value };
       const th = d.cast - 2 * d.scalp;
       $('lbl-init-scalp').innerHTML = d.scalp + '<em>mm</em>';
       $('lbl-init-wid').innerHTML   = d.width + '<em>mm</em>';
@@ -2455,18 +2902,46 @@ class UIManager {
       $('lbl-init-temp').innerHTML  = d.temp + '<em>℃</em>';
       $('der-scalp').textContent =
         `圧延前の実厚 ${th} mm（呼び厚 ${d.cast} − 面削 2×${d.scalp}）。面削面（上下）は鏡面仕上げ。`;
-      const target = CONFIG.SLAB.TARGET_TH;
-      const outLen = d.length * th / target;
+      const coil = d.mode === 'COIL';
+      $('lbl-target').innerHTML = d.target + '<em>mm</em>';
+      $('lbl-trim').innerHTML = d.trim + '<em>mm</em>';
+      const outLen = d.length * th / d.target;
       const mass = th * d.width * d.length * 1e-9 * CONFIG.MATERIAL.RHO / 1000;
-      const n = Rolling.buildSchedule(th, target, d.width, d.temp).length;
-      const half = outLen / 2 + CONFIG.SAFE_CLEAR;
-      const over = half > Math.abs(CONFIG.TABLE.X_MIN) || half > Math.abs(CONFIG.TABLE.X_MAX);
+      const sch = Rolling.buildSchedule(th, d.target, d.width, d.temp, { coil, length: d.length });
+      const reached = sch.length ? sch[sch.length - 1].gap : th;
+      const finW = Math.max(d.width - 2 * d.trim, 100);
+      const C = CONFIG.COILER;
+      const od = Rolling.coilOD(outLen, d.target), coilKg = Rolling.coilMass(outLen, d.target, finW);
+      $('der-trim').textContent = `仕上げ幅 ${finW} mm（板幅 ${d.width} − 両耳 2×${d.trim}）`;
+      const warn = [];
+      if (Math.abs(reached - d.target) > 0.6) warn.push(`テーブル長の制約で ${reached.toFixed(1)} mm までしか到達できません`);
+      if (coil) {
+        if (finW < C.WIDTH_MIN || finW > C.WIDTH_MAX) warn.push(`コイル巾 ${C.WIDTH_MIN}〜${C.WIDTH_MAX} mm を外れます`);
+        if (od > C.OD_MAX) warn.push(`コイル外径 Φ${od.toFixed(0)} が最大 Φ${C.OD_MAX} を超えます`);
+        if (coilKg > C.WEIGHT_MAX) warn.push(`コイル重量 ${(coilKg / 1000).toFixed(1)} t が最大 ${C.WEIGHT_MAX / 1000} t を超えます`);
+      }
       $('der-slab').innerHTML =
-        `質量 ${mass.toFixed(1)} t ／ ${target} mm まで ${n} パス ／ 最終長 ${(outLen / 1000).toFixed(1)} m` +
-        `（伸び ${(th / target).toFixed(2)} 倍）` +
-        (over ? ' <span style="color:var(--crit);font-weight:700">※ テーブル長を超えます</span>' : '');
+        `スラブ質量 ${mass.toFixed(1)} t ／ ${sch.length} パス ／ 最終長 ${(outLen / 1000).toFixed(1)} m（伸び ${(th / d.target).toFixed(1)} 倍）` +
+        (coil ? `<br>コイル: 外径 Φ${od.toFixed(0)} ／ 内径 Φ${C.MANDREL_D} ／ ${(coilKg / 1000).toFixed(1)} t` : '') +
+        (warn.length ? `<br><span style="color:var(--crit);font-weight:700">※ ${warn.join(' / ')}</span>` : '');
       return d;
     };
+    const setFinish = (m) => {
+      this.finishMode = m;
+      $('fin-plate').setAttribute('aria-pressed', m === 'PLATE');
+      $('fin-coil').setAttribute('aria-pressed', m === 'COIL');
+      const r = CONFIG.SLAB.FINISH[m], el = $('rng-target');
+      el.min = r.th[0]; el.max = r.th[1]; el.step = m === 'COIL' ? 0.5 : 2;
+      el.value = Num.clamp(+el.value, r.th[0], r.th[1]);
+      if (+el.value !== r.def && (+el.value < r.th[0] || +el.value > r.th[1])) el.value = r.def;
+      this.dims();
+    };
+    on('fin-plate', 'click', () => setFinish('PLATE'));
+    on('fin-coil',  'click', () => setFinish('COIL'));
+    ['rng-target', 'rng-trim'].forEach(id => on(id, 'input', this.dims));
+    this.finishMode = CONFIG.SLAB.MODE_DEFAULT;
+    $('rng-target').value = CONFIG.SLAB.FINISH[this.finishMode].def;
+    setFinish(this.finishMode);
     ['rng-init-scalp', 'rng-init-wid', 'rng-init-len', 'rng-init-temp'].forEach(id => on(id, 'input', this.dims));
     on('btn-apply-size', 'click', () => this.bus.emit('CMD_SET_SLAB', this.dims()));
 
@@ -2605,8 +3080,8 @@ class UIManager {
         st = `スラブ装入 ${p.supply.step + 1}/${CONFIG.SEQUENCE.length}`;
         hint = step ? step[3] : '';
       }
-      else if (p.shear.phase !== 'IDLE' && p.shear.phase !== 'DONE') { cls = 'is-run'; ic = 'fa-scissors'; st = 'クロップ切断';
-        hint = { APPROACH: '先端を切断位置まで搬送しています', CUT: '切断中', RETRACT: '刃を戻しています' }[p.shear.phase] ?? ''; }
+      else if (p.finish.winding) { cls = 'is-run'; ic = 'fa-arrows-spin'; st = 'コイル巻取中';
+        hint = `外径 Φ${p.finish.od.toFixed(0)} mm ／ ${(p.finish.coilMass / 1000).toFixed(1)} t`; }
       else if (m.passIndex >= 0) {
         const sch = CONFIG.SCHEDULE[m.passIndex];
         cls = 'is-run'; ic = 'fa-arrows-left-right'; st = `第 ${sch.pass} パス ${m.passPhase === 'SETUP' ? 'セットアップ' : '圧延中'}`;
