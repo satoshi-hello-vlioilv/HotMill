@@ -384,8 +384,8 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
           <label class="switch"><input type="checkbox" id="chk-labels" checked><span class="sl"></span></label></div>
         <div class="row"><span class="lbl">ロールクーラント<small>潤滑エマルジョンのロール噴射</small></span>
           <label class="switch"><input type="checkbox" id="chk-coolant" checked><span class="sl"></span></label></div>
-        <div class="row"><span class="lbl">ミスト・水蒸気<small>ロール面での蒸発</small></span>
-          <label class="switch"><input type="checkbox" id="chk-steam" checked><span class="sl"></span></label></div>
+        <div class="row"><span class="lbl">油煙<small>圧延油の気化によるヒューム</small></span>
+          <label class="switch"><input type="checkbox" id="chk-fume" checked><span class="sl"></span></label></div>
         <div class="fld" style="margin-top:6px;">
           <div class="top"><span class="k">描画品質</span></div>
           <div class="seg" role="group" aria-label="描画品質">
@@ -570,8 +570,15 @@ const CONFIG = {
    * マンドレル軸の最大トルク = 550 kW ÷ 300 rpm × 8.5 ≒ 148.8 kN·m。
    * 張力はトルク ÷ コイル半径なので、コイルが太るほど下がる（Φ1900 で約 16 t）。 */
   COILER: {
-    X: 8350, Y_ABOVE: 1700, DEFLECTOR_X: 6900, DEFLECTOR_D: 420,
+    // 配置は図面「3ロール・板接触角」に拠る。リール中心はパスライン上 1,200 mm、
+    // 3ロールから 1,450 mm、3ロールはトリマーから 1,000 mm（5,875 / 6,900 / 8,350）。
+    // 3ロールは下 2 本 Φ230（軸間 260 mm）＋ 上 1 本 Φ320。
+    X: 8350, Y_ABOVE: 1200, DEFLECTOR_X: 6900,
+    ROLL_LO_D: 230, ROLL_LO_PITCH: 260, ROLL_UP_D: 320,
     MANDREL_D: 610, SEGMENTS: 4, OD_MIN: 760, OD_MAX: 1900,
+    // 図面のこのパスラインでの最大コイル径。8 mm×56 巻 / 10 mm×45 巻 で Φ1510。
+    // OD_MAX（Φ1900）は巻取機そのものの能力上限で、両者は別の値。
+    OD_DRAWING: 1510,
     WIDTH_MIN: 760, WIDTH_MAX: 2100, WEIGHT_MAX: 9000,
     MOTOR_KW: 550, RPM_BASE: 300, RPM_MAX: 900, GEAR: 8.5,
     TENSION_MAX_KG: 14480, TENSION_LIMIT_KG: 20500,   // 設定変更で 20,500 kg まで
@@ -582,7 +589,9 @@ const CONFIG = {
   /* 75 mm クロップシャー。出側のかなり遠方に置かれ、板厚が 75 mm 以下になった
    * パスで端部のワニ口（不整形な先尾端）を切り落とす。 */
   // ワークロール出側から約 30.6 m（実測・精度は低い）
-  CROP_SHEAR: { X: 30600, MAX_TH: 75, CROP_LEN: 300, OPEN: 900, T_CUT: 1.0, T_OPEN: 1.2, SPEED: 70 },
+  // アップカットシャー: 可動刃は下側にあり、パスライン下から上昇して切る。上刃は固定。
+  CROP_SHEAR: { X: 30600, MAX_TH: 75, CROP_LEN: 300, OPEN: 900, T_CUT: 1.0, T_OPEN: 1.2, SPEED: 70,
+                UPPER_CLR: 90 },
 
   /* サイドトリマー。上下軸の円板刃で板の両耳を切り落として幅を仕上げる。
    * ミル中心から 5,875 mm（図面）。厚板パス中は刃を開いて板を素通りさせる。 */
@@ -595,7 +604,9 @@ const CONFIG = {
     WIDTH_IN_MAX: 2350, WIDTH_OUT_MIN: 760, WIDTH_OUT_MAX: 2300,
     TH_CONT: 7.0, TH_EMERGENCY: 9.5,
     MOTOR_KW: 110, RPM_BASE: 500, RPM_MAX: 600, SPEED_MAX: 208,
-    OPEN: 700, T_SET: 1.2,
+    // 刃物軸の中心高さ。開位置はパスラインから ±305 mm（図面）。閉位置は刃先が
+    // 板を貫通して反対面から OVERLAP だけ出る位置（＝かみ合い量）で決まる。
+    SHAFT_OPEN: 305, OVERLAP: 3, T_SET: 1.2,
   },
 
   BUILDING: { X0: -132000, X1: 92000, Z: 34000, PIT: { X: 6000, Z: 6000, DEPTH: 3800 } },
@@ -1171,7 +1182,8 @@ class FinishController {
     const s = this.s, sl = this.slab, m = this.mill, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
     const cut = (which) => {
       s.cropLen = S.CROP_LEN;
-      s.cropX = S.X + F * S.CROP_LEN / 2; s.cropY = 0; s.cropVY = 0; s.cropVisible = true;
+      // アップカットなので端材は刃に突き上げられ、跳ね上がってからシュートへ落ちる
+      s.cropX = S.X + F * S.CROP_LEN / 2; s.cropY = 0; s.cropVY = 900; s.cropVisible = true;
       if (which === 'head') { if (F > 0) sl.xMax -= S.CROP_LEN; else sl.xMin += S.CROP_LEN; }
       else                  { if (F > 0) sl.xMin += S.CROP_LEN; else sl.xMax -= S.CROP_LEN; }
       sl.length = sl.xMax - sl.xMin;
@@ -1280,7 +1292,7 @@ class PhysicsEngine {
     this.bus = bus;
     this.slab = new SlabState(); this.mill = new MillState();
     this.supply = new SupplyState(); this.finish = new FinishState();
-    this.env = { coolant: true, steam: true };
+    this.env = { coolant: true, fume: true };
     this.millCtrl   = new MillController(bus, this.mill, this.slab);
     this.supplyCtrl = new SupplyController(bus, this.supply);
     this.finishCtrl = new FinishController(bus, this.finish, this.slab, this.mill);
@@ -1497,6 +1509,8 @@ function initMaterials(envMap) {
     tableFrame:matte(C.TABLE_FRAME,0.30, 0.74),
     guide:     matte(C.GUIDE,     0.45, 0.56),
     shearBody: matte(C.SHEAR_BODY,0.35, 0.62),
+    shearGhost: new THREE.MeshLambertMaterial({ color: C.SHEAR_BODY, transparent: true,
+                    opacity: 0.15, depthWrite: false, side: THREE.FrontSide }),
     blade:     shiny(C.BLADE,     0.70, 0.28),
     // 上下面は両面面削されて鏡面状、側面と端面は鋳肌のまま。面ごとに質感を変える。
     slab:       matte(C.SLAB,      0.30, 0.62),
@@ -1544,6 +1558,19 @@ const G = {
     const out = BufferGeometryUtils.mergeGeometries(flat, false);
     flat.forEach(g => g.dispose());
     return out;
+  },
+  /**
+   * 機側フレームを「手前側(OS,+Z) / 奥側(DS,−Z) / 中央」の3つに分けて生成する。
+   * ミルのハウジングと同じく手前側だけを透過できるようになり、
+   * ライン上の材料が構造物に隠れずに見える。
+   * build には (sz, geometry) を受け取る add 関数を渡す。sz=0 は中央部材。
+   */
+  sided(build) {
+    const bin = { 1: [], '-1': [], 0: [] };
+    build((sz, geo) => bin[sz].push(geo));
+    const out = {};
+    for (const [k, v] of Object.entries(bin)) if (v.length) out[k] = G.merge(v);
+    return { near: out[1], far: out['-1'], mid: out[0] };
   },
   roundedRect(path, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
@@ -1729,41 +1756,45 @@ const Parts = {
 
   /* --- 75 mm クロップシャー（油圧アップカット・ギロチン） --------------------- */
   cropShearFrame() {
-    const S = CONFIG.CROP_SHEAR, W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP;
-    const parts = [];
-    for (const sz of [-1, 1]) {
-      parts.push(G.at(G.box(1000, 4400, 1000), 0, P + 1200, sz * (W / 2 + 700)));
-      parts.push(G.at(G.cyl(420, 1400, 'y', 16), 0, P + 3400, sz * (W / 2 + 700)));
-    }
-    parts.push(G.at(G.box(1200, 900, W + 3200), 0, P + 3200, 0));                 // 上部クロスヘッド
-    parts.push(G.at(G.box(1500, 1000, W + 3200), 0, P - 700, 0));                 // ベース
-    parts.push(G.at(G.box(240, 260, W + 200), F * 110, P - 130, 0));              // 下刃（上面＝パスライン）
-    parts.push(G.at(G.box(2400, 900, W + 3200), F * 1800, P - 1900, 0));          // クロップシュート
-    return G.merge(parts);
+    const W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
+    return G.sided(add => {
+      for (const sz of [-1, 1]) {
+        add(sz, G.at(G.box(1000, 4400, 1000), 0, P + 1200, sz * (W / 2 + 700)));
+        add(sz, G.at(G.cyl(420, 1400, 'y', 16), 0, P + 3400, sz * (W / 2 + 700)));
+      }
+      add(0, G.at(G.box(1200, 900, W + 3200), 0, P + 3200, 0));                   // 上部クロスヘッド
+      add(0, G.at(G.box(1500, 1000, W + 3200), 0, P - 700, 0));                   // ベース
+      // アップカットなので固定刃は «上»。下端を最大板厚 75 mm より上に置く。
+      add(0, G.at(G.box(240, 300, W + 200), F * 110, P + S.UPPER_CLR + 150, 0));
+      add(0, G.at(G.box(700, 900, W + 400), F * 110, P + S.UPPER_CLR + 750, 0));  // 上刃ホルダ
+      add(0, G.at(G.box(2400, 900, W + 3200), F * 1800, P - 1900, 0));            // クロップシュート
+    });
   },
+  /** アップカットシャーの可動刃（下側）。原点＝刃先。上昇して板を下から切る。 */
   cropShearRam() {
     const W = CONFIG.TABLE.BARREL;
     return G.merge([
-      G.at(G.box(480, 760, W + 400), 0, 460, 0),
-      G.at(G.cyl(300, 1000, 'y', 14), 0, 1250, 0),
-      G.at((() => { const g = G.box(220, 300, W + 200); g.rotateX(0.045); return g; })(), 0, -80, 0),
+      G.at((() => { const g = G.box(220, 300, W + 200); g.rotateX(0.045); return g; })(), 0, -150, 0),
+      G.at(G.box(480, 760, W + 400), 0, -680, 0),          // 刃物台
+      G.at(G.cyl(300, 1100, 'y', 14), 0, -1610, 0),        // 昇降シリンダ
     ]);
   },
 
   /* --- サイドトリマー。上下軸の円板刃が板の両耳を切り落として幅を仕上げる ------ */
   trimmerFrame() {
-    const W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE, parts = [];
-    for (const sz of [-1, 1]) {
-      parts.push(G.at(G.box(1200, 3000, 800), 0, P + 400, sz * (W / 2 + 650)));
-      parts.push(G.at(G.box(1600, 600, 1100), 0, P - 1400, sz * (W / 2 + 650)));
-      // 耳くずスクラップチョッパー（切り落とした耳を細断して落とす）と受けシュート
-      parts.push(G.at(G.box(900, 800, 900), 0, P - 250, sz * (W / 2 + 1450)));
-      parts.push(G.at(G.cyl(320, 700, 'x', 12), 0, P + 160, sz * (W / 2 + 1450)));
-      parts.push(G.at(G.cyl(320, 700, 'x', 12), 0, P - 220, sz * (W / 2 + 1450)));
-      parts.push(G.at(G.box(1100, 900, 1100), 0, P - 1250, sz * (W / 2 + 1450)));
-    }
-    parts.push(G.at(G.box(1200, 450, W + 2400), 0, P + 1800, 0));                 // 上部梁
-    return G.merge(parts);
+    const W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE;
+    return G.sided(add => {
+      for (const sz of [-1, 1]) {
+        add(sz, G.at(G.box(1200, 3000, 800), 0, P + 400, sz * (W / 2 + 650)));
+        add(sz, G.at(G.box(1600, 600, 1100), 0, P - 1400, sz * (W / 2 + 650)));
+        // 耳くずスクラップチョッパー（切り落とした耳を細断して落とす）と受けシュート
+        add(sz, G.at(G.box(900, 800, 900), 0, P - 250, sz * (W / 2 + 1450)));
+        add(sz, G.at(G.cyl(320, 700, 'x', 12), 0, P + 160, sz * (W / 2 + 1450)));
+        add(sz, G.at(G.cyl(320, 700, 'x', 12), 0, P - 220, sz * (W / 2 + 1450)));
+        add(sz, G.at(G.box(1100, 900, 1100), 0, P - 1250, sz * (W / 2 + 1450)));
+      }
+      add(0, G.at(G.box(1200, 450, W + 2400), 0, P + 1800, 0));                   // 上部梁
+    });
   },
   /** トリマー軸（円板刃 2 枚つき）。刃位置は板幅に合わせて Z 方向へ移動する。 */
   trimmerShaft() {
@@ -1780,34 +1811,46 @@ const Parts = {
 
   /* --- スリーロール（下2本・上1本）。板の先端を上方へ曲げてリールへ導く ------ */
   threeRollFrame() {
-    const C = CONFIG.COILER, W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE, parts = [];
-    for (const sz of [-1, 1]) {
-      parts.push(G.at(G.box(1700, 2200, 700), 0, P + 200, sz * (W / 2 + 560)));
-      parts.push(G.at(G.box(2100, 500, 1000), 0, P - 1050, sz * (W / 2 + 560)));
-    }
-    parts.push(G.at(G.box(1700, 400, W + 2200), 0, P + 1400, 0));
-    return G.merge(parts);
+    const W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE, z = W / 2 + 480;
+    // 実機は鉄板で囲われた箱ではなく、柱と梁で組んだ開放フレーム。
+    return G.sided(add => {
+      for (const sz of [-1, 1]) {
+        for (const sx of [-1, 1])                                             // 前後の柱
+          add(sz, G.at(G.box(300, P + 1500, 380), sx * 620, (P + 1500) / 2, sz * z));
+        add(sz, G.at(G.box(1800, 260, 380), 0, P + 1300, sz * z));            // 上部つなぎ
+        add(sz, G.at(G.box(1900, 220, 700), 0, 110, sz * z));                 // ベースプレート
+        add(sz, G.at(G.box(520, 520, 420), 0, P + 260, sz * z));              // 上ロール軸受
+      }
+    });
   },
-  deflectorRoll() {
-    const C = CONFIG.COILER, W = CONFIG.TABLE.BARREL;
+  deflectorRoll(d) {
+    const W = CONFIG.TABLE.BARREL;
     return G.merge([
-      G.cyl(C.DEFLECTOR_D, W + 100, 'z', 16),
-      G.at(G.cyl(C.DEFLECTOR_D * 0.4, 560, 'z', 8), 0, 0,  (W + 660) / 2),
-      G.at(G.cyl(C.DEFLECTOR_D * 0.4, 560, 'z', 8), 0, 0, -(W + 660) / 2),
+      G.cyl(d, W + 100, 'z', 16),
+      G.at(G.cyl(d * 0.45, 560, 'z', 8), 0, 0,  (W + 660) / 2),
+      G.at(G.cyl(d * 0.45, 560, 'z', 8), 0, 0, -(W + 660) / 2),
     ]);
   },
 
   /* --- 巻取リール。パスラインより上に置かれ、コイル下端がパスラインを侵さない ---- */
   coilerFrame() {
     const C = CONFIG.COILER, P = CONFIG.MILL.PASS_LINE, W = CONFIG.TABLE.BARREL;
-    const cy = P + C.Y_ABOVE, parts = [];
-    for (const sz of [-1, 1]) {
-      parts.push(G.at(G.box(1600, cy, 1000), 0, cy / 2, sz * (W / 2 + 800)));
-      parts.push(G.at(G.box(2000, 500, 1300), 0, 250, sz * (W / 2 + 800)));
-      parts.push(G.at(G.cyl(900, 700, 'z', 16), 0, cy, sz * (W / 2 + 800)));  // 軸受
-    }
-    parts.push(G.at(G.box(1400, 400, W + 3000), 0, cy + 1500, 0));            // 上部梁
-    return G.merge(parts);
+    const cy = P + C.Y_ABOVE;                       // リール軸心（床から）
+    // アウトボードベアリング付きの片持ちリール。駆動側に主軸受と減速機を置き、
+    // 操作側はコイル抜き取りのため «開いた» 補助軸受だけにする。実機同様、
+    // 鉄板で囲った箱にはしない（囲うとコイルもラインも見えなくなる）。
+    return G.sided(add => {
+      // --- 駆動側(−Z): 主軸受ハウジングと駆動機 ---
+      add(-1, G.at(G.box(1500, cy - 250, 900), 0, (cy - 250) / 2, -(W / 2 + 750)));
+      add(-1, G.at(G.cyl(1050, 800, 'z', 20), 0, cy, -(W / 2 + 750)));
+      add(-1, G.at(G.box(2100, 300, 1300), 0, 150, -(W / 2 + 750)));
+      add(-1, G.at(G.box(1700, 900, 1100), -900, cy - 250, -(W / 2 + 1500)));   // 減速機
+      // --- 操作側(+Z): アウトボードベアリング（コイル抜き取り側。柱2本の開放構造）---
+      for (const sx of [-1, 1])
+        add(1, G.at(G.box(280, cy - 250, 320), sx * 520, (cy - 250) / 2, W / 2 + 900));
+      add(1, G.at(G.cyl(760, 520, 'z', 16), 0, cy, W / 2 + 900));
+      add(1, G.at(G.box(1600, 240, 620), 0, 120, W / 2 + 900));
+    });
   },
   /** 4セグメント・コラプシブルウェッジ式マンドレル（外周を4分割したセグメントで構成） */
   mandrel() {
@@ -1961,44 +2004,190 @@ class Instances {
   finalize() { this.mesh.computeBoundingSphere(); this.mesh.boundingSphere?.radius && (this.mesh.boundingSphere.radius *= 1.35); return this; }
 }
 
-/** 汎用パーティクル場（クーラント / 蒸気で共有） */
+/* --- ソフトスプライト ------------------------------------------------------
+ * 点スプライトが「四角い塊」に見えるのは、輪郭が矩形のまま切り落とされるため。
+ * 中心から滑らかに消えるアルファを持つテクスチャを1枚だけ共有し、
+ * 粒ごとに向きを変えて使うことで、少ない枚数でも塊感を出さずに済む。
+ * 画像ファイルは持たず、起動時に Canvas で生成する。 */
+const Sprite = {
+  _cache: {},
+  _tex(key, draw) {
+    if (this._cache[key]) return this._cache[key];
+    const N = 128, cv = document.createElement('canvas');
+    cv.width = cv.height = N;
+    const g = cv.getContext('2d');
+    draw(g, N);
+    // 外周は必ず透明にする。回転させたときに角が欠けるのを防ぐため半径は N の 1/3 に留める
+    g.globalCompositeOperation = 'destination-in';
+    const mask = g.createRadialGradient(N / 2, N / 2, 0, N / 2, N / 2, N * 0.34);
+    mask.addColorStop(0.00, 'rgba(255,255,255,1)');
+    mask.addColorStop(0.45, 'rgba(255,255,255,0.80)');
+    mask.addColorStop(0.78, 'rgba(255,255,255,0.34)');
+    mask.addColorStop(1.00, 'rgba(255,255,255,0)');
+    g.fillStyle = mask; g.fillRect(0, 0, N, N);
+    const t = new THREE.CanvasTexture(cv);
+    t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+    return (this._cache[key] = t);
+  },
+  /** 油煙用の不定形パフ。小さな塊を重ねて輪郭を崩す（配置は再現性のため固定値）。 */
+  puff() {
+    return this._tex('puff', (g, N) => {
+      const R = N * 0.34, blob = (cx, cy, r, a) => {
+        const gr = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+        gr.addColorStop(0, `rgba(255,255,255,${a})`);
+        gr.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = gr; g.fillRect(cx - r, cy - r, r * 2, r * 2);
+      };
+      g.globalCompositeOperation = 'lighter';
+      blob(N / 2, N / 2, R * 1.05, 0.62);
+      for (const [ax, ay, ar, aa] of [[-.44, -.28, .60, .30], [ .40, -.38, .52, .27],
+                                      [ .46,  .28, .58, .28], [-.34,  .44, .48, .25],
+                                      [ .02,  .54, .40, .22], [-.56,  .08, .44, .24]])
+        blob(N / 2 + ax * R, N / 2 + ay * R, ar * R, aa);
+    });
+  },
+  /** クーラント液滴。中心が締まった単純な減衰。 */
+  drop() {
+    return this._tex('drop', (g, N) => {
+      const gr = g.createRadialGradient(N / 2, N / 2, 0, N / 2, N / 2, N * 0.34);
+      gr.addColorStop(0.00, 'rgba(255,255,255,1)');
+      gr.addColorStop(0.42, 'rgba(255,255,255,0.78)');
+      gr.addColorStop(1.00, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, N, N);
+    });
+  },
+};
+
+/**
+ * 汎用パーティクル場（クーラント液滴 / 油煙で共有）。
+ * 1 ドローコールで完結する点スプライトのまま、粒ごとに «大きさ・向き・濃さ・色» を
+ * 持たせ、寿命に沿って «膨張しながら薄れる» ようにしている。
+ * 速度は解析解で積分するので、フレームレートが変わっても見え方が変わらない。
+ */
 class ParticleField {
-  constructor(scene, { count, size, color, opacity, gravity, blending }) {
-    this.n = count; this.gravity = gravity;
-    this.pos = new Float32Array(count * 3);
-    this.p = []; for (let i = 0; i < count; i++) { this.p.push({ vx: 0, vy: 0, vz: 0, life: 0 }); this.pos[i * 3 + 1] = -1e4; }
+  constructor(scene, o) {
+    const n = this.n = o.count;
+    this.buoy   = o.buoy   ?? 0;    // mm/s² 鉛直加速度（煙は正＝浮力、液滴は負＝重力）
+    this.drag   = o.drag   ?? 0;    // 1/s   空気抵抗。終端速度 = buoy/drag
+    this.swirl  = o.swirl  ?? 0;    // mm/s² 揺らぎ
+    this.grow   = o.grow   ?? 1;    // 寿命末端での直径倍率
+    this.fadeIn = o.fadeIn ?? 0.15; // 立ち上がりに使う寿命比
+    this.opacity = o.opacity;
+    this.pos = new Float32Array(n * 3);
+    this.at = { size: new Float32Array(n), alpha: new Float32Array(n),
+                rot:  new Float32Array(n), tint:  new Float32Array(n) };
+    this.p = [];
+    for (let i = 0; i < n; i++) {
+      this.p.push({ vx: 0, vy: 0, vz: 0, age: 0, life: 0, size: 0, rot: 0, spin: 0, seed: 0, peak: 0 });
+      this.pos[i * 3 + 1] = -1e4;
+    }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
-    const mat = new THREE.PointsMaterial({ color, size, transparent: true, opacity, depthWrite: false,
-      blending: blending ?? THREE.NormalBlending, sizeAttenuation: true });
-    this.mesh = new THREE.Points(geo, mat); this.mesh.frustumCulled = false; scene.add(this.mesh);
+    for (const [k, v] of Object.entries(this.at)) {
+      const a = new THREE.BufferAttribute(v, 1); a.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('a' + k[0].toUpperCase() + k.slice(1), a);
+    }
+    geo.getAttribute('position').setUsage(THREE.DynamicDrawUsage);
+    this.mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uMap:    { value: o.map },
+        uColorA: { value: new THREE.Color(o.color) },
+        uColorB: { value: new THREE.Color(o.color2 ?? o.color) },
+        uScale:  ParticleField.viewScale,
+      },
+      vertexShader: `
+        attribute float aSize; attribute float aAlpha; attribute float aRot; attribute float aTint;
+        uniform float uScale;
+        varying float vAlpha; varying float vRot; varying float vTint;
+        void main() {
+          vAlpha = aAlpha; vRot = aRot; vTint = aTint;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = clamp(aSize * uScale / max(-mv.z, 0.001), 1.0, 4096.0);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        uniform sampler2D uMap; uniform vec3 uColorA; uniform vec3 uColorB;
+        varying float vAlpha; varying float vRot; varying float vTint;
+        void main() {
+          vec2 d = gl_PointCoord - 0.5;
+          float c = cos(vRot), s = sin(vRot);
+          float a = texture2D(uMap, vec2(c * d.x - s * d.y, s * d.x + c * d.y) + 0.5).a * vAlpha;
+          if (a < 0.012) discard;
+          gl_FragColor = vec4(mix(uColorA, uColorB, vTint), a);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+      transparent: true, depthWrite: false, blending: o.blending ?? THREE.NormalBlending,
+    });
+    this.mesh = new THREE.Points(geo, this.mat); this.mesh.frustumCulled = false; scene.add(this.mesh);
     this.cursor = 0;
   }
-  spawn(x, y, z, vx, vy, vz, life) {
-    const i = this.cursor = (this.cursor + 1) % this.n, p = this.p[i];
+
+  /** 粒を1つ放出する。size は初期直径 [mm]（寿命末端で grow 倍まで膨らむ）。 */
+  spawn(x, y, z, vx, vy, vz, life, size) {
+    const i = this.cursor = (this.cursor + 1) % this.n, p = this.p[i], r = Math.random;
     this.pos[i * 3] = u(x); this.pos[i * 3 + 1] = u(y); this.pos[i * 3 + 2] = u(z);
-    p.vx = vx; p.vy = vy; p.vz = vz; p.life = life;
+    p.vx = vx; p.vy = vy; p.vz = vz;
+    p.age = 0; p.life = life; p.size = size;
+    p.rot = r() * Math.PI * 2; p.spin = (r() - .5) * 1.1; p.seed = r() * Math.PI * 2;
+    p.peak = this.opacity * (0.65 + r() * 0.7);
+    this.at.tint[i] = r();
   }
+
   update(dt, floorY) {
+    const A = this.at, vt = this.drag > 0 ? this.buoy / this.drag : 0;
+    const k = this.drag > 0 ? Math.exp(-this.drag * dt) : 1;
     let live = 0;
     for (let i = 0; i < this.n; i++) {
       const p = this.p[i]; if (p.life <= 0) continue;
-      p.life -= dt; live++;
-      if (p.life <= 0) { this.pos[i * 3 + 1] = -1e4; continue; }
-      p.vy += this.gravity * dt;
+      p.age += dt;
+      const t = p.age / p.life;
+      if (t >= 1) { p.life = 0; this.pos[i * 3 + 1] = -1e4; A.alpha[i] = 0; continue; }
+      live++;
+      // 速度は v' = buoy − drag·v の解析解。dt を変えても軌跡が変わらない。
+      if (this.drag > 0) { p.vx *= k; p.vz *= k; p.vy = vt + (p.vy - vt) * k; }
+      else p.vy += this.buoy * dt;
+      if (this.swirl) {                                  // 立ち上る煙のゆらぎ
+        const a = p.seed + p.age * 1.6;
+        p.vx += Math.cos(a) * this.swirl * dt;
+        p.vz += Math.sin(a * 0.77 + 1.3) * this.swirl * dt;
+      }
       const j = i * 3;
       this.pos[j] += u(p.vx * dt); this.pos[j + 1] += u(p.vy * dt); this.pos[j + 2] += u(p.vz * dt);
-      if (floorY !== undefined && this.pos[j + 1] < u(floorY)) { this.pos[j + 1] = u(floorY); p.vy = 0; p.vx *= .82; p.vz *= .82; }
+      if (floorY !== undefined && this.pos[j + 1] < u(floorY)) {
+        this.pos[j + 1] = u(floorY); p.vy = 0; p.vx *= .82; p.vz *= .82;
+      }
+      A.size[i]  = u(p.size * Num.lerp(1, this.grow, t));
+      // 膨らむほど濃度が下がる。立ち上がりは滑らかに出して唐突な出現を避ける。
+      A.alpha[i] = p.peak * Num.smoothstep(0, this.fadeIn, t) * (1 - t) ** 0.9;
+      A.rot[i]   = p.rot + p.spin * p.age;
     }
-    this.mesh.geometry.attributes.position.needsUpdate = true;
+    for (const a of Object.values(this.mesh.geometry.attributes)) a.needsUpdate = true;
     this.mesh.visible = live > 0;
   }
-  clear() { for (let i = 0; i < this.n; i++) { this.p[i].life = 0; this.pos[i * 3 + 1] = -1e4; } this.mesh.visible = false; }
+
+  clear() {
+    for (let i = 0; i < this.n; i++) { this.p[i].life = 0; this.pos[i * 3 + 1] = -1e4; this.at.alpha[i] = 0; }
+    this.mesh.visible = false;
+  }
 }
+/** 点スプライトの大きさを実寸で扱うための係数（= 画面高px/2 × 1/tan(fov/2)）。全場で共有。 */
+ParticleField.viewScale = { value: 900 };
 
 /* =============================================================================
  * 10. VIEWS
  * ========================================================================== */
+/**
+ * 透過切替の共通処理。実体／透過のマテリアルを userData に持たせておき、
+ * 影の投影・受光も同時に切る（半透明面のシャドウ判定はアクネの原因になる）。
+ */
+function setGhost(list, ghost) {
+  for (const m of list) {
+    m.material = ghost ? m.userData.ghostMat : m.userData.solidMat;
+    m.castShadow = !ghost; m.receiveShadow = !ghost;
+  }
+}
+
 class MillStandView {
   constructor(scene) {
     const M = CONFIG.MILL, H = M.HOUSING, zC = H.INNER_Z + H.THICK_Z / 2;
@@ -2009,7 +2198,9 @@ class MillStandView {
     this.housings = [1, -1].map(s => {
       const m = new THREE.Mesh(plate, MAT.housing);
       m.position.z = u(s * zC); m.castShadow = true; m.receiveShadow = true;
-      m.userData.side = s; this.group.add(m); return m;
+      m.userData.side = s;
+      m.userData.solidMat = MAT.housing; m.userData.ghostMat = MAT.housingGhost;
+      this.group.add(m); return m;
     });
     const struct = new THREE.Mesh(Parts.standStructure(), MAT.base);
     struct.castShadow = struct.receiveShadow = true; this.group.add(struct);
@@ -2033,7 +2224,7 @@ class MillStandView {
     this.sided = { near: [], far: [] };
     const sidedPair = (geo, mat, n, opts) => {
       const near = new Instances(geo, mat, n, opts), far = new Instances(geo, mat, n, opts);
-      near.mesh.userData.solidMat = mat; far.mesh.userData.solidMat = mat;
+      for (const x of [near.mesh, far.mesh]) { x.userData.solidMat = mat; x.userData.ghostMat = MAT.ghost; }
       this.sided.near.push(near.mesh); this.sided.far.push(far.mesh);
       this.group.add(near.mesh, far.mesh);
       return { near, far };
@@ -2101,18 +2292,11 @@ class MillStandView {
   }
   setCutaway(mode) {
     // 'solid' 実体 / 'half' 手前(オペレータ側)のみ透過 / 'xray' 両方透過
-    for (const m of this.housings) {
-      const ghost = mode === 'xray' || (mode === 'half' && m.userData.side === 1);
-      m.material = ghost ? MAT.housingGhost : MAT.housing;
-      m.castShadow = !ghost; m.receiveShadow = !ghost;
-    }
+    setGhost(this.housings.filter(m => m.userData.side === 1), mode !== 'solid');
+    setGhost(this.housings.filter(m => m.userData.side === -1), mode === 'xray');
     // ハウジングだけ透かしてもチョックが窓を塞ぐので、同じ側のチョック類も透過させる
-    const apply = (list, ghost) => list.forEach(m => {
-      m.material = ghost ? MAT.ghost : m.userData.solidMat;
-      m.castShadow = !ghost; m.receiveShadow = !ghost;
-    });
-    apply(this.sided.near, mode !== 'solid');
-    apply(this.sided.far,  mode === 'xray');
+    setGhost(this.sided.near, mode !== 'solid');
+    setGhost(this.sided.far,  mode === 'xray');
   }
 }
 
@@ -2255,11 +2439,25 @@ class FinishView {
   constructor(scene) {
     const T = CONFIG.TRIMMER, C = CONFIG.COILER, P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP;
     this.P = P;
+    // 出側設備もミルと同じ半断面切替に従う。手前(オペレータ側)の架構が
+    // 透過すれば、トリミング〜通板〜巻取までライン上の材料が隠れずに見える。
+    this.sided = { near: [], far: [] };
+
+    /** G.sided() が返す near/far/mid を、透過切替できる3メッシュとして配置する。 */
+    const addFrame = (parent, geos) => {
+      for (const [key, geo] of Object.entries(geos)) {
+        if (!geo) continue;
+        const m = new THREE.Mesh(geo, MAT.shearBody);
+        m.castShadow = m.receiveShadow = true;
+        m.userData.solidMat = MAT.shearBody; m.userData.ghostMat = MAT.shearGhost;
+        if (key !== 'mid') this.sided[key].push(m);
+        parent.add(m);
+      }
+    };
 
     // --- サイドトリマー ---
     this.trimmer = new THREE.Group(); this.trimmer.position.x = u(T.X); scene.add(this.trimmer);
-    const tf = new THREE.Mesh(Parts.trimmerFrame(), MAT.shearBody);
-    tf.castShadow = tf.receiveShadow = true; this.trimmer.add(tf);
+    addFrame(this.trimmer, Parts.trimmerFrame());
     this.knifeShafts = [1, -1].map(sy => {
       const m = new THREE.Mesh(Parts.trimmerShaft(), MAT.rollNeck); this.trimmer.add(m); return m;
     });
@@ -2269,21 +2467,20 @@ class FinishView {
 
     // --- スリーロール（下2本・上1本）---
     this.three = new THREE.Group(); this.three.position.x = u(C.DEFLECTOR_X); scene.add(this.three);
-    const trf = new THREE.Mesh(Parts.threeRollFrame(), MAT.shearBody);
-    trf.castShadow = trf.receiveShadow = true; this.three.add(trf);
-    const dRoll = Parts.deflectorRoll();
+    addFrame(this.three, Parts.threeRollFrame());
+    // 下 2 本 Φ230（軸間 260 mm、上面＝パスライン）／ 上 1 本 Φ320
+    const loRoll = Parts.deflectorRoll(C.ROLL_LO_D);
     this.lowerRolls = [-1, 1].map(sx => {
-      const m = new THREE.Mesh(dRoll, MAT.rollFace);
-      m.position.set(u(sx * 520), u(P - C.DEFLECTOR_D / 2), 0); m.castShadow = true;
+      const m = new THREE.Mesh(loRoll, MAT.rollFace);
+      m.position.set(u(sx * C.ROLL_LO_PITCH / 2), u(P - C.ROLL_LO_D / 2), 0); m.castShadow = true;
       this.three.add(m); return m;
     });
-    this.upperRoll = new THREE.Mesh(dRoll, MAT.rollFace); this.upperRoll.castShadow = true;
-    this.three.add(this.upperRoll);
+    this.upperRoll = new THREE.Mesh(Parts.deflectorRoll(C.ROLL_UP_D), MAT.rollFace);
+    this.upperRoll.castShadow = true; this.three.add(this.upperRoll);
 
     // --- 巻取リール ---
     this.coiler = new THREE.Group(); this.coiler.position.x = u(C.X); scene.add(this.coiler);
-    const cf = new THREE.Mesh(Parts.coilerFrame(), MAT.shearBody);
-    cf.castShadow = cf.receiveShadow = true; this.coiler.add(cf);
+    addFrame(this.coiler, Parts.coilerFrame());
     this.mandrelY = P + C.Y_ABOVE;
     this.mandrel = new THREE.Mesh(Parts.mandrel(), MAT.rollNeck);
     this.mandrel.position.y = u(this.mandrelY); this.mandrel.castShadow = true; this.coiler.add(this.mandrel);
@@ -2303,32 +2500,43 @@ class FinishView {
     // --- 75 mm クロップシャー（出側の遠方。端部のワニ口を切り落とす）---
     const CS = CONFIG.CROP_SHEAR;
     this.cropShear = new THREE.Group(); this.cropShear.position.x = u(CS.X); scene.add(this.cropShear);
-    const csf = new THREE.Mesh(Parts.cropShearFrame(), MAT.shearBody);
-    csf.castShadow = csf.receiveShadow = true; this.cropShear.add(csf);
+    addFrame(this.cropShear, Parts.cropShearFrame());
     this.cropRam = new THREE.Mesh(Parts.cropShearRam(), MAT.blade);
     this.cropRam.castShadow = true; this.cropShear.add(this.cropRam);
     this.cropPiece = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
     this.cropPiece.castShadow = true; this.cropPiece.visible = false; scene.add(this.cropPiece);
   }
 
+  setCutaway(mode) {
+    setGhost(this.sided.near, mode !== 'solid');
+    setGhost(this.sided.far,  mode === 'xray');
+  }
+
   update(fin, slab, mill) {
     const T = CONFIG.TRIMMER, C = CONFIG.COILER, P = mill.passLine, F = CONFIG.FLIP;
 
-    // トリマー: 刃は板幅・トリム量に合わせて Z、開閉は Y で表す
+    // トリマー: 刃は板幅・トリム量に合わせて Z、開閉は軸心の高さで表す。
+    //  開: パスライン ±305 mm（図面）／ 閉: 刃先が板を貫通して反対面から OVERLAP 出る位置
     const half = Math.max(slab.width / 2 - fin.trim, 60);
-    const openY = Num.lerp(T.OPEN, T.KNIFE_T * 0.4, fin.knifeClose);
-    this.knifeShafts[0].position.y = u(P + openY);
-    this.knifeShafts[1].position.y = u(P - openY + slab.thickness);
+    const r = T.KNIFE_D / 2;
+    const yUp = Num.lerp(P + T.SHAFT_OPEN,                    P - T.OVERLAP + r,             fin.knifeClose);
+    const yLo = Num.lerp(P - T.SHAFT_OPEN, P + slab.thickness + T.OVERLAP - r,               fin.knifeClose);
+    this.knifeShafts[0].position.y = u(yUp);
+    this.knifeShafts[1].position.y = u(yLo);
+    // 上下の刃はせん断面（±half）を挟んで «軸方向に隣り合う»。上刃をスクラップ側、
+    // 下刃を製品側に置く。同じ Z に重ねると刃どうしが食い込んでしまう。
+    const off = T.KNIFE_T / 2 + 0.25;                        // 側面クリアランス 0.5 mm
     let i = 0;
-    for (const sy of [1, -1]) for (const sz of [-1, 1])
-      this.knives.set(i++, 0, P + (sy > 0 ? openY : -openY + slab.thickness), sz * half, 0, 0, sy * fin.knifeAngle);
+    for (const [y, so] of [[yUp, off], [yLo, -off]]) for (const sz of [-1, 1])
+      this.knives.set(i++, 0, y, sz * (half + so), 0, 0, (y > P ? 1 : -1) * fin.knifeAngle);
     this.knives.commit();
 
-    // スリーロール: 通板時に上ロールが降りて先端を上方へ曲げる
-    this.upperRoll.position.y = u(P + slab.thickness + C.DEFLECTOR_D / 2 + Num.lerp(500, 30, fin.thread));
-    const a = -mill.tableAngle;
-    this.lowerRolls.forEach(m => { m.rotation.z = a; });
-    this.upperRoll.rotation.z = -a;
+    // スリーロール: 通板時に上ロールが降りて先端を上方へ曲げる。
+    // 回転角はテーブルロールの積分角を径比で換算する（周速を一致させる）。
+    this.upperRoll.position.y = u(P + slab.thickness + C.ROLL_UP_D / 2 + Num.lerp(400, 15, fin.thread));
+    const a = -mill.tableAngle * CONFIG.TABLE.ROLL_D_END;
+    this.lowerRolls.forEach(m => { m.rotation.z = a / C.ROLL_LO_D; });
+    this.upperRoll.rotation.z = -a / C.ROLL_UP_D;
 
     // コイル: 巻き取った長さから外径が決まる
     const wound = fin.gripped && fin.coiledLen > 1;
@@ -2341,7 +2549,8 @@ class FinishView {
     }
     // 75 mm シャー: 刃の昇降と切り落とし片の落下
     const CS = CONFIG.CROP_SHEAR;
-    this.cropRam.position.y = u(P + CS.OPEN + 300 - fin.cropBlade * (CS.OPEN + slab.thickness + 150));
+    // アップカット: 刃先はパスライン下 OPEN mm から上昇し、板を貫いて上刃側へ抜ける
+    this.cropRam.position.y = u(P - CS.OPEN + fin.cropBlade * (CS.OPEN + slab.thickness + 120));
     this.cropPiece.visible = fin.cropVisible;
     if (fin.cropVisible) {
       this.cropPiece.scale.set(u(Math.max(fin.cropLen, 1)), u(slab.thickness), u(slab.width));
@@ -2591,38 +2800,68 @@ class SlabView {
 
 class SprayView {
   constructor(scene) {
-    this.coolant = new ParticleField(scene, { count: 900, size: u(70), color: CONFIG.COLORS.COOLANT,
-      opacity: 0.55, gravity: -9810, blending: THREE.NormalBlending });
-    this.steam = new ParticleField(scene, { count: 500, size: u(700), color: 0xffffff,
-      opacity: 0.13, gravity: 1400, blending: THREE.NormalBlending });
-    this.acc = 0;
+    const C = CONFIG.COLORS;
+    // クーラント: ロール面に当たって跳ねる液滴。重力支配、寿命が短く粒が小さい。
+    this.coolant = new ParticleField(scene, { count: 800, map: Sprite.drop(),
+      color: C.COOLANT, color2: 0xbed3e0, opacity: 0.50,
+      buoy: -9810, drag: 0.45, grow: 1.3, fadeIn: 0.05 });
+    // 油煙: 圧延油がロールバイトの熱で気化して立ち上る煙。浮力で上昇し、
+    // 周囲の空気を巻き込んで膨らみながら薄れる。粒数より «大きく柔らかく» で質感を出す。
+    // 粒径は塗り面積に二乗で効くので «大きく薄く» に寄せすぎない。
+    // 実寸で 0.3 m 前後の煙が 0.7〜1.2 m まで膨らむ、という程度に収めている。
+    // 粒は «スプライト1枚が煙の塊1つ» になる大きさにする。小さい粒を多数撒くと
+    // 遠景で «点の集合» に見えてしまい、逆に質感が落ちる（塗り面積も増える）。
+    this.fume = new ParticleField(scene, { count: 260, map: Sprite.puff(),
+      // 背景（明るい建屋の壁・床）より «暗い» 灰青にしないと煙として読めない。
+      color: 0xb4c1cb, color2: 0x6e7f8d, opacity: 0.70,
+      buoy: 2000, drag: 0.95, swirl: 620, grow: 2.6, fadeIn: 0.22 });  // 終端上昇速度 2.1 m/s
+    this.density = 1;
+    this._acc = { coolant: 0, fume: 0 };
   }
+  /** 描画品質に合わせて放出量を落とす（粒が大きいぶん塗り面積が効くため）。 */
+  setDensity(x) { this.density = x; }
+
+  /** 放出数をフレームレートに依らず一定にする（端数は次フレームへ繰り越す）。 */
+  _emit(key, rate, dt, max, fn) {
+    const a = this._acc[key] + rate * this.density * dt;
+    const n = Math.min(max, Math.floor(a));
+    this._acc[key] = a - n;
+    for (let i = 0; i < n; i++) fn(Math.random);
+  }
+
   update(dt, phys) {
     const { slab, mill, env } = phys, M = CONFIG.MILL;
     const running = Math.abs(mill.currentSpeed) > 3 && slab.onLine;
+
     if (env.coolant && running) {
       // ロール冷却・潤滑エマルジョンをワークロール面へ噴射する（材料への直接噴射ではない）
-      const nz = Math.min(24, Math.ceil(dt * 700));
-      for (let k = 0; k < nz; k++) {
-        const top = Math.random() < 0.5;
+      this._emit('coolant', 620, dt, 26, r => {
+        const top = r() < 0.5, sx = r() < 0.5 ? -1 : 1;
         const y = (top ? mill.wrTopY : mill.wrBotY) + (top ? 1 : -1) * (M.WR_D / 2 + 400);
-        const sx = Math.random() < 0.5 ? -1 : 1;
-        this.coolant.spawn(sx * 1250 + (Math.random() - .5) * 200, y,
-          (Math.random() - .5) * M.BARREL,
-          -sx * 900 + (Math.random() - .5) * 400, top ? -2600 : 2600, (Math.random() - .5) * 500, 0.55);
-      }
+        this.coolant.spawn(sx * 1250 + (r() - .5) * 200, y, (r() - .5) * M.BARREL,
+          -sx * 900 + (r() - .5) * 400, top ? -2600 : 2600, (r() - .5) * 500,
+          0.45 + r() * 0.35, 70 + r() * 70);
+      });
     }
     this.coolant.update(dt, mill.passLine - 800);
-    if (env.steam && running && slab.inBite) {
-      const ns = Math.min(8, Math.ceil(dt * 90));
-      for (let k = 0; k < ns; k++)
-        this.steam.spawn((Math.random() - .5) * 5200, mill.passLine + 500 + Math.random() * 1400,
-          (Math.random() - .5) * (CONFIG.TABLE.BARREL + 1200),
-          (Math.random() - .5) * 700, 600 + Math.random() * 700, (Math.random() - .5) * 700, 2.4);
+
+    if (env.fume && running && slab.inBite) {
+      // 煙が立つのはロールバイトの出側。板速度が上がるほど発生量も増える。
+      const dir = Num.sign0(mill.currentSpeed) || 1;
+      const rate = 30 + Math.abs(mill.currentSpeed) * 0.50;
+      this._emit('fume', rate, dt, 8, r => {
+        const s = r() ** 0.7;                             // 出側ほど密に、遠方ほど疎に
+        this.fume.spawn(
+          dir * (400 + s * 2600) + (r() - .5) * 500,
+          mill.passLine + slab.thickness + 120 + r() * 520,
+          (r() - .5) * (slab.width + 800),
+          dir * (150 + r() * 420), 800 + r() * 900, (r() - .5) * 400,
+          2.4 + r() * 1.8, 620 + r() * 520);
+      });
     }
-    this.steam.update(dt);
+    this.fume.update(dt);
   }
-  clear(which) { if (which === 'coolant') this.coolant.clear(); else this.steam.clear(); }
+  clear(which) { if (which === 'coolant') this.coolant.clear(); else this.fume.clear(); }
 }
 
 /** 3D上の設備ラベル（DOMを投影。ジオメトリを増やさない） */
@@ -2648,8 +2887,8 @@ class LabelView {
       ['横送り設備',                        S.ENTRY_X,  2300, S.SIDE_Z / 2, 55000],
       ['サイドトリマー',            CONFIG.TRIMMER.X,  4200,        0, 40000],
       ['75 mm クロップシャー',   CONFIG.CROP_SHEAR.X,  6200,        0, 95000],
-      ['スリーロール',      CONFIG.COILER.DEFLECTOR_X,  3000,        0, 30000],
-      ['巻取リール',                  CONFIG.COILER.X, CONFIG.MILL.PASS_LINE + CONFIG.COILER.Y_ABOVE + 1800, 0, 45000],
+      ['スリーロール',      CONFIG.COILER.DEFLECTOR_X,  CONFIG.MILL.PASS_LINE + 1750, 0, 30000],
+      ['巻取リール',                  CONFIG.COILER.X, CONFIG.MILL.PASS_LINE + CONFIG.COILER.Y_ABOVE + CONFIG.COILER.OD_DRAWING / 2 + 350, 0, 45000],
       ['ピット炉',                        S.TILTER_X,  1800, CONFIG.FURNACE.Z, 80000],
       ['装入クレーン',                    S.TILTER_X, CONFIG.CRANE.GIRDER_Y + 1500, CONFIG.FURNACE.Z, 90000],
     ].map(([t, x, y, z, maxD]) => {
@@ -2716,7 +2955,7 @@ class World3D {
     this._world();
 
     this.labels = new LabelView(this.camera, document.getElementById('tags'));
-    this.cutaway = 'half'; this.millView.setCutaway('half');
+    this.cutaway = 'half'; this.setCutaway('half');
     this._dpr = 1.5; this.setQuality('std');
     this.applyView(CONFIG.VIEWS[1], true);
 
@@ -2756,7 +2995,7 @@ class World3D {
     this.sprayView = new SprayView(this.scene);
   }
 
-  setCutaway(mode) { this.cutaway = mode; this.millView.setCutaway(mode); }
+  setCutaway(mode) { this.cutaway = mode; this.millView.setCutaway(mode); this.finishView.setCutaway(mode); }
   /**
    * 描画品質。環境反射は金属の質感を決める代わりにフラグメント単価が高いので、
    * 影・解像度と合わせて一段で切り替えられるようにする。
@@ -2770,6 +3009,14 @@ class World3D {
     this.renderer.setSize(innerWidth, innerHeight);
     this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); });
     this._dpr = dpr;
+    // 煙は柔らかく大きい粒なので塗り面積が効く。軽量時は粒数を落として面積を減らす。
+    this.sprayView.setDensity(q === 'lite' ? 0.4 : 1);
+    this._particleScale();
+  }
+  /** 点スプライトを実寸で描くための係数。画面高(実ピクセル)と画角から決まる。 */
+  _particleScale() {
+    ParticleField.viewScale.value =
+      this.renderer.domElement.height * 0.5 * this.camera.projectionMatrix.elements[5];
   }
   setShadows(on) { this.renderer.shadowMap.enabled = on; this.key.castShadow = on;
     this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); }); }
@@ -2822,6 +3069,7 @@ class World3D {
     this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, this._dpr ?? 1.5));
     this.renderer.setSize(innerWidth, innerHeight);
+    this._particleScale();
   }
 }
 
@@ -3047,7 +3295,7 @@ class UIManager {
     for (const [id, q] of [['q-high', 'high'], ['q-std', 'std'], ['q-lite', 'lite']])
       on(id, 'click', () => this.setQuality(q));
     on('chk-coolant', 'change', e => this.bus.emit('CMD_SET_ENV', { coolant: e.target.checked }));
-    on('chk-steam',   'change', e => this.bus.emit('CMD_SET_ENV', { steam: e.target.checked }));
+    on('chk-fume',    'change', e => this.bus.emit('CMD_SET_ENV', { fume: e.target.checked }));
     on('chk-supply-anim', 'change', e => this.bus.emit('CMD_SET_SUPPLY_ANIM', e.target.checked));
 
     addEventListener('keydown', e => {
