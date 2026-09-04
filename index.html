@@ -1,1218 +1,2332 @@
-<!-- START OF FILE HOT_v30_Shear_Supply_Fix.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aluminium Hot Rolling Simulator (v30 Improved)</title>
+<title>アルミニウム熱間圧延シミュレータ HYPER MILL</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-    /* CSSに変更はありません */
-    body { margin: 0; overflow: hidden; font-family: "Meiryo", "Yu Gothic", sans-serif; background-color: #eceff1; color: #333; }
-    #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; background: radial-gradient(circle at center, #f5f7fa 0%, #cfd8dc 100%); }
-    
-    #sidebar {
-        position: absolute; top: 0; left: 0; bottom: 0; width: 340px;
-        background: rgba(255, 255, 255, 0.9); border-right: 1px solid #b2dfdb;
-        display: flex; flex-direction: column; z-index: 10;
-        box-shadow: 2px 0 20px rgba(0,0,0,0.05); overflow-y: auto;
-        backdrop-filter: blur(8px);
-    }
-    .brand-header { padding: 20px 15px; background: linear-gradient(135deg, #263238, #212121); color: #fff; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-    .brand-title { font-weight: 800; font-size: 18px; letter-spacing: 1px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
-    
-    .panel-section { padding: 15px; border-bottom: 1px solid #e0f2f1; }
-    .section-title { font-size: 12px; font-weight: 700; color: #37474f; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-    
-    .toggle-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .toggle-label { font-size: 13px; font-weight: 600; color: #546e7a; }
-    .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cfd8dc; transition: .4s; border-radius: 20px; }
-    .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-    input:checked + .slider { background-color: #546e7a; }
-    input:checked + .slider:before { transform: translateX(20px); }
-    
-    .control-group { margin-bottom: 15px; }
-    .control-label { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #455a64; }
-    input[type=range] { width: 100%; cursor: pointer; accent-color: #455a64; height: 4px; background: #b0bec5; border-radius: 2px; appearance: none; }
-    input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; background: #37474f; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: transform 0.1s; }
-    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
-    
-    .btn { border: none; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.3s; width: 100%; margin-top: 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .btn-primary { background: linear-gradient(135deg, #546e7a, #37474f); color: white; }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(55,71,79,0.3); }
-    .btn-danger { background: linear-gradient(135deg, #ef5350, #c62828); color: white; }
-    .btn-secondary { background: #fff; color: #37474f; border: 1px solid #b0bec5; }
-    .btn-secondary:hover { background: #eceff1; }
-    
-    .pass-list { list-style: none; padding: 0; margin: 0; font-size: 11px; }
-    .pass-item { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #f1f8e9; border-radius: 6px; margin-bottom: 4px; background: rgba(255,255,255,0.5); transition: 0.2s; }
-    .pass-item.active { background: #eceff1; color: #263238; font-weight: bold; border-left: 4px solid #546e7a; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    .pass-item.done { color: #b0bec5; text-decoration: line-through; opacity: 0.7; }
-    
-    #status-bar {
-        position: absolute; bottom: 20px; left: 360px; right: 20px;
-        display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px;
-        z-index: 10; pointer-events: none;
-    }
-    .metric-card {
-        background: rgba(255, 255, 255, 0.85); padding: 15px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.8);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.05); text-align: center;
-        backdrop-filter: blur(5px); transition: transform 0.2s;
-    }
-    .metric-card:hover { transform: translateY(-5px); }
-    .metric-label { font-size: 11px; color: #78909c; font-weight: 800; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .metric-value { font-family: "Segoe UI", sans-serif; font-size: 24px; font-weight: 800; color: #37474f; }
-    .metric-unit { font-size: 12px; color: #90a4ae; font-weight: 600; }
-    
-    .overlay-msg {
-        position: absolute; top: 30px; right: 30px; padding: 15px 30px;
-        background: rgba(38, 50, 56, 0.9); color: #fff; border-radius: 50px; font-size: 14px; font-weight: 600;
-        opacity: 0; transition: opacity 0.5s, transform 0.5s; z-index: 20; pointer-events: none;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.2); transform: translateY(-20px);
-        backdrop-filter: blur(5px);
-    }
-    .show-msg { opacity: 1; transform: translateY(0); }
-    
-    #control-hint {
-        position: absolute; top: 10px; left: 360px; font-size: 11px; color: #90a4ae; z-index: 5;
-        background: rgba(255,255,255,0.6); padding: 5px 10px; border-radius: 15px;
-    }
+/* =========================================================================
+   デザイントークン
+   ・面(surface)/インク(ink)/主アクセント/状態色 の4系統だけに限定し、
+     「色が何を意味するか」を1対1に保つ（色相を装飾に使わない）。
+   ・状態色は必ずアイコン＋文言と併用し、色単独で意味を運ばせない。
+   ========================================================================= */
+:root {
+  --s-0:#eef1f3; --s-1:#ffffff; --s-2:#f6f8f9; --s-3:#e6ebee;
+  --ink-1:#12191d; --ink-2:#48565e; --ink-3:#7d8c95; --line:#d7dfe4; --line-2:#eaeff2;
+
+  --accent:#1c5cab; --accent-2:#2a78d6; --accent-soft:#e8f0fb;
+
+  --ok:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+
+  /* 連続量メータ用 単一色相ランプ(青) */
+  --ramp-1:#cde2fb; --ramp-2:#9ec5f4; --ramp-3:#5598e7; --ramp-4:#2a78d6; --ramp-5:#1c5cab;
+
+  --hot:#c2410c;
+  --r-s:6px; --r-m:10px; --r-l:16px;
+  --sb-w:372px;
+  --shadow-1:0 1px 2px rgba(18,25,29,.06), 0 2px 8px rgba(18,25,29,.05);
+  --shadow-2:0 8px 28px rgba(18,25,29,.10);
+  --font:"Segoe UI","Yu Gothic UI","Meiryo",system-ui,-apple-system,sans-serif;
+}
+* { box-sizing:border-box; }
+html,body { height:100%; }
+body {
+  margin:0; overflow:hidden; font-family:var(--font); background:var(--s-0); color:var(--ink-1);
+  font-size:13px; -webkit-font-smoothing:antialiased;
+}
+#canvas-container { position:fixed; inset:0; z-index:0; background:linear-gradient(180deg,#dfe7ec 0%,#f2f5f7 55%,#e3e9ed 100%); }
+canvas { display:block; }
+
+/* ---------- 起動オーバーレイ ---------- */
+#boot { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center;
+        flex-direction:column; gap:14px; background:var(--s-0); transition:opacity .45s; }
+#boot.hide { opacity:0; pointer-events:none; }
+#boot .spin { width:34px; height:34px; border:3px solid var(--line); border-top-color:var(--accent);
+              border-radius:50%; animation:spin 1s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+#boot .t { font-weight:700; letter-spacing:.06em; color:var(--ink-2); }
+#boot .e { max-width:520px; text-align:center; color:var(--crit); font-size:12px; line-height:1.7; display:none; }
+#boot.error .spin { display:none; } #boot.error .e { display:block; }
+
+/* ---------- サイドバー ---------- */
+#sidebar {
+  position:fixed; top:0; left:0; bottom:0; width:var(--sb-w); z-index:10;
+  background:rgba(255,255,255,.93); backdrop-filter:blur(14px);
+  border-right:1px solid var(--line); box-shadow:var(--shadow-2);
+  display:flex; flex-direction:column;
+}
+.brand {
+  padding:14px 16px; display:flex; align-items:center; gap:11px; color:#fff; flex:none;
+  background:linear-gradient(135deg,#1b262c 0%,#2c3d47 100%);
+}
+.brand i { font-size:19px; opacity:.85; }
+.brand .n { font-weight:800; font-size:15px; letter-spacing:.09em; line-height:1.15; }
+.brand .sub { font-size:10px; opacity:.62; letter-spacing:.05em; font-weight:600; }
+
+/* 現在状態バナー: 「今どうなっていて、次に何をするか」を常に1か所に出す */
+#status-banner {
+  flex:none; padding:11px 16px; display:flex; gap:11px; align-items:flex-start;
+  background:var(--accent-soft); border-bottom:1px solid var(--line);
+}
+#status-banner .ic { width:26px; height:26px; border-radius:50%; flex:none; display:grid; place-items:center;
+  background:var(--accent); color:#fff; font-size:12px; }
+#status-banner .tx { min-width:0; }
+#status-banner .st { font-weight:700; font-size:12.5px; color:var(--accent); line-height:1.35; }
+#status-banner .hint { font-size:11px; color:var(--ink-2); margin-top:2px; line-height:1.5; }
+#status-banner.is-run { background:#eaf6ea; } #status-banner.is-run .ic{ background:var(--ok);} #status-banner.is-run .st{ color:#0a7a0a; }
+#status-banner.is-warn { background:#fff6e2; } #status-banner.is-warn .ic{ background:var(--warn); color:#3a2a00;} #status-banner.is-warn .st{ color:#8a5b00; }
+
+#panels { flex:1; overflow-y:auto; overscroll-behavior:contain; }
+#panels::-webkit-scrollbar { width:9px; } #panels::-webkit-scrollbar-thumb { background:var(--line); border-radius:9px; }
+
+.sec { border-bottom:1px solid var(--line-2); }
+.sec > summary {
+  list-style:none; cursor:pointer; padding:11px 16px; display:flex; align-items:center; gap:8px;
+  font-size:11px; font-weight:800; letter-spacing:.07em; color:var(--ink-2); text-transform:uppercase;
+  user-select:none;
+}
+.sec > summary::-webkit-details-marker { display:none; }
+.sec > summary .chev { margin-left:auto; transition:transform .18s; color:var(--ink-3); font-size:10px; }
+.sec[open] > summary .chev { transform:rotate(90deg); }
+.sec > summary:hover { background:var(--s-2); }
+.sec .body { padding:2px 16px 15px; }
+
+/* ---------- コントロール ---------- */
+.row { display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:30px; }
+.row + .row { margin-top:3px; }
+.lbl { font-size:12px; color:var(--ink-2); font-weight:600; }
+.lbl small { display:block; font-weight:500; color:var(--ink-3); font-size:10.5px; margin-top:1px; }
+
+.fld { margin-bottom:13px; }
+.fld:last-child { margin-bottom:0; }
+.fld .top { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
+.fld .k { font-size:12px; font-weight:600; color:var(--ink-2); }
+.fld .v { font-size:12.5px; font-weight:700; color:var(--ink-1); font-variant-numeric:tabular-nums; }
+.fld .v em { font-style:normal; font-weight:600; color:var(--ink-3); font-size:11px; margin-left:2px; }
+.fld .derived { font-size:10.5px; color:var(--ink-3); margin-top:4px; font-variant-numeric:tabular-nums; }
+
+input[type=range] { width:100%; appearance:none; height:4px; border-radius:2px; background:var(--s-3); cursor:pointer; }
+input[type=range]::-webkit-slider-thumb { appearance:none; width:15px; height:15px; border-radius:50%;
+  background:var(--accent); border:2.5px solid #fff; box-shadow:0 1px 4px rgba(18,25,29,.3); transition:transform .12s; }
+input[type=range]::-webkit-slider-thumb:hover { transform:scale(1.18); }
+input[type=range]:focus-visible { outline:2px solid var(--accent-2); outline-offset:3px; }
+input[type=range]:disabled { opacity:.45; cursor:not-allowed; }
+
+.switch { position:relative; display:inline-block; width:38px; height:21px; flex:none; }
+.switch input { opacity:0; width:0; height:0; }
+.switch .sl { position:absolute; inset:0; background:var(--s-3); transition:.22s; border-radius:21px; cursor:pointer; }
+.switch .sl:before { content:""; position:absolute; height:15px; width:15px; left:3px; bottom:3px; background:#fff;
+  transition:.22s; border-radius:50%; box-shadow:0 1px 3px rgba(18,25,29,.28); }
+.switch input:checked + .sl { background:var(--accent); }
+.switch input:checked + .sl:before { transform:translateX(17px); }
+.switch input:focus-visible + .sl { outline:2px solid var(--accent-2); outline-offset:2px; }
+
+.btn { border:none; padding:11px 12px; border-radius:var(--r-m); font-weight:700; font-size:12.5px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:8px; width:100%; transition:.16s;
+  font-family:inherit; box-shadow:var(--shadow-1); }
+.btn:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover { background:#174d90; transform:translateY(-1px); }
+.btn-ghost { background:var(--s-1); color:var(--ink-2); border:1px solid var(--line); }
+.btn-ghost:hover { background:var(--s-2); color:var(--ink-1); }
+.btn-danger { background:var(--s-1); color:var(--crit); border:1px solid #f0c9c9; }
+.btn-danger:hover { background:#fdf2f2; }
+.btn:disabled { opacity:.45; cursor:not-allowed; transform:none; }
+.btn .kbd { margin-left:auto; font-size:9.5px; font-weight:700; opacity:.62; border:1px solid currentColor;
+  border-radius:4px; padding:1px 4px; line-height:1.35; }
+.btn-row { display:flex; gap:7px; } .btn-row .btn { margin:0; }
+
+.seg { display:flex; background:var(--s-3); border-radius:var(--r-m); padding:3px; gap:3px; }
+.seg button { flex:1; border:none; background:transparent; padding:7px 4px; border-radius:7px; cursor:pointer;
+  font-size:11.5px; font-weight:700; color:var(--ink-2); font-family:inherit; transition:.14s; }
+.seg button[aria-pressed="true"] { background:var(--s-1); color:var(--accent); box-shadow:var(--shadow-1); }
+.seg button:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px; }
+
+.chips { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.chip { border:1px solid var(--line); background:var(--s-1); border-radius:8px; padding:7px 4px; cursor:pointer;
+  font-size:10.5px; font-weight:700; color:var(--ink-2); font-family:inherit; display:flex; flex-direction:column;
+  align-items:center; gap:4px; transition:.14s; }
+.chip i { font-size:13px; color:var(--ink-3); }
+.chip:hover { border-color:var(--accent-2); color:var(--accent); } .chip:hover i { color:var(--accent); }
+.chip[aria-pressed="true"] { background:var(--accent-soft); border-color:var(--accent-2); color:var(--accent); }
+.chip[aria-pressed="true"] i { color:var(--accent); }
+.chip:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px; }
+
+/* ---------- パススケジュール表 ---------- */
+.sched { width:100%; border-collapse:collapse; font-size:11px; font-variant-numeric:tabular-nums; }
+.sched th { font-size:9.5px; font-weight:800; color:var(--ink-3); text-align:right; padding:0 5px 5px;
+  letter-spacing:.04em; text-transform:uppercase; border-bottom:1px solid var(--line); }
+.sched th:first-child, .sched td:first-child { text-align:left; }
+.sched td { padding:5px; text-align:right; color:var(--ink-2); border-bottom:1px solid var(--line-2); }
+.sched tr.active td { background:var(--accent-soft); color:var(--accent); font-weight:700; }
+.sched tr.active td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+.sched tr.done td { color:var(--ink-3); }
+.sched tr.done td:first-child i { color:var(--ok); }
+.sched .dir { font-size:10px; }
+.sched .load { display:block; height:3px; border-radius:2px; background:var(--s-3); margin-top:3px; overflow:hidden; }
+.sched .load i { display:block; height:100%; background:var(--ramp-4); border-radius:2px; }
+
+/* ---------- 計測バー ---------- */
+#metrics {
+  position:fixed; bottom:16px; left:calc(var(--sb-w) + 16px); right:16px; z-index:10;
+  display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:10px; pointer-events:none;
+}
+.mc { background:rgba(255,255,255,.9); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.9);
+  border-radius:var(--r-l); padding:10px 12px 11px; box-shadow:var(--shadow-2); min-width:0;
+  display:flex; flex-direction:column; min-height:96px; }
+.mc .k { font-size:9.5px; font-weight:800; color:var(--ink-3); letter-spacing:.05em; text-transform:uppercase;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mc .val { font-size:22px; font-weight:800; color:var(--ink-1); line-height:1.15; margin-top:3px;
+  font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+.mc .val u { text-decoration:none; font-size:11px; font-weight:700; color:var(--ink-3); margin-left:2px; }
+.mc .sub { font-size:10px; color:var(--ink-3); margin-top:auto; padding-top:4px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mc .bar { height:4px; border-radius:2px; background:var(--s-3); margin-top:6px; overflow:hidden; }
+.mc .bar i { display:block; height:100%; width:0; background:var(--ramp-4); border-radius:2px; transition:width .12s linear; }
+.mc.is-warn .bar i { background:var(--warn); } .mc.is-crit .bar i { background:var(--crit); }
+.mc.is-warn .sub, .mc.is-crit .sub { font-weight:700; }
+.mc.is-warn .sub { color:#8a5b00; } .mc.is-crit .sub { color:var(--crit); }
+.mc.temp .val { color:var(--hot); }
+
+/* ---------- ヘッドアップ ---------- */
+#hud-top { position:fixed; top:14px; left:calc(var(--sb-w) + 16px); right:16px; z-index:9;
+  display:flex; gap:10px; align-items:flex-start; pointer-events:none; }
+#legend { background:rgba(255,255,255,.86); backdrop-filter:blur(8px); border:1px solid var(--line);
+  border-radius:var(--r-m); padding:8px 12px; font-size:10.5px; color:var(--ink-2); box-shadow:var(--shadow-1); }
+#legend b { color:var(--ink-1); font-size:11px; display:block; margin-bottom:3px; }
+#legend span { display:inline-flex; align-items:center; gap:5px; margin-right:11px; white-space:nowrap; }
+#legend em { width:9px; height:9px; border-radius:2px; display:inline-block; font-style:normal; }
+#toast { margin-left:auto; padding:11px 18px; border-radius:var(--r-l); font-size:12.5px; font-weight:700;
+  background:rgba(24,33,39,.92); color:#fff; box-shadow:var(--shadow-2); backdrop-filter:blur(8px);
+  opacity:0; transform:translateY(-8px); transition:opacity .3s,transform .3s; max-width:430px; }
+#toast.show { opacity:1; transform:translateY(0); }
+#toast.warn { background:rgba(250,178,25,.96); color:#2a1d00; }
+#toast.crit { background:rgba(208,59,59,.96); }
+
+#hud-br { position:fixed; right:16px; bottom:calc(16px + 112px); z-index:9; display:flex; flex-direction:column;
+  align-items:flex-end; gap:6px; pointer-events:none; font-size:10.5px; color:var(--ink-3); }
+#hud-br .box { background:rgba(255,255,255,.82); border:1px solid var(--line); border-radius:8px;
+  padding:5px 9px; font-variant-numeric:tabular-nums; }
+
+
+/* ---------- ラベル(3D上の注記) ---------- */
+.shortcuts { padding:12px 16px 18px; font-size:10.5px; color:var(--ink-3); line-height:2.1; }
+.shortcuts b { display:block; font-size:10px; font-weight:800; letter-spacing:.07em; color:var(--ink-2);
+  text-transform:uppercase; margin-bottom:4px; }
+.shortcuts span { display:inline-flex; align-items:center; gap:4px; margin-right:10px; white-space:nowrap; }
+kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
+  padding:0 5px; font-family:inherit; font-size:10px; font-weight:700; color:var(--ink-2); }
+.derived kbd { font-size:9.5px; }
+
+.tag { position:fixed; left:0; top:0; z-index:8; transform:translate(-50%,-50%); pointer-events:none; will-change:transform;
+  background:rgba(24,33,39,.82); color:#fff; font-size:10.5px; font-weight:700; letter-spacing:.02em;
+  padding:3px 8px; border-radius:20px; white-space:nowrap; box-shadow:var(--shadow-1); opacity:0;
+  transition:opacity .2s; backdrop-filter:blur(4px); }
+.tag.on { opacity:1; }
+.tag:after { content:""; position:absolute; left:50%; top:100%; width:1px; height:var(--leader,0px);
+  background:rgba(24,33,39,.42); }
+
+@media (max-width:1500px) {
+  #metrics { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .mc .val { font-size:19px; }
+}
 </style>
 </head>
 <body>
 
 <div id="canvas-container"></div>
-<div id="control-hint"><i class="fa-solid fa-mouse"></i> 左ドラッグ: 回転 | 右ドラッグ: 平行移動 | ホイール: ズーム</div>
 
-<div id="sidebar">
-    <div class="brand-header"><i class="fa-solid fa-industry"></i><span class="brand-title">HYPER MILL v30</span></div>
-    
-    <div class="panel-section">
-        <div class="section-title"><i class="fa-solid fa-ruler-combined"></i> スラブ初期サイズ</div>
-        <div class="control-group">
-            <div class="control-label"><span>厚み (Initial Th.)</span> <span id="lbl-init-th">400 mm</span></div>
-            <input type="range" id="rng-init-th" min="200" max="600" value="400" step="10">
-        </div>
-        <div class="control-group">
-            <div class="control-label"><span>幅 (Width)</span> <span id="lbl-init-wid">1500 mm</span></div>
-            <input type="range" id="rng-init-wid" min="800" max="2200" value="1500" step="50">
-        </div>
-        <div class="control-group">
-            <div class="control-label"><span>長さ (Length)</span> <span id="lbl-init-len">4000 mm</span></div>
-            <input type="range" id="rng-init-len" min="2000" max="6000" value="4000" step="100">
-        </div>
-        <button class="btn btn-secondary" id="btn-apply-size"><i class="fa-solid fa-check"></i> サイズ適用＆リセット</button>
+<div id="boot">
+  <div class="spin"></div>
+  <div class="t">アルミニウム熱間圧延シミュレータを起動中…</div>
+  <div class="e" id="boot-error"></div>
+</div>
+
+<aside id="sidebar">
+  <header class="brand">
+    <i class="fa-solid fa-industry"></i>
+    <div>
+      <div class="n">HYPER MILL</div>
+      <div class="sub">アルミニウム熱間可逆圧延機 / 4-High Reversing Mill</div>
     </div>
+  </header>
 
-    <div class="panel-section">
-        <div class="section-title"><i class="fa-solid fa-microchip"></i> 操作モード</div>
-        <div class="toggle-row">
-            <span class="toggle-label">自動スケジュール</span>
-            <label class="switch"><input type="checkbox" id="chk-auto" checked><span class="slider"></span></label>
+  <div id="status-banner">
+    <div class="ic"><i class="fa-solid fa-power-off" id="sb-icon"></i></div>
+    <div class="tx">
+      <div class="st" id="sb-state">待機中</div>
+      <div class="hint" id="sb-hint">「圧延サイクル開始」でスラブ供給から自動運転します。</div>
+    </div>
+  </div>
+
+  <div id="panels">
+
+    <details class="sec" open>
+      <summary><i class="fa-solid fa-play"></i> 運転<i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body">
+        <div class="seg" role="group" aria-label="運転モード" style="margin-bottom:11px;">
+          <button id="mode-auto"   aria-pressed="true">自動スケジュール</button>
+          <button id="mode-manual" aria-pressed="false">手動操作</button>
         </div>
-        <div class="toggle-row" style="margin-bottom:15px;">
-            <span class="toggle-label" style="font-weight:400; font-size:12px;">供給アニメーション</span>
-            <label class="switch" style="transform:scale(0.8);"><input type="checkbox" id="chk-supply-anim" checked><span class="slider"></span></label>
-        </div>
+
         <div id="auto-controls">
-            <button class="btn btn-primary" id="btn-start"><i class="fa-solid fa-play"></i> 圧延サイクル開始</button>
-            <div style="margin-top:15px; max-height: 150px; overflow-y:auto; border:1px solid #f1f8e9; border-radius:8px;">
-                <ul class="pass-list" id="pass-list-ul"></ul>
-            </div>
+          <button class="btn btn-primary" id="btn-start">
+            <i class="fa-solid fa-play"></i><span id="btn-start-tx">圧延サイクル開始</span><span class="kbd">Space</span>
+          </button>
+          <div class="btn-row" style="margin-top:7px;">
+            <button class="btn btn-ghost" id="btn-pause"><i class="fa-solid fa-pause"></i>一時停止</button>
+            <button class="btn btn-danger" id="btn-reset"><i class="fa-solid fa-rotate-left"></i>リセット</button>
+          </div>
+          <div class="fld" style="margin-top:13px;">
+            <div class="top"><span class="k">シミュレーション速度</span><span class="v" id="lbl-timescale">1.0<em>×</em></span></div>
+            <input type="range" id="rng-timescale" min="0.25" max="4" value="1" step="0.25">
+            <div class="derived">実時間比。物理計算は速度に依らず同一結果になります。</div>
+          </div>
         </div>
-    </div>
 
-    <div class="panel-section" id="manual-controls" style="display:none; background:#f9fbe7; border-radius: 8px; margin: 10px;">
-        <div class="section-title"><i class="fa-solid fa-sliders"></i> 手動操作</div>
-        <div class="control-group">
-            <div class="control-label"><span>ロールギャップ</span> <span id="lbl-gap">400 mm</span></div>
+        <div id="manual-controls" style="display:none;">
+          <div class="fld">
+            <div class="top"><span class="k">ロールギャップ（圧下）</span><span class="v" id="lbl-gap">400<em>mm</em></span></div>
             <input type="range" id="rng-gap" min="10" max="600" value="400" step="1">
+            <div class="derived" id="der-gap">圧下量 0 mm / 圧下率 0.0 %</div>
+          </div>
+          <div class="fld">
+            <div class="top"><span class="k">ライン速度</span><span class="v" id="lbl-speed">0<em>mpm</em></span></div>
+            <input type="range" id="rng-speed" min="-300" max="300" value="0" step="5">
+            <div class="derived"><i class="fa-solid fa-backward"></i> 逆行 ←　0　→ 前進 <i class="fa-solid fa-forward"></i></div>
+          </div>
+          <button class="btn btn-ghost" id="btn-stopline"><i class="fa-solid fa-stop"></i>ライン停止</button>
         </div>
-        <div class="control-group">
-            <div class="control-label"><span>ライン速度</span> <span id="lbl-speed">0 mpm</span></div>
-            <input type="range" id="rng-speed" min="-300" max="300" value="0" step="10">
-            <div style="font-size:10px; color:#90a4ae; text-align:center; margin-top:4px;">
-                <i class="fa-solid fa-backward"></i> REV <span style="margin:0 10px">0</span> FWD <i class="fa-solid fa-forward"></i>
-            </div>
-        </div>
-    </div>
+      </div>
+    </details>
 
-    <div class="panel-section">
-        <div class="section-title"><i class="fa-solid fa-wand-magic-sparkles"></i> エフェクト</div>
-        <div class="toggle-row">
-            <span class="toggle-label">クーラントスプレー</span>
-            <label class="switch"><input type="checkbox" id="chk-coolant" checked><span class="slider"></span></label>
-        </div>
-        <div class="toggle-row">
-            <span class="toggle-label">水蒸気演出</span>
-            <label class="switch"><input type="checkbox" id="chk-steam" checked><span class="slider"></span></label>
-        </div>
-    </div>
+    <details class="sec" open>
+      <summary><i class="fa-solid fa-list-check"></i> パススケジュール<i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body">
+        <table class="sched">
+          <thead><tr><th>Pass</th><th>出側厚</th><th>圧下率</th><th>速度</th><th>荷重</th></tr></thead>
+          <tbody id="sched-body"></tbody>
+        </table>
+        <div class="derived" style="margin-top:7px;" id="sched-note"></div>
+      </div>
+    </details>
 
-    <div class="panel-section" style="border:none;">
-        <button class="btn btn-danger" id="btn-reset"><i class="fa-solid fa-rotate-right"></i> 初期状態に戻す</button>
+    <details class="sec">
+      <summary><i class="fa-solid fa-cube"></i> 素材（スラブ）<i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body">
+        <div class="fld">
+          <div class="top"><span class="k">厚み</span><span class="v" id="lbl-init-th">400<em>mm</em></span></div>
+          <input type="range" id="rng-init-th" min="200" max="600" value="400" step="10">
+        </div>
+        <div class="fld">
+          <div class="top"><span class="k">幅</span><span class="v" id="lbl-init-wid">1500<em>mm</em></span></div>
+          <input type="range" id="rng-init-wid" min="800" max="2200" value="1500" step="50">
+        </div>
+        <div class="fld">
+          <div class="top"><span class="k">長さ</span><span class="v" id="lbl-init-len">4000<em>mm</em></span></div>
+          <input type="range" id="rng-init-len" min="2000" max="6000" value="4000" step="100">
+        </div>
+        <div class="fld">
+          <div class="top"><span class="k">加熱炉抽出温度</span><span class="v" id="lbl-init-temp">500<em>℃</em></span></div>
+          <input type="range" id="rng-init-temp" min="400" max="540" value="500" step="5">
+          <div class="derived">アルミの熱間圧延域は概ね 400–540 ℃。この温度域では可視発光しません。</div>
+        </div>
+        <div class="derived" id="der-slab" style="margin-bottom:9px;"></div>
+        <button class="btn btn-ghost" id="btn-apply-size"><i class="fa-solid fa-check"></i>適用してリセット</button>
+      </div>
+    </details>
+
+    <details class="sec" open>
+      <summary><i class="fa-solid fa-video"></i> 視点<i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body">
+        <div class="chips" id="cam-chips"></div>
+        <div class="derived" style="margin-top:8px;">
+          左ドラッグ回転 / 右ドラッグ平行移動 / ホイール拡大縮小　<kbd>1</kbd>–<kbd>6</kbd> で切替
+        </div>
+      </div>
+    </details>
+
+    <details class="sec">
+      <summary><i class="fa-solid fa-sliders"></i> 表示<i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body">
+        <div class="fld">
+          <div class="top"><span class="k">ハウジング表示</span></div>
+          <div class="seg" role="group" aria-label="ハウジング表示">
+            <button id="cut-solid" aria-pressed="false">実体</button>
+            <button id="cut-half"  aria-pressed="true">半断面</button>
+            <button id="cut-xray"  aria-pressed="false">透視</button>
+          </div>
+          <div class="derived">半断面は手前側（オペレータ側）ハウジングのみ透過し、奥行きを保ったままロール系を見せます。</div>
+        </div>
+        <div class="row"><span class="lbl">設備ラベル<small>主要機器の名称を重畳</small></span>
+          <label class="switch"><input type="checkbox" id="chk-labels" checked><span class="sl"></span></label></div>
+        <div class="row"><span class="lbl">ロールクーラント<small>潤滑エマルジョンのロール噴射</small></span>
+          <label class="switch"><input type="checkbox" id="chk-coolant" checked><span class="sl"></span></label></div>
+        <div class="row"><span class="lbl">ミスト・水蒸気<small>ロール面での蒸発</small></span>
+          <label class="switch"><input type="checkbox" id="chk-steam" checked><span class="sl"></span></label></div>
+        <div class="fld" style="margin-top:6px;">
+          <div class="top"><span class="k">描画品質</span></div>
+          <div class="seg" role="group" aria-label="描画品質">
+            <button id="q-high" aria-pressed="false">高</button>
+            <button id="q-std"  aria-pressed="true">標準</button>
+            <button id="q-lite" aria-pressed="false">軽量</button>
+          </div>
+          <div class="derived" id="der-quality">標準：環境反射あり・影あり・解像度 1.5×まで</div>
+        </div>
+        <div class="row"><span class="lbl">供給アニメーション<small>転倒→縦送り→横送り</small></span>
+          <label class="switch"><input type="checkbox" id="chk-supply-anim" checked><span class="sl"></span></label></div>
+      </div>
+    </details>
+
+    <details class="sec">
+      <summary><i class="fa-solid fa-gears"></i> 設備諸元<i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body">
+        <table class="sched"><tbody id="spec-body"></tbody></table>
+      </div>
+    </details>
+
+    <div class="shortcuts">
+      <b>ショートカット</b>
+      <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
+      <span><kbd>L</kbd>ラベル</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>6</kbd>視点</span>
     </div>
+  </div>
+</aside>
+
+
+<div id="metrics">
+  <div class="mc"><div class="k">パス</div><div class="val"><span id="m-pass-v">0</span></div><div class="sub" id="m-pass-s">/ 全 7 パス</div></div>
+  <div class="mc"><div class="k">板厚</div><div class="val"><span id="m-thick-v">400</span><u>mm</u></div><div class="sub" id="m-thick-s">累積圧下率 0.0 %</div></div>
+  <div class="mc"><div class="k">板長</div><div class="val"><span id="m-len-v">4.00</span><u>m</u></div><div class="sub" id="m-len-s">伸び 1.00 倍</div></div>
+  <div class="mc"><div class="k">ライン速度</div><div class="val"><span id="m-speed-v">0</span><u>mpm</u></div><div class="sub" id="m-speed-s">停止</div></div>
+  <div class="mc" id="m-force"><div class="k">圧延荷重</div><div class="val"><span id="m-force-v">0</span><u>ton</u></div><div class="sub" id="m-force-s">常用最大の 0 %</div><div class="bar"><i></i></div></div>
+  <div class="mc" id="m-power"><div class="k">主機動力</div><div class="val"><span id="m-power-v">0.0</span><u>MW</u></div><div class="sub" id="m-power-s">定格の 0 %</div><div class="bar"><i></i></div></div>
+  <div class="mc temp"><div class="k">材料温度</div><div class="val"><span id="m-temp-v">500</span><u>℃</u></div><div class="sub" id="m-temp-s">熱間圧延域</div></div>
+  <div class="mc"><div class="k">ロールギャップ</div><div class="val"><span id="m-gap-v">400</span><u>mm</u></div><div class="sub" id="m-gap-s">目標 400 mm</div></div>
 </div>
 
-<div id="status-bar">
-    <div class="metric-card">
-        <div class="metric-label">Gap Center Height</div>
-        <div><span class="metric-value" id="val-center-h">200.0</span> <span class="metric-unit">mm</span></div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-label">Slab Length</div>
-        <div><span class="metric-value" id="val-length">4.0</span> <span class="metric-unit">m</span></div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-label">Line Speed</div>
-        <div><span class="metric-value" id="val-speed">0</span> <span class="metric-unit">mpm</span></div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-label">Roll Force</div>
-        <div><span class="metric-value" id="val-force">0</span> <span class="metric-unit">ton</span></div>
-    </div>
-    <div class="metric-card">
-        <div class="metric-label">Slab Temp</div>
-        <div><span class="metric-value" id="val-temp" style="color:#ff7043;">450</span> <span class="metric-unit">°C</span></div>
-    </div>
+<div id="hud-top">
+  <div id="legend"><b>凡例</b><span id="legend-items"></span></div>
+  <div id="toast"></div>
 </div>
 
-<div id="msg-box" class="overlay-msg"><i class="fa-solid fa-circle-info"></i> <span id="msg-text">System Ready</span></div>
+<div id="hud-br">
+  <div class="box"><span id="fps">– fps</span> / <span id="dcalls">– draw</span></div>
+</div>
+
+<div id="tags"></div>
 
 <script type="importmap">
-{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
 </script>
-
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
-// --- 1. CONFIGURATION ---
+/* =============================================================================
+ * 1. CONFIGURATION —— 単位は全て mm / ℃ / mpm / 秒。
+ *    3D空間へは Sim.u() でのみ変換する（マジックナンバーを持たない単一の真実）。
+ *    座標系: +X = 圧延方向(前進)、+Y = 上、+Z = オペレータ側 / −Z = 駆動側。
+ *    Y の原点 = ミル床(グレード)。パスラインはその上 PASS_LINE。
+ * ========================================================================== */
 const CONFIG = {
-    SCALE: 0.02,
-    MACHINE: {
-        WR_DIAMETER: 900,
-        BR_DIAMETER: 1500,
-        ROLL_WIDTH: 3200,
-        MAX_GAP: 600,
-        MIN_GAP: 10,
-        GUIDE_DISTANCE: 2500,
-        GUIDE_HEIGHT: 600,
-        TABLE_ROLL_DIAMETER: 400
-    },
-    SUPPLY: {
-        ENTRY_X: -5500,     
-        SIDE_Z: -3500, // FIX: Moved to Near Side (Operator Side)
-        TRANSFER_OFFSET: 7500 
-    },
-    PHYSICS: {
-        DENSITY: 2.7,
-        DEFORMATION_RESISTANCE: 50,
-        COOLING_RATE_AIR: 0.1,
-        COOLING_RATE_WATER: 0.3,
-        ACCEL_AUTO: 150,
-        ACCEL_MANUAL: 200,
-        GAP_SPEED: 15,
-        GUIDE_SPEED: 600
-    },
-    COLORS: {
-        BG: 0xf0f4f5,
-        HOUSING: 0x455a64, 
-        SLAB: 0xe0e0e0,
-        ROLL_FACE: 0xffffff,
-        ROLL_CORE: 0x455a64,
-        COOLANT: 0xb2ebf2,
-        GRID: 0xb0bec5,
-        GUIDE_FRAME: 0x90a4ae,
-        GUIDE_ROLLER: 0xb0bec5,
-        TABLE_FRAME: 0x78909c,
-        SHEAR_FRAME: 0x455a64,
-        SHEAR_BLADE: 0xffeb3b,
-        SHEAR_CYL: 0xcfcfcf
-    },
-    SCHEDULE: [
-        { pass: 1, gap: 350, speed: 80, dir: 1 },
-        { pass: 2, gap: 300, speed: 120, dir: -1 },
-        { pass: 3, gap: 250, speed: 160, dir: 1 },
-        { pass: 4, gap: 200, speed: 200, dir: -1 },
-        { pass: 5, gap: 150, speed: 250, dir: 1 },
-        { pass: 6, gap: 100, speed: 280, dir: -1 },
-        { pass: 7, gap: 60, speed: 300, dir: 1 }
-    ]
+  SCALE: 0.02,                       // 1 mm → 0.02 scene unit (1 unit = 50 mm)
+
+  MILL: {
+    PASS_LINE:      900,             // 床からパスライン(下ワークロール上面)まで ※推定値
+    WR_D:           935,             // ワークロール胴径  Φ935 × 2500L
+    BR_D:          1430,             // バックアップロール胴径 Φ1430 × 2450L
+    BARREL:        2500,             // ワークロール胴長
+    BR_BARREL:     2450,             // バックアップロール胴長
+    WR_NECK_D:      520,  BR_NECK_D: 850,
+    GAP_MIN:         10,  GAP_MAX:   600,
+    MAX_SPEED:      161,             // 最大圧延速度 mpm
+    GAP_RATE:        70,             // 圧下シリンダ速度 mm/s ※推定値
+    PASSLINE_ADJ_RANGE: 120,         // パスライン調整装置(ステップウェッジ)の可動量
+    // ハウジング（オペレータ側/駆動側の2枚。窓の中にチョックが収まる）
+    HOUSING: { POST_X: 1350, WIN_X: 1600, THICK_Z: 1300, INNER_Z: 1400,
+               TOP_Y: 7000, BOT_Y: -3600, WIN_TOP: 5200, WIN_BOT: -2100 },
+    CHOCK:   { WR: { x: 1500, y: 820,  z: 1300 }, BR: { x: 1500, y: 1400, z: 1300 } },
+    CAPSULE: { D: 1300, BODY_L: 800 },     // 油圧圧下シリンダ
+    WEDGE:   { H: 300 },                   // パスライン調整ステップウェッジ
+    BENDER:  { D: 300, L: 520 },           // ロールベンディングシリンダ
+    RATED_FORCE_T: 3920,                   // 常用最大圧延荷重 (tonf)
+    LIMIT_FORCE_T: 4200,                   // 非常最大圧延荷重 (tonf)
+    RATED_POWER_KW: 14000,                 // 主電動機定格 (2×7000 kW) ※推定値
+  },
+
+  DRIVE: {                                  // 駆動側 (−Z)
+    COUPLING_Z: -3400,                      // スピンドル継手（ロール側）
+    PINION_Z:   -9500,                      // ピニオンスタンド出力軸
+    PINION_SPAN: 1800,
+    PINION_Y_LO:  433, PINION_Y_HI: 1733,   // ピニオン軸の固定高さ（公称ギャップ300相当）
+    GEAR_Z:    -12200, GEAR_L: 2600, GEAR_D: 2600,
+    MOTOR_Z:   -16200, MOTOR_L: 4600, MOTOR_D: 2900,
+    SPINDLE_D:   620,
+  },
+
+  TABLE: {
+    // 実機テーブル長: 入側 121.8 m / 出側 80.1 m（板が最終パスで大きく伸びるため非対称）
+    ROLL_D: 400, BARREL: 2700,
+    PITCH_NEAR: 900, PITCH_FAR: 1500, NEAR_ZONE: 22000,
+    X_MIN: -121800, X_MAX: 80100,
+    CLEAR: 1600,                            // ミル直下は敷板(エプロン)なのでローラを置かない
+    GUIDE: { X_IN: -2700, X_OUT: 2700, LEN: 4200, H: 700, ROLL_D: 260, N: 5,
+             OPEN_MARGIN: 600, RATE: 500 },
+  },
+
+  SUPPLY: {                                  // オペレータ側 (+Z) のスラブ装入設備
+    SIDE_Z: 9500,
+    ENTRY_X: -9450,                          // 転送完了位置(＝装入時のスラブ中心)
+    TILTER_X: -20250,
+    RUNIN_X0: -18900, RUNIN_X1: -12150,
+    // 横送りローラは主テーブルローラの「中間」に置き、胴長をピッチ未満にして干渉を避ける
+    CROSS_X: [-7650, -8550, -9450, -10350, -11250],
+    CROSS_ROLL_L: 420,   // 主テーブル(ピッチ900・胴径400)の隙間500に余裕をもって収める
+    ROLL_D: 400, PITCH: 1200,
+    T_TILT: 3.6, T_RUNIN: 4.2, T_CROSS: 4.6, // 各動作の所要時間 (秒)
+  },
+
+  SHEAR: {                                   // 出側クロップシャー(油圧アップカット・ギロチン)
+    X: 52000, CROP_LEN: 400, RAKE: 0.045,
+    OPEN: 1400, STROKE: 1500, T_CUT: 1.1, T_OPEN: 1.4, APPROACH_SPEED: 150,
+  },
+
+  BUILDING: { X0: -132000, X1: 92000, Z: 34000, PIT: { X: 6000, Z: 6000, DEPTH: 3800 } },
+
+  /* --- 材料・プロセス定数（アルミニウム熱間圧延） ---------------------------
+   * 変形抵抗   k = C·exp(−b(T−Tref))·ε̇^m          [MPa]
+   * 平均面圧   pm = 1.155·k·Qp   (平面ひずみ係数 × 摩擦丘係数)
+   * 摩擦丘     Qp = (exp(x)−1)/x ,  x = μ·Ld/hm    (スラブ法、x→0 で 1)
+   * 接触弧長   Ld = √(R·Δh − Δh²/4)
+   * 圧延荷重   P  = pm · w · Ld
+   * トルク     M  = 2·P·λ·Ld ,  動力 = M·ω
+   * 加工発熱   ΔT = η·1.155·k·ln(hIn/hOut) / (ρ·cp)
+   * ------------------------------------------------------------------------ */
+  MATERIAL: {
+    NAME: 'アルミニウム合金', RHO: 2700, CP: 1050,     // kg/m³, J/(kg·K)
+    KF: { C: 55, TREF: 450, B: 0.0055, M: 0.10 },      // 変形抵抗モデル(Al-Mg系相当)
+    EMISSIVITY: 0.18, H_AIR: 12, H_WATER: 900, H_ROLL: 30000,
+    T_ROLL: 80, T_AMBIENT: 30,
+    T_MIN_ROLLABLE: 350,                                // これ未満は熱間圧延域外
+  },
+  PROCESS: { MU: 0.25, TORQUE_ARM: 0.45, HEAT_EFF: 0.95,
+             ACCEL: 110, BITE_ANGLE_MAX: 0.42 },        // mpm/s, rad(24°)
+
+  SCHEDULE: [
+    { pass: 1, gap: 350, speed:  55, dir:  1 },
+    { pass: 2, gap: 300, speed:  70, dir: -1 },
+    { pass: 3, gap: 250, speed:  90, dir:  1 },
+    { pass: 4, gap: 200, speed: 110, dir: -1 },
+    { pass: 5, gap: 150, speed: 130, dir:  1 },
+    { pass: 6, gap: 100, speed: 150, dir: -1 },
+    { pass: 7, gap:  60, speed: 161, dir:  1 },
+  ],
+  SAFE_CLEAR: 8000,                                     // パス終了と判定する噛み出し余裕 mm
+
+  COLORS: {
+    SLAB:        0xc9ccd1,   // 熱間アルミ (この温度域では発光しない)
+    ROLL_FACE:   0xdfe3e6,
+    ROLL_NECK:   0x9aa7b0,
+    CHOCK:       0x6f7f89,
+    HOUSING:     0x5b6a73,
+    BASE:        0x4c5a63,
+    HYDRAULIC:   0xb98b3d,   // 油圧・駆動系
+    SPINDLE:     0x8d949a,
+    TABLE_FRAME: 0x6b7880,
+    GUIDE:       0x7c8a93,
+    SHEAR_BODY:  0x55636c,
+    BLADE:       0xd9c15a,
+    FLOOR:       0xb9c2c8,
+    PIT:         0x8d979e,
+    COOLANT:     0xdcecf5,
+  },
+
+  VIEWS: [                                                // カメラプリセット (mm)
+    { id:'overview', name:'全景',       icon:'fa-mountain-sun',     pos:[ 24000, 19000, 46000], tgt:[ -7000,   600,  1500] },
+    { id:'stand',    name:'圧延機',     icon:'fa-industry',         pos:[ 17000,  8000, 21000], tgt:[     0,  1900,     0] },
+    { id:'bite',     name:'ロールバイト', icon:'fa-magnifying-glass', pos:[  6600,  2000,  2200], tgt:[   200,  1150,     0] },
+    { id:'drive',    name:'駆動側',     icon:'fa-gears',            pos:[ 34000, 13000,-16000], tgt:[     0,  1400, -9500] },
+    { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[-38000, 17000, 33000], tgt:[-14000,   600,  5000] },
+    { id:'shear',    name:'クロップシャー', icon:'fa-scissors',      pos:[ 66000,  8000, 17000], tgt:[ 51000,  1800,     0] },
+  ],
 };
 
-// --- 2. UTILITIES ---
+/* =============================================================================
+ * 2. CORE —— 数値ユーティリティ・単位変換・イベントバス
+ *    すべての時間積分をここに集約し、フレームレート非依存を構造的に保証する。
+ * ========================================================================== */
+const Num = {
+  clamp: (v, a, b) => v < a ? a : v > b ? b : v,
+  lerp:  (a, b, t) => a + (b - a) * t,
+  /** 指数緩和。tau[s] の時定数で target へ。dt に依らず無条件安定。 */
+  approach: (cur, tgt, tau, dt) => tgt + (cur - tgt) * Math.exp(-dt / Math.max(tau, 1e-6)),
+  /** 速度制限付き移動。実アクチュエータの最大速度を素直に表す。 */
+  rateTo: (cur, tgt, rate, dt) => {
+    const d = tgt - cur, m = rate * dt;
+    return Math.abs(d) <= m ? tgt : cur + Math.sign(d) * m;
+  },
+  smoothstep: (e0, e1, x) => { const t = Num.clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); },
+  sign0: (v, eps = 1e-9) => (v > eps ? 1 : v < -eps ? -1 : 0),
+};
+
+const Sim = {
+  u: (mm) => mm * CONFIG.SCALE,                       // mm → scene unit
+  mm: (u) => u / CONFIG.SCALE,
+  v3: (a) => new THREE.Vector3(Sim.u(a[0]), Sim.u(a[1]), Sim.u(a[2])),
+};
+
 class EventBus {
-    constructor() { this.listeners = {}; }
-    on(event, callback) { (this.listeners[event] = this.listeners[event] || []).push(callback); }
-    emit(event, data) { if (this.listeners[event]) this.listeners[event].forEach(cb => cb(data)); }
+  constructor() { this.map = new Map(); }
+  on(ev, cb) { if (!this.map.has(ev)) this.map.set(ev, []); this.map.get(ev).push(cb); return this; }
+  emit(ev, data) { const l = this.map.get(ev); if (l) for (let i = 0; i < l.length; i++) l[i](data); }
 }
 
-const SimUtils = {
-    S: CONFIG.SCALE,
-    scale: (val) => val * CONFIG.SCALE,
-    toRad: (deg) => deg * (Math.PI / 180)
+/* =============================================================================
+ * 3. ROLLING MODEL —— 圧延理論（純関数。状態を持たない＝単体で検証できる）
+ * ========================================================================== */
+const Rolling = {
+  /** 変形抵抗 [MPa] */
+  flowStress(T, strainRate) {
+    const k = CONFIG.MATERIAL.KF;
+    return k.C * Math.exp(-k.B * (T - k.TREF)) * Math.pow(Math.max(strainRate, 0.01), k.M);
+  },
+  /** 接触弧長 [mm] */
+  contactLength(hIn, hOut) {
+    const dh = Math.max(hIn - hOut, 0), R = CONFIG.MILL.WR_D / 2;
+    return Math.sqrt(Math.max(R * dh - dh * dh / 4, 0));
+  },
+  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */
+  frictionHill(Ld, hMean) {
+    const x = CONFIG.PROCESS.MU * Ld / Math.max(hMean, 1e-3);
+    return x < 1e-6 ? 1 : (Math.exp(x) - 1) / x;
+  },
+  /** 1パスの力学量をまとめて算出 */
+  solve(hIn, hOut, width, speedMpm, temp) {
+    const dh = hIn - hOut;
+    if (dh <= 0 || width <= 0)
+      return { force: 0, forceTon: 0, torque: 0, power: 0, powerKW: 0, Ld: 0, kf: 0, pm: 0,
+               strainRate: 0, heat: 0, biteAngle: 0, biteOk: true };
+    const R = CONFIG.MILL.WR_D / 2;
+    const Ld = Rolling.contactLength(hIn, hOut);
+    const hMean = (hIn + hOut) / 2;
+    const v = Math.abs(speedMpm) / 60 * 1000;                       // mm/s
+    const strain = Math.log(hIn / hOut);
+    const strainRate = Ld > 0 ? (v / Ld) * strain : 0;
+    const kf = Rolling.flowStress(temp, strainRate);
+    const pm = 1.155 * kf * Rolling.frictionHill(Ld, hMean);        // MPa
+    const force = pm * width * Ld;                                  // N
+    const torque = 2 * force * (CONFIG.PROCESS.TORQUE_ARM * Ld / 1000);   // N·m
+    const power = torque * ((v / 1000) / (R / 1000));               // W
+    const heat = CONFIG.PROCESS.HEAT_EFF * 1.155 * kf * 1e6 * strain
+               / (CONFIG.MATERIAL.RHO * CONFIG.MATERIAL.CP);        // K (このパスでの加工発熱)
+    const biteAngle = Math.acos(Num.clamp(1 - dh / (2 * R), -1, 1));
+    return { force, torque, power, Ld, kf, pm, strainRate, heat,
+             forceTon: force / 9806.65, powerKW: power / 1000,
+             biteAngle, biteOk: biteAngle <= CONFIG.PROCESS.BITE_ANGLE_MAX };
+  },
+  /** ロールバイト内の板厚プロファイル h(x) と下面高さ。x は圧延中心からの mm。 */
+  profile(x, hIn, gap, dir) {
+    const R = CONFIG.MILL.WR_D / 2, dh = hIn - gap;
+    if (dh <= 0) return { h: hIn, dip: 0 };
+    const Ld = Rolling.contactLength(hIn, gap);
+    const xe = -dir * Ld;                                     // 入側の弧端
+    const s = x * dir;                                        // 進行方向へ正規化 (負=入側)
+    if (s >= 0) return { h: gap, dip: 0 };                    // 出側: ロール平行部
+    if (s >= -Ld) {                                           // 弧内: 上下ロール円弧に沿う
+      const d = R - Math.sqrt(Math.max(R * R - s * s, 0));
+      return { h: Math.min(gap + 2 * d, hIn), dip: d };
+    }
+    // 入側の助走: 下面をパスラインへ滑らかに戻す（折れを作らない）
+    const t = Num.smoothstep(-Ld * 4, -Ld, s);
+    return { h: hIn, dip: (dh / 2) * t };
+  },
 };
 
-class ShapeHelpers {
-    static drawRoundedBox(shape, x, y, w, h, r) {
-        shape.moveTo(x + r, y);
-        shape.lineTo(x + w - r, y);
-        shape.quadraticCurveTo(x + w, y, x + w, y + r);
-        shape.lineTo(x + w, y + h - r);
-        shape.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        shape.lineTo(x + r, y + h);
-        shape.quadraticCurveTo(x, y + h, x, y + h - r);
-        shape.lineTo(x, y + r);
-        shape.quadraticCurveTo(x, y, x + r, y);
-    }
-}
-
-class TextureGenerator {
-    static getBrushedMetal() {
-        const size = 512;
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,size,size);
-        for(let i=0; i<8; i++) {
-            ctx.fillStyle = (i%2===0) ? '#e0e0e0' : '#f5f5f5';
-            ctx.fillRect(0, i*(size/8), size, size/8);
-        }
-        for(let i=0; i<2000; i++) {
-            const y = Math.random() * size;
-            const len = Math.random() * 100 + 20;
-            const offset = Math.random() * size;
-            ctx.fillStyle = '#bdbdbd';
-            ctx.globalAlpha = 0.1; 
-            ctx.fillRect(offset, y, len, 1);
-        }
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
-        return tex;
-    }
-}
-
-// --- 3. LOGIC ---
+/* =============================================================================
+ * 4. STATE —— 可変状態。位置・寸法は全て mm。圧延中心を X=0 とする。
+ * ========================================================================== */
 class SlabState {
-    constructor(thickness = 400, width = 1500, length = 4000) {
-        this.reset(thickness, width, length);
-    }
-    reset(thickness, width, length) {
-        this.thickness = thickness;
-        this.width = width;
-        this.length = length;
-        this.initialThickness = thickness;
-        const entryX_M = CONFIG.SUPPLY.ENTRY_X / 1000;
-        const len_M = length / 1000;
-        this.xMax = entryX_M + (len_M / 2.0); 
-        this.xMin = this.xMax - len_M;        
-        this.inBite = false;
-        this.rollingActive = false;
-        this.temperature = 450;
-        this.rollForce = 0;
-        this.currentSpeed = 0;
-        this.visible = true; 
-    }
-    clone() {
-        const s = new SlabState();
-        Object.assign(s, this);
-        return s;
-    }
+  constructor() { this.reset(400, 1500, 4000, 500); }
+  reset(thickness, width, length, temp) {
+    this.initialThickness = thickness; this.initialTemp = temp;
+    this.thickness = thickness; this.width = width; this.length = length;
+    this.xCenter = CONFIG.SUPPLY.ENTRY_X;
+    this.xMin = this.xCenter - length / 2; this.xMax = this.xCenter + length / 2;
+    this.temperature = temp;
+    this.inBite = false; this.rollingActive = false; this.onLine = false; this.biteOk = true;
+    this.rollForce = 0; this.rollTorque = 0; this.rollPower = 0; this.contactLength = 0;
+    this.currentSpeed = 0; this.strainRate = 0; this.flowStress = 0;
+    this.dir = 1;
+  }
+  get reduction() { return 1 - this.thickness / this.initialThickness; }
 }
 
 class MillState {
-    constructor() {
-        this.gap = CONFIG.MACHINE.MAX_GAP;
-        this.targetGap = CONFIG.MACHINE.MAX_GAP;
-        this.targetSpeed = 0;
-        this.currentSpeed = 0;
-        this.mode = 'AUTO';
-        this.passIndex = -1;
-        this.tableHeightL = 0;
-        this.tableHeightR = 0;
-        this.centerHeight = 0;
-        this.guideGap = 2500;
-    }
+  constructor() {
+    this.gap = CONFIG.MILL.GAP_MAX; this.targetGap = CONFIG.MILL.GAP_MAX;
+    this.currentSpeed = 0; this.targetSpeed = 0;
+    this.mode = 'AUTO'; this.passIndex = -1; this.passPhase = 'IDLE';
+    this.guideGap = 2600; this.passLineAdj = 0;
+    this.rollAngle = 0; this.tableAngle = 0;
+    this.bendingForce = 0;
+  }
+  get passLine() { return CONFIG.MILL.PASS_LINE + this.passLineAdj; }
+  /** 下ワークロール上面 = パスライン（下ロールは調整装置の上で固定） */
+  get wrBotY() { return this.passLine - CONFIG.MILL.WR_D / 2; }
+  get wrTopY() { return this.passLine + this.gap + CONFIG.MILL.WR_D / 2; }
+  get brBotY() { return this.wrBotY - (CONFIG.MILL.WR_D + CONFIG.MILL.BR_D) / 2; }
+  get brTopY() { return this.wrTopY + (CONFIG.MILL.WR_D + CONFIG.MILL.BR_D) / 2; }
 }
 
 class SupplyState {
-    constructor() {
-        this.isActive = false;
-        this.phase = 'IDLE'; 
-        this.tiltAngle = 0; 
-        this.runInDist = 0; 
-        this.crossDist = 0; 
-        this.enableAnimation = true;
-    }
+  constructor() { this.reset(); this.enabled = true; }
+  reset() { this.active = false; this.phase = 'IDLE'; this.tilt = 0; this.runIn = 0; this.cross = 0; }
 }
 
+class ShearState {
+  constructor() { this.reset(); }
+  reset() { this.phase = 'IDLE'; this.blade = 0; this.cropVisible = false;
+            this.cropY = 0; this.cropVY = 0; this.cropX = 0; this.cropLen = 0; }
+}
+
+/* =============================================================================
+ * 5. CONTROLLERS
+ * ========================================================================== */
 class SupplyController {
-    constructor(eventBus, supplyState) {
-        this.eventBus = eventBus;
-        this.state = supplyState;
-        this._setupListeners();
+  constructor(bus, state) {
+    this.bus = bus; this.s = state;
+    bus.on('CMD_START_SUPPLY', () => {
+      if (!this.s.enabled) { bus.emit('SYS_SUPPLY_DONE'); return; }
+      this.s.reset(); this.s.active = true; this.s.phase = 'TILT';
+      bus.emit('SYS_MESSAGE', { text: '装入 1/3: 転倒装置でスラブを倒しています', kind: 'info' });
+    });
+    bus.on('CMD_RESET', () => this.s.reset());
+  }
+  update(dt) {
+    const s = this.s; if (!s.active) return;
+    const S = CONFIG.SUPPLY;
+    const step = (key, T, next, msg) => {
+      s[key] = Math.min(1, s[key] + dt / T);
+      if (s[key] >= 1) { s.phase = next; if (msg) this.bus.emit('SYS_MESSAGE', { text: msg, kind: 'info' }); }
+    };
+    if (s.phase === 'TILT')       step('tilt',  S.T_TILT,  'RUNIN', '装入 2/3: 縦送りテーブルで搬送しています');
+    else if (s.phase === 'RUNIN') step('runIn', S.T_RUNIN, 'CROSS', '装入 3/3: 横送りでミルラインへ移載しています');
+    else if (s.phase === 'CROSS') {
+      step('cross', S.T_CROSS, 'DONE');
+      if (s.phase === 'DONE') { s.active = false; this.bus.emit('SYS_SUPPLY_DONE'); }
     }
-    _setupListeners() {
-        this.eventBus.on('CMD_START_SUPPLY', () => {
-            if (this.state.enableAnimation) this.startSequence();
-            else this.eventBus.emit('SYS_SUPPLY_COMPLETE');
-        });
-        this.eventBus.on('CMD_SET_SUPPLY_OPTS', (opts) => {
-            if(opts.anim !== undefined) this.state.enableAnimation = opts.anim;
-        });
-        this.eventBus.on('CMD_RESET', () => {
-            this.state.phase = 'IDLE';
-            this.state.tiltAngle = 0;
-            this.state.runInDist = 0;
-            this.state.crossDist = 0;
-            this.state.isActive = false;
-        });
-    }
-    startSequence() {
-        this.state.isActive = true;
-        this.state.phase = 'TILTING';
-        this.state.tiltAngle = 0;
-        this.state.runInDist = 0;
-        this.state.crossDist = 0;
-        this.eventBus.emit('SYS_MESSAGE', '供給: 1. 転倒 (Down-ending)');
-    }
-    update(dt) {
-        if (!this.state.isActive) return;
-        if (this.state.phase === 'TILTING') {
-            this.state.tiltAngle += 0.5 * dt;
-            if (this.state.tiltAngle >= 1.0) {
-                this.state.tiltAngle = 1.0;
-                this.state.phase = 'RUN_IN';
-                this.eventBus.emit('SYS_MESSAGE', '供給: 2. 縦送り (Run-In)');
-            }
-        } else if (this.state.phase === 'RUN_IN') {
-            this.state.runInDist += 0.4 * dt;
-            if (this.state.runInDist >= 1.0) {
-                this.state.runInDist = 1.0;
-                this.state.phase = 'CROSS_TRANSFER';
-                this.eventBus.emit('SYS_MESSAGE', '供給: 3. 横送り (Cross Transfer)');
-            }
-        } else if (this.state.phase === 'CROSS_TRANSFER') {
-            this.state.crossDist += 0.3 * dt;
-            if (this.state.crossDist >= 1.0) {
-                this.state.crossDist = 1.0;
-                this.state.phase = 'IDLE';
-                this.eventBus.emit('SYS_SUPPLY_COMPLETE');
-                this.state.isActive = false;
-            }
-        }
-    }
+  }
 }
 
 class MillController {
-    constructor(eventBus, millState, slabState) {
-        this.eventBus = eventBus;
-        this.mill = millState;
-        this.slab = slabState;
-        this._setupListeners();
+  constructor(bus, mill, slab) {
+    this.bus = bus; this.mill = mill; this.slab = slab;
+    bus.on('CMD_START_AUTO', () => bus.emit('CMD_START_SUPPLY'));
+    bus.on('SYS_SUPPLY_DONE', () => this.begin());
+    bus.on('CMD_SET_MODE', (m) => {
+      this.mill.mode = m;
+      if (m === 'MANUAL') { this.mill.passIndex = -1; this.mill.passPhase = 'IDLE'; }
+    });
+    bus.on('CMD_MANUAL', (d) => {
+      if (d.gap !== undefined) this.mill.targetGap = d.gap;
+      if (d.speed !== undefined) this.mill.targetSpeed = d.speed;
+    });
+  }
+  begin() {
+    this.slab.onLine = true;
+    this.mill.mode = 'AUTO'; this.mill.passIndex = 0; this.mill.passPhase = 'SETUP';
+    this.bus.emit('SYS_MESSAGE', { text: '圧延開始', kind: 'info' });
+    this.bus.emit('STATE_PASS', 0);
+  }
+  update() {
+    const m = this.mill, s = this.slab;
+    if (m.mode !== 'AUTO' || m.passIndex < 0) return;
+    const sch = CONFIG.SCHEDULE[m.passIndex];
+    if (!sch) return;
+    m.targetGap = sch.gap;
+
+    if (m.passPhase === 'SETUP') {
+      // 圧下完了までライン停止。実機の「セットアップ→噛み込み」の順序を守る。
+      m.targetSpeed = 0;
+      if (Math.abs(m.gap - sch.gap) < 0.5 && Math.abs(m.currentSpeed) < 1) m.passPhase = 'RUN';
+    } else if (m.passPhase === 'RUN') {
+      m.targetSpeed = sch.dir * sch.speed;
+      const cleared = sch.dir > 0 ? s.xMin > CONFIG.SAFE_CLEAR : s.xMax < -CONFIG.SAFE_CLEAR;
+      if (cleared) { m.passPhase = 'CLEAR'; m.targetSpeed = 0; }
+    } else if (m.passPhase === 'CLEAR') {
+      m.targetSpeed = 0;
+      if (Math.abs(m.currentSpeed) < 1) this.advance();
     }
-    _setupListeners() {
-        this.eventBus.on('CMD_START_AUTO', () => this.eventBus.emit('CMD_START_SUPPLY'));
-        this.eventBus.on('SYS_SUPPLY_COMPLETE', () => this.startRolling());
-        this.eventBus.on('CMD_SET_MODE', (mode) => this.mill.mode = mode);
-        this.eventBus.on('CMD_MANUAL_CTRL', (data) => {
-            if (data.gap !== undefined) this.mill.targetGap = data.gap;
-            if (data.speed !== undefined) this.mill.targetSpeed = data.speed;
-        });
+  }
+  advance() {
+    const m = this.mill;
+    m.passIndex++;
+    if (m.passIndex >= CONFIG.SCHEDULE.length) {
+      m.passIndex = -1; m.passPhase = 'IDLE';
+      this.bus.emit('SYS_MESSAGE', { text: '全パス完了 — クロップシャーへ搬送します', kind: 'info' });
+      this.bus.emit('STATE_PASS', -1);
+      this.bus.emit('CMD_START_CROP');
+    } else {
+      m.passPhase = 'SETUP';
+      this.bus.emit('STATE_PASS', m.passIndex);
     }
-    startRolling() {
-        this.slab.visible = true; 
-        this.mill.mode = 'AUTO';
-        this.mill.passIndex = 0;
-        this.eventBus.emit('SYS_MESSAGE', '圧延開始 (Rolling Started)');
-        this.eventBus.emit('STATE_PASS_CHANGED', 0);
-    }
-    update() {
-        if (this.mill.mode !== 'AUTO' || this.mill.passIndex < 0) return;
-        const schedule = CONFIG.SCHEDULE[this.mill.passIndex];
-        if (!schedule) return;
-        this.mill.targetGap = schedule.gap;
-        if (Math.abs(this.mill.gap - schedule.gap) < 5.0) {
-            this.mill.targetSpeed = schedule.dir * schedule.speed;
-        }
-        const safeDistance = 6.0; 
-        let isClear = false;
-        if (schedule.dir === 1 && this.slab.xMin > safeDistance) isClear = true;
-        if (schedule.dir === -1 && this.slab.xMax < -safeDistance) isClear = true;
-        if (isClear) this.advancePass();
-    }
-    advancePass() {
-        this.mill.targetSpeed = 0;
-        this.mill.passIndex++;
-        if (this.mill.passIndex >= CONFIG.SCHEDULE.length) {
-            this.mill.passIndex = -1;
-            this.eventBus.emit('SYS_MESSAGE', '全パス完了！');
-            this.eventBus.emit('STATE_FINISHED');
-        } else {
-            this.eventBus.emit('STATE_PASS_CHANGED', this.mill.passIndex);
-        }
-    }
+  }
 }
+
+class ShearController {
+  constructor(bus, state, slab, mill) {
+    this.bus = bus; this.s = state; this.slab = slab; this.mill = mill;
+    bus.on('CMD_START_CROP', () => {
+      if (!this.slab.onLine) return;
+      this.s.phase = 'APPROACH';
+      bus.emit('SYS_MESSAGE', { text: 'クロップシャー: 先端を切断位置まで送っています', kind: 'info' });
+    });
+    bus.on('CMD_RESET', () => this.s.reset());
+  }
+  update(dt) {
+    const s = this.s, sl = this.slab, C = CONFIG.SHEAR;
+    if (s.phase === 'IDLE' || s.phase === 'DONE') {
+      if (s.cropVisible) {   // 切り落とした先端がシュートへ落下
+        s.cropVY -= 9810 * dt; s.cropY += s.cropVY * dt;
+        if (s.cropY < -CONFIG.BUILDING.PIT.DEPTH) s.cropVisible = false;
+      }
+      return;
+    }
+    if (s.phase === 'APPROACH') {
+      this.mill.targetSpeed = C.APPROACH_SPEED;
+      if (sl.xMax >= C.X + C.CROP_LEN) {
+        this.mill.targetSpeed = 0; this.mill.currentSpeed = 0;
+        s.phase = 'CUT';
+        this.bus.emit('SYS_MESSAGE', { text: 'クロップシャー: 切断', kind: 'info' });
+      }
+    } else if (s.phase === 'CUT') {
+      s.blade = Math.min(1, s.blade + dt / C.T_CUT);
+      if (s.blade >= 1) {
+        s.cropLen = sl.xMax - C.X;
+        s.cropX = C.X + s.cropLen / 2; s.cropY = 0; s.cropVY = 0; s.cropVisible = true;
+        sl.xMax = C.X; sl.length = sl.xMax - sl.xMin;
+        s.phase = 'RETRACT';
+        this.bus.emit('STATE_CROPPED');
+      }
+    } else if (s.phase === 'RETRACT') {
+      s.blade = Math.max(0, s.blade - dt / C.T_OPEN);
+      if (s.blade <= 0) {
+        s.phase = 'DONE';
+        this.bus.emit('SYS_MESSAGE', { text: `完了: 板厚 ${sl.thickness.toFixed(0)} mm × 長さ ${(sl.length / 1000).toFixed(1)} m`, kind: 'info' });
+        this.bus.emit('STATE_FINISHED');
+      }
+    }
+  }
+}
+
+/* =============================================================================
+ * 6. PHYSICS ENGINE
+ *    update(dt) は内部で固定ステップに分割する。呼び出し側の dt（＝表示の
+ *    フレームレート）が変わっても結果が変わらないことを構造的に保証する。
+ * ========================================================================== */
+const PHYS_DT = 1 / 120, MAX_SUBSTEPS = 16;
 
 class PhysicsEngine {
-    constructor(eventBus) {
-        this.eventBus = eventBus;
-        this.slab = new SlabState();
-        this.mill = new MillState();
-        this.supply = new SupplyState();
-        this.millCtrl = new MillController(eventBus, this.mill, this.slab);
-        this.supplyCtrl = new SupplyController(eventBus, this.supply);
-        this.env = { coolantOn: true, steamOn: true };
-        this._setupListeners();
-    }
-    _setupListeners() {
-        this.eventBus.on('CMD_RESET', () => this.reset());
-        this.eventBus.on('CMD_SET_SLAB_SIZE', (d) => this.slab.reset(d.th, d.wid, d.len));
-        this.eventBus.on('CMD_SET_ENV', (d) => Object.assign(this.env, d));
-        this.eventBus.on('CMD_START_SUPPLY', () => { if(this.supply.enableAnimation) this.slab.visible = false; });
-    }
-    reset() {
-        this.mill.targetGap = this.slab.initialThickness;
-        this.mill.gap = this.slab.initialThickness;
-        this.mill.passIndex = -1;
-        this.mill.targetSpeed = 0;
-        this.mill.currentSpeed = 0;
-        this.slab.reset(this.slab.initialThickness, this.slab.width, this.slab.length);
-        this.mill.guideGap = this.slab.width + 500;
-        if (this.supply.enableAnimation) this.slab.visible = false;
-        this.eventBus.emit('STATE_RESET', this.getSnapshot());
-    }
-    update(dt) {
-        this.supplyCtrl.update(dt);
-        this.millCtrl.update();
-        this._updateActuators(dt);
-        if (this.slab.visible) {
-            this._updateDynamics(dt);
-            this._updateSideGuides(dt);
-            this._updateThermal(dt);
-        }
-        this.eventBus.emit('STATE_UPDATE', this.getSnapshot());
-    }
-    _updateActuators(dt) {
-        const gapDiff = this.mill.targetGap - this.mill.gap;
-        if (Math.abs(gapDiff) > 0.05) this.mill.gap += gapDiff * CONFIG.PHYSICS.GAP_SPEED * dt;
-        else this.mill.gap = this.mill.targetGap;
-        const accel = (this.mill.mode === 'AUTO' ? CONFIG.PHYSICS.ACCEL_AUTO : CONFIG.PHYSICS.ACCEL_MANUAL) * dt;
-        if (this.mill.currentSpeed < this.mill.targetSpeed) this.mill.currentSpeed = Math.min(this.mill.targetSpeed, this.mill.currentSpeed + accel);
-        else if (this.mill.currentSpeed > this.mill.targetSpeed) this.mill.currentSpeed = Math.max(this.mill.targetSpeed, this.mill.currentSpeed - accel);
-        this.mill.centerHeight = this.slab.initialThickness / 2.0;
-    }
-    _updateSideGuides(dt) {
-        const guideCenterM = CONFIG.MACHINE.GUIDE_DISTANCE / 1000;
-        const clampGap = this.slab.width;
-        let target = this.slab.width + 600;
-        const guideZoneMin = guideCenterM - 1.0;
-        const guideZoneMax = guideCenterM + 1.0;
-        if ((this.slab.xMax > guideZoneMin && this.slab.xMin < guideZoneMax) && Math.abs(this.mill.currentSpeed) > 10 && this.mill.targetSpeed > 0) {
-            target = clampGap;
-        }
-        const diff = target - this.mill.guideGap;
-        const moveSpeed = CONFIG.PHYSICS.GUIDE_SPEED * dt;
-        if (Math.abs(diff) < moveSpeed) this.mill.guideGap = target; 
-        else this.mill.guideGap += Math.sign(diff) * moveSpeed;
-    }
-    _updateDynamics(dt) {
-        const isForward = this.mill.targetSpeed >= 0;
-        const hSlab = this.slab.thickness;
-        const hGap = this.mill.gap;
-        const centerOffset = this.mill.centerHeight;
-        let targetTableL, targetTableR;
-        if (isForward) { targetTableL = centerOffset - (hSlab / 2.0); targetTableR = centerOffset - (hGap / 2.0); } 
-        else { targetTableR = centerOffset - (hSlab / 2.0); targetTableL = centerOffset - (hGap / 2.0); }
-        this.mill.tableHeightL += (targetTableL - this.mill.tableHeightL) * 0.1;
-        this.mill.tableHeightR += (targetTableR - this.mill.tableHeightR) * 0.1;
+  constructor(bus) {
+    this.bus = bus;
+    this.slab = new SlabState(); this.mill = new MillState();
+    this.supply = new SupplyState(); this.shear = new ShearState();
+    this.env = { coolant: true, steam: true };
+    this.millCtrl   = new MillController(bus, this.mill, this.slab);
+    this.supplyCtrl = new SupplyController(bus, this.supply);
+    this.shearCtrl  = new ShearController(bus, this.shear, this.slab, this.mill);
+    this.paused = false; this.elapsed = 0;
+    this.warn = null;
+    this._acc = 0;
+    bus.on('CMD_RESET', () => this.reset());
+    bus.on('CMD_SET_SLAB', (d) => { this._pending = d; this.reset(); });
+    bus.on('CMD_SET_ENV', (d) => Object.assign(this.env, d));
+    bus.on('CMD_SET_SUPPLY_ANIM', (v) => { this.supply.enabled = v; });
+    bus.on('CMD_PAUSE', (v) => { this.paused = v; });
+    bus.on('CMD_STOP_LINE', () => { this.mill.targetSpeed = 0; });
+    bus.on('CMD_START_SUPPLY', () => { if (this.supply.enabled) this.slab.onLine = false; });
+    this.reset();
+  }
 
-        const vMillMPS = this.mill.currentSpeed / 60;
-        const currentGap = Math.max(this.mill.gap, 1.0);
-        const inBite = (this.slab.xMin < 0 && this.slab.xMax > 0);
-        this.slab.inBite = inBite;
-        this.slab.rollForce = 0;
-        if (inBite && this.slab.thickness > currentGap) {
-            this.slab.rollingActive = true;
-            const hIn = this.slab.thickness;
-            const hOut = currentGap;
-            const vOut = vMillMPS; const vIn = vMillMPS * (hOut / hIn);
-            if (vMillMPS > 0) { this.slab.xMax += vOut * dt; this.slab.xMin += vIn * dt; } 
-            else { this.slab.xMin += vOut * dt; this.slab.xMax += vIn * dt; }
-            const R = CONFIG.MACHINE.WR_DIAMETER / 2;
-            const contactLength = Math.sqrt(R * (hIn - hOut));
-            this.slab.rollForce = (CONFIG.PHYSICS.DEFORMATION_RESISTANCE * this.slab.width * contactLength) / 9800;
-            this.slab.currentSpeed = Math.abs(vOut) * 60;
-        } else {
-            if (this.slab.rollingActive) {
-                if (this.slab.xMin > 0 || this.slab.xMax < 0) {
-                    const newLengthM = Math.abs(this.slab.xMax - this.slab.xMin);
-                    this.slab.length = newLengthM * 1000;
-                    this.slab.thickness = currentGap; this.slab.rollingActive = false;
-                }
-            }
-            this.slab.xMin += vMillMPS * dt; this.slab.xMax += vMillMPS * dt;
-            this.slab.currentSpeed = Math.abs(vMillMPS) * 60;
-        }
+  reset() {
+    const d = this._pending ?? {};
+    const th  = d.th  ?? this.slab.initialThickness;
+    const wid = d.wid ?? this.slab.width;
+    const len = d.len ?? this.slab.length;
+    const tmp = d.temp ?? this.slab.initialTemp;
+    this._pending = null;
+    this.slab.reset(th, wid, len, tmp);
+    this.mill.gap = this.mill.targetGap = th;
+    this.mill.currentSpeed = this.mill.targetSpeed = 0;
+    this.mill.passIndex = -1; this.mill.passPhase = 'IDLE';
+    this.mill.guideGap = wid + CONFIG.TABLE.GUIDE.OPEN_MARGIN;
+    this.shear.reset(); this.supply.reset();
+    this.slab.onLine = !this.supply.enabled;
+    this.paused = false; this.elapsed = 0; this.warn = null;
+    this.bus.emit('STATE_RESET');
+  }
+
+  /** 任意 dt を受け取り、固定ステップに分割して積分する。 */
+  update(dt) {
+    if (this.paused || !(dt > 0)) { this.bus.emit('STATE_UPDATE', this); return; }
+    this._acc = Math.min(this._acc + dt, PHYS_DT * MAX_SUBSTEPS);
+    while (this._acc >= PHYS_DT) { this.step(PHYS_DT); this._acc -= PHYS_DT; }
+    this.bus.emit('STATE_UPDATE', this);
+  }
+
+  step(dt) {
+    this.elapsed += dt;
+    this.supplyCtrl.update(dt);
+    this.millCtrl.update();
+    this.shearCtrl.update(dt);
+    this._actuators(dt);
+    if (this.slab.onLine) { this._dynamics(dt); this._guides(dt); this._thermal(dt); }
+    this._rollKinematics(dt);
+    this._diagnose();
+  }
+
+  _actuators(dt) {
+    const m = this.mill;
+    m.targetGap = Num.clamp(m.targetGap, CONFIG.MILL.GAP_MIN, CONFIG.MILL.GAP_MAX);
+    m.gap = Num.rateTo(m.gap, m.targetGap, CONFIG.MILL.GAP_RATE, dt);
+    m.currentSpeed = Num.rateTo(m.currentSpeed, m.targetSpeed, CONFIG.PROCESS.ACCEL, dt);
+    // ロールベンディングは圧延荷重に追従（形状制御の可視化用）
+    m.bendingForce = Num.approach(m.bendingForce, this.slab.rollForce > 0 ? 1 : 0, 0.35, dt);
+  }
+
+  _dynamics(dt) {
+    const s = this.slab, m = this.mill;
+    const v = m.currentSpeed / 60 * 1000;                    // mm/s（ロール周速＝出側速度）
+    const gap = Math.max(m.gap, CONFIG.MILL.GAP_MIN);
+    s.inBite = s.xMin < 0 && s.xMax > 0;
+    s.dir = Num.sign0(v) || s.dir;
+
+    if (s.inBite && s.thickness > gap + 1e-6 && Math.abs(v) > 1e-6) {
+      // 質量流一定: 出側 v、入側 v·(hOut/hIn)。これで体積が保存される。
+      const r = gap / s.thickness;
+      if (v > 0) { s.xMax += v * dt; s.xMin += v * r * dt; }
+      else       { s.xMin += v * dt; s.xMax += v * r * dt; }
+      s.rollingActive = true;
+      const res = Rolling.solve(s.thickness, gap, s.width, m.currentSpeed, s.temperature);
+      s.rollForce = res.forceTon; s.rollTorque = res.torque; s.rollPower = res.powerKW;
+      s.contactLength = res.Ld; s.strainRate = res.strainRate; s.flowStress = res.kf;
+      s.currentSpeed = Math.abs(v) / 1000 * 60;
+      // 加工発熱: このステップでロールギャップを通過した体積分だけを板全体へ配分
+      const passedFrac = (Math.abs(v) * dt * gap) / Math.max(s.thickness * s.length, 1);
+      s.temperature += res.heat * passedFrac;
+      // ロール抜熱: 接触弧における熱伝達
+      const M = CONFIG.MATERIAL;
+      const contactTime = res.Ld / Math.max(Math.abs(v), 1e-3);
+      const dTroll = 2 * M.H_ROLL * (s.temperature - M.T_ROLL) * contactTime
+                   / (M.RHO * M.CP * (gap / 1000));
+      s.temperature -= dTroll * passedFrac;
+      s.biteOk = res.biteOk;
+    } else {
+      if (s.rollingActive && (s.xMin > 0 || s.xMax < 0)) {   // 尻抜け: 板厚・板長を確定
+        s.length = s.xMax - s.xMin; s.thickness = gap; s.rollingActive = false;
+      }
+      s.xMin += v * dt; s.xMax += v * dt;
+      s.rollForce = 0; s.rollTorque = 0; s.rollPower = 0; s.contactLength = 0; s.biteOk = true;
+      s.currentSpeed = Math.abs(v) / 1000 * 60;
     }
-    _updateThermal(dt) {
-        const rate = this.env.coolantOn ? CONFIG.PHYSICS.COOLING_RATE_WATER : CONFIG.PHYSICS.COOLING_RATE_AIR;
-        this.slab.temperature -= dt * rate;
-    }
-    getSnapshot() { 
-        return { slab: this.slab.clone(), mill: { ...this.mill }, supply: { ...this.supply }, env: { ...this.env } }; 
-    }
+    s.xCenter = (s.xMin + s.xMax) / 2;
+  }
+
+  _guides(dt) {
+    const s = this.slab, m = this.mill, G = CONFIG.TABLE.GUIDE;
+    // 進行方向の入側ガイドだけが板幅までクランプする（出側は開放）
+    const gx = s.dir >= 0 ? G.X_IN : G.X_OUT;
+    const near = s.xMax > gx - G.LEN / 2 && s.xMin < gx + G.LEN / 2;
+    const target = (near && Math.abs(m.currentSpeed) > 5) ? s.width + 20 : s.width + G.OPEN_MARGIN;
+    m.guideGap = Num.rateTo(m.guideGap, target, G.RATE, dt);
+  }
+
+  _thermal(dt) {
+    const s = this.slab, M = CONFIG.MATERIAL;
+    const T = s.temperature, Tk = T + 273.15, Ak = M.T_AMBIENT + 273.15;
+    const hConv = M.H_AIR + (this.env.coolant && s.inBite ? M.H_WATER * 0.15 : 0);
+    const q = M.EMISSIVITY * 5.67e-8 * (Tk ** 4 - Ak ** 4) + hConv * (T - M.T_AMBIENT); // W/m²
+    s.temperature -= 2 * q * dt / (M.RHO * M.CP * (s.thickness / 1000));
+  }
+
+  _rollKinematics(dt) {
+    // ロール角度は「材料表面速度」から積分する。描画側は角度を読むだけにして
+    // 回転が表示フレームレートに依存しないようにする。
+    const m = this.mill, s = this.slab;
+    const surf = (s.inBite ? Math.sign(m.currentSpeed) * s.currentSpeed : m.currentSpeed) / 60 * 1000; // mm/s
+    m.rollAngle  += (surf / (CONFIG.MILL.WR_D / 2)) * dt;
+    m.tableAngle += (surf / (CONFIG.TABLE.ROLL_D / 2)) * dt;
+  }
+
+  _diagnose() {
+    const s = this.slab, m = this.mill, C = CONFIG.MILL;
+    let w = null;
+    if (s.rollForce > C.RATED_FORCE_T)            w = { kind: 'crit', text: `圧延荷重が定格 ${C.RATED_FORCE_T} t を超過しています` };
+    else if (s.rollPower > C.RATED_POWER_KW)      w = { kind: 'crit', text: `主電動機動力が定格 ${(C.RATED_POWER_KW / 1000).toFixed(1)} MW を超過しています` };
+    else if (s.onLine && s.temperature < CONFIG.MATERIAL.T_MIN_ROLLABLE)
+                                                  w = { kind: 'warn', text: `材料温度が熱間圧延域 ${CONFIG.MATERIAL.T_MIN_ROLLABLE} ℃ を下回りました` };
+    else if (s.inBite && s.biteOk === false) w = { kind: 'warn', text: '噛み込み角が限界を超えています（圧下量過大）' };
+    if ((w && w.text) !== (this.warn && this.warn.text)) { this.warn = w; this.bus.emit('STATE_WARN', w); }
+  }
 }
 
-// --- 5. VISUALIZATION ---
-class MaterialFactory {
-    static init() {
-        const metalTex = TextureGenerator.getBrushedMetal();
-        const brightMetal = new THREE.MeshStandardMaterial({ 
-            color: 0xffffff, map: metalTex, roughnessMap: metalTex, roughness: 0.20, metalness: 0.60 
-        });
-        const steelHousing = new THREE.MeshPhysicalMaterial({ 
-            color: CONFIG.COLORS.HOUSING, metalness: 0.7, roughness: 0.6, 
-            transparent: true, opacity: 0.45, side: THREE.DoubleSide, flatShading: false
-        });
-        this.mats = {
-            rollFace: brightMetal,
-            rollNeck: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.ROLL_CORE, roughness: 0.5 }),
-            housing: steelHousing,
-            slab: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SLAB, roughness: 0.4, metalness: 0.3 }),
-            supplySlab: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SLAB, roughness: 0.4, metalness: 0.3 }),
-            nozzle: new THREE.MeshStandardMaterial({ color: 0x90a4ae }),
-            guideFrame: new THREE.MeshPhysicalMaterial({ color: CONFIG.COLORS.GUIDE_FRAME, transparent: true, opacity: 0.6 }),
-            guideRoller: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.GUIDE_ROLLER }),
-            tableFrame: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.TABLE_FRAME, roughness: 0.8 }),
-            tilterFrame: new THREE.MeshStandardMaterial({ color: 0xffcc80, roughness: 0.7 }),
-            shearFrame: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SHEAR_FRAME, roughness: 0.6 }),
-            shearBlade: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SHEAR_BLADE, metalness: 0.6, roughness: 0.3 }),
-            shearCyl: new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.SHEAR_CYL, metalness: 0.8, roughness: 0.2 })
-        };
-    }
-    static get(name) { return this.mats[name]; }
+/* =============================================================================
+ * 7. MATERIALS —— 少数の共有マテリアルだけを使う（＝シェーダプログラム数を抑える）
+ * ========================================================================== */
+const MAT = {};
+/**
+ * 環境反射は「磨かれた金属」の質感を決める要だが、キューブマップのサンプリングは
+ * フラグメント単位で高価であり、画面占有面積の大きい塗装構造物や床では効果に対して
+ * 割に合わない。そこでロール・ロッド・油圧系など光沢部材にだけ適用する。
+ */
+function initMaterials(envMap) {
+  const shiny = (color, metalness, roughness, extra = {}) => new THREE.MeshStandardMaterial(
+    { color, metalness, roughness, envMap, envMapIntensity: 0.95, ...extra });
+  const matte = (color, metalness, roughness, extra = {}) => new THREE.MeshStandardMaterial(
+    { color, metalness, roughness, ...extra });
+  const C = CONFIG.COLORS;
+  Object.assign(MAT, {
+    rollFace:  shiny(C.ROLL_FACE, 0.88, 0.22),
+    rollNeck:  shiny(C.ROLL_NECK, 0.72, 0.42),
+    chock:     matte(C.CHOCK,     0.45, 0.60),
+    housing:   matte(C.HOUSING,   0.25, 0.68),
+    // 透過ハウジングは陰影計算を最小にし、片面描画にしてフラグメント数を半減させる
+    // 透過部材は影を受け取らせない（半透明面のシャドウ判定はアクネの原因になる）
+    housingGhost: new THREE.MeshLambertMaterial({ color: C.HOUSING, transparent: true,
+                    opacity: 0.15, depthWrite: false, side: THREE.FrontSide }),
+    ghost: new THREE.MeshLambertMaterial({ color: C.CHOCK, transparent: true,
+                    opacity: 0.20, depthWrite: false, side: THREE.FrontSide }),
+    base:      matte(C.BASE,      0.20, 0.82),
+    hydraulic: shiny(C.HYDRAULIC, 0.82, 0.30),
+    rod:       shiny(0xd9dee2,    1.00, 0.08),
+    spindle:   shiny(C.SPINDLE,   0.80, 0.36),
+    tableFrame:matte(C.TABLE_FRAME,0.30, 0.74),
+    guide:     matte(C.GUIDE,     0.45, 0.56),
+    shearBody: matte(C.SHEAR_BODY,0.35, 0.62),
+    blade:     shiny(C.BLADE,     0.70, 0.28),
+    slab:      matte(C.SLAB,      0.35, 0.44),
+    // 床・ピットは金属ではないため環境反射の不要な Lambert とし、画面の大半を占める
+    // 面のフラグメントコストを下げる（見た目の損失はほぼ無い）。
+    floor:     new THREE.MeshLambertMaterial({ color: C.FLOOR }),
+    pit:       new THREE.MeshLambertMaterial({ color: C.PIT }),
+  });
+  MAT.envMap = envMap;
+  MAT.shinyList = [MAT.rollFace, MAT.rollNeck, MAT.hydraulic, MAT.rod, MAT.spindle, MAT.blade];
 }
 
-class DeformableSlabMesh {
-    constructor(materialName) {
-        this.geometry = new THREE.BoxGeometry(1, 1, 1, 40, 5, 9);
-        this.basePositions = this.geometry.attributes.position.clone();
-        this.mesh = new THREE.Mesh(this.geometry, MaterialFactory.get(materialName));
+/* =============================================================================
+ * 8. GEOMETRY BUILDERS —— 全て mm 入力・scene unit 出力。
+ *    静的な部材は mergeGeometries で1メッシュに畳んでドローコールを抑える。
+ * ========================================================================== */
+const u = Sim.u;
+const G = {
+  box: (w, h, d) => new THREE.BoxGeometry(u(w), u(h), u(d)),
+  /** 軸方向を指定した円柱。axis: 'x'|'y'|'z' */
+  cyl(d, len, axis = 'y', seg = 24, d2 = d) {
+    const g = new THREE.CylinderGeometry(u(d2 / 2), u(d / 2), u(len), seg, 1);
+    if (axis === 'x') g.rotateZ(Math.PI / 2);
+    if (axis === 'z') g.rotateX(Math.PI / 2);
+    return g;
+  },
+  at(geo, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz));
+    m.setPosition(u(x), u(y), u(z));
+    return geo.clone().applyMatrix4(m);
+  },
+  /** ExtrudeGeometry は非indexed、Box/Cylinder はindexed なので、マージ前に揃える。 */
+  merge(list) {
+    const flat = list.map(g => { if (!g.index) return g; const n = g.toNonIndexed(); g.dispose(); return n; });
+    const out = BufferGeometryUtils.mergeGeometries(flat, false);
+    flat.forEach(g => g.dispose());
+    return out;
+  },
+  roundedRect(path, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    path.moveTo(x + r, y);
+    path.lineTo(x + w - r, y); path.quadraticCurveTo(x + w, y, x + w, y + r);
+    path.lineTo(x + w, y + h - r); path.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    path.lineTo(x + r, y + h);     path.quadraticCurveTo(x, y + h, x, y + h - r);
+    path.lineTo(x, y + r);         path.quadraticCurveTo(x, y, x + r, y);
+  },
+};
+
+const Parts = {
+  /* --- ミルハウジング（1枚分）: 窓を開けた押出形材 + 窓ライナ ---------------- */
+  housingPlate() {
+    const H = CONFIG.MILL.HOUSING;
+    const totalX = H.POST_X * 2 + H.WIN_X, totalY = H.TOP_Y - H.BOT_Y;
+    const shape = new THREE.Shape();
+    G.roundedRect(shape, u(-totalX / 2), u(H.BOT_Y), u(totalX), u(totalY), u(260));
+    const hole = new THREE.Path();
+    G.roundedRect(hole, u(-H.WIN_X / 2), u(H.WIN_BOT), u(H.WIN_X), u(H.WIN_TOP - H.WIN_BOT), u(200));
+    shape.holes.push(hole);
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: u(H.THICK_Z), bevelEnabled: true,
+      bevelThickness: u(35), bevelSize: u(35), bevelSegments: 1, curveSegments: 6 });
+    geo.translate(0, 0, -u(H.THICK_Z) / 2);
+    // 窓ライナ（チョック摺動面の消耗板）。窓側壁と面が一致すると Z ファイティングを
+    // 起こすので、母材側へ 8 mm 食い込ませて同一平面を避ける。
+    const liner = [];
+    for (const sx of [-1, 1])
+      liner.push(G.at(G.box(60, H.WIN_TOP - H.WIN_BOT - 200, H.THICK_Z * 0.92),
+                      sx * (H.WIN_X / 2 - 22), (H.WIN_TOP + H.WIN_BOT) / 2, 0));
+    return G.merge([geo, ...liner]);
+  },
+
+  /* --- ハウジングを繋ぐ上部タイビームと共通ソールプレート ------------------- */
+  standStructure() {
+    const H = CONFIG.MILL.HOUSING, outer = H.INNER_Z + H.THICK_Z;
+    const parts = [
+      G.at(G.box(1500, 900, outer * 2 + 200), 0, H.TOP_Y - 450, 0),          // 上部タイビーム
+      G.at(G.box(H.POST_X * 2 + H.WIN_X + 900, 700, outer * 2 + 1200), 0, H.BOT_Y + 350, 0), // ソールプレート
+    ];
+    for (const sz of [-1, 1]) for (const sx of [-1, 1])   // アンカーボルト柱
+      parts.push(G.at(G.cyl(220, 1400, 'y', 10), sx * 2450, H.BOT_Y + 1050, sz * (outer + 380)));
+    return G.merge(parts);
+  },
+
+  /* --- ロール（胴 + 首 + 継手端）。胴と首で材質が異なるため2ジオメトリ返す --- */
+  roll(dia, barrel, neckD, withCoupling) {
+    const M = CONFIG.MILL;
+    const neckL = M.HOUSING.INNER_Z + M.HOUSING.THICK_Z - barrel / 2 + 150;   // 窓を貫通する長さ
+    const face = G.cyl(dia, barrel, 'z', 48);
+    const necks = [];
+    for (const s of [-1, 1]) {
+      const z = s * (barrel / 2 + neckL / 2);
+      necks.push(G.at(G.cyl(neckD, neckL, 'z', 20), 0, 0, z));
+      necks.push(G.at(G.cyl(dia * 0.92, 90, 'z', 24), 0, 0, s * (barrel / 2 - 45)));  // 胴端の逃げ
     }
-
-    update(length, thickness, width, initialThickness, centerX, centerY) {
-        const S = SimUtils.S;
-        const L = length * S; const T = thickness * S; const W = width * S;
-        const reductionRatio = Math.max(0, 1.0 - (thickness / initialThickness));
-        
-        const waniguchiFactor = 0.27 * reductionRatio; 
-        const tongueFactor = 1.2 * reductionRatio;    
-
-        const pos = this.geometry.attributes.position;
-        const base = this.basePositions;
-        const count = pos.count;
-
-        for (let i = 0; i < count; i++) {
-            const ix = base.getX(i); const iy = base.getY(i); const iz = base.getZ(i);
-            let finalX = ix * L; let finalY = iy * T; let finalZ = iz * W;
-
-            const distFromCenter = Math.abs(ix * 2); 
-            if (distFromCenter > 0.85) {
-                const ramp = Math.pow((distFromCenter - 0.85) / 0.15, 2);
-                const dir = Math.sign(ix); 
-                const normZ = iz * 2;
-                const wProfile = 1.0 - (normZ * normZ); 
-                const wExt = (W * 0.15) * tongueFactor * ramp * wProfile;
-                finalX += dir * wExt;
-
-                const normY = iy * 2;
-                const tProfile = (normY * normY); 
-                const tExt = (L * 0.05) * waniguchiFactor * ramp * tProfile;
-                finalX += dir * tExt;
-            }
-            pos.setXYZ(i, finalX, finalY, finalZ);
-        }
-        pos.needsUpdate = true;
-        this.mesh.geometry.computeVertexNormals();
-        this.mesh.position.set(centerX, centerY, 0); 
+    if (withCoupling) {   // 駆動側のスピンドル継手フランジ
+      const z = -(barrel / 2 + neckL + 260);
+      necks.push(G.at(G.cyl(neckD * 1.5, 520, 'z', 14), 0, 0, z));
+      necks.push(G.at(G.cyl(neckD * 0.75, 620, 'z', 12), 0, 0, z - 560));
     }
-    
-    setVisible(visible) { this.mesh.visible = visible; }
-    getMesh() { return this.mesh; }
+    return { face, neck: G.merge(necks) };
+  },
+
+  /* --- チョック（軸受箱）: 本体 + 軸受ボス + 摺動ライナ -------------------- */
+  chock(kind) {
+    const c = CONFIG.MILL.CHOCK[kind], bore = kind === 'WR' ? CONFIG.MILL.WR_NECK_D : CONFIG.MILL.BR_NECK_D;
+    const parts = [G.at(G.box(c.x, c.y, c.z), 0, 0, 0)];
+    parts.push(G.at(G.cyl(bore * 1.55, c.z * 0.55, 'z', 20), 0, 0, 0));       // 軸受ボス
+    for (const s of [-1, 1]) parts.push(G.at(G.box(70, c.y * 0.86, c.z * 0.8), s * (c.x / 2 + 30), 0, 0)); // ライナ
+    parts.push(G.at(G.box(c.x * 0.5, 130, 260), 0, c.y / 2 + 60, -c.z * 0.28));  // 給油ブロック
+    return G.merge(parts);
+  },
+
+  /* --- 油圧圧下シリンダ（本体はハウジング上部固定、ロッドが伸縮） ----------- */
+  capsuleBody() {
+    const C = CONFIG.MILL.CAPSULE;
+    return G.merge([
+      G.at(G.cyl(C.D, C.BODY_L, 'y', 24), 0, 0, 0),
+      G.at(G.cyl(C.D * 1.18, 140, 'y', 24), 0, C.BODY_L / 2 - 70, 0),
+      G.at(G.box(260, 200, 200), C.D * 0.62, C.BODY_L * 0.2, 0),               // 給排油ポート
+    ]);
+  },
+  capsuleRod() { return G.cyl(CONFIG.MILL.CAPSULE.D * 0.72, 1000, 'y', 20); },
+
+  /* --- パスライン調整ステップウェッジ（下BUR チョック下、スクリュー駆動） --- */
+  passLineWedge() {
+    const c = CONFIG.MILL.CHOCK.BR, h = CONFIG.MILL.WEDGE.H;
+    return G.merge([
+      G.at(G.box(c.x * 1.15, h, c.z), 0, 0, 0),
+      G.at(G.box(c.x * 1.15, h * 0.55, c.z * 0.9), 0, -h * 0.78, 0),
+      G.at(G.cyl(150, 900, 'x', 12), c.x * 0.9, -h * 0.2, 0),                  // 調整スクリュー
+    ]);
+  },
+
+  /* --- ロールベンディングシリンダブロック（窓面に取り付き WR チョックを押す）- */
+  benderBlock() {
+    const B = CONFIG.MILL.BENDER;
+    return G.merge([
+      G.at(G.box(340, 640, 700), 0, 0, 0),
+      G.at(G.cyl(B.D, B.L, 'y', 14), 0, B.L * 0.55, 200),
+      G.at(G.cyl(B.D, B.L, 'y', 14), 0, -B.L * 0.55, 200),
+    ]);
+  },
+
+  /* --- ユニバーサルスピンドル: +Z 方向・長さ1(unit) の素体。毎フレーム姿勢を与える -- */
+  spindle() {
+    const d = CONFIG.DRIVE.SPINDLE_D;
+    const g = G.merge([
+      G.at(G.cyl(d, 1 / CONFIG.SCALE, 'z', 14), 0, 0, 0),                      // 1 unit 長
+      G.at(G.cyl(d * 1.5, 0.16 / CONFIG.SCALE, 'z', 14), 0, 0,  0.42 / CONFIG.SCALE),
+      G.at(G.cyl(d * 1.5, 0.16 / CONFIG.SCALE, 'z', 14), 0, 0, -0.42 / CONFIG.SCALE),
+    ]);
+    return g;
+  },
+
+  /* --- ピニオンスタンド・減速機・主電動機（駆動側の静的設備） --------------- */
+  driveTrain() {
+    const D = CONFIG.DRIVE, parts = [];
+    const midY = (D.PINION_Y_LO + D.PINION_Y_HI) / 2;
+    // ピニオンスタンド（2軸を上下に配置したギヤボックス）
+    parts.push(G.at(G.box(2600, D.PINION_SPAN + 1500, 2400), 0, midY, D.PINION_Z - 900));
+    for (const y of [D.PINION_Y_LO, D.PINION_Y_HI])
+      parts.push(G.at(G.cyl(760, 1600, 'z', 16), 0, y, D.PINION_Z + 100));
+    parts.push(G.at(G.box(3400, 700, 3000), 0, -350, D.PINION_Z - 900));       // 基礎
+    // 減速機
+    parts.push(G.at(G.box(2400, D.GEAR_D, D.GEAR_L), 0, midY, D.GEAR_Z));
+    parts.push(G.at(G.box(3200, 700, D.GEAR_L + 800), 0, -350, D.GEAR_Z));
+    parts.push(G.at(G.cyl(560, 1400, 'z', 14), 0, midY, D.GEAR_Z + D.GEAR_L / 2 + 700));
+    // 主電動機
+    parts.push(G.at(G.cyl(D.MOTOR_D, D.MOTOR_L, 'z', 28), 0, midY, D.MOTOR_Z));
+    parts.push(G.at(G.box(D.MOTOR_D * 1.15, 900, D.MOTOR_L * 1.1), 0, midY - D.MOTOR_D / 2 - 300, D.MOTOR_Z));
+    parts.push(G.at(G.box(3600, 700, D.MOTOR_L + 1200), 0, -350, D.MOTOR_Z));
+    parts.push(G.at(G.cyl(600, 1500, 'z', 14), 0, midY, D.MOTOR_Z + D.MOTOR_L / 2 + 750));
+    for (let i = 0; i < 7; i++)                                                // 電動機の冷却フィン
+      parts.push(G.at(G.cyl(D.MOTOR_D * 1.06, 90, 'z', 28), 0, midY, D.MOTOR_Z - D.MOTOR_L / 2 + 400 + i * 640));
+    return G.merge(parts);
+  },
+
+  /* --- テーブルローラ（1本）: インスタンス化して使う ----------------------- */
+  tableRoll() {
+    const T = CONFIG.TABLE;
+    return G.merge([
+      G.cyl(T.ROLL_D, T.BARREL, 'z', 14),
+      G.at(G.cyl(T.ROLL_D * 0.42, 420, 'z', 8), 0, 0,  T.BARREL / 2 + 210),
+      G.at(G.cyl(T.ROLL_D * 0.42, 420, 'z', 8), 0, 0, -T.BARREL / 2 - 210),
+    ]);
+  },
+  tablePedestal() {
+    const T = CONFIG.TABLE, h = CONFIG.MILL.PASS_LINE - T.ROLL_D;
+    return G.merge([
+      G.at(G.box(420, h, 460), 0, h / 2, 0),
+      G.at(G.box(620, 120, 700), 0, 60, 0),
+    ]);
+  },
+
+  /* --- サイドガイド（片側）: フレーム + 縦ローラ -------------------------- */
+  sideGuideFrame() {
+    const g = CONFIG.TABLE.GUIDE;
+    return G.merge([
+      G.at(G.box(g.LEN, g.H, 280), 0, g.H / 2, 0),
+      G.at(G.box(g.LEN, 220, 620), 0, g.H + 90, 100),
+      G.at(G.box(320, 520, 900), -g.LEN / 2 + 160, -260, 240),
+      G.at(G.box(320, 520, 900),  g.LEN / 2 - 160, -260, 240),
+    ]);
+  },
+  sideGuideRoll() { const g = CONFIG.TABLE.GUIDE; return G.cyl(g.ROLL_D, g.H * 0.92, 'y', 14); },
+
+  /* --- クロップシャー（油圧アップカット・ギロチン） ----------------------- */
+  shearStatic() {
+    const S = CONFIG.SHEAR, W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE;
+    const parts = [];
+    for (const s of [-1, 1]) {
+      parts.push(G.at(G.box(1000, 5200, 1100), 0, P + 1600, s * (W / 2 + 750)));   // 柱
+      parts.push(G.at(G.cyl(420, 1500, 'y', 16), 0, P + 4000, s * (W / 2 + 750))); // 油圧シリンダ
+    }
+    parts.push(G.at(G.box(1200, 900, W + 3400), 0, P + 3750, 0));                  // 上部クロスヘッド
+    parts.push(G.at(G.box(1500, 1000, W + 3400), 0, P - 700, 0));                  // ベース
+    parts.push(G.at(G.box(240, 260, W + 200), 120, P - 130, 0));                   // 下刃（上面＝パスライン）
+    parts.push(G.at(G.box(2600, 900, W + 3400), 1900, P - 1900, 0));               // クロップシュート
+    return G.merge(parts);
+  },
+  shearRam() {
+    const S = CONFIG.SHEAR, W = CONFIG.TABLE.BARREL;
+    return G.merge([G.at(G.box(500, 800, W + 400), 0, 480, 0), G.at(G.cyl(300, 1100, 'y', 14), 0, 1300, 0)]);
+  },
+  shearBlade() {   // 斜め刃（レーキ角つき）
+    const W = CONFIG.TABLE.BARREL, S = CONFIG.SHEAR;
+    const g = G.box(220, 300, W + 200); g.rotateX(S.RAKE); return g;
+  },
+  shearHoldDown() { const W = CONFIG.TABLE.BARREL; return G.box(420, 420, W + 100); },
+
+  /* --- 装入設備: 転倒装置 / 縦送りテーブル / 横送りローラ ------------------ */
+  /** 転倒装置(down-ender)の腕。縦置きスラブを受け、90°倒して縦送りテーブルへ渡す。 */
+  tilterArm() {
+    const L = 4400, W = 2900, t = 240, parts = [];
+    parts.push(G.at(G.box(L, t, W), L / 2, -t / 2, 0));                   // 受け面
+    parts.push(G.at(G.box(t, 1200, W), -t / 2, 600, 0));                  // 立ち上がり(スラブ受け)
+    for (let i = 0; i < 5; i++)                                           // 補強リブ
+      parts.push(G.at(G.box(L * 0.94, 300, 180), L / 2, -t - 150,
+                       -W / 2 + 300 + i * (W - 600) / 4));
+    parts.push(G.at(G.box(360, 1500, W * 0.9), L * 0.62, -t - 1000, 0));  // 支持脚
+    return G.merge(parts);
+  },
+  tilterBase() {
+    return G.merge([
+      G.at(G.box(2400, 1500, 3800), -900, -750, 0),
+      G.at(G.cyl(520, 3900, 'z', 16), 0, 0, 0),                           // 転倒軸
+      G.at(G.cyl(900, 420, 'z', 16), 0, 0,  1750),
+      G.at(G.cyl(900, 420, 'z', 16), 0, 0, -1750),
+    ]);
+  },
+  crossRoll() { return G.cyl(CONFIG.SUPPLY.ROLL_D, CONFIG.SUPPLY.CROSS_ROLL_L, 'x', 12); },
+
+  /* --- 建屋: 床 / ピット / 基礎 ------------------------------------------ */
+  /** ミル床。ピット開口だけを避けてライン全長（入側121.8 m / 出側80.1 m）を覆う。 */
+  building() {
+    const B = CONFIG.BUILDING, P = B.PIT, parts = [], t = 300;
+    const wL = -P.X - B.X0, wR = B.X1 - P.X;
+    parts.push(G.at(G.box(wL, t, B.Z * 2), B.X0 + wL / 2, -t / 2, 0));
+    parts.push(G.at(G.box(wR, t, B.Z * 2), B.X1 - wR / 2, -t / 2, 0));
+    const wZ = B.Z - P.Z;
+    parts.push(G.at(G.box(P.X * 2, t, wZ), 0, -t / 2, -P.Z - wZ / 2));
+    parts.push(G.at(G.box(P.X * 2, t, wZ), 0, -t / 2,  P.Z + wZ / 2));
+    return G.merge(parts);
+  },
+  pit() {
+    const P = CONFIG.BUILDING.PIT, w = 400;
+    return G.merge([
+      G.at(G.box(P.X * 2 + w * 2, P.DEPTH, w), 0, -P.DEPTH / 2, -P.Z - w / 2),
+      G.at(G.box(P.X * 2 + w * 2, P.DEPTH, w), 0, -P.DEPTH / 2,  P.Z + w / 2),
+      G.at(G.box(w, P.DEPTH, P.Z * 2), -P.X - w / 2, -P.DEPTH / 2, 0),
+      G.at(G.box(w, P.DEPTH, P.Z * 2),  P.X + w / 2, -P.DEPTH / 2, 0),
+      G.at(G.box(P.X * 2, 400, P.Z * 2), 0, -P.DEPTH - 200, 0),
+    ]);
+  },
+};
+
+/* =============================================================================
+ * 9. RENDER HELPERS
+ * ========================================================================== */
+/** 同一形状の繰り返しを1ドローコールに畳む薄いラッパ（位置は mm で指定）。 */
+class Instances {
+  constructor(geo, mat, count, opts = {}) {
+    this.mesh = new THREE.InstancedMesh(geo, mat, count);
+    this.mesh.castShadow = !!opts.cast; this.mesh.receiveShadow = !!opts.receive;
+    this.mesh.frustumCulled = opts.cull !== false;
+    this.mesh.instanceMatrix.setUsage(opts.dynamic ? THREE.DynamicDrawUsage : THREE.StaticDrawUsage);
+    this._m = new THREE.Matrix4(); this._e = new THREE.Euler(); this._q = new THREE.Quaternion();
+    this._p = new THREE.Vector3(); this._s = new THREE.Vector3(1, 1, 1);
+    this.count = count; this.n = 0;
+  }
+  set(i, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
+    this._p.set(u(x), u(y), u(z)); this._e.set(rx, ry, rz); this._q.setFromEuler(this._e);
+    this._s.set(sx, sy, sz);
+    this._m.compose(this._p, this._q, this._s);
+    this.mesh.setMatrixAt(i, this._m);
+    return this;
+  }
+  push(...a) { this.set(this.n++, ...a); return this; }
+  commit(n) { if (n !== undefined) this.mesh.count = n; this.mesh.instanceMatrix.needsUpdate = true; return this; }
+  /** インスタンス行列を含めた境界球を確定する（フラスタムカリングを有効にするため）。 */
+  finalize() { this.mesh.computeBoundingSphere(); this.mesh.boundingSphere?.radius && (this.mesh.boundingSphere.radius *= 1.35); return this; }
 }
 
-class MeshFactory {
-    static createRoll(diameter) {
-        const radius = (diameter * SimUtils.S) / 2;
-        const width = CONFIG.MACHINE.ROLL_WIDTH * SimUtils.S;
-        const group = new THREE.Group();
-        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, width, 64), MaterialFactory.get('rollFace'));
-        barrel.rotation.x = Math.PI / 2; barrel.castShadow = true;
-        const neckRadius = radius * 0.6; const neckLen = width * 0.2;
-        const neckMat = MaterialFactory.get('rollNeck');
-        const neckL = new THREE.Mesh(new THREE.CylinderGeometry(neckRadius, neckRadius, neckLen, 32), neckMat);
-        neckL.rotation.x = Math.PI / 2; neckL.position.z = -(width + neckLen) / 2;
-        const neckR = neckL.clone();
-        neckR.rotation.x = Math.PI / 2; neckR.position.z = (width + neckLen) / 2;
-        const tipW = neckRadius * 0.6; const tipH = neckRadius * 1.4; const tipLen = width * 0.08;
-        const tipGeo = new THREE.BoxGeometry(tipW, tipH, tipLen);
-        const tipL = new THREE.Mesh(tipGeo, MaterialFactory.get('rollFace'));
-        tipL.position.z = -(width/2 + neckLen + tipLen/2);
-        const tipR = tipL.clone();
-        tipR.position.z = (width/2 + neckLen + tipLen/2);
-        group.add(barrel, neckL, neckR, tipL, tipR);
-        return group;
+/** 汎用パーティクル場（クーラント / 蒸気で共有） */
+class ParticleField {
+  constructor(scene, { count, size, color, opacity, gravity, blending }) {
+    this.n = count; this.gravity = gravity;
+    this.pos = new Float32Array(count * 3);
+    this.p = []; for (let i = 0; i < count; i++) { this.p.push({ vx: 0, vy: 0, vz: 0, life: 0 }); this.pos[i * 3 + 1] = -1e4; }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    const mat = new THREE.PointsMaterial({ color, size, transparent: true, opacity, depthWrite: false,
+      blending: blending ?? THREE.NormalBlending, sizeAttenuation: true });
+    this.mesh = new THREE.Points(geo, mat); this.mesh.frustumCulled = false; scene.add(this.mesh);
+    this.cursor = 0;
+  }
+  spawn(x, y, z, vx, vy, vz, life) {
+    const i = this.cursor = (this.cursor + 1) % this.n, p = this.p[i];
+    this.pos[i * 3] = u(x); this.pos[i * 3 + 1] = u(y); this.pos[i * 3 + 2] = u(z);
+    p.vx = vx; p.vy = vy; p.vz = vz; p.life = life;
+  }
+  update(dt, floorY) {
+    let live = 0;
+    for (let i = 0; i < this.n; i++) {
+      const p = this.p[i]; if (p.life <= 0) continue;
+      p.life -= dt; live++;
+      if (p.life <= 0) { this.pos[i * 3 + 1] = -1e4; continue; }
+      p.vy += this.gravity * dt;
+      const j = i * 3;
+      this.pos[j] += u(p.vx * dt); this.pos[j + 1] += u(p.vy * dt); this.pos[j + 2] += u(p.vz * dt);
+      if (floorY !== undefined && this.pos[j + 1] < u(floorY)) { this.pos[j + 1] = u(floorY); p.vy = 0; p.vx *= .82; p.vz *= .82; }
     }
-
-    static createHousing() {
-        const S = SimUtils.S;
-        const gap = (CONFIG.MACHINE.ROLL_WIDTH * S / 2) + 12; 
-        const group = new THREE.Group();
-        const mat = MaterialFactory.get('housing');
-        const postW = 1200 * S; const winW = 1400 * S; const totalW = postW*2 + winW;
-        const totalH = 8500 * S; const thick = 1500 * S; const cornerR = 300 * S; 
-        
-        const shape = new THREE.Shape();
-        ShapeHelpers.drawRoundedBox(shape, -totalW/2, -totalH/2, totalW, totalH, cornerR/2);
-        const hole = new THREE.Path();
-        const winH = totalH * 0.65;
-        ShapeHelpers.drawRoundedBox(hole, -winW/2, -winH/2, winW, winH, cornerR);
-        shape.holes.push(hole);
-
-        const geo = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: true, bevelThickness: 5 * S, bevelSize: 5 * S, bevelSegments: 2 });
-        geo.translate(0, 0, -thick/2);
-
-        const frameDrive = new THREE.Mesh(geo, mat); frameDrive.position.z = -gap - thick/2;
-        const frameOp = new THREE.Mesh(geo, mat); frameOp.position.z = gap + thick/2;
-        const capGeo = new THREE.CylinderGeometry(400*S, 400*S, 800*S, 32);
-        const cap1 = new THREE.Mesh(capGeo, mat); cap1.position.set(0, totalH/2 + 400*S, -gap - thick/2);
-        const cap2 = new THREE.Mesh(capGeo, mat); cap2.position.set(0, totalH/2 + 400*S, gap + thick/2);
-        group.add(frameDrive, frameOp, cap1, cap2);
-        return group;
-    }
-    
-    static createSideGuide() {
-        const group = new THREE.Group();
-        const length = 40; const height = 12; const depth = 5;   
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(length, height, depth), MaterialFactory.get('guideFrame'));
-        frame.position.y = height / 2; group.add(frame);
-        const rollerGeo = new THREE.CylinderGeometry(1.5, 1.5, height + 2, 16);
-        const rollerMat = MaterialFactory.get('guideRoller');
-        const startX = -length/2 + 3; const stepX = (length - 6) / 5;
-        for(let i=0; i<6; i++) {
-            const r = new THREE.Mesh(rollerGeo, rollerMat);
-            r.position.set(startX + stepX * i, height/2, depth/2 + 1.6); group.add(r);
-        }
-        return group;
-    }
-
-    static createTilter() {
-        const S = SimUtils.S;
-        const group = new THREE.Group();
-        const L = 5000 * S; const W = 2500 * S; const frameThick = 200 * S; const rRad = 120 * S;
-        const arm = new THREE.Group(); arm.name = "TilterArm";
-        const bed = new THREE.Mesh(new THREE.BoxGeometry(L, frameThick, W), MaterialFactory.get('tilterFrame'));
-        bed.position.set(L/2, -frameThick/2 - rRad, 0); 
-        const seat = new THREE.Mesh(new THREE.BoxGeometry(frameThick, 800*S, W), MaterialFactory.get('tilterFrame'));
-        seat.position.set(-frameThick/2, 400*S - rRad, 0);
-        const rGeo = new THREE.CylinderGeometry(rRad, rRad, W, 16); rGeo.rotateX(Math.PI / 2); 
-        const rMat = MaterialFactory.get('rollFace');
-        const rollers = new THREE.Group(); rollers.name = "TilterRollers";
-        const stepX = (L * 0.8) / 5; const startX = L * 0.1;
-        for(let i=0; i<6; i++) {
-            const r = new THREE.Mesh(rGeo, rMat); r.position.set(startX + i*stepX, -rRad, 0); rollers.add(r);
-        }
-        arm.add(bed, seat, rollers); arm.rotation.z = Math.PI / 2; group.add(arm);
-        return group;
-    }
-
-    static createTransferTable() {
-        const S = SimUtils.S;
-        const group = new THREE.Group();
-        const L = 5000 * S; const W = 2500 * S; const H = 200 * S; const rRad = 120 * S;
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(L, H, W), MaterialFactory.get('tableFrame'));
-        frame.position.y = -H/2 - rRad; group.add(frame);
-        const rMat = MaterialFactory.get('rollFace');
-        const rGeoZ = new THREE.CylinderGeometry(rRad, rRad, W*0.35, 16); rGeoZ.rotateX(Math.PI / 2); 
-        const zRollers = new THREE.Group(); zRollers.name = "TransferRollersZ";
-        const rGeoX = new THREE.CylinderGeometry(rRad, rRad, 600*S, 16); rGeoX.rotateZ(Math.PI / 2); 
-        const xRollers = new THREE.Group(); xRollers.name = "TransferRollersX"; 
-        const stepX = (L * 0.85) / 5; const startX = -(L * 0.85) / 2;
-        const stepZ = (W * 0.6) / 2; const startZ = -(W * 0.6) / 2;
-        for(let c=0; c<6; c++) {
-            const xPos = startX + c*stepX;
-            const rz = new THREE.Mesh(rGeoZ, rMat); rz.position.set(xPos, -rRad, 0); zRollers.add(rz);
-            if (c === 0 || c === 5) continue;
-            for(let r=0; r<3; r++) {
-                const zPos = startZ + r*stepZ; if(Math.abs(zPos) < 10) continue; 
-                const rx = new THREE.Mesh(rGeoX, rMat); rx.position.set(xPos + stepX*0.5, -rRad, zPos); xRollers.add(rx);
-            }
-        }
-        group.add(zRollers, xRollers);
-        return group;
-    }
-
-    // UPDATED: High Quality Shear in Standby Position
-    static createShear() {
-        const S = SimUtils.S;
-        const W = CONFIG.MACHINE.ROLL_WIDTH * S;
-        const group = new THREE.Group();
-        const fMat = MaterialFactory.get('shearFrame');
-        const bMat = MaterialFactory.get('shearBlade');
-        const cMat = MaterialFactory.get('shearCyl');
-
-        // Main Columns
-        const colGeo = new THREE.BoxGeometry(800 * S, 4000 * S, 1000 * S);
-        const colL = new THREE.Mesh(colGeo, fMat); colL.position.set(0, 1800*S, -W/2 - 700*S);
-        const colR = new THREE.Mesh(colGeo, fMat); colR.position.set(0, 1800*S, W/2 + 700*S);
-        
-        // Top Crosshead
-        const headGeo = new THREE.BoxGeometry(800 * S, 1000 * S, W + 3000 * S);
-        const head = new THREE.Mesh(headGeo, fMat); head.position.set(0, 4200*S, 0);
-
-        // Bottom Base
-        const baseGeo = new THREE.BoxGeometry(1200 * S, 800 * S, W + 3000 * S);
-        const base = new THREE.Mesh(baseGeo, fMat); base.position.set(0, -1000*S, 0);
-
-        // Blade Holders & Blades (Standby Position: Wide Open)
-        // Top Blade: Parked High
-        const holderGeo = new THREE.BoxGeometry(400 * S, 600 * S, W + 200 * S);
-        const topHolder = new THREE.Mesh(holderGeo, fMat); topHolder.position.set(0, 1500*S, 0);
-        const bladeGeo = new THREE.BoxGeometry(100 * S, 200 * S, W);
-        const topBlade = new THREE.Mesh(bladeGeo, bMat); topBlade.position.set(0, 1100*S, 0); // Y > 1000
-
-        // Bottom Blade: Parked Low (Upcut style)
-        const botHolder = new THREE.Mesh(holderGeo, fMat); botHolder.position.set(0, -500*S, 0);
-        const botBlade = new THREE.Mesh(bladeGeo, bMat); botBlade.position.set(0, -100*S, 0); // Y < 0
-
-        // Hydraulic Cylinders (Visual)
-        const cylGeo = new THREE.CylinderGeometry(150*S, 150*S, 1000*S, 16);
-        const cyl1 = new THREE.Mesh(cylGeo, cMat); cyl1.position.set(0, 3000*S, -W/2 - 300*S);
-        const cyl2 = new THREE.Mesh(cylGeo, cMat); cyl2.position.set(0, 3000*S, W/2 + 300*S);
-
-        group.add(colL, colR, head, base, topHolder, topBlade, botHolder, botBlade, cyl1, cyl2);
-        return group;
-    }
+    this.mesh.geometry.attributes.position.needsUpdate = true;
+    this.mesh.visible = live > 0;
+  }
+  clear() { for (let i = 0; i < this.n; i++) { this.p[i].life = 0; this.pos[i * 3 + 1] = -1e4; } this.mesh.visible = false; }
 }
 
-// --- 6. VISUALIZATION VIEWS ---
-class CoolantParticleSystem {
-    constructor(scene) {
-        this.maxParticles = 1500;
-        this.particles = new Float32Array(this.maxParticles * 3);
-        this.velocities = [];
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(this.particles, 3));
-        const material = new THREE.PointsMaterial({
-            color: 0xffffff, size: 1.5, transparent: true, opacity: 0.6,
-            blending: THREE.AdditiveBlending, depthWrite: false
-        });
-        this.mesh = new THREE.Points(geometry, material);
-        scene.add(this.mesh);
-        for(let i=0; i<this.maxParticles; i++) {
-            this.velocities.push({ vx: 0, vy: 0, vz: 0, active: false, onSlab: false, life: 0 });
-            this.particles[i*3] = 0; this.particles[i*3+1] = -500; this.particles[i*3+2] = 0;
-        }
-    }
-    update(dt, state) {
-        if (!state.env.coolantOn || !state.slab.inBite) { this.mesh.visible = false; return; }
-        this.mesh.visible = true;
-        const S = SimUtils.S;
-        const slabY = state.mill.centerHeight * S + (state.slab.thickness * S / 2);
-        const passLine = state.mill.centerHeight * S;
-        for(let i=0; i<this.maxParticles; i++) {
-            const p = this.velocities[i];
-            const idx = i*3;
-            if(!p.active) {
-                if(Math.random()<0.1) {
-                    p.active=true; p.life=1.0; p.onSlab=false;
-                    this.particles[idx] = 14 + (Math.random()-0.5)*2;
-                    this.particles[idx+1] = passLine + 20;
-                    this.particles[idx+2] = (Math.random()-0.5)*40;
-                    p.vx = (Math.random()-0.5)*20; p.vy = -150 - Math.random()*50; p.vz = (Math.random()-0.5)*10;
-                }
-            } else {
-                let px=this.particles[idx], py=this.particles[idx+1], pz=this.particles[idx+2];
-                if (!p.onSlab && py < slabY) { py = slabY; p.onSlab = true; p.vy = 0; p.vx *= 0.5; p.vz *= 0.5; }
-                else if (!p.onSlab) { py += p.vy*dt; px += p.vx*dt; pz += p.vz*dt; }
-                else { px += p.vx*dt; pz += p.vz*dt; p.life -= dt*2; }
-                if (p.life<=0 || py < -100) { p.active=false; py=-500; }
-                this.particles[idx]=px; this.particles[idx+1]=py; this.particles[idx+2]=pz;
-            }
-        }
-        this.mesh.geometry.attributes.position.needsUpdate = true;
-    }
-}
-
+/* =============================================================================
+ * 10. VIEWS
+ * ========================================================================== */
 class MillStandView {
-    constructor(scene) {
-        this.rolls = {
-            workTop: MeshFactory.createRoll(CONFIG.MACHINE.WR_DIAMETER),
-            workBot: MeshFactory.createRoll(CONFIG.MACHINE.WR_DIAMETER),
-            backupTop: MeshFactory.createRoll(CONFIG.MACHINE.BR_DIAMETER),
-            backupBot: MeshFactory.createRoll(CONFIG.MACHINE.BR_DIAMETER)
-        };
-        Object.values(this.rolls).forEach(r => scene.add(r));
-        
-        this.sprays = [];
-        [{y: 25, r: 0}, {y: -25, r: Math.PI}].forEach(conf => {
-            const s = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, CONFIG.MACHINE.ROLL_WIDTH*SimUtils.S, 16), MaterialFactory.get('nozzle'));
-            s.rotation.x = Math.PI / 2; s.position.set(14, conf.y, 0); s.rotation.z = conf.r;
-            scene.add(s); this.sprays.push(s);
-        });
+  constructor(scene) {
+    const M = CONFIG.MILL, H = M.HOUSING, zC = H.INNER_Z + H.THICK_Z / 2;
+    this.group = new THREE.Group(); scene.add(this.group);
 
-        this.guides = new THREE.Group(); 
-        const g = new THREE.Group();
-        const g1 = MeshFactory.createSideGuide(); g1.rotation.y = Math.PI; g1.name = "Front";
-        const g2 = MeshFactory.createSideGuide(); g2.name = "Back";
-        g.add(g1, g2);
-        this.guideComponents = { front: g1, back: g2 };
-        this.guides.add(g);
-        scene.add(this.guides);
+    // --- ハウジング（オペレータ側 +Z / 駆動側 −Z）--------------------------
+    const plate = Parts.housingPlate();
+    this.housings = [1, -1].map(s => {
+      const m = new THREE.Mesh(plate, MAT.housing);
+      m.position.z = u(s * zC); m.castShadow = true; m.receiveShadow = true;
+      m.userData.side = s; this.group.add(m); return m;
+    });
+    const struct = new THREE.Mesh(Parts.standStructure(), MAT.base);
+    struct.castShadow = struct.receiveShadow = true; this.group.add(struct);
+
+    // --- ロール4本（胴 / 首の2メッシュ = 回転体として1つのグループ）-------
+    const mk = (dia, barrel, neckD, coupling) => {
+      const r = Parts.roll(dia, barrel, neckD, coupling), g = new THREE.Group();
+      const f = new THREE.Mesh(r.face, MAT.rollFace), n = new THREE.Mesh(r.neck, MAT.rollNeck);
+      f.castShadow = true; g.add(f, n); this.group.add(g); return g;
+    };
+    this.rolls = {
+      workTop:   mk(M.WR_D, M.BARREL,    M.WR_NECK_D, true),
+      workBot:   mk(M.WR_D, M.BARREL,    M.WR_NECK_D, true),
+      backupTop: mk(M.BR_D, M.BR_BARREL, M.BR_NECK_D, false),
+      backupBot: mk(M.BR_D, M.BR_BARREL, M.BR_NECK_D, false),
+    };
+
+    // --- チョック / 圧下シリンダは「手前側」「奥側」に分けて保持する ---------
+    //  半断面表示では手前側だけを透過させ、窓の中のロール系を見せられるようにする。
+    const io = { cast: true, dynamic: true, cull: false };
+    this.sided = { near: [], far: [] };
+    const sidedPair = (geo, mat, n, opts) => {
+      const near = new Instances(geo, mat, n, opts), far = new Instances(geo, mat, n, opts);
+      near.mesh.userData.solidMat = mat; far.mesh.userData.solidMat = mat;
+      this.sided.near.push(near.mesh); this.sided.far.push(far.mesh);
+      this.group.add(near.mesh, far.mesh);
+      return { near, far };
+    };
+    this.chockWR = sidedPair(Parts.chock('WR'), MAT.chock, 2, io);
+    this.chockBR = sidedPair(Parts.chock('BR'), MAT.chock, 2, io);
+    this.capBody = sidedPair(Parts.capsuleBody(), MAT.hydraulic, 1, { cast: true, cull: false });
+    this.capRod  = sidedPair(Parts.capsuleRod(),  MAT.rod,       1, io);
+    this.capBody.near.set(0, 0, H.WIN_TOP - M.CAPSULE.BODY_L / 2,  zC).commit();
+    this.capBody.far .set(0, 0, H.WIN_TOP - M.CAPSULE.BODY_L / 2, -zC).commit();
+
+    // --- パスライン調整ウェッジ -------------------------------------------
+    this.wedge = new Instances(Parts.passLineWedge(), MAT.hydraulic, 2, { cast: true, dynamic: true, cull: false });
+    this.group.add(this.wedge.mesh);
+
+    // --- ロールベンディングシリンダブロック（WRチョックを挟む）------------
+    this.bender = new Instances(Parts.benderBlock(), MAT.hydraulic, 8, { cast: true, dynamic: true, cull: false });
+    this.group.add(this.bender.mesh);
+
+    // --- クーラントヘッダ（入出側 × 上下ロール）---------------------------
+    this.headers = new Instances(G.cyl(180, M.BARREL + 200, 'z', 12), MAT.tableFrame, 4, { dynamic: true, cull: false });
+    this.group.add(this.headers.mesh);
+
+    this.zC = zC;
+  }
+  update(mill) {
+    const M = CONFIG.MILL, H = M.HOUSING, zC = this.zC, ratio = M.WR_D / M.BR_D;
+    const wt = mill.wrTopY, wb = mill.wrBotY, bt = mill.brTopY, bb = mill.brBotY;
+    // 材料が +X のとき: 上ロールは接触点が下面 → +Z 回転、下ロールは −Z 回転。
+    // バックアップロールはワークロールと外接するので符号が反転する。
+    this.rolls.workTop.position.y   = u(wt); this.rolls.workTop.rotation.z   =  mill.rollAngle;
+    this.rolls.workBot.position.y   = u(wb); this.rolls.workBot.rotation.z   = -mill.rollAngle;
+    this.rolls.backupTop.position.y = u(bt); this.rolls.backupTop.rotation.z = -mill.rollAngle * ratio;
+    this.rolls.backupBot.position.y = u(bb); this.rolls.backupBot.rotation.z =  mill.rollAngle * ratio;
+
+    for (const [k, sz] of [['near', 1], ['far', -1]]) {
+      this.chockWR[k].set(0, 0, wt, sz * zC).set(1, 0, wb, sz * zC).commit();
+      this.chockBR[k].set(0, 0, bt, sz * zC).set(1, 0, bb, sz * zC).commit();
     }
-    update(state, dt) {
-        const S = SimUtils.S;
-        const centerH = state.mill.centerHeight * S;
-        const gap = state.mill.gap * S;
-        const wrRad = (CONFIG.MACHINE.WR_DIAMETER * S) / 2;
-        const brRad = (CONFIG.MACHINE.BR_DIAMETER * S) / 2;
-        const wrY_Top = centerH + gap / 2 + wrRad;
-        const wrY_Bot = centerH - gap / 2 - wrRad;
-        
-        this.rolls.workTop.position.y = wrY_Top;
-        this.rolls.workBot.position.y = wrY_Bot;
-        this.rolls.backupTop.position.y = wrY_Top + wrRad + brRad;
-        this.rolls.backupBot.position.y = wrY_Bot - wrRad - brRad;
+    // ロッドはシリンダ下端から上BURチョック天端までを埋める（＝圧下量そのもの）
+    const rodTop = H.WIN_TOP - M.CAPSULE.BODY_L, rodBot = bt + M.CHOCK.BR.y / 2;
+    const len = Math.max(rodTop - rodBot, 20);
+    this.capRod.near.set(0, 0, (rodTop + rodBot) / 2,  zC, 0, 0, 0, 1, len / 1000, 1).commit();
+    this.capRod.far .set(0, 0, (rodTop + rodBot) / 2, -zC, 0, 0, 0, 1, len / 1000, 1).commit();
 
-        // FIXED: Sync Rotation with Slab Direction
-        // Determine physical direction: 1 (FWD), -1 (REV), or 0
-        const dir = Math.sign(state.mill.targetSpeed) || 1;
-        // Use slab speed magnitude but apply direction
-        const speedMPS = (state.slab.currentSpeed / 60) * dir; 
-        
-        const wrCirc = (CONFIG.MACHINE.WR_DIAMETER / 1000) * Math.PI;
-        const wrRotDelta = (speedMPS / wrCirc) * 2 * Math.PI * dt;
-        
-        // Logic: if moving +X (Right), Top roll bottom moves +X -> Top roll rotates -Z (CW viewed from +Z)
-        this.rolls.workTop.rotation.z -= wrRotDelta;
-        this.rolls.workBot.rotation.z += wrRotDelta;
-        this.rolls.backupTop.rotation.z += wrRotDelta;
-        this.rolls.backupBot.rotation.z -= wrRotDelta;
+    const wedgeTop = bb - M.CHOCK.BR.y / 2;
+    for (const [k, s] of [1, -1].entries()) this.wedge.set(k, 0, wedgeTop - M.WEDGE.H / 2, s * zC);
+    this.wedge.commit();
 
-        this.guides.position.x = (CONFIG.MACHINE.GUIDE_DISTANCE * S);
-        this.guides.position.y = centerH;
-        const guideZ = (state.mill.guideGap * S / 2) + 5.6;
-        this.guideComponents.front.position.z = guideZ;
-        this.guideComponents.back.position.z = -guideZ;
+    let i = 0;
+    for (const s of [1, -1]) for (const sx of [-1, 1]) for (const y of [wt, wb])
+      this.bender.set(i++, sx * (H.WIN_X / 2 - 170), y, s * zC);
+    this.bender.commit();
 
-        this.sprays[0].position.y = wrY_Top + 14 * S;
-        this.sprays[1].position.y = wrY_Bot - 14 * S;
+    i = 0;
+    for (const sx of [-1, 1]) for (const [y, dy] of [[wt, -1], [wb, 1]])
+      this.headers.set(i++, sx * 1250, y + dy * (M.WR_D / 2 + 420), 0);
+    this.headers.commit();
+  }
+  setCutaway(mode) {
+    // 'solid' 実体 / 'half' 手前(オペレータ側)のみ透過 / 'xray' 両方透過
+    for (const m of this.housings) {
+      const ghost = mode === 'xray' || (mode === 'half' && m.userData.side === 1);
+      m.material = ghost ? MAT.housingGhost : MAT.housing;
+      m.castShadow = !ghost; m.receiveShadow = !ghost;
     }
+    // ハウジングだけ透かしてもチョックが窓を塞ぐので、同じ側のチョック類も透過させる
+    const apply = (list, ghost) => list.forEach(m => {
+      m.material = ghost ? MAT.ghost : m.userData.solidMat;
+      m.castShadow = !ghost; m.receiveShadow = !ghost;
+    });
+    apply(this.sided.near, mode !== 'solid');
+    apply(this.sided.far,  mode === 'xray');
+  }
 }
 
-class TableRollerView {
-    constructor(scene) {
-        this.tableL = new THREE.Group(); this.tableR = new THREE.Group();
-        for (let z = -150; z <= 60; z += 0.8) { 
-            if (Math.abs(z) < 1.05) continue; 
-            const tr = MeshFactory.createRoll(CONFIG.MACHINE.TABLE_ROLL_DIAMETER); 
-            tr.position.set(z * 20, -CONFIG.MACHINE.TABLE_ROLL_DIAMETER * SimUtils.S / 2, 0);
-            if (z < 0) this.tableL.add(tr); else this.tableR.add(tr);
-        }
-        scene.add(this.tableL, this.tableR);
-    }
-    update(state, dt) {
-        const S = SimUtils.S;
-        this.tableL.position.y = state.mill.tableHeightL * S;
-        this.tableR.position.y = state.mill.tableHeightR * S;
-        
-        // FIXED: Sync Rotation
-        const dir = Math.sign(state.mill.targetSpeed) || 1;
-        const speedMPS = (state.slab.currentSpeed / 60) * dir;
-        const trCirc = (CONFIG.MACHINE.TABLE_ROLL_DIAMETER / 1000) * Math.PI;
-        const trRotDelta = (speedMPS / trCirc) * 2 * Math.PI * dt;
-        
-        // If moving +X, top of table roll moves +X -> Rotate -Z
-        const apply = (grp) => { grp.children.forEach(r => r.rotation.z -= trRotDelta); };
-        apply(this.tableL); apply(this.tableR);
-    }
+class DriveView {
+  constructor(scene) {
+    const D = CONFIG.DRIVE, M = CONFIG.MILL;
+    this.group = new THREE.Group(); scene.add(this.group);
+    const train = new THREE.Mesh(Parts.driveTrain(), MAT.base);
+    train.castShadow = train.receiveShadow = true; this.group.add(train);
+
+    this.pinions = [D.PINION_Y_HI, D.PINION_Y_LO].map(y => {
+      const g = new THREE.Group();
+      const shaft = new THREE.Mesh(G.merge([G.cyl(900, 900, 'z', 20), G.at(G.box(160, 900, 700), 380, 0, 0)]), MAT.spindle);
+      g.add(shaft); g.position.set(0, u(y), u(D.PINION_Z + 700)); this.group.add(g); return g;
+    });
+
+    const sg = Parts.spindle();
+    this.spindles = [0, 1].map(() => {
+      const m = new THREE.Mesh(G.merge([sg.clone(), G.at(G.box(u(0) + 300, 300, 0.30 / CONFIG.SCALE), 420, 0, 0)]), MAT.spindle);
+      m.castShadow = true; this.group.add(m); return m;
+    });
+    sg.dispose();
+    this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._d = new THREE.Vector3();
+    this._zAxis = new THREE.Vector3(0, 0, 1);
+  }
+  update(mill) {
+    const D = CONFIG.DRIVE, M = CONFIG.MILL, ends = [
+      { rollY: mill.wrTopY, pinY: D.PINION_Y_HI },
+      { rollY: mill.wrBotY, pinY: D.PINION_Y_LO },
+    ];
+    this.pinions[0].rotation.z =  mill.rollAngle;
+    this.pinions[1].rotation.z = -mill.rollAngle;
+    ends.forEach((e, i) => {
+      // スピンドルはロール側継手とピニオン出力軸を結ぶ。圧下でロールが上下すると
+      // 自在継手が首を振る＝実機と同じ挙動。
+      this._a.set(0, u(e.rollY), u(D.COUPLING_Z));
+      this._b.set(0, u(e.pinY),  u(D.PINION_Z + 1200));
+      this._d.subVectors(this._b, this._a);
+      const len = this._d.length();
+      const m = this.spindles[i];
+      m.position.copy(this._a).addScaledVector(this._d, 0.5);
+      m.quaternion.setFromUnitVectors(this._zAxis, this._d.normalize());
+      m.scale.set(1, 1, len);
+      m.rotateZ(i === 0 ? mill.rollAngle : -mill.rollAngle);
+    });
+  }
 }
 
-class SupplySystemView {
-    constructor(scene) {
-        const S = SimUtils.S;
-        const entryX = CONFIG.SUPPLY.ENTRY_X * S;
-        const tilterX = (CONFIG.SUPPLY.ENTRY_X - CONFIG.SUPPLY.TRANSFER_OFFSET) * S;
-        const sideZ = CONFIG.SUPPLY.SIDE_Z * S; 
-        const pivotY = 0; 
-
-        this.tilterRoot = MeshFactory.createTilter();
-        this.tilterRoot.position.set(tilterX, pivotY, sideZ);
-        this.tilterArm = this.tilterRoot.getObjectByName("TilterArm");
-        this.tilterRollers = this.tilterRoot.getObjectByName("TilterRollers");
-        scene.add(this.tilterRoot);
-
-        this.transferTable = MeshFactory.createTransferTable();
-        this.transferTable.position.set(entryX, pivotY, sideZ);
-        this.transferRollersZ = this.transferTable.getObjectByName("TransferRollersZ");
-        this.transferRollersX = this.transferTable.getObjectByName("TransferRollersX");
-        scene.add(this.transferTable);
-
-        this.supplySlab = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), MaterialFactory.get('supplySlab'));
-        scene.add(this.supplySlab);
+class TableView {
+  constructor(scene) {
+    const T = CONFIG.TABLE, P = CONFIG.MILL.PASS_LINE;
+    // ローラピッチはミル近傍を密に、遠方を粗に取る（実機同様、かつインスタンス数を抑える）。
+    // 圧延機直下とクロップシャー直下は設備が占有するのでローラを置かない。
+    const blocked = [{ x: 0, half: T.CLEAR }, { x: CONFIG.SHEAR.X, half: 1400 }];
+    const free = x => blocked.every(b => Math.abs(x - b.x) > b.half);
+    this.xs = [];
+    for (let x = 0; x >= T.X_MIN; x -= (Math.abs(x) < T.NEAR_ZONE ? T.PITCH_NEAR : T.PITCH_FAR))
+      if (free(x)) this.xs.push(x);
+    for (let x = T.PITCH_NEAR; x <= T.X_MAX; x += (Math.abs(x) < T.NEAR_ZONE ? T.PITCH_NEAR : T.PITCH_FAR))
+      if (free(x)) this.xs.push(x);
+    // 200 m のテーブルを1つの InstancedMesh にすると常に全数が描画されてしまう。
+    // 区間に分けて境界球を持たせ、視界外の区間をフラスタムカリングで落とす。
+    this.xs.sort((a, b) => a - b);
+    const y = P - T.ROLL_D / 2, ZONE = 28;
+    const rollGeo = Parts.tableRoll(), pedGeo = Parts.tablePedestal();
+    this.zones = [];
+    for (let s0 = 0; s0 < this.xs.length; s0 += ZONE) {
+      const seg = this.xs.slice(s0, s0 + ZONE);
+      const rolls = new Instances(rollGeo, MAT.rollFace, seg.length, { dynamic: true });
+      const peds  = new Instances(pedGeo, MAT.tableFrame, seg.length * 2, { receive: true });
+      seg.forEach((x, i) => {
+        rolls.set(i, x, y, 0);
+        peds.set(i * 2,     x, 0,  T.BARREL / 2 + 320);
+        peds.set(i * 2 + 1, x, 0, -T.BARREL / 2 - 320);
+      });
+      rolls.commit().finalize(); peds.commit().finalize();
+      scene.add(rolls.mesh, peds.mesh);
+      this.zones.push({ xs: seg, rolls });
     }
-    update(state) {
-        const S = SimUtils.S;
-        const tiltDeg = (1.0 - state.supply.tiltAngle) * (Math.PI / 2);
-        this.tilterArm.rotation.z = tiltDeg; 
 
-        const showSupplySlab = state.supply.isActive || !state.slab.visible;
-        this.supplySlab.visible = showSupplySlab;
-
-        if (showSupplySlab) {
-            const gTh = state.slab.thickness * S;
-            const gW = state.slab.width * S;
-            const gL = state.slab.length * S;
-            const tilterX = this.tilterRoot.position.x;
-            const transferX = this.transferTable.position.x;
-            const sideZ = CONFIG.SUPPLY.SIDE_Z * S;
-            const pivY = this.tilterRoot.position.y;
-            const millCenterY = state.mill.centerHeight * S;
-
-            let phase = state.supply.phase;
-            if (!state.supply.isActive && !state.slab.visible) phase = 'TILTING'; 
-
-            if (phase === 'TILTING') {
-                const localX = gL/2; const localY = gTh/2;
-                const cos = Math.cos(tiltDeg); const sin = Math.sin(tiltDeg);
-                const rX = localX*cos - localY*sin; const rY = localX*sin + localY*cos;
-                this.supplySlab.position.set(tilterX + rX, pivY + rY, sideZ);
-                this.supplySlab.rotation.set(0, 0, tiltDeg); 
-                this.supplySlab.scale.set(gL, gTh, gW);
-            } else if (phase === 'RUN_IN') {
-                const startX = tilterX + gL/2; const endX = transferX; 
-                const curX = startX + (endX - startX) * state.supply.runInDist;
-                this.supplySlab.position.set(curX, pivY + gTh/2, sideZ);
-                this.supplySlab.rotation.set(0, 0, 0); 
-                this.supplySlab.scale.set(gL, gTh, gW);
-                this.tilterRollers.children.forEach(r => r.rotation.z -= 0.2); 
-                this.transferRollersZ.children.forEach(r => r.rotation.z -= 0.2);
-            } else if (phase === 'CROSS_TRANSFER') {
-                const curZ = sideZ + (0 - sideZ) * state.supply.crossDist;
-                this.supplySlab.position.set(transferX, millCenterY, curZ);
-                this.supplySlab.rotation.set(0, 0, 0);
-                this.supplySlab.scale.set(gL, gTh, gW);
-                this.transferRollersX.children.forEach(r => r.rotation.x -= 0.2); 
-            }
-        }
+    // ミル直下の敷板（エプロン）— ローラを置けない区間を埋める実機同等の部材
+    const ap = G.merge([
+      G.at(G.box(T.CLEAR - CONFIG.MILL.WR_D / 2 - 80, 120, T.BARREL), -(T.CLEAR + CONFIG.MILL.WR_D / 2) / 2 - 40, P - 60, 0),
+      G.at(G.box(T.CLEAR - CONFIG.MILL.WR_D / 2 - 80, 120, T.BARREL),  (T.CLEAR + CONFIG.MILL.WR_D / 2) / 2 + 40, P - 60, 0),
+    ]);
+    const apron = new THREE.Mesh(ap, MAT.tableFrame); apron.receiveShadow = true; scene.add(apron);
+    this.y = y;
+  }
+  update(mill) {
+    const a = -mill.tableAngle;                      // 材料 +X → テーブルローラは −Z 回転
+    this.rollAngle = a;
+    if (a === this._a) return;                       // 停止中は行列更新もアップロードも省く
+    this._a = a;
+    for (const z of this.zones) {
+      if (!z.rolls.mesh.visible) continue;
+      for (let i = 0; i < z.xs.length; i++) z.rolls.set(i, z.xs[i], this.y, 0, 0, 0, a);
+      z.rolls.commit();
     }
+  }
 }
 
+class GuideView {
+  constructor(scene) {
+    const g = CONFIG.TABLE.GUIDE, P = CONFIG.MILL.PASS_LINE;
+    const frameGeo = Parts.sideGuideFrame(), rollGeo = Parts.sideGuideRoll();
+    this.stations = [g.X_IN, g.X_OUT].map(x => {
+      const sides = [1, -1].map(s => {
+        const grp = new THREE.Group();
+        const f = new THREE.Mesh(frameGeo, MAT.guide); f.castShadow = true;
+        if (s < 0) grp.rotation.y = Math.PI;
+        grp.add(f);
+        const rolls = new Instances(rollGeo, MAT.rollNeck, g.N, { cull: false });
+        for (let i = 0; i < g.N; i++)
+          rolls.set(i, -g.LEN / 2 + g.LEN * (i + 0.5) / g.N, g.H / 2, 190);
+        rolls.commit(); grp.add(rolls.mesh);
+        grp.position.set(u(x), u(P), 0); scene.add(grp); return grp;
+      });
+      return { x, sides };
+    });
+  }
+  update(mill) {
+    for (const st of this.stations) {
+      const z = mill.guideGap / 2 + 140;
+      st.sides[0].position.z =  u(z); st.sides[1].position.z = -u(z);
+    }
+  }
+}
+
+class ShearView {
+  constructor(scene) {
+    const S = CONFIG.SHEAR, P = CONFIG.MILL.PASS_LINE;
+    this.group = new THREE.Group(); this.group.position.x = u(S.X); scene.add(this.group);
+    const body = new THREE.Mesh(Parts.shearStatic(), MAT.shearBody);
+    body.castShadow = body.receiveShadow = true; this.group.add(body);
+    this.ram = new THREE.Mesh(Parts.shearRam(), MAT.shearBody); this.ram.castShadow = true; this.group.add(this.ram);
+    this.blade = new THREE.Mesh(Parts.shearBlade(), MAT.blade); this.blade.castShadow = true; this.group.add(this.blade);
+    this.hold = new THREE.Mesh(Parts.shearHoldDown(), MAT.shearBody); this.group.add(this.hold);
+    this.crop = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slab); this.crop.castShadow = true;
+    this.crop.visible = false; scene.add(this.crop);
+    this.P = P;
+  }
+  update(shear, slab, mill) {
+    const S = CONFIG.SHEAR, P = mill.passLine;
+    const open = S.OPEN, drop = shear.blade * (open + slab.thickness + 120);
+    const y = P + open + 320 - drop;
+    this.ram.position.y = u(y + 520); this.blade.position.y = u(y);
+    this.hold.position.y = u(P + slab.thickness + 210 - shear.blade * 200);
+    this.hold.position.x = u(-900);
+    this.crop.visible = shear.cropVisible;
+    if (shear.cropVisible) {
+      this.crop.scale.set(u(Math.max(shear.cropLen, 1)), u(slab.thickness), u(slab.width));
+      this.crop.position.set(u(shear.cropX), u(P + shear.cropY + slab.thickness / 2), 0);
+      this.crop.rotation.z = Num.clamp(shear.cropY / 900, -0.9, 0);
+    }
+  }
+}
+
+class SupplyView {
+  constructor(scene) {
+    const S = CONFIG.SUPPLY, P = CONFIG.MILL.PASS_LINE;
+    this.group = new THREE.Group(); scene.add(this.group);
+    // 転倒装置（スラブを縦置きから平置きへ倒す）
+    this.tilterPivot = new THREE.Group();
+    this.tilterPivot.position.set(u(S.TILTER_X), u(P), u(S.SIDE_Z));
+    const arm = new THREE.Mesh(Parts.tilterArm(), MAT.hydraulic); arm.castShadow = true;
+    this.tilterArm = new THREE.Group(); this.tilterArm.add(arm); this.tilterPivot.add(this.tilterArm);
+    const tb = new THREE.Mesh(Parts.tilterBase(), MAT.base); tb.receiveShadow = true; this.tilterPivot.add(tb);
+    this.group.add(this.tilterPivot);
+
+    // 縦送りテーブル（+X へ搬送）
+    const runXs = []; for (let x = S.RUNIN_X0; x <= S.RUNIN_X1; x += S.PITCH) runXs.push(x);
+    this.runIn = new Instances(Parts.tableRoll(), MAT.rollFace, runXs.length, { dynamic: true, cull: false });
+    const rp = new Instances(Parts.tablePedestal(), MAT.tableFrame, runXs.length * 2, { cull: false });
+    runXs.forEach((x, i) => {
+      this.runIn.set(i, x, P - CONFIG.TABLE.ROLL_D / 2, S.SIDE_Z);
+      rp.set(i * 2,     x, 0, S.SIDE_Z + CONFIG.TABLE.BARREL / 2 + 320);
+      rp.set(i * 2 + 1, x, 0, S.SIDE_Z - CONFIG.TABLE.BARREL / 2 - 320);
+    });
+    this.runIn.commit(); rp.commit(); this.group.add(this.runIn.mesh, rp.mesh);
+    this.runXs = runXs;
+
+    // 横送りローラ列（主テーブルの隙間に配置し −Z へ移載）
+    const zs = []; for (let z = -1200; z <= S.SIDE_Z + 1200; z += S.PITCH) zs.push(z);
+    this.cross = new Instances(Parts.crossRoll(), MAT.rollFace, zs.length * S.CROSS_X.length, { dynamic: true, cull: false });
+    this.crossSlots = [];
+    let i = 0;
+    for (const x of S.CROSS_X) for (const z of zs) { this.crossSlots.push([x, z]); this.cross.set(i++, x, P - S.ROLL_D / 2, z); }
+    this.cross.commit(); this.group.add(this.cross.mesh);
+
+    this.slab = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slab);
+    this.slab.castShadow = true; scene.add(this.slab);
+  }
+  update(sup, slab, mill, dt) {
+    const S = CONFIG.SUPPLY, P = mill.passLine;
+    const tilt = (1 - sup.tilt) * Math.PI / 2;
+    this.tilterArm.rotation.z = tilt;
+
+    const active = sup.active || !slab.onLine;
+    this.slab.visible = active;
+    if (!active) return;
+    const th = slab.thickness, w = slab.width, L = slab.length;
+    this.slab.scale.set(u(L), u(th), u(w));
+    const phase = sup.active ? sup.phase : 'TILT';
+    if (phase === 'TILT') {
+      const c = Math.cos(tilt), s = Math.sin(tilt);
+      const lx = L / 2, ly = th / 2;
+      this.slab.position.set(u(S.TILTER_X + lx * c - ly * s), u(P + lx * s + ly * c), u(S.SIDE_Z));
+      this.slab.rotation.set(0, 0, tilt);
+    } else if (phase === 'RUNIN') {
+      const x = Num.lerp(S.TILTER_X + L / 2, S.ENTRY_X, sup.runIn);
+      this.slab.position.set(u(x), u(P + th / 2), u(S.SIDE_Z));
+      this.slab.rotation.set(0, 0, 0);
+      const a = -sup.runIn * 40;
+      this.runXs.forEach((x2, i) => this.runIn.set(i, x2, P - CONFIG.TABLE.ROLL_D / 2, S.SIDE_Z, 0, 0, a));
+      this.runIn.commit();
+    } else {
+      const z = Num.lerp(S.SIDE_Z, 0, sup.cross);
+      this.slab.position.set(u(S.ENTRY_X), u(P + th / 2), u(z));
+      this.slab.rotation.set(0, 0, 0);
+      const a = -sup.cross * 40;
+      this.crossSlots.forEach(([x, z2], i) => this.cross.set(i, x, P - S.ROLL_D / 2, z2, a, 0, 0));
+      this.cross.commit();
+    }
+  }
+}
+
+/** 圧延材。ロールバイト内の板厚プロファイルを持つ単一メッシュ。 */
+class SlabView {
+  constructor(scene) {
+    this.geo = new THREE.BoxGeometry(1, 1, 1, 96, 2, 6);
+    this.base = this.geo.attributes.position.clone();
+    this.mesh = new THREE.Mesh(this.geo, MAT.slab);
+    this.mesh.castShadow = true; this.mesh.frustumCulled = false;
+    scene.add(this.mesh);
+  }
+  /**
+   * 頂点の X 分布をロールバイト近傍へ寄せる。
+   * 板長は最終パスで数十 m に達する一方、接触弧長は 150 mm 程度しかない。
+   * 等分割のままでは圧下部が1セグメントにも満たず形状が消えるため、
+   * パラメータの半分をバイト近傍の窓へ割り当てる（総頂点数は増やさない）。
+   */
+  _mapX(bx) {
+    const m = this._map;
+    if (!m) return 0;
+    if (bx < m.pl) return m.xMin + (bx / m.pl) * m.a * m.L;
+    if (bx < m.pl + m.pw) return m.xMin + (m.a + ((bx - m.pl) / m.pw) * (m.b - m.a)) * m.L;
+    return m.xMin + (m.b + ((bx - m.pl - m.pw) / m.pr) * (1 - m.b)) * m.L;
+  }
+  update(slab, mill) {
+    this.mesh.visible = slab.onLine && slab.length > 1;
+    if (!this.mesh.visible) return;
+    // 形状が変わっていなければ頂点更新も法線再計算も行わない（停止中のコストをゼロに）
+    const sig = slab.xMin + ':' + slab.xMax + ':' + slab.thickness + ':' + slab.width + ':'
+              + mill.gap + ':' + mill.passLine + ':' + slab.inBite + ':' + slab.dir;
+    if (sig === this._sig) return;
+    this._sig = sig;
+    const L = slab.xMax - slab.xMin, w = slab.width, P = mill.passLine;
+    const hIn = slab.thickness, gap = mill.gap;
+    const rolling = slab.inBite && hIn > gap + 1e-6;
+    const red = Num.clamp(1 - slab.thickness / slab.initialThickness, 0, 1);
+
+    this._map = null;
+    if (rolling) {
+      const Ld = Rolling.contactLength(hIn, gap);
+      const hw = Num.clamp((Ld * 8) / L, 0.004, 0.45);       // 注目窓の正規化半幅
+      const c = Num.clamp(-slab.xMin / L, 0, 1);
+      const a = Math.max(0, c - hw), b = Math.min(1, c + hw);
+      const wl = a, wr = 1 - b, den = (wl + wr) || 1, F = 0.55;
+      const pl = Math.max((1 - F) * wl / den, 1e-6), pr = Math.max((1 - F) * wr / den, 1e-6);
+      const pw = Math.max(1 - pl - pr, 1e-6);
+      this._map = { xMin: slab.xMin, L, a, b, pl, pw, pr };
+    }
+
+    const pos = this.geo.attributes.position, base = this.base, n = pos.count;
+    for (let i = 0; i < n; i++) {
+      const bx = base.getX(i) + 0.5, by = base.getY(i) + 0.5, bz = base.getZ(i);
+      let x = this._map ? this._mapX(bx) : slab.xMin + bx * L, h = hIn, dip = 0;
+      if (rolling) { const p = Rolling.profile(x, hIn, gap, slab.dir); h = p.h; dip = p.dip; }
+      // 端部の張り出し（舌＝幅中央が伸び、ワニ口＝表裏が伸びる）
+      const e = (Math.abs(bx * 2 - 1) - 0.88) / 0.12;
+      if (e > 0) {
+        const ramp = e * e, sgn = bx > 0.5 ? 1 : -1, nz = bz * 2, ny = by * 2 - 1;
+        x += sgn * (w * 0.09 * red * ramp * (1 - nz * nz) + L * 0.025 * red * ramp * ny * ny);
+      }
+      pos.setXYZ(i, u(x), u(P - dip + by * h), u(bz * w));
+    }
+    pos.needsUpdate = true;
+    this.geo.computeVertexNormals();
+    this.geo.computeBoundingSphere();
+  }
+}
+
+class SprayView {
+  constructor(scene) {
+    this.coolant = new ParticleField(scene, { count: 900, size: u(70), color: CONFIG.COLORS.COOLANT,
+      opacity: 0.55, gravity: -9810, blending: THREE.NormalBlending });
+    this.steam = new ParticleField(scene, { count: 500, size: u(700), color: 0xffffff,
+      opacity: 0.13, gravity: 1400, blending: THREE.NormalBlending });
+    this.acc = 0;
+  }
+  update(dt, phys) {
+    const { slab, mill, env } = phys, M = CONFIG.MILL;
+    const running = Math.abs(mill.currentSpeed) > 3 && slab.onLine;
+    if (env.coolant && running) {
+      // ロール冷却・潤滑エマルジョンをワークロール面へ噴射する（材料への直接噴射ではない）
+      const nz = Math.min(24, Math.ceil(dt * 700));
+      for (let k = 0; k < nz; k++) {
+        const top = Math.random() < 0.5;
+        const y = (top ? mill.wrTopY : mill.wrBotY) + (top ? 1 : -1) * (M.WR_D / 2 + 400);
+        const sx = Math.random() < 0.5 ? -1 : 1;
+        this.coolant.spawn(sx * 1250 + (Math.random() - .5) * 200, y,
+          (Math.random() - .5) * M.BARREL,
+          -sx * 900 + (Math.random() - .5) * 400, top ? -2600 : 2600, (Math.random() - .5) * 500, 0.55);
+      }
+    }
+    this.coolant.update(dt, mill.passLine - 800);
+    if (env.steam && running && slab.inBite) {
+      const ns = Math.min(8, Math.ceil(dt * 90));
+      for (let k = 0; k < ns; k++)
+        this.steam.spawn((Math.random() - .5) * 5200, mill.passLine + 500 + Math.random() * 1400,
+          (Math.random() - .5) * (CONFIG.TABLE.BARREL + 1200),
+          (Math.random() - .5) * 700, 600 + Math.random() * 700, (Math.random() - .5) * 700, 2.4);
+    }
+    this.steam.update(dt);
+  }
+  clear(which) { if (which === 'coolant') this.coolant.clear(); else this.steam.clear(); }
+}
+
+/** 3D上の設備ラベル（DOMを投影。ジオメトリを増やさない） */
+class LabelView {
+  constructor(camera, host) {
+    this.camera = camera; this.host = host; this.enabled = true;
+    const M = CONFIG.MILL, D = CONFIG.DRIVE, S = CONFIG.SUPPLY;
+    // ラベル文言は CONFIG から生成する（表示と実体の食い違いを構造的に起こさない）
+    this.items = [
+      ['圧延スタンド（4段可逆）',                    0,  7900,        0, 70000],
+      [`ワークロール φ${M.WR_D}`,                 3300,  1150,        0, 26000],
+      [`バックアップロール φ${M.BR_D}`,          -3500,  3600,        0, 26000],
+      ['油圧圧下シリンダ',                          0,  5500,     2450, 32000],
+      ['ロールチョック',                         2500,  2700,     2450, 20000],
+      ['パスライン調整ウェッジ',                    0, -1900,     2450, 20000],
+      ['ユニバーサルスピンドル',                    0,  1600,    -6400, 32000],
+      ['ピニオンスタンド',                          0,  3500,    -9500, 42000],
+      ['主電動機',                                  0,  3700, D.MOTOR_Z, 60000],
+      ['サイドガイド',                          -3300,  1900,     2300, 18000],
+      ['入側テーブル',                         -26000,  1600,        0, 95000],
+      ['出側テーブル',                          26000,  1600,        0, 95000],
+      ['転倒装置',                        S.TILTER_X,  3600, S.SIDE_Z,  75000],
+      ['横送り設備',                        S.ENTRY_X,  2300, S.SIDE_Z / 2, 55000],
+      ['クロップシャー',              CONFIG.SHEAR.X,  6400,        0, 95000],
+    ].map(([t, x, y, z, maxD]) => {
+      const el = document.createElement('div'); el.className = 'tag'; el.textContent = t;
+      host.appendChild(el);
+      return { el, v: new THREE.Vector3(u(x), u(y), u(z)), maxD: u(maxD) };
+    });
+    this._p = new THREE.Vector3();
+  }
+  update(w, h) {
+    // DOM への書き込みはレイアウト再計算を誘発するので 20 Hz に間引き、
+    // かつ 1 px 以上動いたときだけ書き換える。
+    const now = performance.now();
+    if (now - (this._t || 0) < 50) return;
+    this._t = now;
+    for (const it of this.items) {
+      if (!this.enabled) { if (it.on) { it.el.classList.remove('on'); it.on = false; } continue; }
+      const dist = this.camera.position.distanceTo(it.v);
+      this._p.copy(it.v).project(this.camera);
+      const on = dist < it.maxD && this._p.z < 1
+              && Math.abs(this._p.x) < 0.96 && Math.abs(this._p.y) < 0.94;
+      if (on !== it.on) { it.el.classList.toggle('on', on); it.on = on; }
+      if (!on) continue;
+      const x = Math.round((this._p.x * .5 + .5) * w), y = Math.round((-this._p.y * .5 + .5) * h);
+      if (x !== it.x || y !== it.y) { it.x = x; it.y = y; it.el.style.transform = `translate(-50%,-50%) translate(${x}px,${y}px)`; }
+    }
+  }
+  setEnabled(v) { this.enabled = v; }
+}
+
+/* =============================================================================
+ * 11. WORLD —— シーン・ライティング・カメラ
+ * ========================================================================== */
 class World3D {
-    constructor(container, eventBus) {
-        this.eventBus = eventBus;
-        MaterialFactory.init();
-        this._initScene(container);
-        
-        this.scene.add(MeshFactory.createHousing());
-        const grid = new THREE.GridHelper(6000, 150, CONFIG.COLORS.GRID, 0xffffff);
-        grid.position.y = -50; grid.material.opacity = 0.4; grid.material.transparent = true;
-        this.scene.add(grid);
+  constructor(container, bus) {
+    this.bus = bus;
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0xdde5ea);
+    this.scene.fog = new THREE.Fog(0xdde5ea, u(45000), u(210000));
 
-        // Improved Shear
-        const shear = MeshFactory.createShear();
-        shear.position.x = 15000 * CONFIG.SCALE;
-        this.scene.add(shear);
+    this.camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 1, 24000);
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    this.renderer.setSize(innerWidth, innerHeight);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(this.renderer.domElement);
 
-        this.millView = new MillStandView(this.scene);
-        this.tableView = new TableRollerView(this.scene);
-        this.supplyView = new SupplySystemView(this.scene);
-        this.coolantSystem = new CoolantParticleSystem(this.scene);
+    // 環境マップ。金属表面は環境反射が無いと黒く沈むため、これが質感の要になる。
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    initMaterials(env);
 
-        this.deformSlabLeft = new DeformableSlabMesh('slab');
-        this.deformSlabRight = new DeformableSlabMesh('slab');
-        this.scene.add(this.deformSlabLeft.getMesh(), this.deformSlabRight.getMesh());
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true; this.controls.dampingFactor = 0.07;
+    this.controls.maxPolarAngle = Math.PI * 0.495;
+    this.controls.minDistance = u(2500); this.controls.maxDistance = u(160000);
+    this.controls.screenSpacePanning = false;
 
-        this._setupEvents();
-    }
+    this._lights();
+    this._world();
 
-    _initScene(container) {
-        this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 1, 8000);
-        // FIX: Adjusted camera to see the new Supply System location clearly
-        this.camera.position.set(300, 250, -4500);
-        this.camera.lookAt(-100, 50, 0);
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        container.appendChild(this.renderer.domElement);
-        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.target.set(-50, 50, 0);
-        this.controls.enableDamping = true;
-        this.scene.add(new THREE.HemisphereLight(0xffffff, 0xd7ccc8, 0.8));
-        const mainLight = new THREE.DirectionalLight(0xffffff, 1.8);
-        mainLight.position.set(100, 300, 150); mainLight.castShadow = true;
-        this.scene.add(mainLight);
-    }
+    this.labels = new LabelView(this.camera, document.getElementById('tags'));
+    this.cutaway = 'half'; this.millView.setCutaway('half');
+    this._dpr = 1.5; this.setQuality('std');
+    this.applyView(CONFIG.VIEWS[1], true);
 
-    _setupEvents() {
-        this.eventBus.on('STATE_UPDATE', (state) => this.render(state));
-        window.addEventListener('resize', () => {
-            this.camera.aspect = window.innerWidth / window.innerHeight;
-            this.camera.updateProjectionMatrix();
-            this.renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    }
+    addEventListener('resize', () => this.resize());
+    this.stats = { fps: 0, draws: 0, _n: 0, _t: performance.now() };
+  }
 
-    render(state) {
-        const dt = 0.016; 
-        
-        this.millView.update(state, dt);
-        this.tableView.update(state, dt);
-        this.supplyView.update(state);
-        this.coolantSystem.update(dt, state);
-        this._updateSlabVisuals(state);
+  _lights() {
+    this.scene.add(new THREE.HemisphereLight(0xdfeaf2, 0x9aa3a8, 1.15));
+    const key = new THREE.DirectionalLight(0xfff4e6, 2.1);
+    key.position.set(u(14000), u(26000), u(18000));
+    key.castShadow = true;
+    // 影はミルスタンド周辺に集中させる（200 m のシーン全体を覆うと粗くなり効果が出ない）
+    const s = u(16000), cam = key.shadow.camera;
+    cam.left = -s; cam.right = s; cam.top = s; cam.bottom = -s;
+    cam.near = u(6000); cam.far = u(70000);
+    key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = u(80);
+    this.scene.add(key, key.target);
+    this.key = key;
+    const fill = new THREE.DirectionalLight(0xdce8f2, 0.5);
+    fill.position.set(u(-16000), u(9000), u(-14000)); this.scene.add(fill);
+  }
 
-        this.controls.update();
-        this.renderer.render(this.scene, this.camera);
-    }
+  _world() {
+    const floor = new THREE.Mesh(Parts.building(), MAT.floor);
+    floor.receiveShadow = true; this.scene.add(floor);
+    const pit = new THREE.Mesh(Parts.pit(), MAT.pit);
+    pit.receiveShadow = true; this.scene.add(pit);
 
-    _updateSlabVisuals(state) {
-        const S = SimUtils.S;
-        const centerH = state.mill.centerHeight * S;
-        this.deformSlabLeft.setVisible(false);
-        this.deformSlabRight.setVisible(false);
-        
-        if (state.slab.visible) {
-            const xm = state.slab.xMin * 20; const xM = state.slab.xMax * 20;
-            if (xm < 0) {
-                const len = Math.min(0, xM) - xm;
-                if(len > 0.01) {
-                    this.deformSlabLeft.setVisible(true);
-                    let drawThick = state.slab.thickness;
-                    if (state.slab.inBite && state.mill.currentSpeed <= 0) drawThick = state.mill.gap;
-                    this.deformSlabLeft.update(len/S, drawThick, state.slab.width, state.slab.initialThickness, xm + len/2, centerH);
-                }
-            }
-            if (xM > 0 || (xM <= 0 && xm > -9999)) {
-                const end = xM;
-                if (end > 0) {
-                    const len = end - Math.max(0, xm);
-                    if(len > 0.01) {
-                        this.deformSlabRight.setVisible(true);
-                        let drawThick = state.slab.thickness;
-                        if (state.slab.inBite && state.mill.currentSpeed > 0) drawThick = state.mill.gap;
-                        this.deformSlabRight.update(len/S, drawThick, state.slab.width, state.slab.initialThickness, Math.max(0, xm) + len/2, centerH);
-                    }
-                }
-            }
-        }
-    }
+    this.millView  = new MillStandView(this.scene);
+    this.driveView = new DriveView(this.scene);
+    this.tableView = new TableView(this.scene);
+    this.guideView = new GuideView(this.scene);
+    this.shearView = new ShearView(this.scene);
+    this.supplyView= new SupplyView(this.scene);
+    this.slabView  = new SlabView(this.scene);
+    this.sprayView = new SprayView(this.scene);
+  }
+
+  setCutaway(mode) { this.cutaway = mode; this.millView.setCutaway(mode); }
+  /**
+   * 描画品質。環境反射は金属の質感を決める代わりにフラグメント単価が高いので、
+   * 影・解像度と合わせて一段で切り替えられるようにする。
+   */
+  setQuality(q) {
+    const env = q !== 'lite', shadow = q !== 'lite';
+    const dpr = q === 'high' ? 2 : q === 'std' ? 1.5 : 1;
+    for (const m of MAT.shinyList) { m.envMap = env ? MAT.envMap : null; m.needsUpdate = true; }
+    this.renderer.shadowMap.enabled = shadow; this.key.castShadow = shadow;
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, dpr));
+    this.renderer.setSize(innerWidth, innerHeight);
+    this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); });
+    this._dpr = dpr;
+  }
+  setShadows(on) { this.renderer.shadowMap.enabled = on; this.key.castShadow = on;
+    this.scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => m.needsUpdate = true); }); }
+  setLabels(on) { this.labels.setEnabled(on); }
+
+  /** カメラプリセットへの滑らかな遷移（唐突なジャンプは空間認知を壊す） */
+  applyView(v, instant = false) {
+    const pos = Sim.v3(v.pos), tgt = Sim.v3(v.tgt);
+    if (instant) { this.camera.position.copy(pos); this.controls.target.copy(tgt); this.controls.update(); this._tw = null; return; }
+    this._tw = { p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1: pos, t1: tgt, t: 0, d: 1.1 };
+  }
+  _tween(dt) {
+    const w = this._tw; if (!w) return;
+    w.t = Math.min(1, w.t + dt / w.d);
+    const e = w.t < .5 ? 4 * w.t ** 3 : 1 - Math.pow(-2 * w.t + 2, 3) / 2;
+    this.camera.position.lerpVectors(w.p0, w.p1, e);
+    this.controls.target.lerpVectors(w.t0, w.t1, e);
+    if (w.t >= 1) this._tw = null;
+  }
+
+  render(phys, dt) {
+    const { slab, mill, supply, shear } = phys;
+    this.millView.update(mill);
+    this.driveView.update(mill);
+    this.tableView.update(mill);
+    this.guideView.update(mill);
+    this.shearView.update(shear, slab, mill);
+    this.supplyView.update(supply, slab, mill, dt);
+    this.slabView.update(slab, mill);
+    this.sprayView.update(dt, phys);
+    // 熱間アルミは 400〜540 ℃ では可視発光しない。温度は色味と粗さの微差だけで表す。
+    const t = Num.clamp((slab.temperature - 300) / 260, 0, 1);
+    MAT.slab.color.copy(World3D.COLD).lerp(World3D.HOT, t);
+    MAT.slab.roughness = 0.36 + 0.16 * t;
+
+    this._tween(dt);
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+    this.labels.update(innerWidth, innerHeight);
+
+    const st = this.stats; st._n++;
+    const now = performance.now();
+    if (now - st._t > 500) { st.fps = Math.round(st._n * 1000 / (now - st._t)); st._n = 0; st._t = now;
+                             st.draws = this.renderer.info.render.calls; }
+  }
+
+  resize() {
+    this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix();
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, this._dpr ?? 1.5));
+    this.renderer.setSize(innerWidth, innerHeight);
+  }
 }
 
-// --- 7. UI MANAGER ---
+World3D.PRESETS = CONFIG.VIEWS;
+World3D.COLD = new THREE.Color(0xd8dce0);
+World3D.HOT  = new THREE.Color(0xbcc0c6);
+
+/* =============================================================================
+ * 12. UI —— 「探させない・思い出させない・推測させない」ための情報設計
+ *  ・入力(左) / 現物(中央) / 出力(下) を空間的に分離する
+ *  ・操作の結果（圧下量・圧下率・荷重率）を操作の場に併記して往復を無くす
+ *  ・状態と次の行動を常に1か所（上部バナー）に集約する
+ * ========================================================================== */
+const $ = (id) => document.getElementById(id);
+
 class UIManager {
-    constructor(eventBus) {
-        this.eventBus = eventBus;
-        this.dom = {
-            btnStart: document.getElementById('btn-start'),
-            btnReset: document.getElementById('btn-reset'),
-            chkAuto: document.getElementById('chk-auto'),
-            chkSupply: document.getElementById('chk-supply-anim'),
-            rngGap: document.getElementById('rng-gap'),
-            rngSpeed: document.getElementById('rng-speed'),
-            chkCoolant: document.getElementById('chk-coolant'),
-            passList: document.getElementById('pass-list-ul'),
-            msgBox: document.getElementById('msg-box'),
-            msgText: document.getElementById('msg-text'),
-            panelAuto: document.getElementById('auto-controls'),
-            panelManual: document.getElementById('manual-controls')
-        };
-        this._bindEvents();
-        this._setupListeners();
-        this._renderPassList(-1);
+  constructor(bus) {
+    this.bus = bus; this.busy = false; this.paused = false; this.warn = null;
+    this.timeScale = 1; this.passIndex = -1;
+    this._acc = 0;
+    this._buildSchedule(); this._buildViews(); this._buildSpec(); this._buildLegend();
+    this._bind(); this._listen();
+    this._banner('idle');
+  }
+
+  /* ---- 静的な表の構築 ---- */
+  _buildSchedule() {
+    const tb = $('sched-body'); let h = CONFIG.SCHEDULE[0] ? 400 : 400;
+    this.rows = CONFIG.SCHEDULE.map((s, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td><i class="fa-solid fa-circle-check" style="opacity:0"></i> ${s.pass}</td>
+        <td>${s.gap}</td><td class="red">–</td>
+        <td>${s.speed}<span class="dir"> ${s.dir > 0 ? '▶' : '◀'}</span></td>
+        <td class="ld">–<span class="load"><i></i></span></td>`;
+      tb.appendChild(tr); return tr;
+    });
+    $('sched-note').textContent =
+      `全 ${CONFIG.SCHEDULE.length} パス・可逆圧延。▶ 前進 / ◀ 逆行。荷重は常用最大 ${CONFIG.MILL.RATED_FORCE_T} t に対する比。`;
+  }
+  _buildViews() {
+    const host = $('cam-chips');
+    this.chips = CONFIG.VIEWS.map((v, i) => {
+      const b = document.createElement('button');
+      b.className = 'chip'; b.setAttribute('aria-pressed', i === 1 ? 'true' : 'false');
+      b.innerHTML = `<i class="fa-solid ${v.icon}"></i>${v.name}`;
+      b.onclick = () => this.selectView(i);
+      host.appendChild(b); return b;
+    });
+  }
+  _buildLegend() {
+    const C = CONFIG.COLORS, hex = v => '#' + v.toString(16).padStart(6, '0');
+    $('legend-items').innerHTML = [
+      [C.SLAB, 'アルミ材'], [C.ROLL_FACE, 'ロール'], [C.HOUSING, 'ハウジング・架構'],
+      [C.HYDRAULIC, '油圧・駆動'], [C.BLADE, 'シャー刃'],
+    ].map(([c, t]) => `<span><em style="background:${hex(c)};border:1px solid rgba(0,0,0,.15)"></em>${t}</span>`).join('');
+  }
+  _buildSpec() {
+    const M = CONFIG.MILL, T = CONFIG.TABLE;
+    const rows = [
+      ['形式', '4段可逆式熱間圧延機'],
+      ['ワークロール', `Φ${M.WR_D} × ${M.BARREL} mm`],
+      ['バックアップロール', `Φ${M.BR_D} × ${M.BR_BARREL} mm`],
+      ['最大圧延速度', `${M.MAX_SPEED} mpm`],
+      ['常用最大圧延荷重', `${M.RATED_FORCE_T.toLocaleString()} ton`],
+      ['非常最大圧延荷重', `${M.LIMIT_FORCE_T.toLocaleString()} ton`],
+      ['入側テーブル長', `${(Math.abs(T.X_MIN) / 1000).toFixed(1)} m`],
+      ['出側テーブル長', `${(T.X_MAX / 1000).toFixed(1)} m`],
+      ['主電動機容量', `${(M.RATED_POWER_KW / 1000).toFixed(0)} MW <span style="color:var(--ink-3)">(推定)</span>`],
+      ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
+    ];
+    $('spec-body').innerHTML = rows.map(([k, v]) =>
+      `<tr><td style="text-align:left;color:var(--ink-3)">${k}</td><td style="font-weight:700;color:var(--ink-1)">${v}</td></tr>`).join('');
+  }
+
+  /* ---- 入力の結線 ---- */
+  _bind() {
+    const on = (id, ev, fn) => $(id)?.addEventListener(ev, fn);
+
+    on('btn-start', 'click', () => this.toggleRun());
+    on('btn-pause', 'click', () => this.togglePause());
+    on('btn-reset', 'click', () => this.bus.emit('CMD_RESET'));
+    on('btn-stopline', 'click', () => this.bus.emit('CMD_STOP_LINE'));
+
+    const setMode = (auto) => {
+      $('mode-auto').setAttribute('aria-pressed', auto); $('mode-manual').setAttribute('aria-pressed', !auto);
+      $('auto-controls').style.display = auto ? 'block' : 'none';
+      $('manual-controls').style.display = auto ? 'none' : 'block';
+      this.bus.emit('CMD_SET_MODE', auto ? 'AUTO' : 'MANUAL');
+      this._banner(auto ? 'idle' : 'manual');
+    };
+    on('mode-auto', 'click', () => setMode(true));
+    on('mode-manual', 'click', () => setMode(false));
+
+    const gap = $('rng-gap'), spd = $('rng-speed');
+    spd.min = -CONFIG.MILL.MAX_SPEED; spd.max = CONFIG.MILL.MAX_SPEED;
+    gap.min = CONFIG.MILL.GAP_MIN; gap.max = CONFIG.MILL.GAP_MAX;
+    on('rng-gap', 'input', e => { this.bus.emit('CMD_MANUAL', { gap: +e.target.value }); this._manualLabels(); });
+    on('rng-speed', 'input', e => { this.bus.emit('CMD_MANUAL', { speed: +e.target.value }); this._manualLabels(); });
+
+    on('rng-timescale', 'input', e => { this.timeScale = +e.target.value; $('lbl-timescale').innerHTML = this.timeScale.toFixed(2).replace(/0$/, '') + '<em>×</em>'; });
+
+    const dims = () => {
+      const d = { th: +$('rng-init-th').value, wid: +$('rng-init-wid').value,
+                  len: +$('rng-init-len').value, temp: +$('rng-init-temp').value };
+      $('lbl-init-th').innerHTML   = d.th  + '<em>mm</em>';
+      $('lbl-init-wid').innerHTML  = d.wid + '<em>mm</em>';
+      $('lbl-init-len').innerHTML  = d.len + '<em>mm</em>';
+      $('lbl-init-temp').innerHTML = d.temp + '<em>℃</em>';
+      const last = CONFIG.SCHEDULE[CONFIG.SCHEDULE.length - 1].gap;
+      const outLen = d.len * d.th / last, vol = d.th * d.wid * d.len * 1e-9 * CONFIG.MATERIAL.RHO / 1000;
+      $('der-slab').innerHTML =
+        `質量 ${vol.toFixed(1)} t ／ 最終パス後 ${(outLen / 1000).toFixed(1)} m（伸び ${(d.th / last).toFixed(2)} 倍）` +
+        (outLen / 2 > Math.abs(CONFIG.TABLE.X_MIN) - CONFIG.SAFE_CLEAR
+          ? ' <span style="color:var(--crit);font-weight:700">※ テーブル長を超えます</span>' : '');
+      return d;
+    };
+    ['rng-init-th', 'rng-init-wid', 'rng-init-len', 'rng-init-temp'].forEach(id => on(id, 'input', dims));
+    dims();
+    on('btn-apply-size', 'click', () => this.bus.emit('CMD_SET_SLAB', dims()));
+
+    for (const [id, mode] of [['cut-solid', 'solid'], ['cut-half', 'half'], ['cut-xray', 'xray']])
+      on(id, 'click', () => this.setCutaway(mode));
+
+    on('chk-labels',  'change', e => this.bus.emit('CMD_VIEW', { labels: e.target.checked }));
+    for (const [id, q] of [['q-high', 'high'], ['q-std', 'std'], ['q-lite', 'lite']])
+      on(id, 'click', () => this.setQuality(q));
+    on('chk-coolant', 'change', e => this.bus.emit('CMD_SET_ENV', { coolant: e.target.checked }));
+    on('chk-steam',   'change', e => this.bus.emit('CMD_SET_ENV', { steam: e.target.checked }));
+    on('chk-supply-anim', 'change', e => this.bus.emit('CMD_SET_SUPPLY_ANIM', e.target.checked));
+
+    addEventListener('keydown', e => {
+      if (e.target.matches('input,select,textarea')) return;
+      const k = e.key.toLowerCase();
+      if (k === ' ') { e.preventDefault(); this.toggleRun(); }
+      else if (k === 'p') this.togglePause();
+      else if (k === 'r') this.bus.emit('CMD_RESET');
+      else if (k === 'l') { const c = $('chk-labels'); c.checked = !c.checked; c.dispatchEvent(new Event('change')); }
+      else if (k === 'c') this.setCutaway(this.cutaway === 'half' ? 'xray' : this.cutaway === 'xray' ? 'solid' : 'half');
+      else if (k >= '1' && k <= String(CONFIG.VIEWS.length)) this.selectView(+k - 1);
+    });
+    this._manualLabels();
+  }
+
+  _listen() {
+    this.bus.on('STATE_UPDATE', p => this.onState(p));
+    this.bus.on('STATE_PASS', i => { this.passIndex = i; this.renderSchedule(); });
+    this.bus.on('STATE_RESET', () => { this.busy = false; this.paused = false; this.passIndex = -1;
+      this.peak = {}; this.renderSchedule(); this._startBtn(); this._banner('idle'); });
+    this.bus.on('STATE_FINISHED', () => { this.busy = false; this._startBtn(); this._banner('done'); });
+    this.bus.on('SYS_MESSAGE', m => this.toast(m.text, m.kind));
+    this.bus.on('STATE_WARN', w => { this.warn = w; if (w) this.toast(w.text, w.kind); this._banner(); });
+    this.peak = {};
+  }
+
+  /* ---- 操作 ---- */
+  toggleRun() {
+    if (this.busy) { this.bus.emit('CMD_RESET'); return; }
+    this.busy = true; this.paused = false; this.bus.emit('CMD_PAUSE', false);
+    this.bus.emit('CMD_START_AUTO'); this._startBtn();
+  }
+  togglePause() { if (!this.busy) return; this.paused = !this.paused; this.bus.emit('CMD_PAUSE', this.paused);
+    $('btn-pause').innerHTML = this.paused ? '<i class="fa-solid fa-play"></i>再開' : '<i class="fa-solid fa-pause"></i>一時停止';
+    this._banner(); }
+  _startBtn() {
+    const b = $('btn-start');
+    b.className = 'btn ' + (this.busy ? 'btn-danger' : 'btn-primary');
+    b.innerHTML = this.busy
+      ? '<i class="fa-solid fa-stop"></i><span>運転を中止</span><span class="kbd">Space</span>'
+      : '<i class="fa-solid fa-play"></i><span>圧延サイクル開始</span><span class="kbd">Space</span>';
+    $('btn-pause').innerHTML = '<i class="fa-solid fa-pause"></i>一時停止';
+  }
+  selectView(i) {
+    this.chips.forEach((c, k) => c.setAttribute('aria-pressed', k === i));
+    this.bus.emit('CMD_VIEW', { preset: CONFIG.VIEWS[i] });
+  }
+  setCutaway(mode) {
+    this.cutaway = mode;
+    for (const [id, m] of [['cut-solid', 'solid'], ['cut-half', 'half'], ['cut-xray', 'xray']])
+      $(id).setAttribute('aria-pressed', m === mode);
+    this.bus.emit('CMD_VIEW', { cutaway: mode });
+  }
+  setQuality(q) {
+    for (const [id, k] of [['q-high', 'high'], ['q-std', 'std'], ['q-lite', 'lite']])
+      $(id).setAttribute('aria-pressed', k === q);
+    $('der-quality').textContent = {
+      high: '高：環境反射あり・影あり・解像度 2×まで。GPU に余裕がある場合に。',
+      std:  '標準：環境反射あり・影あり・解像度 1.5×まで',
+      lite: '軽量：環境反射なし・影なし・解像度 1×。フレームレートを最優先。',
+    }[q];
+    this.bus.emit('CMD_VIEW', { quality: q });
+  }
+
+  _manualLabels() {
+    const g = +$('rng-gap').value, s = +$('rng-speed').value;
+    $('lbl-gap').innerHTML = g + '<em>mm</em>';
+    $('lbl-speed').innerHTML = s + '<em>mpm</em>';
+    if (this._lastThickness) {
+      const dh = Math.max(0, this._lastThickness - g);
+      $('der-gap').textContent = `圧下量 ${dh.toFixed(0)} mm ／ 圧下率 ${(dh / this._lastThickness * 100).toFixed(1)} %`;
     }
-    _bindEvents() {
-        const on = (id, evt, fn) => document.getElementById(id)?.addEventListener(evt, fn);
-        on('btn-start', 'click', () => { this.eventBus.emit('CMD_START_AUTO'); this._setBusyState(true); });
-        on('btn-reset', 'click', () => this.eventBus.emit('CMD_RESET'));
-        on('chk-auto', 'change', (e) => {
-            const isAuto = e.target.checked;
-            this.dom.panelAuto.style.display = isAuto ? 'block' : 'none';
-            this.dom.panelManual.style.display = !isAuto ? 'block' : 'none';
-            this.eventBus.emit('CMD_SET_MODE', isAuto ? 'AUTO' : 'MANUAL');
-        });
-        on('chk-supply-anim', 'change', (e) => this.eventBus.emit('CMD_SET_SUPPLY_OPTS', { anim: e.target.checked }));
-        on('rng-gap', 'input', (e) => this.eventBus.emit('CMD_MANUAL_CTRL', { gap: +e.target.value }));
-        on('rng-speed', 'input', (e) => this.eventBus.emit('CMD_MANUAL_CTRL', { speed: +e.target.value }));
-        on('chk-coolant', 'change', (e) => this.eventBus.emit('CMD_SET_ENV', { coolantOn: e.target.checked }));
-        const updateDims = () => {
-             const d = { th: +document.getElementById('rng-init-th').value, wid: +document.getElementById('rng-init-wid').value, len: +document.getElementById('rng-init-len').value };
-            document.getElementById('lbl-init-th').innerText = d.th + " mm";
-            document.getElementById('lbl-init-wid').innerText = d.wid + " mm";
-            document.getElementById('lbl-init-len').innerText = d.len + " mm";
-            return d;
-        };
-        ['rng-init-th','rng-init-wid','rng-init-len'].forEach(id => on(id, 'input', updateDims));
-        on('btn-apply-size', 'click', () => { this.eventBus.emit('CMD_SET_SLAB_SIZE', updateDims()); this.eventBus.emit('CMD_RESET'); });
+  }
+
+  /* ---- 出力 ---- */
+  renderSchedule() {
+    let h = this.h0 ?? 400;
+    CONFIG.SCHEDULE.forEach((s, i) => {
+      const tr = this.rows[i];
+      tr.className = i < this.passIndex || (this.passIndex === -1 && this.finished) ? 'done'
+                   : i === this.passIndex ? 'active' : '';
+      tr.querySelector('.red').textContent = ((1 - s.gap / h) * 100).toFixed(1) + '%';
+      tr.querySelector('td i').style.opacity = (i < this.passIndex) ? 1 : 0;
+      const pk = this.peak[i];
+      const ld = tr.querySelector('.ld');
+      const ratio = pk ? Num.clamp(pk / CONFIG.MILL.RATED_FORCE_T, 0, 1) : 0;
+      ld.firstChild.nodeValue = pk ? Math.round(pk).toLocaleString() + ' t' : '–';
+      ld.querySelector('.load i').style.width = (ratio * 100) + '%';
+      h = s.gap;
+    });
+  }
+
+  onState(p) {
+    this._acc = (this._acc || 0) + 1;
+    const s = p.slab, m = p.mill;
+    this._lastThickness = s.thickness;
+    if (m.passIndex >= 0 && s.rollForce > 0)
+      this.peak[m.passIndex] = Math.max(this.peak[m.passIndex] ?? 0, s.rollForce);
+    if (this._acc % 4) return;                       // 表示更新は ~15 Hz（レイアウト負荷を抑える）
+
+    const M = CONFIG.MILL;
+    $('m-pass-v').textContent  = m.passIndex >= 0 ? `${m.passIndex + 1}` : (this.finished ? '完了' : this.busy ? '–' : '0');
+    $('m-pass-s').textContent  = `/ 全 ${CONFIG.SCHEDULE.length} パス`;
+    $('m-thick-v').textContent = s.thickness.toFixed(0);
+    $('m-thick-s').textContent = `累積圧下率 ${(s.reduction * 100).toFixed(1)} %`;
+    $('m-len-v').textContent   = (s.length / 1000).toFixed(2);
+    $('m-len-s').textContent   = `伸び ${(s.length / (this.len0 || s.length)).toFixed(2)} 倍`;
+    $('m-speed-v').textContent = (Math.abs(m.currentSpeed)).toFixed(0);
+    $('m-speed-s').textContent = m.currentSpeed > 1 ? '前進 ▶' : m.currentSpeed < -1 ? '◀ 逆行' : '停止';
+    this._meter('m-force', s.rollForce, M.RATED_FORCE_T, s.rollForce.toFixed(0), t => `常用最大の ${(t * 100).toFixed(0)} %`);
+    this._meter('m-power', s.rollPower / 1000, M.RATED_POWER_KW / 1000, (s.rollPower / 1000).toFixed(1), t => `定格の ${(t * 100).toFixed(0)} %`);
+    $('m-temp-v').textContent  = s.temperature.toFixed(0);
+    $('m-temp-s').textContent  = s.temperature < CONFIG.MATERIAL.T_MIN_ROLLABLE ? '熱間域を下回る' : '熱間圧延域';
+    $('m-gap-v').textContent   = m.gap.toFixed(0);
+    $('m-gap-s').textContent   = `目標 ${m.targetGap.toFixed(0)} mm`;
+    this._banner();
+    const st = window.__world?.stats;
+    if (st) { $('fps').textContent = st.fps + ' fps'; $('dcalls').textContent = st.draws + ' draw'; }
+  }
+
+  _meter(id, val, rated, text, subFn) {
+    const card = $(id), t = Num.clamp(val / rated, 0, 1);
+    $(id + '-v').textContent = text;
+    $(id + '-s').textContent = subFn(val / rated);
+    card.querySelector('.bar i').style.width = (t * 100) + '%';
+    card.classList.toggle('is-warn', val / rated > 0.85 && val / rated <= 1);
+    card.classList.toggle('is-crit', val / rated > 1);
+  }
+
+  _banner(force) {
+    const p = window.__phys; if (!p && !force) return;
+    let cls = '', ic = 'fa-power-off', st = '待機中', hint = '「圧延サイクル開始」でスラブ装入から自動運転します。';
+    if (this.warn) { cls = this.warn.kind === 'crit' ? 'is-warn' : 'is-warn'; ic = 'fa-triangle-exclamation';
+                     st = this.warn.kind === 'crit' ? '定格超過' : '注意'; hint = this.warn.text; }
+    else if (force === 'done' || this._doneFlag) { cls = 'is-run'; ic = 'fa-flag-checkered'; st = '完了'; hint = 'リセットで初期状態へ戻せます。'; }
+    else if (this.paused) { cls = ''; ic = 'fa-pause'; st = '一時停止中'; hint = '<kbd>P</kbd> または「再開」で続行します。'; }
+    else if (p) {
+      const m = p.mill, s = p.slab;
+      if (p.supply.active) { cls = 'is-run'; ic = 'fa-truck-ramp-box'; st = 'スラブ装入中';
+        hint = { TILT: '転倒装置でスラブを平置きにしています', RUNIN: '縦送りテーブルで搬送中', CROSS: '横送りでミルラインへ移載中' }[p.supply.phase] ?? ''; }
+      else if (p.shear.phase !== 'IDLE' && p.shear.phase !== 'DONE') { cls = 'is-run'; ic = 'fa-scissors'; st = 'クロップ切断';
+        hint = { APPROACH: '先端を切断位置まで搬送しています', CUT: '切断中', RETRACT: '刃を戻しています' }[p.shear.phase] ?? ''; }
+      else if (m.passIndex >= 0) {
+        const sch = CONFIG.SCHEDULE[m.passIndex];
+        cls = 'is-run'; ic = 'fa-arrows-left-right'; st = `第 ${sch.pass} パス ${m.passPhase === 'SETUP' ? 'セットアップ' : '圧延中'}`;
+        hint = m.passPhase === 'SETUP'
+          ? `圧下シリンダでギャップを ${sch.gap} mm へ設定中（現在 ${m.gap.toFixed(0)} mm）`
+          : `出側厚 ${sch.gap} mm ／ ${sch.dir > 0 ? '前進' : '逆行'} ${sch.speed} mpm`;
+      }
     }
-    _setupListeners() {
-        this.eventBus.on('STATE_UPDATE', (s) => this._updateMetrics(s));
-        this.eventBus.on('STATE_PASS_CHANGED', (i) => this._renderPassList(i));
-        this.eventBus.on('STATE_FINISHED', () => { this._setBusyState(false); this._renderPassList(999); });
-        this.eventBus.on('SYS_MESSAGE', (txt) => this._showMessage(txt));
-        this.eventBus.on('STATE_RESET', () => { this._setBusyState(false); this._renderPassList(-1); this._showMessage("Ready to Start"); });
-    }
-    _renderPassList(currentIndex) {
-        this.dom.passList.innerHTML = '';
-        CONFIG.SCHEDULE.forEach(sch => {
-            const li = document.createElement('li');
-            let status = '';
-            if (sch.pass < currentIndex + 1) status = 'done'; if (sch.pass === currentIndex + 1) status = 'active';
-            li.className = `pass-item ${status}`;
-            li.innerHTML = `<span>#${sch.pass}</span><span>${sch.gap}mm</span><span>${sch.dir>0?'FWD':'REV'}</span>`;
-            this.dom.passList.appendChild(li);
-        });
-    }
-    _updateMetrics(state) {
-        document.getElementById('val-center-h').textContent = state.mill.centerHeight.toFixed(1);
-        document.getElementById('val-speed').textContent = state.slab.currentSpeed.toFixed(0);
-        document.getElementById('val-force').textContent = state.slab.rollForce.toFixed(0);
-        document.getElementById('val-temp').textContent = state.slab.temperature.toFixed(0);
-        document.getElementById('val-length').textContent = (state.slab.length/1000).toFixed(1);
-    }
-    _setBusyState(isBusy) {
-        this.dom.btnStart.className = isBusy ? 'btn btn-danger' : 'btn btn-primary';
-        this.dom.btnStart.innerHTML = isBusy ? '<i class="fa-solid fa-spinner fa-spin"></i> 運転中...' : '<i class="fa-solid fa-play"></i> 圧延サイクル開始';
-    }
-    _showMessage(text) {
-        this.dom.msgText.textContent = text;
-        this.dom.msgBox.classList.add('show-msg');
-        setTimeout(() => this.dom.msgBox.classList.remove('show-msg'), 2500);
-    }
+    const b = $('status-banner');
+    if (b.dataset.k === st + hint) return;
+    b.dataset.k = st + hint; b.className = cls;
+    $('sb-icon').className = 'fa-solid ' + ic; $('sb-state').textContent = st; $('sb-hint').innerHTML = hint;
+  }
+
+  toast(text, kind = 'info') {
+    const t = $('toast'); t.textContent = text;
+    t.className = 'show' + (kind === 'crit' ? ' crit' : kind === 'warn' ? ' warn' : '');
+    clearTimeout(this._tt); this._tt = setTimeout(() => t.classList.remove('show'), 3200);
+  }
 }
 
+/* =============================================================================
+ * 13. APP
+ * ========================================================================== */
 class App {
-    constructor() {
-        const bus = new EventBus();
-        this.physics = new PhysicsEngine(bus);
-        this.ui = new UIManager(bus);
-        this.world = new World3D(document.getElementById('canvas-container'), bus);
-        this.clock = new THREE.Clock();
-        bus.emit('CMD_RESET');
-        this.animate();
+  constructor() {
+    const bus = this.bus = new EventBus();
+    this.ui = new UIManager(bus);
+    this.world = new World3D($('canvas-container'), bus);
+    this.physics = new PhysicsEngine(bus);
+    window.__world = this.world; window.__phys = this.physics;
+    this.ui.len0 = this.physics.slab.length; this.ui.h0 = this.physics.slab.initialThickness;
+
+    bus.on('CMD_VIEW', d => {
+      if (d.preset) this.world.applyView(d.preset);
+      if (d.cutaway) this.world.setCutaway(d.cutaway);
+      if (d.labels !== undefined) this.world.setLabels(d.labels);
+      if (d.quality) this.world.setQuality(d.quality);
+    });
+    bus.on('STATE_FINISHED', () => { this.ui._doneFlag = true; this.ui.finished = true; this.ui.renderSchedule(); });
+    bus.on('STATE_RESET', () => { this.ui._doneFlag = false; this.ui.finished = false;
+      this.ui.len0 = this.physics.slab.length; this.ui.h0 = this.physics.slab.initialThickness; this.ui.renderSchedule(); });
+
+    this.clock = new THREE.Clock();
+    bus.emit('CMD_RESET');
+    $('boot').classList.add('hide');
+    this.loop = this.loop.bind(this); this.loop();
+  }
+  loop() {
+    requestAnimationFrame(this.loop);
+    const raw = Math.min(this.clock.getDelta(), 0.25);
+    this.physics.update(raw * this.ui.timeScale);
+    this.world.render(this.physics, raw);
+    this._probeQuality(raw);
+  }
+
+  /**
+   * 起動直後にフレームレートを実測し、描画が重すぎる環境では自動的に品質を落とす。
+   * 「重い」と気づいて設定を探す手間をユーザーに負わせないための先回り。
+   * 物理計算は品質設定に依存しないため、挙動は変わらない。
+   */
+  _probeQuality(dt) {
+    if (this._probed) return;
+    (this._samples ??= []).push(dt);
+    if (this._samples.length < 70) return;              // 起動直後のシェーダ compile 分は除く
+    this._probed = true;
+    const s = this._samples.slice(30).sort((a, b) => a - b);
+    const med = s[Math.floor(s.length / 2)];
+    if (med > 1 / 20) {                                 // 20 fps を下回る環境だけを対象にする
+      this.ui.setQuality('lite');
+      this.ui.toast('描画負荷が高いため品質を「軽量」に切り替えました（表示メニューで変更できます）', 'warn');
     }
-    animate() {
-        requestAnimationFrame(() => this.animate());
-        this.physics.update(this.clock.getDelta());
-    }
+  }
 }
+
+addEventListener('error', (e) => {
+  const b = $('boot'); if (!b || b.classList.contains('hide')) return;
+  b.classList.add('error');
+  $('boot-error').textContent =
+    '起動に失敗しました。three.js の読み込み（unpkg.com）に到達できない可能性があります。ネットワーク接続をご確認ください。詳細: ' + (e.message || e);
+});
+
 new App();
 </script>
 </body>
