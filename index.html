@@ -477,20 +477,28 @@ const CONFIG = {
     PITCH_NEAR: 900, PITCH_FAR: 1500, NEAR_ZONE: 22000,
     X_MIN: -121800, X_MAX: 80100,
     CLEAR: 1600,                            // ミル直下は敷板(エプロン)なのでローラを置かない
-    GUIDE: { X_IN: -2700, X_OUT: 2700, LEN: 4200, H: 700, ROLL_D: 260, N: 5,
+    GUIDE: { X_IN: -2700, X_OUT: 2700, LEN: 3600, H: 700, ROLL_D: 260, N: 4,
              OPEN_MARGIN: 600, RATE: 500 },
   },
 
-  SUPPLY: {                                  // オペレータ側 (+Z) のスラブ装入設備
-    SIDE_Z: 9500,
-    ENTRY_X: -9450,                          // 転送完了位置(＝装入時のスラブ中心)
-    TILTER_X: -20250,
-    RUNIN_X0: -18900, RUNIN_X1: -12150,
-    // 横送りローラは主テーブルローラの「中間」に置き、胴長をピッチ未満にして干渉を避ける
-    CROSS_X: [-7650, -8550, -9450, -10350, -11250],
+  /* スラブ装入設備 —— ライン直近（側方 3.8 m）のオペレータ側に置く。
+   * 縦置きインゴットを転倒装置で倒す → そのまま進行方向(+X)へ縦送り
+   * → 横送りローラが上昇してライン側(-Z)へ移載、という実機の流れをそのまま再現する。
+   * 駆動側(-Z)にはスピンドル・ピニオンスタンド・主電動機があるため装入設備は置けない。 */
+  SUPPLY: {
+    SIDE_Z: 3800,                            // ラインからの側方距離（主テーブル架台と420 mm離隔）
+    ENTRY_X: -6300,                          // 移載完了位置（＝装入時のスラブ中心）
+    TILTER_X: -14400,                        // 転倒軸。移載位置まで 8.1 m
+    ARM_L: 6000,                             // 転倒アーム長（最大インゴット長 6 m を受ける）
+    BARREL: 2400,                            // 縦送りローラ胴長（主テーブルより短くして離隔を確保）
+    // 縦送りローラは主テーブルと同じ 900 mm グリッド、横送りローラはその中間に置く
+    RUNIN_X: [-8100, -7200, -6300, -5400, -4500, -3600, -2700],
+    CROSS_X: [-7650, -6750, -5850, -4950],
+    CROSS_Z0: -1350, CROSS_Z1: 5150, CROSS_PITCH: 900,
     CROSS_ROLL_L: 420,   // 主テーブル(ピッチ900・胴径400)の隙間500に余裕をもって収める
-    ROLL_D: 400, PITCH: 1200,
-    T_TILT: 3.6, T_RUNIN: 4.2, T_CROSS: 4.6, // 各動作の所要時間 (秒)
+    CROSS_LIFT: 260,     // 横送りローラの昇降ストローク（退避時は縦送りローラ面より下）
+    ROLL_D: 400,
+    T_TILT: 3.6, T_RUNIN: 4.2, T_CROSS: 3.4, // 各動作の所要時間 (秒)
   },
 
   SHEAR: {                                   // 出側クロップシャー(油圧アップカット・ギロチン)
@@ -553,7 +561,7 @@ const CONFIG = {
     { id:'stand',    name:'圧延機',     icon:'fa-industry',         pos:[ 17000,  8000, 21000], tgt:[     0,  1900,     0] },
     { id:'bite',     name:'ロールバイト', icon:'fa-magnifying-glass', pos:[  6600,  2000,  2200], tgt:[   200,  1150,     0] },
     { id:'drive',    name:'駆動側',     icon:'fa-gears',            pos:[ 34000, 13000,-16000], tgt:[     0,  1400, -9500] },
-    { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[-38000, 17000, 33000], tgt:[-14000,   600,  5000] },
+    { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[-26000, 11000, 21000], tgt:[-10000,   700,  2200] },
     { id:'shear',    name:'クロップシャー', icon:'fa-scissors',      pos:[ 66000,  8000, 17000], tgt:[ 51000,  1800,     0] },
   ],
 };
@@ -1186,19 +1194,21 @@ const Parts = {
   },
 
   /* --- テーブルローラ（1本）: インスタンス化して使う ----------------------- */
-  tableRoll() {
+  tableRoll(barrel = CONFIG.TABLE.BARREL) {
     const T = CONFIG.TABLE;
     return G.merge([
-      G.cyl(T.ROLL_D, T.BARREL, 'z', 14),
-      G.at(G.cyl(T.ROLL_D * 0.42, 420, 'z', 8), 0, 0,  T.BARREL / 2 + 210),
-      G.at(G.cyl(T.ROLL_D * 0.42, 420, 'z', 8), 0, 0, -T.BARREL / 2 - 210),
+      G.cyl(T.ROLL_D, barrel, 'z', 14),
+      G.at(G.cyl(T.ROLL_D * 0.42, 420, 'z', 8), 0, 0,  barrel / 2 + 210),
+      G.at(G.cyl(T.ROLL_D * 0.42, 420, 'z', 8), 0, 0, -barrel / 2 - 210),
     ]);
   },
   tablePedestal() {
     const T = CONFIG.TABLE, h = CONFIG.MILL.PASS_LINE - T.ROLL_D;
+    // ベースプレートの奥行きは、ライン直近に置く縦送りテーブルとの離隔を確保するため
+    // ローラ胴端に収まる寸法に抑える。
     return G.merge([
-      G.at(G.box(420, h, 460), 0, h / 2, 0),
-      G.at(G.box(620, 120, 700), 0, 60, 0),
+      G.at(G.box(420, h, 440), 0, h / 2, 0),
+      G.at(G.box(560, 120, 460), 0, 60, 0),
     ]);
   },
 
@@ -1239,23 +1249,31 @@ const Parts = {
   shearHoldDown() { const W = CONFIG.TABLE.BARREL; return G.box(420, 420, W + 100); },
 
   /* --- 装入設備: 転倒装置 / 縦送りテーブル / 横送りローラ ------------------ */
-  /** 転倒装置(down-ender)の腕。縦置きスラブを受け、90°倒して縦送りテーブルへ渡す。 */
+  /**
+   * 転倒装置(down-ender)の腕。縦置きインゴットを立ち上がり面で受け、90°倒して
+   * 自身のローラベッドへ寝かせる。ベッド上面は倒した状態でパスラインと一致する。
+   * 板状ではなく開放フレーム（サイドレール＋クロスメンバ）として構造を見せる。
+   */
   tilterArm() {
-    const L = 4400, W = 2900, t = 240, parts = [];
-    parts.push(G.at(G.box(L, t, W), L / 2, -t / 2, 0));                   // 受け面
-    parts.push(G.at(G.box(t, 1200, W), -t / 2, 600, 0));                  // 立ち上がり(スラブ受け)
-    for (let i = 0; i < 5; i++)                                           // 補強リブ
-      parts.push(G.at(G.box(L * 0.94, 300, 180), L / 2, -t - 150,
-                       -W / 2 + 300 + i * (W - 600) / 4));
-    parts.push(G.at(G.box(360, 1500, W * 0.9), L * 0.62, -t - 1000, 0));  // 支持脚
+    const S = CONFIG.SUPPLY, L = S.ARM_L, W = 2900, parts = [];
+    for (const sz of [-1, 1])                                             // サイドレール
+      parts.push(G.at(G.box(L, 480, 260), L / 2, -520, sz * (W / 2 - 130)));
+    for (let i = 0; i < 7; i++)                                           // クロスメンバ
+      parts.push(G.at(G.box(240, 300, W - 200), 350 + i * (L - 700) / 6, -640, 0));
+    parts.push(G.at(G.box(260, 1500, W), -130, 750, 0));                  // 立ち上がり（受け面）
+    parts.push(G.at(G.box(260, 700, W), -130, -410, 0));
+    parts.push(G.at(G.box(420, 1600, W * 0.86), L * 0.66, -1560, 0));     // 支持脚
     return G.merge(parts);
   },
+  /** 転倒アームのベッドローラ（倒した状態で上面＝パスライン） */
+  tilterArmRoll() { return G.cyl(CONFIG.SUPPLY.ROLL_D, CONFIG.SUPPLY.BARREL, 'z', 12); },
   tilterBase() {
     return G.merge([
-      G.at(G.box(2400, 1500, 3800), -900, -750, 0),
-      G.at(G.cyl(520, 3900, 'z', 16), 0, 0, 0),                           // 転倒軸
-      G.at(G.cyl(900, 420, 'z', 16), 0, 0,  1750),
-      G.at(G.cyl(900, 420, 'z', 16), 0, 0, -1750),
+      G.at(G.box(2600, 1600, 3000), -1000, -800, 0),
+      G.at(G.cyl(560, 3200, 'z', 16), 0, 0, 0),                           // 転倒軸
+      G.at(G.cyl(940, 440, 'z', 16), 0, 0,  1420),                        // 軸受
+      G.at(G.cyl(940, 440, 'z', 16), 0, 0, -1420),
+      G.at(G.cyl(360, 2600, 'x', 12), -1900, -700, 0),                    // 転倒シリンダ
     ]);
   },
   crossRoll() { return G.cyl(CONFIG.SUPPLY.ROLL_D, CONFIG.SUPPLY.CROSS_ROLL_L, 'x', 12); },
@@ -1534,7 +1552,7 @@ class TableView {
       });
       rolls.commit().finalize(); peds.commit().finalize();
       scene.add(rolls.mesh, peds.mesh);
-      this.zones.push({ xs: seg, rolls });
+      this.zones.push({ xs: seg, rolls, peds });
     }
 
     // ミル直下の敷板（エプロン）— ローラを置けない区間を埋める実機同等の部材
@@ -1616,43 +1634,67 @@ class ShearView {
 
 class SupplyView {
   constructor(scene) {
-    const S = CONFIG.SUPPLY, P = CONFIG.MILL.PASS_LINE;
+    const S = CONFIG.SUPPLY, P = CONFIG.MILL.PASS_LINE, r = S.ROLL_D / 2;
     this.group = new THREE.Group(); scene.add(this.group);
-    // 転倒装置（スラブを縦置きから平置きへ倒す）
+
+    // --- 転倒装置（縦置きインゴットを 90° 倒す）-----------------------------
     this.tilterPivot = new THREE.Group();
     this.tilterPivot.position.set(u(S.TILTER_X), u(P), u(S.SIDE_Z));
+    this.tilterArm = new THREE.Group();
     const arm = new THREE.Mesh(Parts.tilterArm(), MAT.hydraulic); arm.castShadow = true;
-    this.tilterArm = new THREE.Group(); this.tilterArm.add(arm); this.tilterPivot.add(this.tilterArm);
-    const tb = new THREE.Mesh(Parts.tilterBase(), MAT.base); tb.receiveShadow = true; this.tilterPivot.add(tb);
+    this.tilterArm.add(arm);
+    // アームのベッドローラ（倒した状態で上面がパスラインに一致する）
+    const nArm = 7, armRolls = new Instances(Parts.tilterArmRoll(), MAT.rollFace, nArm, { dynamic: true, cull: false });
+    this.armRollXs = [];
+    for (let i = 0; i < nArm; i++) {
+      const x = 350 + i * (S.ARM_L - 700) / (nArm - 1);
+      this.armRollXs.push(x); armRolls.set(i, x, -r, 0);
+    }
+    armRolls.commit(); this.tilterArm.add(armRolls.mesh); this.armRolls = armRolls;
+    this.tilterPivot.add(this.tilterArm);
+    const tb = new THREE.Mesh(Parts.tilterBase(), MAT.base); tb.receiveShadow = true;
+    this.tilterPivot.add(tb);
     this.group.add(this.tilterPivot);
 
-    // 縦送りテーブル（+X へ搬送）
-    const runXs = []; for (let x = S.RUNIN_X0; x <= S.RUNIN_X1; x += S.PITCH) runXs.push(x);
-    this.runIn = new Instances(Parts.tableRoll(), MAT.rollFace, runXs.length, { dynamic: true, cull: false });
-    const rp = new Instances(Parts.tablePedestal(), MAT.tableFrame, runXs.length * 2, { cull: false });
-    runXs.forEach((x, i) => {
-      this.runIn.set(i, x, P - CONFIG.TABLE.ROLL_D / 2, S.SIDE_Z);
-      rp.set(i * 2,     x, 0, S.SIDE_Z + CONFIG.TABLE.BARREL / 2 + 320);
-      rp.set(i * 2 + 1, x, 0, S.SIDE_Z - CONFIG.TABLE.BARREL / 2 - 320);
+    // --- 縦送りテーブル（アームから受け取り +X へ搬送）----------------------
+    this.runXs = S.RUNIN_X;
+    this.runIn = new Instances(Parts.tableRoll(S.BARREL), MAT.rollFace, this.runXs.length, { dynamic: true, cull: false });
+    const rp = new Instances(Parts.tablePedestal(), MAT.tableFrame, this.runXs.length * 2, { cull: false });
+    this.runXs.forEach((x, i) => {
+      this.runIn.set(i, x, P - r, S.SIDE_Z);
+      rp.set(i * 2,     x, 0, S.SIDE_Z + S.BARREL / 2 + 280);
+      rp.set(i * 2 + 1, x, 0, S.SIDE_Z - S.BARREL / 2 - 280);
     });
-    this.runIn.commit(); rp.commit(); this.group.add(this.runIn.mesh, rp.mesh);
-    this.runXs = runXs;
+    this.runIn.commit(); rp.commit(); this.group.add(this.runIn.mesh, rp.mesh); this.runPeds = rp;
 
-    // 横送りローラ列（主テーブルの隙間に配置し −Z へ移載）
-    const zs = []; for (let z = -1200; z <= S.SIDE_Z + 1200; z += S.PITCH) zs.push(z);
-    this.cross = new Instances(Parts.crossRoll(), MAT.rollFace, zs.length * S.CROSS_X.length, { dynamic: true, cull: false });
+    // --- 横送りローラ（縦送り／主テーブルの中間に配置し、移載時だけ上昇）-----
     this.crossSlots = [];
-    let i = 0;
-    for (const x of S.CROSS_X) for (const z of zs) { this.crossSlots.push([x, z]); this.cross.set(i++, x, P - S.ROLL_D / 2, z); }
+    for (const x of S.CROSS_X)
+      for (let z = S.CROSS_Z0; z <= S.CROSS_Z1; z += S.CROSS_PITCH) this.crossSlots.push([x, z]);
+    this.cross = new Instances(Parts.crossRoll(), MAT.rollFace, this.crossSlots.length, { dynamic: true, cull: false });
+    this.crossY = P - r - S.CROSS_LIFT;
+    this.crossSlots.forEach(([x, z], i) => this.cross.set(i, x, this.crossY, z));
     this.cross.commit(); this.group.add(this.cross.mesh);
 
     this.slab = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slab);
     this.slab.castShadow = true; scene.add(this.slab);
+    this._state = {};
   }
-  update(sup, slab, mill, dt) {
-    const S = CONFIG.SUPPLY, P = mill.passLine;
+
+  update(sup, slab, mill) {
+    const S = CONFIG.SUPPLY, P = mill.passLine, r = S.ROLL_D / 2;
     const tilt = (1 - sup.tilt) * Math.PI / 2;
     this.tilterArm.rotation.z = tilt;
+
+    // 横送りローラは移載区間の前後で昇降する（実機の可動スキッド）
+    const lift = Num.smoothstep(0, 0.12, sup.cross) * (1 - Num.smoothstep(0.88, 1, sup.cross));
+    const crossY = P - r - S.CROSS_LIFT * (1 - lift);
+    const crossA = -sup.cross * 26;
+    if (crossY !== this._state.crossY || crossA !== this._state.crossA) {
+      this._state.crossY = crossY; this._state.crossA = crossA;
+      this.crossSlots.forEach(([x, z], i) => this.cross.set(i, x, crossY, z, crossA, 0, 0));
+      this.cross.commit();
+    }
 
     const active = sup.active || !slab.onLine;
     this.slab.visible = active;
@@ -1660,25 +1702,28 @@ class SupplyView {
     const th = slab.thickness, w = slab.width, L = slab.length;
     this.slab.scale.set(u(L), u(th), u(w));
     const phase = sup.active ? sup.phase : 'TILT';
+
     if (phase === 'TILT') {
-      const c = Math.cos(tilt), s = Math.sin(tilt);
-      const lx = L / 2, ly = th / 2;
-      this.slab.position.set(u(S.TILTER_X + lx * c - ly * s), u(P + lx * s + ly * c), u(S.SIDE_Z));
+      // アーム上のローカル座標 (L/2, th/2) を転倒軸まわりに回す
+      const c = Math.cos(tilt), sn = Math.sin(tilt), lx = L / 2, ly = th / 2;
+      this.slab.position.set(u(S.TILTER_X + lx * c - ly * sn), u(P + lx * sn + ly * c), u(S.SIDE_Z));
       this.slab.rotation.set(0, 0, tilt);
     } else if (phase === 'RUNIN') {
       const x = Num.lerp(S.TILTER_X + L / 2, S.ENTRY_X, sup.runIn);
       this.slab.position.set(u(x), u(P + th / 2), u(S.SIDE_Z));
       this.slab.rotation.set(0, 0, 0);
-      const a = -sup.runIn * 40;
-      this.runXs.forEach((x2, i) => this.runIn.set(i, x2, P - CONFIG.TABLE.ROLL_D / 2, S.SIDE_Z, 0, 0, a));
-      this.runIn.commit();
+      const a = -sup.runIn * 34;
+      if (a !== this._state.runA) {
+        this._state.runA = a;
+        this.runXs.forEach((x2, i) => this.runIn.set(i, x2, P - r, S.SIDE_Z, 0, 0, a));
+        this.runIn.commit();
+        this.armRollXs.forEach((x2, i) => this.armRolls.set(i, x2, -r, 0, 0, 0, a));
+        this.armRolls.commit();
+      }
     } else {
       const z = Num.lerp(S.SIDE_Z, 0, sup.cross);
       this.slab.position.set(u(S.ENTRY_X), u(P + th / 2), u(z));
       this.slab.rotation.set(0, 0, 0);
-      const a = -sup.cross * 40;
-      this.crossSlots.forEach(([x, z2], i) => this.cross.set(i, x, P - S.ROLL_D / 2, z2, a, 0, 0));
-      this.cross.commit();
     }
   }
 }
