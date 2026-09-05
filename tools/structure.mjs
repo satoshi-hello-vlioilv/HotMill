@@ -32,7 +32,7 @@ const out = await page.evaluate((EPS) => {
     add(F[k]);
   for (const side of (F.pilerSides ?? [])) add(side.grp);
   const S = W.supplyView;
-  for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT', 'tongs'])
+  for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT', 'tongs', 'pusher'])
     add(S[k]);
   W.scene.traverse(o => { if (o.isPoints || o.userData.telescoping) moving.add(o); });
 

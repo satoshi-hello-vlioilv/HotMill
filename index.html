@@ -666,23 +666,57 @@ const CONFIG = {
     PIVOT_DROP: 330, SHAFT_D: 560, HUB_D: 640, BEARING_Z: 1700,
     LIP_H: 1510,                             // 受け面（立ち上がり）の高さ
   },
-  /* トランスファークレーン —— 倒した（平置きの）スラブをクランプで吊り、ラインへ横移動する。
-   * 装入クレーンと同じ走行路を走る 2 台目の橋形クレーン。装入クレーンが転倒機で作業する間は
-   * ミル側 PARK_DX へ退避し、転倒後にスラブの真上へ走行して吊る。 */
+  /*
+   * トランスファークレーン —— 倒した（平置きの）スラブをクランプで吊り、ラインへ横移動する。
+   *
+   * ピットクレーン（装入クレーン）とは «完全に別» の、独立した低い最小限のフレームを持つ。
+   * ピットクレーンは縦置きスラブを吊るため桁高さ 12.5 m の背の高いフレームが要るが、
+   * トランスファークレーンは平置きの薄い板を LIFT 分（1.7 m）持ち上げるだけなので、
+   * 同じ高さのフレームを共用する理由が無い（実際、共用させると桁からスラブまでの
+   * ワイヤが 10 m 近く垂れ下がる不自然な絵になっていた）。
+   *
+   * フレームが別であれば、ピットクレーンの脚（転倒軸のすぐ脇に立つ最小限の門型）と
+   * トランスファークレーンの脚が同じ床面を取り合わないよう、両者の受け渡しには
+   * すき間が要る。そこで転倒直後のスラブは «少しだけ出側へ押し出して» から
+   * トランスファークレーンへ渡す（SHIFT_DX）。低いフレーム自身の Z スパン
+   * （FRAME.GIRDER_Z0/Z1）も転倒アームの占有域より外に置き、桁・柱のどちらも
+   * 転倒機側の設備と重ならない。
+   */
   TRANSFER: {
-    PARK_DX: 4300,                           // 待機位置（転倒軸からミル側へ）
+    SHIFT_DX: 2500,                          // 転倒後、渡す前にプッシャで押し出す距離（出側へ）
+    PARK_DX: 5200,                           // 待機位置（転倒軸からミル側へ）。最大スラブの受け取り位置より先
     LIFT: 1700,                              // 横移動時のスラブ底面高さ（パスライン上）。転倒機の受け面 1,510 を越える
     TONG_OPEN: 150,                          // クランプの開き（片側）。開いても転倒機のサイドレールの内側
     TONG_DX: 1100,                           // クランプ 2 対のビーム中心からの X
     BEAM_L: 3200,
+    // トランスファークレーン専用の低い最小限フレーム（ピットクレーンの FRAME とは別定義）。
+    // GIRDER_Z0/Z1 は転倒アームの占有域（SIDE_Z ± 概ね ARM_W/2 + 500）の外側であること
+    // «だけ» では足りない。柱は床付近から立つので、主テーブル架台（ロール胴端の外、
+    // Z = ±1,545 mm 付近、柱断面の半幅 225 mm を含めて ±1,765 mm まで張り出す）とも
+    // Z が重ならない位置まで押し出す必要がある（tools/structure.mjs のレイキャスト判定
+    // で実測して決めた）。柱は桁の両端の 2 本だけで足りる（桁は薄板を吊るだけの軽荷重
+    // なので、ピットクレーンのような多点支持は要らない。COL_SIZE も細くしている）。
+    // GIRDER_Z0 はライン中心（Z=0）でトロリが吊りビームごと止まれるだけの桁の延び代
+    // （ビーム半長 1,600 mm）も確保している。
+    FRAME: {
+      // GIRDER_Y はワイヤに十分な垂れ代を残せる高さ（最大板厚・最大吊上げ高さでも
+      // 桁下フランジと吊りビームの間に 300 mm 以上のロープ長が残る値）で決めている。
+      GIRDER_Y: 5000, GIRDER_Z0: -2100, GIRDER_Z1: 6200, COL_SIZE: 450,
+      RUN_X0: 2000, RUN_X1: 7000, COL_PITCH: 2500,
+      TROLLEY: { W: 1400, H: 700, L: 1400 },
+    },
   },
 
   /* ピット炉 —— スラブは立てた状態で加熱され、装入クレーンで吊り上げられて
    * 転倒機に立てかけられる。ここではその一連の動きを再現する。 */
   FURNACE: { Z: 10800, DEPTH: 5200, W: 2800, L: 2400, WALL: 500, LID_T: 380 },
-  /* クレーン走行路 —— ライン方向（X）の走行桁 2 本に、装入クレーンとトランスファークレーンの
-   * 2 台の橋（桁は Z 方向）が載る。RUN_X0/X1 は転倒軸からの相対距離（ミル側が正）。 */
-  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -3800, RUN_X1: 6600, COL_PITCH: 5200,
+  /*
+   * 装入クレーン（ピットクレーン）—— 転倒軸の真上に固定された橋（X 方向には走行しない。
+   * トロリが桁上を Z 方向に動いて炉と転倒機の間を往復する）。したがって走行桁の X 方向の
+   * 長さは «脚を支える最小限» で足り、トランスファークレーンのような広い走行域は要らない
+   * （RUN_X0/X1 は転倒軸 ±1 m の門型脚 2 対のみ）。
+   */
+  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -1000, RUN_X1: 1000, COL_PITCH: 2000,
              TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600 },
 
   /* 装入シーケンス。[フェーズ, 進捗キー, 所要秒, 表示文] を並べるだけで工程が決まる。 */
@@ -692,6 +726,7 @@ const CONFIG = {
     ['TRAVERSE', 'traverse', 3.4, '転倒機まで横行しています'],
     ['SET',      'set',      2.6, '転倒機にスラブを立てかけています'],
     ['TILT',     'tilt',     3.6, '転倒装置でスラブを倒しています'],
+    ['SHIFT',    'shift',    1.6, 'プッシャでスラブをトランスファークレーンの受け渡し位置へ押し出しています'],
     ['GRAB',     'grab',     3.2, 'トランスファークレーンが倒したスラブをクランプで吊り上げています'],
     ['TRANSFER', 'transfer', 3.2, 'トランスファークレーンでミルラインへ横移動しています'],
     ['LOWER',    'lower',    2.6, '入側テーブル（A-9）へ降ろしています'],
@@ -1066,7 +1101,9 @@ const Layout = {
     return CONFIG.TABLE.SELECT[CONFIG.TABLE.SELECT.length - 1];
   },
   /** 倒したスラブの中心 X（転倒軸からミル側へ L/2）。ラインへの移載位置もこの X。 */
-  entryX(length) { return CONFIG.SUPPLY.TILTER_X + CONFIG.FLIP * length / 2; },
+  /** 倒したスラブの中心 X。転倒軸から «出側への押し出し量 SHIFT_DX + L/2» の位置＝
+   *  トランスファークレーンが受け取り、ラインへ移載する位置もこの X で変わらない。 */
+  entryX(length) { return CONFIG.SUPPLY.TILTER_X + CONFIG.FLIP * (CONFIG.TRANSFER.SHIFT_DX + length / 2); },
 };
 
 class EventBus {
@@ -3297,9 +3334,16 @@ const Parts = {
     ]);
   },
 
-  /* --- 装入クレーン（ピット炉から吊り上げ、転倒機へ横行して立てかける）------ */
-  craneGirder() {
-    const C = CONFIG.CRANE, len = C.GIRDER_Z1 - C.GIRDER_Z0;
+  /*
+   * --- クレーン系のジオメトリ生成器 --------------------------------------
+   * 装入クレーン（ピットクレーン）とトランスファークレーンは «完全に別のフレーム» を持つが、
+   * どちらも「2 本の走行レール（Z = GIRDER_Z0/Z1）＋ 柱 ＋ その上を X 方向へ走る橋（桁）」
+   * という同じ構成なので、寸法を渡せる関数として共通化する。引数省略時は装入クレーンの
+   * CONFIG.CRANE を使う（既定を変えない）。トランスファークレーンは常に自分の
+   * CONFIG.TRANSFER.FRAME を明示的に渡す。
+   */
+  craneGirder(C = CONFIG.CRANE) {
+    const len = C.GIRDER_Z1 - C.GIRDER_Z0;
     return G.merge([
       G.at(G.box(760, 1300, len), 0, 0, 0),
       G.at(G.box(1500, 180, len), 0, 740, 0),
@@ -3308,28 +3352,31 @@ const Parts = {
   },
   /**
    * クレーン走行路。ライン方向（X）の走行桁 2 本（Z = GIRDER_Z0 / Z1）を柱で受け、
-   * 装入クレーンとトランスファークレーンの橋（Z 方向の桁）がこの上を X 方向に走る。原点＝転倒軸。
+   * 橋（Z 方向の桁）がこの上を X 方向に走る。原点＝転倒軸。
+   * 装入クレーンは桁が X 方向に動かない固定橋なので、柱は転倒軸のすぐ脇の 1 対でよい
+   * （RUN_X0/X1 が狭い）。トランスファークレーンは自分の低いフレーム（別途 CONFIG.TRANSFER.FRAME）
+   * を渡して同じ関数で作る。
    */
-  craneRunway() {
-    const C = CONFIG.CRANE, F = CONFIG.FLIP, parts = [];
+  craneRunway(C = CONFIG.CRANE) {
+    const F = CONFIG.FLIP, cs = C.COL_SIZE ?? 900, parts = [];        // 柱断面（軽荷重の桁は細くてよい）
     const x0 = F * C.RUN_X0, x1 = F * C.RUN_X1, len = Math.abs(x1 - x0) + 1200, xc = (x0 + x1) / 2;
     for (const z of [C.GIRDER_Z0, C.GIRDER_Z1]) {
       for (let k = 0; k * C.COL_PITCH <= Math.abs(x1 - x0) + 1; k++)
-        parts.push(G.at(G.box(900, C.GIRDER_Y, 900), x0 + F * k * C.COL_PITCH, C.GIRDER_Y / 2, z));   // 柱
+        parts.push(G.at(G.box(cs, C.GIRDER_Y, cs), x0 + F * k * C.COL_PITCH, C.GIRDER_Y / 2, z));     // 柱
       parts.push(G.at(G.box(len, 600, 700), xc, C.GIRDER_Y + 300, z));                                // 走行桁
       parts.push(G.at(G.box(len, 120, 220), xc, C.GIRDER_Y + 660, z));                                // レール
     }
     return G.merge(parts);
   },
   /** ホイストトロリ。桁の下フランジを走る吊下げ式（原点＝トロリ中心、上面が桁下面） */
-  craneTrolley() {
-    const T = CONFIG.CRANE.TROLLEY;
+  craneTrolley(T = CONFIG.CRANE.TROLLEY) {
     return G.merge([
       G.at(G.box(T.L, T.H, T.W), 0, 0, 0),
       G.at(G.cyl(760, T.W * 0.55, 'z', 14), -T.L * 0.18, T.H * 0.08, 0),
       G.at(G.box(T.L * 0.8, 200, 1700), 0, T.H / 2 + 100, 0),       // 走行輪フレーム（桁の下フランジを抱く）
     ]);
   },
+  /** 装入クレーンの吊りビーム（立てたスラブを掴む）。トランスファークレーンは別形状 transferBeam() を使う。 */
   craneBeam() {
     const C = CONFIG.CRANE;
     return G.merge([
@@ -3339,6 +3386,50 @@ const Parts = {
     ]);
   },
   craneRope() { return G.cyl(90, 1000, 'y', 8); },
+
+  /*
+   * --- 転倒後の押し出し機構 ------------------------------------------------
+   * ピットクレーンとトランスファークレーンのフレームが別になったことで、転倒直後の
+   * スラブは «ピットクレーンの脚の内側» にあり、そのままではトランスファークレーンの
+   * 低いフレームの受け持ち域（FRAME.RUN_X0 より出側）に届かない。プッシャが板の近端
+   * （転倒軸側の端）を押し、SHIFT_DX だけ出側の受け台（tilterRunout）へ滑らせる。
+   * 転倒シリンダの反対側（+Z）に置き、シリンダと重ならないようにする。
+   */
+  /**
+   * 原点＝転倒軸（tilterArm/tilterBase と同じローカル系。+X がミル側、
+   * y は転倒軸基準＝ワールドの (PASS_LINE − PIVOT_DROP) が y=0）。
+   * 押し板の前面が板の近端に当たり、そこから F 方向へ押し出す。
+   * ロッド・シリンダは簡略化のため押し板と «一体» で並進させる（実機は
+   * シリンダ本体が固定でロッドだけ伸びるが、この規模の描画では往復動作の
+   * 視認性を優先し、他のプッシャ（cropPusher 等）と同じ簡略化に合わせた）。
+   */
+  tilterPusher() {
+    const S = CONFIG.SUPPLY, D = S.PIVOT_DROP, zc = S.ARM_W / 2 + 250, h = 640;
+    return G.merge([
+      G.at(G.box(220, h, S.ARM_W - 300), -110, D + 70, 0),  // 押し板（厚み 220。前面ちょうどが原点＝x=0）
+      G.at(G.cyl(220, 1500, 'x', 12), -750, D + 60, zc),    // ロッド
+      G.at(G.box(420, 420, 560), -1650, D + 60, zc),        // シリンダ
+      G.at(G.box(600, 300, 460), -1650, D - 250, zc),       // シリンダ受け（床上寄り）
+    ]);
+  },
+  /**
+   * 押し出し先の受け台。原点・ローカル系は tilterPusher() と同じ（転倒軸基準）。
+   * 転倒アームのベッド（ローラ無し）の続きとして、上面をパスラインに合わせた固定の
+   * 低いデッキを転倒アーム先端からトランスファークレーンの受け渡し域まで敷く。
+   * ローラは持たない（この区間もクレーンが吊って移動させるだけで、送り出しはしない）。
+   * 始点は tilterBase() の「寝かせたアームの受け台」ブラケット（ARM_L − 700 〜 ARM_L − 100）
+   * の先まで離す。ベッド面の終端（ARM_L − 40）からは 300 mm ほど間が空くが、剛体である
+   * スラブがまたぐには十分小さい。
+   */
+  tilterRunout() {
+    const S = CONFIG.SUPPLY, TR = CONFIG.TRANSFER, D = S.PIVOT_DROP;
+    const x0 = S.ARM_L + 300, x1 = TR.SHIFT_DX + CONFIG.SLAB.LEN_MAX + 400, len = x1 - x0;
+    const deckY = D - 30, y0 = -(CONFIG.MILL.PASS_LINE - D), legH = (deckY - 30) - y0, w = S.ARM_W - 300;
+    const parts = [G.at(G.box(len, 60, w), x0 + len / 2, deckY, 0)];             // デッキ（上面＝パスライン）
+    for (const sx of [0, 1]) for (const sz of [-1, 1])
+      parts.push(G.at(G.box(360, legH, 360), x0 + sx * len, y0 + legH / 2, sz * (w / 2 - 200)));  // 脚
+    return G.merge(parts);
+  },
 
   /* --- 建屋: 床 / ピット / 基礎 ------------------------------------------ */
   /**
@@ -4276,28 +4367,40 @@ class SupplyView {
     this.lid.position.copy(this.lidHome); this.group.add(this.lid);
     this.lidTravel = FU.W + 2 * FU.WALL + 900;
 
-    // --- クレーン走行路（X 方向の走行桁 2 本）と 2 台の橋 ------------------
+    // --- 装入クレーン（ピットクレーン）：転倒軸の真上に固定した橋。X 方向には走行しない ---
     const CR = CONFIG.CRANE;
-    const runway = near(new THREE.Mesh(Parts.craneRunway(), MAT.base), MAT.base);
+    const runway = near(new THREE.Mesh(Parts.craneRunway(CR), MAT.base), MAT.base);
     runway.name = 'クレーン走行路'; runway.position.x = u(S.TILTER_X); runway.castShadow = true; this.group.add(runway);
     // 橋（Z 方向の桁）は走行桁のレール（GIRDER_Y + 720）の上に載る。桁の下フランジ下面 = 中心 − 830
     this.girderY = CR.GIRDER_Y + 720 + 830;
     this.trolleyY = CR.GIRDER_Y + 720 - CR.TROLLEY.H / 2 - 100;      // 吊下げ式: 上面が桁の下フランジ
-    const zc = (CR.GIRDER_Z0 + CR.GIRDER_Z1) / 2, girderGeo = Parts.craneGirder();
-    const mkGirder = (name) => { const g = near(new THREE.Mesh(girderGeo, MAT.tableFrame), MAT.tableFrame);
-      g.name = name; g.castShadow = true; g.position.set(u(S.TILTER_X), u(this.girderY), u(zc)); this.group.add(g); return g; };
-    // (1) 装入クレーン: 炉から立てたスラブを吊り、転倒機に立てかける。桁は転倒軸の真上に固定
-    this.girder = mkGirder('装入クレーン桁');
-    this.trolley = new THREE.Mesh(Parts.craneTrolley(), MAT.hydraulic);
+    const zc = (CR.GIRDER_Z0 + CR.GIRDER_Z1) / 2;
+    this.girder = near(new THREE.Mesh(Parts.craneGirder(CR), MAT.tableFrame), MAT.tableFrame);
+    this.girder.name = '装入クレーン桁'; this.girder.castShadow = true;
+    this.girder.position.set(u(S.TILTER_X), u(this.girderY), u(zc)); this.group.add(this.girder);
+    this.trolley = new THREE.Mesh(Parts.craneTrolley(CR.TROLLEY), MAT.hydraulic);
     this.trolley.name = 'トロリ'; this.trolley.castShadow = true; this.group.add(this.trolley);
     this.hookBeam = new THREE.Mesh(Parts.craneBeam(), MAT.hydraulic);
     this.hookBeam.name = '吊りビーム'; this.hookBeam.castShadow = true; this.group.add(this.hookBeam);
     this.ropes = [-1, 1].map(() => { const m = new THREE.Mesh(Parts.craneRope(), MAT.rod);
       m.name = 'ワイヤ'; this.group.add(m); return m; });
-    // (2) トランスファークレーン: 倒した（平置きの）スラブをクランプで吊り、ラインへ横移動する。
-    //     桁は走行桁の上を X 方向に走る（待機位置 → スラブの真上）
-    this.girderT = mkGirder('トランスファークレーン桁');
-    this.trolleyT = new THREE.Mesh(Parts.craneTrolley(), MAT.hydraulic);
+    this._crane = { z: CONFIG.FURNACE.Z, beamY: null };   // 装入クレーンの現在位置（急に戻さず速度制限で戻す）
+
+    // --- トランスファークレーン：ピットクレーンとは完全に別の、低い最小限フレーム ---
+    // フレーム自体の Z スパン（FT.GIRDER_Z0/Z1）は転倒アームの占有域の外に置いてあるので、
+    // 柱・走行桁のどの X 位置でも転倒装置と重ならない（ジオメトリの生成器は同じ craneRunway/
+    // craneGirder/craneTrolley を、寸法だけ差し替えて呼ぶ）。
+    const FT = TR.FRAME;
+    const runwayT = near(new THREE.Mesh(Parts.craneRunway(FT), MAT.base), MAT.base);
+    runwayT.name = 'トランスファークレーン走行路'; runwayT.position.x = u(S.TILTER_X);
+    runwayT.castShadow = true; this.group.add(runwayT);
+    this.girderYT = FT.GIRDER_Y + 720 + 830;
+    this.trolleyYT = FT.GIRDER_Y + 720 - FT.TROLLEY.H / 2 - 100;
+    const zcT = (FT.GIRDER_Z0 + FT.GIRDER_Z1) / 2;
+    this.girderT = near(new THREE.Mesh(Parts.craneGirder(FT), MAT.tableFrame), MAT.tableFrame);
+    this.girderT.name = 'トランスファークレーン桁'; this.girderT.castShadow = true;
+    this.girderT.position.set(u(S.TILTER_X), u(this.girderYT), u(zcT)); this.group.add(this.girderT);
+    this.trolleyT = new THREE.Mesh(Parts.craneTrolley(FT.TROLLEY), MAT.hydraulic);
     this.trolleyT.name = 'トランスファートロリ'; this.trolleyT.castShadow = true; this.group.add(this.trolleyT);
     this.beamT = new THREE.Mesh(Parts.transferBeam(), MAT.hydraulic);
     this.beamT.name = '吊りビーム（クランプ）'; this.beamT.castShadow = true; this.group.add(this.beamT);
@@ -4308,7 +4411,6 @@ class SupplyView {
       const m = new THREE.Mesh(tongGeo, MAT.hydraulic); m.name = 'クランプ'; m.castShadow = true;
       m.userData.sx = sx; m.userData.sz = sz; this.group.add(m); this.tongs.push(m);
     }
-    this._crane = { z: CONFIG.FURNACE.Z, beamY: null };   // 装入クレーンの現在位置（急に戻さず速度制限で戻す）
 
     // --- 転倒装置（縦置きスラブを 90° 倒す。ローラは持たない）------------------
     // 転倒軸はベッド面（パスライン）より PIVOT_DROP 下。軸がベッド面から突き出さない
@@ -4323,12 +4425,19 @@ class SupplyView {
     const tb = near(new THREE.Mesh(Parts.tilterBase(), MAT.base), MAT.base); tb.receiveShadow = true;
     tb.name = '転倒装置基部';
     this.tilterPivot.add(tb);
+    // --- 押し出し機構と受け台：転倒後、ピットクレーンの脚の内側からトランスファークレーンの
+    //     受け持ち域まで、板をプッシャで滑らせる（詳細は Parts.tilterPusher/tilterRunout）。
+    //     どちらも tilterArm/tilterBase と同じローカル系（原点＝転倒軸）で作っているので、
+    //     tilterPivot の子として追加すれば向きの反転（scale.x = F）も自動でそろう。
+    const runout = near(new THREE.Mesh(Parts.tilterRunout(), MAT.base), MAT.base); runout.receiveShadow = true;
+    runout.name = '受け台'; this.tilterPivot.add(runout);
+    this.pusher = near(new THREE.Mesh(Parts.tilterPusher(), MAT.hydraulic), MAT.hydraulic); this.pusher.castShadow = true;
+    this.pusher.name = 'プッシャ'; this.tilterPivot.add(this.pusher);
     this.group.add(this.tilterPivot);
 
     this.slab = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
     this.slab.name = '装入スラブ'; this.slab.castShadow = true; scene.add(this.slab);
     this._state = {};
-    void TR;
   }
 
   /** 各フェーズにおけるスラブ中心位置（mm）と姿勢を返す */
@@ -4355,6 +4464,12 @@ class SupplyView {
         const tilt = (1 - p.tilt) * Math.PI / 2, c = Math.cos(tilt), sn = Math.sin(tilt);
         return { x: S.TILTER_X + F * (L / 2 * c - (D + th / 2) * sn), y: (P - D) + (L / 2 * sn + (D + th / 2) * c),
                  z: S.SIDE_Z, rot: tilt, hung: false };
+      }
+      // プッシャがベッド上を出側へ滑らせる（クレーンはまだ触れていない）。
+      // 転倒直後の位置（x = TILTER_X + F·L/2）から xFlat（= 転倒軸 + F·(SHIFT_DX + L/2)）まで。
+      case 'SHIFT': {
+        const x0 = S.TILTER_X + F * L / 2;
+        return { x: Num.lerp(x0, xFlat, p.shift), y: P + th / 2, z: S.SIDE_Z, rot: 0, hung: false };
       }
       // トランスファークレーン: クランプで掴んで吊り上げ（GRAB）→ 横移動（TRANSFER）→ 降ろす（LOWER）
       case 'GRAB':     return { x: xFlat, y: P + th / 2 + TR.LIFT * Num.smoothstep(0.75, 1, p.grab), z: S.SIDE_Z, rot: 0, hung: false };
@@ -4395,6 +4510,15 @@ class SupplyView {
     const S = CONFIG.SUPPLY, F = CONFIG.FLIP, P = mill.passLine, p = sup.p, TR = CONFIG.TRANSFER;
 
     this.tilterArm.rotation.z = (1 - p.tilt) * Math.PI / 2;
+    // プッシャ: LID〜TILT の間は RETRACT まで退避させておく。立てた板は転倒軸まわりを
+    // 回転するので、寝た状態・立った状態のどちらよりも «斜めの瞬間» のほうが軸から遠くまで
+    // 張り出す（対角線ぶん）。実測（tools/pushercheck.mjs）では立てた状態の張り出しが
+    // 最大で軸から 712 mm。390 mm の余裕を見て RETRACT = 1100 まで下げておけば、
+    // 回転中のどの角度でも板がプッシャに触れない。SHIFT の間だけ RETRACT → SHIFT_DX − GAP
+    // （板の近端ちょうどだと «接触» と «食い込み» の判定が数値上見分けられないので、
+    // GAP だけ手前で止める）へ動かす。
+    const RETRACT = 1100, GAP = 30;
+    this.pusher.position.x = u(Num.lerp(-RETRACT, TR.SHIFT_DX - GAP, Num.clamp(p.shift ?? 0, 0, 1)));
 
     // 炉蓋は開いたら閉じない（材料が出た後にゆっくり閉じる演出は行わない）
     this.lid.position.z = this.lidHome.z + u(this.lidTravel * Num.smoothstep(0, 1, p.lid));
@@ -4419,12 +4543,14 @@ class SupplyView {
       m.scale.y = ropeLen / 1000;
     });
 
-    // --- トランスファークレーン ---
+    // --- トランスファークレーン（専用の低いフレーム。trolleyYT はピットクレーンの
+    //     trolleyY とは別の、自分のフレーム高さ FT.GIRDER_Y から決まる値） ---
+    const FT = TR.FRAME;
     const t = this._transferPose(sup, slab, P, pose);
     this.girderT.position.x = u(t.x);
-    this.trolleyT.position.set(u(t.x), u(this.trolleyY), u(t.z));
+    this.trolleyT.position.set(u(t.x), u(this.trolleyYT), u(t.z));
     this.beamT.position.set(u(t.x), u(t.beamBot + 210), u(t.z));
-    const ropeT = Math.max(this.trolleyY - CR.TROLLEY.H / 2 - (t.beamBot + 680), 10);
+    const ropeT = Math.max(this.trolleyYT - FT.TROLLEY.H / 2 - (t.beamBot + 680), 10);
     this.ropesT.forEach((m, i) => {
       m.position.set(u(t.x + (i ? 1 : -1) * TR.BEAM_L * 0.34), u(t.beamBot + 680 + ropeT / 2), u(t.z));
       m.scale.y = ropeT / 1000;
@@ -4677,7 +4803,7 @@ class LabelView {
       ['入側テーブル',                   F *-16000,  1600,        0, 95000],
       ['出側テーブル',                   F * 18000,  1600,        0, 95000],
       ['転倒装置',                        S.TILTER_X,  3600, S.SIDE_Z,  75000],
-      ['トランスファークレーン',  Layout.entryX(3000), CONFIG.CRANE.GIRDER_Y + 900, S.SIDE_Z / 2, 90000],
+      ['トランスファークレーン',  Layout.entryX(3000), CONFIG.TRANSFER.FRAME.GIRDER_Y + 900, S.SIDE_Z / 2, 90000],
       ['サイドトリマー',            CONFIG.TRIMMER.X,  4200,        0, 40000],
       ['75 mm クロップシャー',   CONFIG.CROP_SHEAR.X,  2900,        0, 95000],
       ['端材コンベア・パレット', CONFIG.CROP_SHEAR.X + F * 400, 1500, 5200, 40000],
