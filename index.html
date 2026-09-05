@@ -598,12 +598,34 @@ const CONFIG = {
   /* 75 mm クロップシャー。出側のかなり遠方に置かれ、板厚が 75 mm 以下になった
    * パスで端部のワニ口（不整形な先尾端）を切り落とす。 */
   // ワークロール出側から約 30.6 m（実測・精度は低い）
-  /* 75 mm クロップシャー（アップカット）。
-   * 可動刃は «下» にあってベッドのスリットを通ってせり上がり、固定された上刃との
-   * 間で板を剪断する。切断前に押え（ホールドダウン）が板を押さえる。
-   * BLADE_T は刃厚、SLOT は刃が通るベッドの開口幅（刃厚＋左右のクリアランス）。 */
-  CROP_SHEAR: { X: 30600, MAX_TH: 75, CROP_LEN: 300, OPEN: 900, T_CUT: 1.0, T_OPEN: 1.2, SPEED: 70,
-                UPPER_CLR: 90, BLADE_T: 240, SLOT: 340, HOLD_OPEN: 700, STROKE: 1200 },
+  /* 75 mm クロップシャー（アップカット）。ワークロール出側から約 30.6 m。
+   * ---- 実機仕様 ----
+   *   最大剪断力 : 368 ton
+   *   シャー刃   : 75 × 180 × 2500 mm、材質 NS3C、硬度 Hs 65±3°
+   * 「75 mm シャー」の名は被剪断材の最大板厚 75 mm に由来し、刃の断面もこれに合わせて
+   * 75 mm 厚。定格 368 t は最大断面（75 × 2500 mm）を剪断する力なので、
+   *   剪断応力 τ = 368 tf ÷ (75 × 2500 mm²) ≒ 19.2 MPa
+   * が定格の裏にある値になる。実際の必要剪断力はここから逆算する（RATED_FORCE_T 参照）。
+   * 可動刃は «下» にあり、ベッドのスリットを通ってせり上がる。上刃は固定。 */
+  CROP_SHEAR: {
+    X: 30600, MAX_TH: 75,
+    RATED_FORCE_T: 368,                      // 最大剪断力 [tonf]
+    BLADE_T: 75, BLADE_H: 180, BLADE_L: 2500, // 刃 75×180×2500
+    BLADE_MAT: 'NS3C', BLADE_HS: '65±3 HS',
+    CLEARANCE: 4,                            // 上下刃のサイドクリアランス（板厚の約 5 %）
+    SLOT: 145,                               // ベッドの刃通し開口（刃厚 + 左右 35 mm）
+    RAKE: 0.035,                             // 刃の傾斜（剪断を端から進める）
+    CROP_LEN: 800,                           // 切り落とす端材長（実機で最大 800 mm 程度）
+    PARK: 700,                               // 刃先の待機位置（パスライン下）
+    OVERTRAVEL: 60,                          // 切り離し後の上死点余裕
+    UPPER_CLR: 90,                           // 固定上刃の下端（パスライン上）
+    HOLD_OPEN: 600,                          // 押えの退避量
+    APPROACH: 45,                            // 端部をシャーへ寄せるときの速度 [mpm]
+    T_CLAMP: 0.7, T_CUT: 1.1, T_RETURN: 1.0, T_EJECT: 2.4,
+    // 端材の払い出し: 駆動側(−Z)のプッシャで操作側(+Z)のシュートへ押し出す。
+    // Z_HOME はプッシャ面の待機位置、Z_DROP はエプロンの端（ここで端材が落ちる）。
+    EJECT: { Z_HOME: -1900, Z_DROP: 2200, CHUTE_Z: 2900 },
+  },
 
   /* サイドトリマー。上下軸の円板刃で板の両耳を切り落として幅を仕上げる。
    * ミル中心から 5,875 mm（図面）。厚板パス中は刃を開いて板を素通りさせる。 */
@@ -648,6 +670,10 @@ const CONFIG = {
     // 仕上げ形態。板材は出側テーブルへ放出、コイルは最終パスで巻取機へ巻き取る。
     TARGET_TH: 8,
     FINISH: { PLATE: { th: [20, 60], def: 30 }, COIL: { th: [6, 10], def: 8 } },
+    // 端部の張り出し（舌＝幅中央が伸びる / ワニ口＝表裏が開く）。圧下率に比例して育つ。
+    // 大きさを決めるのは板厚と板幅で、全長ではない（全長に比例させると 30 m の板で
+    // 800 mm の舌が出るという非物理な形になる）。描画と物理で同じ式を使う。
+    OVERHANG: { TH_K: 0.8, WID_K: 0.06 },
     MODE_DEFAULT: 'COIL',
   },
 
@@ -853,6 +879,16 @@ const Rolling = {
   },
 
   /** マンドレル軸に出せる最大トルク [N·m]（550 kW ÷ 基底 300 rpm × 減速比 8.5） */
+  /**
+   * クロップシャーの剪断力 [tonf]。定格 368 t が最大断面（75 × 2500 mm）を切る力
+   * であることから剪断応力を逆算し、実際の断面に比例させる。
+   * レーキ角があるため実機の必要力はこれより小さいが、保守側（全幅同時剪断）で見る。
+   */
+  cropForce(th, width) {
+    const S = CONFIG.CROP_SHEAR;
+    const tau = S.RATED_FORCE_T / (S.MAX_TH * S.BLADE_L);      // tonf/mm²
+    return tau * Math.min(th, S.MAX_TH) * width;
+  },
   coilerTorque() {
     const C = CONFIG.COILER;
     return (C.MOTOR_KW * 1000) / (C.RPM_BASE * Math.PI / 30) * C.GEAR;
@@ -1026,12 +1062,23 @@ class SlabState {
     this.xMin = this.xCenter - length / 2; this.xMax = this.xCenter + length / 2;
     this.temperature = temp;
     this.inBite = false; this.rollingActive = false; this.onLine = false; this.biteOk = true;
-    this.cropped = false;
+    this.cropped = false; this.croppedEnd = 0;      // どちら側の端を切ったか (+1: xMax 側 / −1: xMin 側)
     this.rollForce = 0; this.rollTorque = 0; this.rollPower = 0; this.contactLength = 0;
     this.currentSpeed = 0; this.strainRate = 0; this.flowStress = 0;
     this.dir = 1;
   }
   get reduction() { return 1 - this.thickness / this.initialThickness; }
+  /**
+   * 端部の張り出し長 [mm]。圧下率に比例して舌・ワニ口が伸びる。
+   * 描画（SlabView）と切断位置の計算（クロップシャー）がこの 1 か所を参照する。
+   */
+  overhangAt(end) {                                // end: +1 = xMax 側 / −1 = xMin 側
+    if (this.cropped && this.croppedEnd === end) return 0;
+    const O = CONFIG.SLAB.OVERHANG;
+    return Num.clamp(this.reduction, 0, 1) * (O.TH_K * this.thickness + O.WID_K * this.width);
+  }
+  /** 材料の実際の先端／尾端（張り出しを含む）。F は第1パス方向。 */
+  tipX(end) { return end > 0 ? this.xMax + this.overhangAt(1) : this.xMin - this.overhangAt(-1); }
 }
 
 class MillState {
@@ -1078,9 +1125,15 @@ class FinishState {
     this.trim = CONFIG.TRIMMER.TRIM_DEFAULT;   // 片側トリム量 [mm]
     this.trimming = false; this.knifeClose = 0; this.knifeAngle = 0;
     this.trimmedWidth = 0;
-    // 75 mm クロップシャーによる端部ワニ口切断
-    this.cropStage = 'IDLE'; this.cropBlade = 0; this.cropDone = false;
-    this.cropVisible = false; this.cropX = 0; this.cropY = 0; this.cropVY = 0; this.cropLen = 0;
+    // 75 mm クロップシャーによる端部ワニ口切断（アップカット）
+    this.cropStage = 'IDLE'; this.cropDone = false;
+    this.cropBlade = 0;        // 可動刃 0:待機 → 1:上死点
+    this.cropClamp = 0;        // 押え   0:退避 → 1:板を押さえる
+    this.cropPush = 0;         // プッシャ 0:待機 → 1:払い出し完了
+    this.cropFace = CONFIG.CROP_SHEAR.EJECT.Z_HOME;   // プッシャ面の Z
+    this.cropForceT = 0;       // その切断で要した剪断力 [tonf]
+    this.cropVisible = false; this.cropX = 0; this.cropY = 0; this.cropZ = 0;
+    this.cropVY = 0; this.cropLen = 0; this.cropSound = 0; this.cropTh = 0;
     this.gripped = false; this.thread = 0; this.coiledLen = 0; this.od = CONFIG.COILER.MANDREL_D;
     this.tensionKg = 0;
     this.mandrelAngle = 0; this.tension = 0; this.winding = false; this.done = false;
@@ -1148,7 +1201,9 @@ class MillController {
     if (m.mode !== 'AUTO' || m.passIndex < 0) return;
     if (finish) {                                     // 75 mm シャーによる端部切断を優先する
       if (finish.s.cropStage !== 'IDLE' && finish.s.cropStage !== 'DONE') return;
-      if (m.passPhase === 'SETUP' && finish.wantCrop()) { finish.beginCrop(); return; }
+      // クロップは通板の «途中» で始める。パス終了後だと先端がシャーを何 m も
+      // 通り過ぎており、刃の位置で切れない（実機も通板を止めて切る）。
+      if (m.passPhase === 'RUN' && finish.wantCrop()) { finish.beginCrop(); return; }
     }
     const sch = CONFIG.SCHEDULE[m.passIndex];
     if (!sch) return;
@@ -1204,68 +1259,148 @@ class FinishController {
   /** 進行方向の先端座標 */
   _head() { return CONFIG.FLIP > 0 ? this.slab.xMax : this.slab.xMin; }
   _tail() { return CONFIG.FLIP > 0 ? this.slab.xMin : this.slab.xMax; }
-
-  /** クロップ開始条件: 板厚が 75 mm 以下になり、材料が出側にある最初の機会 */
-  wantCrop() {
-    const s = this.s, sl = this.slab, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
-    return !s.cropDone && s.cropStage === 'IDLE' && sl.thickness <= S.MAX_TH
-        && F * this._tail() > 0 && !sl.inBite;
-  }
-  beginCrop() { this.s.cropStage = 'RUN_HEAD';
-    this.bus.emit('SYS_MESSAGE', { text: `75 mm シャー: 端部のワニ口を切断します（板厚 ${this.slab.thickness.toFixed(0)} mm）`, kind: 'info' }); }
+  /** 材料の実際の先端（張り出しを含む）。切断位置の判定はこれで行う。 */
+  _tip() { return this.slab.tipX(CONFIG.FLIP > 0 ? 1 : -1); }
+  /** 先端をここまで進めたら止める位置（刃から端材長ぶん先） */
+  _cropStopX() { const S = CONFIG.CROP_SHEAR; return S.X + CONFIG.FLIP * S.CROP_LEN; }
 
   /**
-   * 端部ワニ口の切断。先端をシャーまで送って切り、続けて尾端を送って切る。
-   * 切断後は端部の張り出し（舌・ワニ口）が無くなる。
+   * クロップ開始条件。
+   * 板厚が 75 mm 以下で、**通板中に先端がシャー位置へ達した瞬間**に始める。
+   * （パス終了後に始めると先端はシャーを何 m も通り過ぎており、板を戻さない限り
+   *   刃の位置で切れない。実機も «通板の途中で止めて切る» 順序になる）
+   * 停止距離ぶん手前で引き金を引き、行き過ぎを抑える。
+   */
+  /**
+   * 先端の板厚。噛み込み中は «先端は既に圧延済み» なのでロールギャップが実厚。
+   * ここを板全体の thickness（＝入側厚）で見ると判定が 1 パス遅れ、先端が
+   * シャーを何 m も通り過ぎてしまう。
+   */
+  _headThickness() { return this.slab.inBite ? this.mill.gap : this.slab.thickness; }
+
+  wantCrop() {
+    const s = this.s, m = this.mill, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
+    if (s.cropDone || s.cropStage !== 'IDLE') return false;
+    if (this._headThickness() > S.MAX_TH) return false;
+    if (F * Num.sign0(m.currentSpeed) <= 0) return false;             // 出側へ進んでいること
+    const v = Math.abs(m.currentSpeed) / 60 * 1000;                   // mm/s
+    const brake = v * v / (2 * CONFIG.PROCESS.ACCEL / 60 * 1000);     // 減速に要る距離
+    return F * (this._tip() - this._cropStopX()) > -brake;
+  }
+  beginCrop() {
+    this.s.cropStage = 'STOP';
+    this.bus.emit('SYS_MESSAGE', {
+      text: `75 mm シャー: 先端のワニ口を切断します（板厚 ${this.slab.thickness.toFixed(0)} mm）`, kind: 'info' });
+  }
+
+  /**
+   * 端部ワニ口の切断（アップカット）。実機の順序どおりに進める。
+   *   STOP → CLAMP → CUT → RETURN → EJECT → DONE
+   * 切断位置は必ず «刃の位置 (S.X)»。切り落とされる長さは
+   * 「そのとき刃より先にある材料の長さ」であり、板端から一定量を削るのではない。
    */
   _crop(dt) {
     const s = this.s, sl = this.slab, m = this.mill, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
-    const cut = (which) => {
-      s.cropLen = S.CROP_LEN;
-      // アップカットなので端材は刃に突き上げられ、跳ね上がってからシュートへ落ちる
-      s.cropX = S.X + F * S.CROP_LEN / 2; s.cropY = 0; s.cropVY = 900; s.cropVisible = true;
-      if (which === 'head') { if (F > 0) sl.xMax -= S.CROP_LEN; else sl.xMin += S.CROP_LEN; }
-      else                  { if (F > 0) sl.xMin += S.CROP_LEN; else sl.xMax -= S.CROP_LEN; }
-      sl.length = sl.xMax - sl.xMin;
-    };
+    const E = S.EJECT;
     switch (s.cropStage) {
-      case 'RUN_HEAD':
-        m.targetSpeed = F * S.SPEED;
-        if (F * (this._head() - S.X) > S.CROP_LEN) { m.targetSpeed = 0; m.currentSpeed = 0; s.cropStage = 'CUT_HEAD'; }
+      case 'STOP':
+        m.targetSpeed = 0;
+        if (Math.abs(m.currentSpeed) < 0.5) { m.currentSpeed = 0; s.cropStage = 'ALIGN'; }
         break;
-      case 'RUN_TAIL':
-        m.targetSpeed = F * S.SPEED;
-        if (F * (this._tail() - S.X) > S.CROP_LEN) { m.targetSpeed = 0; m.currentSpeed = 0; s.cropStage = 'CUT_TAIL'; }
-        break;
-      case 'CUT_HEAD': case 'CUT_TAIL': {
-        s.cropBlade = Math.min(1, s.cropBlade + dt / S.T_CUT);
-        if (s.cropBlade >= 1) {
-          cut(s.cropStage === 'CUT_HEAD' ? 'head' : 'tail');
-          s.cropStage = s.cropStage === 'CUT_HEAD' ? 'OPEN_HEAD' : 'OPEN_TAIL';
+
+      // 行き過ぎ／不足を低速で詰める。先端が刃から CROP_LEN の位置に来るまで。
+      case 'ALIGN': {
+        const err = F * (this._tip() - this._cropStopX());          // + なら行き過ぎ
+        // 戻し過ぎて尾端をロールへ押し戻さない。戻せないときはその場で切る
+        // （端材が規定より長くなるだけで、切断位置は必ず刃の位置になる）
+        const backOk = err <= 0 || F * this._tail() < -CONFIG.SAFE_CLEAR - err;
+        if (Math.abs(err) < 15 || (err > 0 && !backOk)) {
+          m.targetSpeed = 0; m.currentSpeed = 0; s.cropStage = 'CLAMP';
+        } else {
+          m.targetSpeed = -Num.sign0(err) * F * Math.min(S.APPROACH, 6 + Math.abs(err) / 25);
         }
         break;
       }
-      case 'OPEN_HEAD': case 'OPEN_TAIL':
-        s.cropBlade = Math.max(0, s.cropBlade - dt / S.T_OPEN);
-        if (s.cropBlade <= 0) {
-          // シャーは出側のみ。出側に出た先端だけを切る。
-          if (false) s.cropStage = 'RUN_TAIL';
-          else { s.cropStage = 'DONE'; s.cropDone = true; sl.cropped = true;
-                 this.bus.emit('SYS_MESSAGE', { text: '75 mm シャー: 端部切断完了', kind: 'info' }); }
+
+      case 'CLAMP':
+        m.targetSpeed = 0; m.currentSpeed = 0;
+        s.cropClamp = Math.min(1, s.cropClamp + dt / S.T_CLAMP);
+        if (s.cropClamp >= 1) s.cropStage = 'CUT';
+        break;
+
+      // 刃が上昇。刃先が板の上面を越えた瞬間が «切り離し»。
+      case 'CUT': {
+        const before = s.cropBlade;
+        s.cropBlade = Math.min(1, s.cropBlade + dt / S.T_CUT);
+        const through = (b) => this._bladeTip(b) >= m.passLine + this._headThickness();
+        if (!through(before) && through(s.cropBlade)) this._severHead();
+        if (s.cropBlade >= 1) s.cropStage = 'RETURN';
+        break;
+      }
+
+      case 'RETURN':
+        s.cropBlade = Math.max(0, s.cropBlade - dt / S.T_RETURN);
+        if (s.cropBlade <= 0) { s.cropClamp = 0; s.cropStage = 'EJECT'; }
+        break;
+
+      // 端材をエプロン上で操作側へ押し出し、シュートへ落とす。
+      // プッシャ面が端材の後面に触れてから押し出す。触れるまで端材は動かない。
+      case 'EJECT': {
+        s.cropPush = Math.min(1, s.cropPush + dt / S.T_EJECT);
+        const back = sl.width / 2;
+        s.cropFace = Num.lerp(E.Z_HOME, E.Z_DROP - back, s.cropPush);
+        s.cropZ = Math.max(0, s.cropFace + back);
+        if (s.cropPush >= 1) {
+          s.cropStage = 'DROP'; s.cropVY = 0;
+          this.bus.emit('SYS_MESSAGE', {
+            text: `75 mm シャー: 端材 ${s.cropLen.toFixed(0)} mm を操作側へ払い出しました`, kind: 'info' });
+        }
+        break;
+      }
+
+      case 'DROP':                                       // エプロン端からシュートへ落ちる
+        s.cropVY -= 9810 * dt; s.cropY += s.cropVY * dt;
+        s.cropZ += 1200 * dt;
+        s.cropFace = Math.min(s.cropFace + 300 * dt, E.Z_DROP);
+        if (s.cropY < -1200) {
+          s.cropVisible = false; s.cropPush = 0; s.cropFace = E.Z_HOME;
+          s.cropStage = 'DONE'; s.cropDone = true;
         }
         break;
     }
+  }
+
+  /** 刃先の高さ [mm]（cropBlade 0〜1 に対する実位置）。描画と物理でこの 1 式を使う。 */
+  _bladeTip(b) {
+    const S = CONFIG.CROP_SHEAR, P = this.mill.passLine;
+    return P - S.PARK + b * (S.PARK + S.UPPER_CLR + S.OVERTRAVEL);
+  }
+
+  /** 切り離し。板の先端を «刃の位置» に更新し、刃より先にあった材料を端材にする。 */
+  _severHead() {
+    const s = this.s, sl = this.slab, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
+    const tip = this._tip(), before = F > 0 ? sl.xMax : sl.xMin;
+    const cut = Math.abs(tip - S.X);                 // 刃より先にあった材料の長さ
+    const end = F > 0 ? 1 : -1;                      // 先端がどちら側か
+    // 論理端は «刃の位置から張り出しぶん手前»。切った側の張り出しは無くなる。
+    if (end > 0) sl.xMax = S.X; else sl.xMin = S.X;
+    sl.cropped = true; sl.croppedEnd = end;
+    sl.length = sl.xMax - sl.xMin;
+    s.cropLen = cut;                                 // 切り落とした全長（張り出しを含む）
+    s.cropSound = Math.abs(before - S.X);            // うち健全部（板長として減る分）
+    s.cropTh = this._headThickness();
+    s.cropForceT = Rolling.cropForce(s.cropTh, sl.width);
+    // 端材は刃の «先» 側にエプロンへ残る（アップカットなので落下せず床上に乗る）
+    s.cropX = S.X + F * cut / 2; s.cropY = 0; s.cropZ = 0; s.cropVisible = true;
+    this.bus.emit('SYS_MESSAGE', {
+      text: `75 mm シャー: 切断 ${cut.toFixed(0)} mm ／ 剪断力 ${s.cropForceT.toFixed(0)} t`
+          + `（定格 ${S.RATED_FORCE_T} t）`, kind: 'info' });
   }
 
   update(dt) {
     const s = this.s, sl = this.slab, m = this.mill, F = CONFIG.FLIP;
     const SH = CONFIG.TRIMMER, CO = CONFIG.COILER;
 
-    // 切り落とした端材の落下
-    if (s.cropVisible) {
-      s.cropVY -= 9810 * dt; s.cropY += s.cropVY * dt;
-      if (s.cropY < -2400) s.cropVisible = false;      // クロップシュートで受ける
-    }
     if (!sl.onLine) return;
     this._crop(dt);
     if (s.cropStage !== 'IDLE' && s.cropStage !== 'DONE') return;   // クロップ中はライン制御を占有
@@ -1455,14 +1590,15 @@ class PhysicsEngine {
       s.temperature -= dTroll * passedFrac;
       s.biteOk = res.biteOk;
     } else {
-      if (s.rollingActive && (s.xMin > 0 || s.xMax < 0)) {   // 尻抜け: 板厚・板長を確定
-        s.length = s.xMax - s.xMin; s.thickness = gap; s.rollingActive = false;
+      if (s.rollingActive && (s.xMin > 0 || s.xMax < 0)) {   // 尻抜け: 板厚を確定
+        s.thickness = gap; s.rollingActive = false;
       }
       s.xMin += v * dt; s.xMax += v * dt;
       s.rollForce = 0; s.rollTorque = 0; s.rollPower = 0; s.contactLength = 0; s.biteOk = true;
       s.currentSpeed = Math.abs(v) / 1000 * 60;
     }
     s.xCenter = (s.xMin + s.xMax) / 2;
+    s.length = s.xMax - s.xMin;         // 板長は常に幾何から。噛み込み中も実長を保つ
   }
 
   _guides(dt) {
@@ -1816,56 +1952,82 @@ const Parts = {
    *    刃が «出てこられない» 構造になってしまう。
    *  ・門型の側フレームが両側に立ち、その内側にナイフキャリッジの昇降ガイドがある。
    */
+  /* --- 75 mm クロップシャー（アップカット） -------------------------------
+   * 剪断面は x = 0。可動刃（下）は上流側、固定上刃は下流側＝端材が残る側。
+   * ベッドは刃の通り道（SLOT）で上流／下流に分かれており、ここが塞がっていると
+   * 刃がせり上がれない。刃は 75 × 180 × 2500 mm（実機仕様）。 */
   cropShearFrame() {
-    const W = CONFIG.TABLE.BARREL, P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
-    const zc = W / 2 + 780, bt = S.BLADE_T, xKnife = -F * bt / 2, xFixed = F * bt / 2;
+    const P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR, E = S.EJECT;
+    const BL = S.BLADE_L, bt = S.BLADE_T;
+    const xKnife = -F * (bt / 2 + S.CLEARANCE / 2), xFixed = F * (bt / 2 + S.CLEARANCE / 2);
+    const zc = BL / 2 + 620;                                    // 側フレームの中心 Z
     return G.sided(add => {
       for (const sz of [-1, 1]) {
-        add(sz, G.at(G.box(1500, 6200, 900), 0, P + 1300, sz * zc));                  // 側フレーム(柱)
-        add(sz, G.at(G.box(2400, 500, 1500), 0, P - 2050, sz * zc));                  // 基礎
-        // ナイフキャリッジの昇降ガイド（柱の内側、刃の両脇）
+        add(sz, G.at(G.box(1400, 5600, 760), 0, P + 1150, sz * zc));            // 側フレーム(柱)
+        add(sz, G.at(G.box(2200, 460, 1300), 0, P - 2020, sz * zc));            // 基礎
+        // ナイフキャリッジの昇降ガイド（刃の両脇、柱の内側）
         for (const sx of [-1, 1])
-          add(sz, G.at(G.box(180, 2600, 420), xKnife + sx * (bt / 2 + 140), P - 500, sz * (W / 2 + 320)));
+          add(sz, G.at(G.box(150, 2200, 360), xKnife + sx * (bt / 2 + 130), P - 620, sz * (BL / 2 + 250)));
       }
       // --- 上部: クロスヘッド / 固定上刃 / 押えシリンダ ---
-      add(0, G.at(G.box(1900, 800, W + 1700), 0, P + 3900, 0));                       // クロスヘッド
-      add(0, G.at(G.box(760, 950, W + 500), xFixed, P + S.UPPER_CLR + 780, 0));       // 上刃ホルダ
-      add(0, G.at(G.box(bt, 320, W + 240), xFixed, P + S.UPPER_CLR + 160, 0));        // 固定上刃
+      add(0, G.at(G.box(1700, 700, BL + 1500), 0, P + 3550, 0));                // クロスヘッド
+      add(0, G.at(G.box(bt + 380, 620, BL + 300), xFixed, P + S.UPPER_CLR + S.BLADE_H + 310, 0)); // 上刃ホルダ
+      add(0, G.at(G.box(bt, S.BLADE_H, BL), xFixed, P + S.UPPER_CLR + S.BLADE_H / 2, 0));         // 固定上刃
       for (const sx of [-1, 1])
-        add(0, G.at(G.cyl(360, 900, 'y', 14), -F * (bt / 2 + 620), P + 3350, sx * (W / 2 - 300))); // 押えシリンダ
+        add(0, G.at(G.cyl(320, 820, 'y', 14), -F * (bt / 2 + 560), P + 3050, sx * (BL / 2 - 320)));
       // --- ベッド: 刃の通り道を空けて上流／下流に分ける ---
       const bedL = 900, edge = S.SLOT / 2;
-      add(0, G.at(G.box(bedL, 800, W + 900), xKnife - F * (edge + bedL / 2), P - 400, 0));
-      add(0, G.at(G.box(bedL, 800, W + 900), xKnife + F * (edge + bedL / 2), P - 400, 0));
-      // --- クロップシュート: ベッドより下、スリットの下流側に置く ---
-      //     刃の通り道（スリット）に入らない位置まで下げること。
-      add(0, G.at((() => { const g = G.box(2200, 220, W + 1200); g.rotateZ(-F * 0.42); return g; })(),
-                  F * 1800, P - 1700, 0));
-      add(0, G.at(G.box(1500, 1400, W + 1400), F * 3100, P - 2500, 0));               // スクラップ箱
+      add(0, G.at(G.box(bedL, 760, BL + 700), xKnife - F * (edge + bedL / 2), P - 380, 0));
+      add(0, G.at(G.box(bedL, 760, BL + 700), xKnife + F * (edge + bedL / 2), P - 380, 0));
+      // --- 端材エプロン: 切った端材を受け、操作側(+Z)へ押し出す平床 ---
+      //     上面はパスラインと一致（端材が段差なく横へ滑る）。ラインより下流側に置く。
+      // エプロンは刃の通り道（スリット）に掛からない位置から始める
+      const ax = xFixed + F * (S.CROP_LEN / 2 + 420), az0 = E.Z_HOME - 300, az1 = E.Z_DROP;
+      add(0, G.at(G.box(S.CROP_LEN + 700, 120, az1 - az0), ax, P - 60, (az0 + az1) / 2));
+      // 側レール（端材の脱線防止）。板の通る範囲（|Z| ≤ 板幅/2）には出さない。
+      const rz0 = 900, rl = az1 - rz0;
+      for (const sx of [-1, 1])
+        add(0, G.at(G.box(140, 260, rl), ax + sx * (S.CROP_LEN / 2 + 280), P + 10, rz0 + rl / 2));
+      for (const sz of [-1, 1])                                    // エプロン脚
+        add(0, G.at(G.box(S.CROP_LEN + 700, P - 120, 240), ax, (P - 120) / 2, sz * (az1 - az0) / 2 * 0.8));
+      // --- 操作側のスクラップシュートと箱 ---
+      add(0, G.at((() => { const g = G.box(S.CROP_LEN + 700, 140, 1400); g.rotateX(0.52); return g; })(),
+                  ax, P - 380, E.CHUTE_Z));
+      add(0, G.at(G.box(S.CROP_LEN + 1100, 1100, 1800), ax, P - 1400, E.CHUTE_Z + 800));
     });
   },
   /**
-   * ナイフキャリッジ（可動刃）。原点＝刃先。上昇して板を «下から» 切る。
-   * 刃には剪断を先端から進める傾斜（レーキ）を付ける。
+   * ナイフキャリッジ（可動刃）。原点＝刃先の «低い側»。刃 75 × 180 × 2500 に
+   * レーキ角を付け、剪断を端から順に進める（全幅同時剪断より力が小さくて済む）。
    */
   cropShearRam() {
-    const W = CONFIG.TABLE.BARREL, S = CONFIG.CROP_SHEAR;
+    const S = CONFIG.CROP_SHEAR, BL = S.BLADE_L, bt = S.BLADE_T;
     return G.merge([
-      G.at((() => { const g = G.box(S.BLADE_T, 340, W + 240); g.rotateX(0.045); return g; })(), 0, -170, 0),
-      G.at(G.box(S.BLADE_T + 260, 700, W + 700), 0, -690, 0),          // 刃物台
-      G.at(G.box(S.BLADE_T + 620, 300, W + 1300), 0, -1180, 0),        // キャリッジ（ガイド摺動部）
-      G.at(G.cyl(420, 900, 'y', 14), 0, -1780, -(W / 2 - 300)),        // 昇降シリンダ ×2
-      G.at(G.cyl(420, 900, 'y', 14), 0, -1780,  (W / 2 - 300)),
+      G.at((() => { const g = G.box(bt, S.BLADE_H, BL); g.rotateX(S.RAKE); return g; })(),
+           0, -S.BLADE_H / 2, 0),                                    // 刃 75×180×2500
+      G.at(G.box(bt + 240, 620, BL + 500), 0, -S.BLADE_H - 310, 0),  // 刃物台
+      G.at(G.box(bt + 560, 260, BL + 1100), 0, -S.BLADE_H - 750, 0), // キャリッジ（ガイド摺動部）
+      G.at(G.cyl(380, 820, 'y', 14), 0, -S.BLADE_H - 1290, -(BL / 2 - 320)),
+      G.at(G.cyl(380, 820, 'y', 14), 0, -S.BLADE_H - 1290,  (BL / 2 - 320)),
     ]);
   },
-  /** 押え（ホールドダウン）。切断中に板を上から押さえる。原点＝押え面。 */
+  /** 押え（ホールドダウン）。切断前に板を上から押さえる。原点＝押え面。 */
   cropShearHold() {
-    const W = CONFIG.TABLE.BARREL, S = CONFIG.CROP_SHEAR;
+    const S = CONFIG.CROP_SHEAR, BL = S.BLADE_L;
     return G.merge([
-      G.at(G.box(620, 260, W + 300), 0, 130, 0),
-      G.at(G.cyl(300, 700, 'y', 12), 0, 610, -(W / 2 - 300)),
-      G.at(G.cyl(300, 700, 'y', 12), 0, 610,  (W / 2 - 300)),
-      G.at(G.box(500, 220, W + 900), 0, 1010, 0),
+      G.at(G.box(560, 240, BL + 200), 0, 120, 0),
+      G.at(G.cyl(280, 640, 'y', 12), 0, 560, -(BL / 2 - 320)),
+      G.at(G.cyl(280, 640, 'y', 12), 0, 560,  (BL / 2 - 320)),
+      G.at(G.box(460, 200, BL + 800), 0, 920, 0),
+    ]);
+  },
+  /** 端材払い出しプッシャ。駆動側から出て端材を操作側のシュートへ押し出す。 */
+  cropPusher() {
+    const S = CONFIG.CROP_SHEAR, P = CONFIG.MILL.PASS_LINE;
+    return G.merge([
+      G.at(G.box(S.CROP_LEN, 320, 160), 0, P + 160, 0),          // 押し板（エプロン面の上）
+      G.at(G.cyl(160, 900, 'z', 10), 0, P + 160, -530),          // ロッド
+      G.at(G.box(420, 420, 900), 0, P + 160, -1430),             // シリンダ
     ]);
   },
 
@@ -2625,13 +2787,20 @@ class FinishView {
     const CS = CONFIG.CROP_SHEAR;
     this.cropShear = new THREE.Group(); this.cropShear.position.x = u(CS.X); scene.add(this.cropShear);
     addFrame(this.cropShear, Parts.cropShearFrame());
+    const xKnife = -F * (CS.BLADE_T / 2 + CS.CLEARANCE / 2);
     this.cropRam = new THREE.Mesh(Parts.cropShearRam(), MAT.blade);
-    this.cropRam.castShadow = true; this.cropRam.position.x = u(-CONFIG.FLIP * CS.BLADE_T / 2);
+    this.cropRam.castShadow = true; this.cropRam.position.x = u(xKnife);
     this.cropShear.add(this.cropRam);
     this.cropHold = new THREE.Mesh(Parts.cropShearHold(), MAT.hydraulic);
     this.cropHold.castShadow = true;
-    this.cropHold.position.x = u(-CONFIG.FLIP * (CS.BLADE_T / 2 + 620));
+    this.cropHold.position.x = u(xKnife - F * (CS.BLADE_T / 2 + 560));
     this.cropShear.add(this.cropHold);
+    // 端材払い出しプッシャ（駆動側 → 操作側）
+    this.cropPusher = new THREE.Mesh(Parts.cropPusher(), MAT.hydraulic);
+    this.cropPusher.castShadow = true;
+    // 押し板は刃より下流側に寄せる（刃の位置には板の先端が残るため）
+    this.cropPusher.position.x = u(-xKnife + F * (CS.CROP_LEN / 2 + 120));
+    this.cropShear.add(this.cropPusher);
     this.cropPiece = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
     this.cropPiece.castShadow = true; this.cropPiece.visible = false; scene.add(this.cropPiece);
   }
@@ -2697,18 +2866,19 @@ class FinishView {
       this.holdRoll.visible = this.holdArm.visible = fin.mode === 'COIL';
     }
 
-    // 75 mm シャー: 押え → 刃の上昇、の順に動く（実機の順序）。
-    //  押えが先に板を押さえ、そのあと可動刃がベッドのスリットを通ってせり上がる。
-    const CS = CONFIG.CROP_SHEAR;
-    const hold  = Num.smoothstep(0, 0.35, fin.cropBlade);
-    const blade = Num.smoothstep(0.18, 1, fin.cropBlade);
-    this.cropHold.position.y = u(P + slab.thickness + CS.HOLD_OPEN * (1 - hold));
-    this.cropRam.position.y  = u(P - CS.OPEN + blade * (CS.OPEN + slab.thickness + CS.UPPER_CLR + 60));
+    // 75 mm シャー。押え(cropClamp) と 刃(cropBlade) は別の状態量として動かす。
+    // 刃先の高さは物理側と同じ式（FinishController._bladeTip）を使う。
+    const CS = CONFIG.CROP_SHEAR, E = CS.EJECT;
+    const cropTh = fin.cropTh || Math.min(slab.thickness, CS.MAX_TH);
+    this.cropHold.position.y = u(P + cropTh + CS.HOLD_OPEN * (1 - fin.cropClamp));
+    this.cropRam.position.y  = u(P - CS.PARK + fin.cropBlade * (CS.PARK + CS.UPPER_CLR + CS.OVERTRAVEL)
+                                 - CS.BLADE_H * 0);
+    this.cropPusher.position.z = u(fin.cropFace);
     this.cropPiece.visible = fin.cropVisible;
     if (fin.cropVisible) {
-      this.cropPiece.scale.set(u(Math.max(fin.cropLen, 1)), u(slab.thickness), u(slab.width));
-      this.cropPiece.position.set(u(fin.cropX), u(P + fin.cropY + slab.thickness / 2), 0);
-      this.cropPiece.rotation.z = Num.clamp(fin.cropY / 900, -0.9, 0);
+      this.cropPiece.scale.set(u(Math.max(fin.cropLen, 1)), u(Math.max(fin.cropTh, 1)), u(slab.width));
+      this.cropPiece.position.set(u(fin.cropX), u(P + fin.cropY + fin.cropTh / 2), u(fin.cropZ));
+      this.cropPiece.rotation.x = Num.clamp(-fin.cropY / 700, -0.9, 0);
     }
 
     // 渡り板（スリーロール上端 → コイル下面）
@@ -2917,7 +3087,8 @@ class SlabView {
     if (!this.mesh.visible) return;
     // 形状が変わっていなければ頂点更新も法線再計算も行わない（停止中のコストをゼロに）
     const sig = slab.xMin + ':' + slab.xMax + ':' + slab.thickness + ':' + slab.width + ':'
-              + mill.gap + ':' + mill.passLine + ':' + slab.inBite + ':' + slab.dir;
+              + mill.gap + ':' + mill.passLine + ':' + slab.inBite + ':' + slab.dir + ':'
+              + slab.cropped + ':' + slab.croppedEnd;
     if (sig === this._sig) return;
     this._sig = sig;
     const L = slab.xMax - slab.xMin, w = slab.width, P = mill.passLine;
@@ -2942,11 +3113,14 @@ class SlabView {
       const bx = base.getX(i) + 0.5, by = base.getY(i) + 0.5, bz = base.getZ(i);
       let x = this._map ? this._mapX(bx) : slab.xMin + bx * L, h = hIn, dip = 0;
       if (rolling) { const p = Rolling.profile(x, hIn, gap, slab.dir); h = p.h; dip = p.dip; }
-      // 端部の張り出し（舌＝幅中央が伸び、ワニ口＝表裏が伸びる）
-      const e = slab.cropped ? -1 : (Math.abs(bx * 2 - 1) - 0.88) / 0.12;
-      if (e > 0) {
-        const ramp = e * e, sgn = bx > 0.5 ? 1 : -1, nz = bz * 2, ny = by * 2 - 1;
-        x += sgn * (w * 0.09 * red * ramp * (1 - nz * nz) + L * 0.025 * red * ramp * ny * ny);
+      // 端部の張り出し（舌＝幅中央が伸び、ワニ口＝表裏が伸びる）。
+      // 切り落とした側は張り出しが無くなる（slab.overhangAt が 0 を返す）。
+      const sgn = bx > 0.5 ? 1 : -1, oh = slab.overhangAt(sgn);
+      const e = (Math.abs(bx * 2 - 1) - 0.88) / 0.12;
+      if (e > 0 && oh > 0) {
+        // 舌（幅中央が伸びる）と ワニ口（表裏が開く）の合成。端の最大変位が oh になる。
+        const ramp = e * e, nz = bz * 2, ny = by * 2 - 1;
+        x += sgn * oh * ramp * 0.5 * ((1 - nz * nz) + ny * ny);
       }
       pos.setXYZ(i, u(x), u(P - dip + by * h), u(bz * w));
     }

@@ -49,7 +49,7 @@ const out = await p.evaluate(async () => {
     g.children.forEach(c => { if (c.isInstancedMesh) allow.add(c); });   // サイドガイドローラ
   const F = W.finishView;
   add([F.knives, F.lowerRolls, F.upperRoll, F.mandrel, F.coil, F.bridge, F.cropRam, F.cropPiece,
-       F.holdRoll, F.holdArm, F.knifeShafts]);
+       F.holdRoll, F.holdArm, F.knifeShafts, F.cropHold]);
   const S = W.supplyView;
   add([S.runIn, S.cross, S.armRolls, S.tilterArm]);
 

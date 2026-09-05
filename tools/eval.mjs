@@ -458,6 +458,7 @@ const run = async () => {
       grp.children.forEach(o => {
         if (!o.isMesh || o === window.__app.world.finishView.cropRam) return;
         if (o === window.__app.world.finishView.cropHold) return;
+        if (o === window.__app.world.finishView.cropPusher) return;   // 可動の払い出し機構
         const pos = o.geometry.attributes.position;
         const zw = K.TABLE.BARREL / 2 + 120;          // 刃の胴幅（この範囲だけが通り道）
         for (let i = 0; i < pos.count; i++) {
@@ -480,6 +481,33 @@ const run = async () => {
       ok('押えの退避位置が最大板厚を越える',
          S.HOLD_OPEN > S.MAX_TH, `退避 ${S.HOLD_OPEN} mm ＞ 最大板厚 ${S.MAX_TH} mm`);
       ok('端材長は実機の範囲（800 mm 以下）', S.CROP_LEN <= 800, `${S.CROP_LEN} mm`);
+      // --- 実機仕様との突き合わせ ---
+      ok('シャー刃の寸法が実機仕様（75 × 180 × 2500 mm）',
+         S.BLADE_T === 75 && S.BLADE_H === 180 && S.BLADE_L === 2500,
+         `${S.BLADE_T} × ${S.BLADE_H} × ${S.BLADE_L} mm / ${S.BLADE_MAT} ${S.BLADE_HS}`);
+      {
+        const f = window.__ROLL.cropForce(S.MAX_TH, S.BLADE_L);
+        ok('最大断面を切るのに要する剪断力が定格 368 t と一致',
+           Math.abs(f - S.RATED_FORCE_T) < 1,
+           `75 × 2500 mm → ${f.toFixed(0)} t（定格 ${S.RATED_FORCE_T} t）`);
+        const fw = window.__ROLL.cropForce(S.MAX_TH, K.TRIMMER.WIDTH_IN_MAX);
+        ok('実運用の最大板幅でも定格剪断力を超えない', fw <= S.RATED_FORCE_T,
+           `板厚 ${S.MAX_TH} × 幅 ${K.TRIMMER.WIDTH_IN_MAX} mm → ${fw.toFixed(0)} t`);
+      }
+      ok('刃の行程が «待機はベッド下・上死点は固定上刃を越える»',
+         S.PARK > 0 && S.PARK + S.UPPER_CLR + S.OVERTRAVEL > S.PARK + S.MAX_TH,
+         `待機 パスライン下 ${S.PARK} mm → 上死点 パスライン上 ${S.UPPER_CLR + S.OVERTRAVEL} mm`);
+      ok('上下刃のサイドクリアランスが板厚の 3〜8 %',
+         S.CLEARANCE / S.MAX_TH >= 0.03 && S.CLEARANCE / S.MAX_TH <= 0.08,
+         `${S.CLEARANCE} mm ＝ 板厚 ${S.MAX_TH} mm の ${(100 * S.CLEARANCE / S.MAX_TH).toFixed(1)} %`);
+      {
+        const E = S.EJECT, w = K.SLAB.WID_DEFAULT;
+        ok('端材払い出しがエプロン端まで届く（操作側へ抜ける）',
+           E.Z_DROP - w / 2 > E.Z_HOME && E.CHUTE_Z > E.Z_DROP,
+           `プッシャ面 ${E.Z_HOME} → ${E.Z_DROP - w / 2} mm ／ シュート ${E.CHUTE_Z} mm`);
+        ok('払い出し方向が操作側（+Z＝装入設備と同じ側）',
+           E.Z_DROP > 0 && K.SUPPLY.SIDE_Z > 0, `Z_DROP ${E.Z_DROP} / 操作側 +Z`);
+      }
     }
     ok('75 mm シャーはアップカット（可動刃が下、固定刃が上）',
        K.CROP_SHEAR.UPPER_CLR >= K.CROP_SHEAR.MAX_TH,
