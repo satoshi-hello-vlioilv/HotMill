@@ -774,7 +774,7 @@ const CONFIG = {
    * 自重によるたわみ: テーブル上では端部が浮き上がり長 ℓ = √(2·EI·κ/q) だけ持ち上がり
    * （先端高さ κℓ²/4）、ロールから出た直後の先端は片持ち梁として上反り→自重で垂れる。 */
   CURL: { GAIN: 0.04 },
-  PROCESS: { MU: 0.25, TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.70,
+  PROCESS: { MU: 0.25, TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.70, LAYER_LOAD_K: 1.25,
              ACCEL: 110, BITE_ANGLE_MAX: 0.42, PASS_TIME_MAX: 150 },  // mpm/s, rad(24°), s
 
   // パススケジュールは板厚・板幅から Rolling.buildSchedule() が生成する（初期値は空）
@@ -1184,13 +1184,19 @@ const Rolling = {
     // 速度は質量流に合わせて上げ、主機動力の定格で頭打ちにする。ただし温度は選んだ速度に
     // 依存する（低速ほどロールに熱を奪われる）ので、速度→温度→速度 を反復して収束させる。
     let speeds = drafts.map((d, i) => Math.round(Num.lerp(55, vMax, n > 1 ? i / (n - 1) : 1) / 5) * 5);
+    const forces = [], tEnds = [];
     for (let it = 0; it < 5; it++) {
       let hh = h0, TT = temp;
+      forces.length = 0; tEnds.length = 0;
       speeds = drafts.map((d, i) => {
         const hOut = hh - d;
         let v = speeds[i];
         while (v > 10 && Rolling.solve(hh, hOut, width, v, TT, 0, al).powerKW > pLimit) v -= 5;
+        const T0 = TT;
         TT += Rolling.passTempChange(hh, hOut, v, TT, Rolling.passTime(L0 * h0 / hOut, v), al);
+        // 予測荷重: パス終端温度で見た荷重に、表層硬化ぶん（層平均で 2〜3 割増）を掛ける
+        forces.push(Rolling.solve(hh, hOut, width, v, Math.min(T0, TT), 0, al).forceTon * P.LAYER_LOAD_K);
+        tEnds.push(TT);
         hh = hOut;
         return v;
       });
@@ -1201,10 +1207,27 @@ const Rolling = {
       const hOut = Math.round((h - d) * 10) / 10;
       const isCoil = coil && i === (coilPass >= 0 ? coilPass : drafts.length - 1);
       out.push({ pass: i + 1, gap: hOut, dir: CONFIG.FLIP * (i % 2 === 0 ? 1 : -1), coil: isCoil,
-                 speed: isCoil ? Math.min(speeds[i], CONFIG.COILER.ROLL_SPEED_MAX) : speeds[i] });
+                 speed: isCoil ? Math.min(speeds[i], CONFIG.COILER.ROLL_SPEED_MAX) : speeds[i],
+                 force: Math.round(forces[i]), tEnd: Math.round(tEnds[i]) });
       h = hOut;
     });
     return out;
+  },
+  /**
+   * スケジュールの成立判定。予測荷重が常用最大を超える、または最終パスの終端温度が
+   * 材質の下限を割る場合は «このラインでは成立しない» と判定する（実機なら過負荷停止する条件）。
+   */
+  scheduleFeasibility(sch, alloy = Rolling.alloy(), coil = true) {
+    const M = CONFIG.MILL, maxF = Math.max(0, ...sch.map(q => q.force || 0));
+    const last = sch[sch.length - 1], tEnd = last ? last.tEnd : Infinity;
+    const floor = Rolling.tempFloor(coil, alloy);
+    const reasons = [];
+    if (maxF > M.RATED_FORCE_T) {
+      const over = sch.find(q => q.force > M.RATED_FORCE_T);
+      reasons.push(`第 ${over.pass} パスの予測荷重 ${maxF > 9999 ? '9,999 t 以上' : Math.round(maxF).toLocaleString() + ' t'} が常用最大 ${M.RATED_FORCE_T.toLocaleString()} t を超えます`);
+    }
+    if (tEnd < floor) reasons.push(`最終パスの終端温度 ${tEnd} ℃ が下限 ${floor} ℃ を割ります`);
+    return { ok: reasons.length === 0, maxF, tEnd, reasons };
   },
 
   /** ロールバイト内の板厚プロファイル h(x) と下面高さ。x は圧延中心からの mm。 */
@@ -1262,6 +1285,12 @@ class SlabState {
     return s / (n - 1);
   }
   set temperature(v) { this.T.fill(v); }
+  /**
+   * 熱計算に使う実効板厚。噛み込み中の板は入側厚の部分と出側厚の部分が混在するので、
+   * 体積（一定）÷ 現在の全長 で «長さ平均の板厚» を取る。入側厚をそのまま使うと、
+   * すでに薄くなった出側の部分の放熱を過小に見積もる（薄板パスで数十 ℃ 違う）。
+   */
+  get hEff() { return this.inBite && this._vol > 0 ? this._vol / Math.max(this.length, 1) : this.thickness; }
   get tTop() { return this.T[0]; }
   get tBot() { return this.T[this.T.length - 1]; }
   get tCore() { return this.T[(this.T.length - 1) >> 1]; }
@@ -1802,7 +1831,7 @@ class PhysicsEngine {
     this.finish.reset(); this.finish.mode = keepMode; this.finish.trim = keepTrim;
     this.supply.reset();
     this.slab.onLine = !this.supply.enabled;
-    this.paused = false; this.elapsed = 0; this.warn = null;
+    this.paused = false; this.elapsed = 0; this.warn = null; this.tripped = null;
     this.bus.emit('STATE_RESET');
   }
 
@@ -1878,6 +1907,7 @@ class PhysicsEngine {
     }
     s.xCenter = (s.xMin + s.xMax) / 2;
     s.length = s.xMax - s.xMin;         // 板長は常に幾何から。噛み込み中も実長を保つ
+    if (!s.inBite) s._vol = s.thickness * s.length;   // 噛み込み中の実効板厚（体積÷全長）の基準
   }
 
   _guides(dt) {
@@ -1900,7 +1930,7 @@ class PhysicsEngine {
     const x = 2 * M.H_ROLL * contactTime / (rc * (gap / 1000));
     const dTavg = (s.temperature - M.T_ROLL) * (1 - Math.exp(-x)) * passedFrac;   // 板厚平均の抜熱 [K]
     const delta = Math.max(M.CHILL_DEPTH_K * Math.sqrt(alpha * contactTime) * 1000, 0.5);   // mm
-    const h = s.thickness, dz = h / (n - 1);
+    const h = s.hEff, dz = h / (n - 1);
     let wsum = 0; const w = new Array(n);
     for (let j = 0; j < n; j++) {
       const d = Math.min(j, n - 1 - j) * dz;                                // 近い表面からの深さ
@@ -1919,7 +1949,7 @@ class PhysicsEngine {
    */
   _thermal(dt) {
     const s = this.slab, M = CONFIG.MATERIAL, al = s.alloy, T = s.T, n = T.length;
-    const rc = al.RHO * al.CP, h = s.thickness / 1000, dz = h / (n - 1), k = al.K;
+    const rc = al.RHO * al.CP, h = s.hEff / 1000, dz = h / (n - 1), k = al.K;
     const Ta = M.T_AMBIENT, Ak = Ta + 273.15;
     const hRad = (Ts) => { const Tk = Ts + 273.15; return M.EMISSIVITY * 5.67e-8 * (Tk * Tk + Ak * Ak) * (Tk + Ak); };
     const cooling = this.env.coolant && s.inBite && Math.abs(this.mill.currentSpeed) > 3;
@@ -1967,9 +1997,23 @@ class PhysicsEngine {
     return this.mill.mode === 'MANUAL' || this.mill.passIndex >= 0;
   }
 
+  /** 過負荷停止。非常最大圧延荷重を超えたら実機と同じく主機を止め、運転を打ち切る。 */
+  _trip(text) {
+    const m = this.mill;
+    m.mode = 'AUTO'; m.passIndex = -1; m.passPhase = 'IDLE'; m.targetSpeed = 0; m.currentSpeed = 0;
+    this.finish.cropStage = 'DONE';
+    this.tripped = text;
+    this.bus.emit('SYS_MESSAGE', { text, kind: 'crit' });
+    this.bus.emit('STATE_TRIP', text);
+  }
+
   _diagnose() {
     const s = this.slab, m = this.mill, C = CONFIG.MILL;
     let w = null;
+    if (!this.tripped && s.rollForce > C.LIMIT_FORCE_T && m.passIndex >= 0) {
+      this._trip(`過負荷停止: 圧延荷重 ${s.rollForce.toFixed(0)} t が非常最大 ${C.LIMIT_FORCE_T.toLocaleString()} t を超えました（材質・板厚・炉出し温度を見直してください）`);
+      return;
+    }
     if (s.rollForce > C.RATED_FORCE_T)            w = { kind: 'crit', text: `圧延荷重が定格 ${C.RATED_FORCE_T} t を超過しています` };
     else if (s.rollPower > C.RATED_POWER_KW)      w = { kind: 'crit', text: `主電動機動力が定格 ${(C.RATED_POWER_KW / 1000).toFixed(1)} MW を超過しています` };
     else if (s.onLine && this.stillRolling && !this.finish.winding && s.temperature < this.tempFloor)
@@ -4078,8 +4122,8 @@ class UIManager {
     sch.forEach((s, i) => {
       const done = i < this.passIndex || (this.finished && this.passIndex === -1);
       const cls = done ? 'done' : (i === this.passIndex ? 'active' : '');
-      const pk = this.peak?.[i];
-      const ratio = pk ? Num.clamp(pk / RF, 0, 1) : 0;
+      const pk = this.peak?.[i], pred = s.force;
+      const ratio = Num.clamp((pk ?? pred ?? 0) / RF, 0, 1);
       const tr = document.createElement('tr');
       tr.className = cls;
       tr.innerHTML =
@@ -4087,14 +4131,14 @@ class UIManager {
         `<td>${s.gap.toFixed(0)}</td>` +
         `<td>${((1 - s.gap / h) * 100).toFixed(1)}%</td>` +
         `<td>${s.speed}<span class="dir"> ${s.dir * CONFIG.FLIP > 0 ? '▶' : '◀'}</span></td>` +
-        `<td>${pk ? Math.round(pk).toLocaleString() + ' t' : '–'}` +
-        `<span class="load"><i style="width:${(ratio * 100).toFixed(0)}%"></i></span></td>`;
+        `<td>${pk ? Math.round(pk).toLocaleString() + ' t' : pred ? `<span style="color:var(--ink-3)">${pred.toLocaleString()} t</span>` : '–'}` +
+        `<span class="load"><i style="width:${(ratio * 100).toFixed(0)}%${(pk ?? pred ?? 0) > RF ? ';background:var(--crit)' : ''}"></i></span></td>`;
       tb.appendChild(tr);
       h = s.gap;
     });
     $('sched-note').textContent =
-      `全 ${sch.length} パス・可逆圧延（板厚から自動生成）。▶ 第1パス方向 / ◀ 逆行。` +
-      `荷重は常用最大 ${RF.toLocaleString()} t に対する比。`;
+      `全 ${sch.length} パス・可逆圧延（板厚・材質から自動生成）。▶ 第1パス方向 / ◀ 逆行。` +
+      `荷重は常用最大 ${RF.toLocaleString()} t に対する比（灰色は予測、運転中は実測の最大値）。`;
   }
   _buildViews() {
     const host = $('cam-chips');
@@ -4271,12 +4315,15 @@ class UIManager {
       const mass = th * d.width * d.length * 1e-9 * AL.RHO / 1000;
       const sch = Rolling.buildSchedule(th, d.target, d.width, d.temp, { coil, length: d.length, alloy: d.alloy });
       const reached = sch.length ? sch[sch.length - 1].gap : th;
+      const feas = Rolling.scheduleFeasibility(sch, AL, coil);
+      this.previewSchedule = sch;
       const finW = Math.max(d.width - 2 * d.trim, 100);
       const C = CONFIG.COILER;
       const od = Rolling.coilOD(outLen, d.target), coilKg = Rolling.coilMass(outLen, d.target, finW, AL);
       $('der-trim').textContent = `仕上げ幅 ${finW} mm（板幅 ${d.width} − 両耳 2×${d.trim}）`;
       const T2 = CONFIG.TRIMMER, warn = [], note = [];
       if (Math.abs(reached - d.target) > 0.6) warn.push(`テーブル長の制約で ${reached.toFixed(1)} mm までしか到達できません（この板厚はコイルでなければ作れません）`);
+      if (!feas.ok) warn.push(`このラインでは成立しません: ${feas.reasons.join('、')}（運転すると過負荷停止します）`);
       $('der-target').textContent = coil
         ? `${sch.length} パスで ${d.target} mm まで圧延し、最終パスで巻取機へ巻き取ります（コイル可能厚 ${CONFIG.COILER.TH_MIN}〜${CONFIG.COILER.TH_MAX} mm）。`
         : `${sch.length} パスで ${d.target} mm まで圧延し、出側テーブルへ送り出します。${d.target <= CONFIG.CROP_SHEAR.MAX_TH ? '75 mm シャーで端部を切り落とします。' : '板厚 75 mm 超なので 75 mm シャーは使いません。'}`;
@@ -4349,6 +4396,7 @@ class UIManager {
     this.bus.on('STATE_RESET', () => { this.busy = false; this.paused = false; this.passIndex = -1;
       this.peak = {}; this.renderSchedule(); this._startBtn(); this._banner('idle'); });
     this.bus.on('STATE_FINISHED', () => { this.busy = false; this._startBtn(); this._banner('done'); });
+    this.bus.on('STATE_TRIP', (text) => { this.busy = false; this.tripText = text; this._startBtn(); this._banner('trip'); });
     this.bus.on('SYS_MESSAGE', m => this.toast(m.text, m.kind));
     this.bus.on('STATE_WARN', w => { this.warn = w; if (w) this.toast(w.text, w.kind); this._banner(); });
     this.peak = {};
@@ -4454,7 +4502,8 @@ class UIManager {
   _banner(force) {
     const p = window.__phys; if (!p && !force) return;
     let cls = '', ic = 'fa-power-off', st = '待機中', hint = '「圧延サイクル開始」でスラブ装入から自動運転します。';
-    if (this.warn) { cls = this.warn.kind === 'crit' ? 'is-warn' : 'is-warn'; ic = 'fa-triangle-exclamation';
+    if (p && p.tripped) { cls = 'is-warn'; ic = 'fa-circle-stop'; st = '過負荷停止'; hint = p.tripped + ' リセットで初期状態へ戻せます。'; }
+    else if (this.warn) { cls = this.warn.kind === 'crit' ? 'is-warn' : 'is-warn'; ic = 'fa-triangle-exclamation';
                      st = this.warn.kind === 'crit' ? '定格超過' : '注意'; hint = this.warn.text; }
     else if (force === 'done' || this._doneFlag) { cls = 'is-run'; ic = 'fa-flag-checkered'; st = '完了'; hint = 'リセットで初期状態へ戻せます。'; }
     else if (this.paused) { cls = ''; ic = 'fa-pause'; st = '一時停止中'; hint = '<kbd>P</kbd> または「再開」で続行します。'; }

@@ -14,10 +14,11 @@ const out = await page.evaluate(({ target, alloy }) => {
       maxF = Math.max(maxF, p.slab.rollForce); maxP = Math.max(maxP, p.slab.rollPower);
       if (p.mill.passIndex !== last) { last = p.mill.passIndex; log.push({ t: +(n / 120).toFixed(1), pass: last, th: +p.slab.thickness.toFixed(1), len: +(p.slab.length / 1000).toFixed(2), T: +p.slab.temperature.toFixed(0) }); }
       if (n % 240 === 0) A.world.render(P, 2);
-      return p.finish.done;
+      return p.finish.done || !!p.tripped;
     }, 120 * 2500, 0);
     const f = P.finish, s = P.slab;
-    res({ steps: r.n, t: r.t, done: f.done, mode: f.mode, target: K.SLAB.TARGET_TH, passes: K.SCHEDULE.length, log,
+    const feas = window.__ROLL.scheduleFeasibility(K.SCHEDULE, s.alloy, f.mode === 'COIL');
+    res({ steps: r.n, t: r.t, done: f.done, tripped: P.tripped, feasible: feas.ok, feasReasons: feas.reasons, mode: f.mode, target: K.SLAB.TARGET_TH, passes: K.SCHEDULE.length, log,
           maxForceT: +maxF.toFixed(0), maxPowerKW: +maxP.toFixed(0), sched: K.SCHEDULE.map(q => `${q.gap}@${q.speed}`).join(' '),
           th: +s.thickness.toFixed(2), len: +(s.length / 1000).toFixed(2), turns: +f.turns.toFixed(1), layers: f.layers,
           od: +f.od.toFixed(0), odLayers: +(2 * (K.COILER.MANDREL_D / 2 + f.turns * s.thickness)).toFixed(0),
