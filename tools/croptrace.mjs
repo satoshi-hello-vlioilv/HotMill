@@ -18,15 +18,16 @@ const out = await p.evaluate(() => {
     SV.mesh.updateWorldMatrix(true,false);
     SV.mesh.geometry.computeBoundingBox();
     const bb = SV.mesh.geometry.boundingBox.clone().applyMatrix4(SV.mesh.matrixWorld);
-    FV.cropBed.updateWorldMatrix(true,false); FV.cropPiece.updateWorldMatrix(true,false);
+    FV.cropBed.updateWorldMatrix(true,false);
+    const sc0 = f.scraps[f.scraps.length - 1], pm = sc0 ? FV.scraps.get(sc0.id) : null;
     return { t:+t.toFixed(2), stage:f.cropStage, blade:+f.cropBlade.toFixed(3),
       spd:mm(m.currentSpeed), th:+sl.thickness.toFixed(1),
       logic:{ xMin:mm(sl.xMin), xMax:mm(sl.xMax), len:mm(sl.length) },
       drawn:{ x0:mm(bb.min.x/sc), x1:mm(bb.max.x/sc), y0:mm(bb.min.y/sc), y1:mm(bb.max.y/sc) },
       bed:{ x:mm(FV.cropBed.position.x/sc + FV.cropShear.position.x/sc), lift:mm(FV.cropBed.position.y/sc - K.MILL.PASS_LINE) },
       cut:{ i:f.cropIndex, n:f.cropCuts, each:f.cropEach, total:f.cropTotal, need:mm(f.cropNeed) },
-      piece:{ vis:FV.cropPiece.visible, x:mm(FV.cropPiece.position.x/sc), y:mm(FV.cropPiece.position.y/sc),
-              z:mm(FV.cropPiece.position.z/sc), len:mm(f.cropLen), cropY:mm(f.cropY),
+      piece:{ n:f.scraps.length, stage:sc0?.stage, x:pm?mm(pm.position.x/sc):null, y:pm?mm(pm.position.y/sc):null,
+              z:pm?mm(pm.position.z/sc):null, len:mm(f.cropLen), rest:f.scrapRest,
               push:+f.cropPush.toFixed(2), face:mm(FV.cropPusher.position.z/sc) },
       shearX:mm(S.X) };
   };

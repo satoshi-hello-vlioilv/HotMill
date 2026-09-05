@@ -255,8 +255,16 @@ const run = async () => {
     const allX = tv.zones.flatMap(z => z.xs);
     ok('圧延機直下にローラ無し', allX.every(x => Math.abs(x) > 1000), `最近接 ${Math.min(...allX.map(Math.abs)).toFixed(0)} mm`);
     const sx = K.CROP_SHEAR.X;
-    ok('75 mm シャー直下にローラ無し', allX.every(x => Math.abs(x - sx) > 1200),
+    ok('75 mm シャー直下にローラ無し（区間 29.8〜31.4 m が空く）', allX.every(x => Math.abs(x - sx) > 1000),
        `最近接 ${Math.min(...allX.map(x => Math.abs(x - sx))).toFixed(0)} mm`);
+    // 図面のテーブル区分どおりの本数か
+    {
+      const SEC = K.TABLE.SECTIONS, bad = [];
+      for (const s of SEC) { const lo = Math.min(s.side * s.x0, s.side * s.x1), hi = Math.max(s.side * s.x0, s.side * s.x1);
+        const n = allX.filter(x => x >= lo - 1 && x <= hi + 1).length; if (n !== s.n) bad.push(`${s.name}:${n}/${s.n}`); }
+      ok('図面の区分ごとのローラ本数が一致（全 ' + SEC.reduce((a, s) => a + s.n, 0) + ' 本）', bad.length === 0 && allX.length === SEC.reduce((a, s) => a + s.n, 0),
+         bad.join(' ') || `${allX.length} 本`);
+    }
 
     // 6) テーブルローラ同士が干渉しない（ピッチ > 胴径）
     const sorted = [...allX].sort((a, b) => a - b);
@@ -265,13 +273,14 @@ const run = async () => {
     ok('テーブルローラ同士の非干渉', minPitch > CFG.ROLL_D_END,
        `最小ピッチ ${minPitch.toFixed(0)} mm > 胴端径 ${CFG.ROLL_D_END} mm`);
 
-    // 7) 横送りローラが主テーブルローラと干渉しない
-    const cross = W.supplyView.crossSlots.map(([x]) => x);
-    const uniqCross = [...new Set(cross)];
-    let worst = 1e9;
-    for (const cx of uniqCross) for (const x of allX) worst = Math.min(worst, Math.abs(cx - x));
-    const need = CFG.CROSS_ROLL_L / 2 + CFG.ROLL_D_END / 2;
-    ok('横送りローラの非干渉', worst > need, `最小離隔 ${worst.toFixed(0)} mm > ${need.toFixed(0)} mm`);
+    // 7) トランスファークレーンが降ろす位置（倒したスラブの真横）が入側テーブル A-9 の上にある
+    {
+      const L = window.__app.physics.slab.length, xc = K.SUPPLY.TILTER_X + K.FLIP * L / 2;
+      const a9 = K.TABLE.SECTIONS.find(s => s.name === 'A-9'), lo = Math.min(a9.side * a9.x0, a9.side * a9.x1), hi = Math.max(a9.side * a9.x0, a9.side * a9.x1);
+      ok('降ろし位置（倒したスラブの真横）が A-9 テーブルの上', xc - L / 2 >= lo && xc + L / 2 <= hi, `スラブ ${(xc - L / 2).toFixed(0)}〜${(xc + L / 2).toFixed(0)} / A-9 ${lo}〜${hi}`);
+      const under = allX.filter(x => x > xc - L / 2 && x < xc + L / 2).length;
+      ok('降ろしたスラブが 3 本以上のローラに載る', under >= 3, `${under} 本`);
+    }
 
     // 8) スラブがロール面へ食い込まない（バイト内のプロファイル検査）
     P.mill.mode = 'MANUAL'; P.slab.onLine = true; P.slab.inBite = true; P.slab.dir = 1;
@@ -320,64 +329,65 @@ const run = async () => {
     const T3 = window.__T, SV = W.supplyView, mm = v => v / 0.02;
     const bbox = o => { const b = new T3.Box3().setFromObject(o); return { x0: mm(b.min.x), x1: mm(b.max.x), z0: mm(b.min.z), z1: mm(b.max.z), y0: mm(b.min.y), y1: mm(b.max.y) }; };
 
-    // 12) 縦送りテーブルが主ラインと干渉しない
+    // 12) 転倒機（ベッド）が主テーブル架台の側方にあり、重ならない
     const mainPed = bbox(W.tableView.zones[0].peds.mesh);
-    const runPed  = bbox(SV.runPeds.mesh);
-    const lateral = Math.min(Math.abs(runPed.z0), Math.abs(runPed.z1)) - Math.max(Math.abs(mainPed.z0), Math.abs(mainPed.z1));
-    ok('縦送りテーブルと主テーブルの離隔', lateral > 0, `離隔 ${lateral.toFixed(0)} mm`);
-
-    // 13) 転倒アームを倒した状態で横送りローラ・縦送りローラと干渉しない
     const arm = SV.tilterArm, keep = arm.rotation.z;
     arm.rotation.z = 0; SV.tilterPivot.updateMatrixWorld(true);
     const armB = bbox(arm);
     arm.rotation.z = keep; SV.tilterPivot.updateMatrixWorld(true);
+    const lateral = Math.min(Math.abs(armB.z0), Math.abs(armB.z1)) - Math.max(Math.abs(mainPed.z0), Math.abs(mainPed.z1));
+    ok('転倒機ベッドと主テーブル架台の側方離隔', lateral > 0, `離隔 ${lateral.toFixed(0)} mm`);
+
+    // 13) 転倒機は A-8 / A-9 / B-1 テーブルの操作側（+Z）にある（実機配置）
     const FL = window.__CFG.FLIP;
-    const armEnd = FL > 0 ? armB.x1 : armB.x0;             // ミル側のアーム端
-    const crossXs = [...new Set(SV.crossSlots.map(([x]) => x))];
-    const nearCross = crossXs.reduce((a, b) => (FL * b > FL * a ? b : a));
-    ok('転倒アームと横送りローラの非干渉', FL * (nearCross - armEnd) > 210,
-       `アーム端 ${armEnd.toFixed(0)} / 最寄り横送り ${nearCross.toFixed(0)} mm`);
-    const nearRun = SV.runXs.reduce((a, b) => (FL * b > FL * a ? b : a));
-    ok('転倒アームと縦送りローラの非干渉', FL * (nearRun - armEnd) > 200,
-       `アーム端 ${armEnd.toFixed(0)} / 最寄り縦送り ${nearRun.toFixed(0)} mm`);
+    {
+      const rng = (n) => { const s = K.TABLE.SECTIONS.find(q => q.name === n); return [Math.min(s.side * s.x0, s.side * s.x1), Math.max(s.side * s.x0, s.side * s.x1)]; };
+      const lo = Math.min(rng('A-8')[0], rng('B-1')[0]), hi = Math.max(rng('A-8')[1], rng('B-1')[1]);
+      ok('転倒機が A-8〜B-1 テーブルの範囲の操作側にある', armB.x0 >= lo && armB.x1 <= hi && armB.z0 > 0,
+         `転倒アーム X ${armB.x0.toFixed(0)}〜${armB.x1.toFixed(0)}（A-8〜B-1: ${lo}〜${hi}）/ Z ${armB.z0.toFixed(0)}〜`);
+    }
 
     // 14) 転倒アームは最大スラブ長を受けられる
     ok('転倒アーム長 ≥ 最大スラブ長', (armB.x1 - armB.x0) >= CFG.LEN_MAX,
        `アーム長 ${(armB.x1 - armB.x0).toFixed(0)} mm ≥ ${CFG.LEN_MAX} mm`);
 
-    // 15) 倒した状態でアームのベッドローラ上面＝パスライン（立ち上がり面ではなくローラで測る）
-    const keep2 = SV.tilterArm.rotation.z;
-    SV.tilterArm.rotation.z = 0; SV.tilterPivot.updateMatrixWorld(true);
-    const bedB = bbox(SV.armRolls.mesh);
-    SV.tilterArm.rotation.z = keep2; SV.tilterPivot.updateMatrixWorld(true);
-    ok('転倒アームのベッドローラ上面＝パスライン', Math.abs(bedB.y1 - passLine) < 30,
-       `${bedB.y1.toFixed(0)} vs ${passLine.toFixed(0)} mm`);
+    // 15) 倒した状態でアームのベッド面＝パスライン（受け面を除いたベッド部の最高点で測る）
+    {
+      const g = arm.children[0].geometry.attributes.position; let top = -1e9;
+      for (let i = 0; i < g.count; i++) if (g.getX(i) / 0.02 > 700) top = Math.max(top, g.getY(i) / 0.02);
+      const bedTop = (passLine - CFG.PIVOT_DROP) + top;
+      ok('転倒アームのベッド面＝パスライン', Math.abs(bedTop - passLine) < 5, `${bedTop.toFixed(0)} vs ${passLine.toFixed(0)} mm`);
+    }
 
-    // 16) 横送りローラと入側サイドガイドの非干渉
-    const gEntry = bbox(W.guideView.stations[FL > 0 ? 0 : 1].sides[0]);
-    const gEdge = FL > 0 ? gEntry.x0 : gEntry.x1;          // 装入側に近いガイド端
-    // 横送りローラはガイドより「装入側（ミルから遠い側）」にある必要がある
-    ok('横送りローラと入側サイドガイドの非干渉', -FL * (nearCross - gEdge) > 210,
-       `横送り端 ${nearCross.toFixed(0)} / ガイド端 ${gEdge.toFixed(0)} mm`);
+    // 16) トランスファークレーンの吊り上げ高さは転倒機の受け面（リップ）を越える
+    ok('横移動時のスラブ底面が転倒機の受け面より上', K.TRANSFER.LIFT > CFG.LIP_H + 100,
+       `吊り上げ ${K.TRANSFER.LIFT} mm > 受け面 ${CFG.LIP_H} mm`);
 
-    // 17) 横送りローラは退避時に縦送り／主テーブルのローラ面より下にある
-    ok('横送りローラの退避高さ', SV.crossY + 200 < passLine - 100,
-       `退避時上面 ${(SV.crossY + 200).toFixed(0)} mm < パスライン ${passLine} mm`);
+    // 17) 開いたクランプが転倒アームのサイドレールの内側に収まる（最大幅のスラブ）
+    {
+      const outer = CFG.WID_MAX / 2 + 60 + K.TRANSFER.TONG_OPEN + 60, railIn = CFG.ARM_W / 2 - 80 - 80;
+      ok('開いたクランプが転倒アームのサイドレールの内側に収まる', outer < railIn, `クランプ外面 ${outer} mm < レール内面 ${railIn} mm`);
+    }
+    // 18) 装入クレーンとトランスファークレーンの桁が待機時に重ならない
+    {
+      const dx = Math.abs(SV.girderT.position.x - SV.girder.position.x) / 0.02;
+      ok('2 台のクレーンの桁が待機時に重ならない', dx > 760 + CFG.LEN_MAX / 2, `桁間 ${dx.toFixed(0)} mm`);
+    }
 
     // ---- 図面どおりのローラ形状か（ジオメトリから実測する）----
-    const rollAttr = tv.zones[0].rolls.mesh.geometry.attributes.position;
+    const rollAttr = tv.zones[0].rolls.mesh.geometry.attributes.position, TB = K.TABLE;
     let rEnd = 0, rMid = 0;
-    const zBarrelEnd = 0.02 * (CFG.BARREL / 2 - CFG.ROLL_FLAT / 2);
+    // 胴端の直部（胴端から ROLL_FLAT の範囲。カラーは胴端の外なので除く）と中央直部（±ROLL_MID/2）を頂点の Z で選ぶ
+    const zEnd0 = 0.02 * (TB.BARREL / 2 - TB.ROLL_FLAT) - 0.02, zEnd1 = 0.02 * TB.BARREL / 2 - 0.02;
     for (let i = 0; i < rollAttr.count; i++) {
       const z = Math.abs(rollAttr.getZ(i)), r = Math.hypot(rollAttr.getX(i), rollAttr.getY(i));
-      // 中央直部の径は「胴内で最も細い非ゼロ半径」で測る（頂点は区間端にしか無い）
-      if (z < 0.02 * CFG.BARREL / 2 && r > 0.02 * 20) rMid = (rMid === 0 ? r : Math.min(rMid, r));
-      if (Math.abs(z - zBarrelEnd) < 0.02 * 40) rEnd = Math.max(rEnd, r);  // 胴端の直部
+      if (z < 0.02 * (TB.ROLL_MID / 2 + 1) && r > 0.02 * 20) rMid = (rMid === 0 ? r : Math.min(rMid, r));
+      if (z >= zEnd0 && z <= zEnd1) rEnd = Math.max(rEnd, r);
     }
-    ok('テーブルローラ 胴端径＝図面値', Math.abs(rEnd / 0.02 * 2 - CFG.ROLL_D_END) < 1,
-       `実測 Φ${(rEnd / 0.02 * 2).toFixed(1)} / 図面 Φ${CFG.ROLL_D_END}`);
-    ok('テーブルローラ 中央径＝図面値', Math.abs(rMid / 0.02 * 2 - CFG.ROLL_D_MID) < 1.5,
-       `実測 Φ${(rMid / 0.02 * 2).toFixed(1)} / 図面 Φ${CFG.ROLL_D_MID}`);
+    ok('テーブルローラ 胴端径＝図面値', Math.abs(rEnd / 0.02 * 2 - TB.ROLL_D_END) < 1,
+       `実測 Φ${(rEnd / 0.02 * 2).toFixed(1)} / 図面 Φ${TB.ROLL_D_END}`);
+    ok('テーブルローラ 中央径＝図面値', Math.abs(rMid / 0.02 * 2 - TB.ROLL_D_MID) < 1.5,
+       `実測 Φ${(rMid / 0.02 * 2).toFixed(1)} / 図面 Φ${TB.ROLL_D_MID}`);
     ok('テーブルローラは中央が細い（自動調心形状）', rMid < rEnd - 0.02 * 20,
        `中央 Φ${(rMid / 0.02 * 2).toFixed(1)} < 胴端 Φ${(rEnd / 0.02 * 2).toFixed(1)}`);
 
@@ -452,9 +462,9 @@ const run = async () => {
          `${S.CLEARANCE} mm ＝ 板厚 ${S.MAX_TH} mm の ${(100 * S.CLEARANCE / S.MAX_TH).toFixed(1)} %`);
       {
         const E = S.EJECT, w = K.SLAB.WID_DEFAULT;
-        ok('端材払い出しがエプロン端まで届く（操作側へ抜ける）',
-           E.Z_DROP - w / 2 > E.Z_HOME && E.CHUTE_Z > E.Z_DROP,
-           `プッシャ面 ${E.Z_HOME} → ${E.Z_DROP - w / 2} mm ／ シュート ${E.CHUTE_Z} mm`);
+        ok('端材払い出しがエプロン端まで届き、コンベア → パレットへ続く',
+           E.Z_DROP - w / 2 > E.Z_HOME && S.CONVEYOR.Z0 <= E.Z_DROP && S.CONVEYOR.Z1 > E.Z_DROP && S.PALLET.Z - S.PALLET.L / 2 <= S.CONVEYOR.Z1,
+           `プッシャ面 ${E.Z_HOME} → ${E.Z_DROP - w / 2} mm ／ コンベア ${S.CONVEYOR.Z0}〜${S.CONVEYOR.Z1} ／ パレット ${S.PALLET.Z - S.PALLET.L / 2}〜${S.PALLET.Z + S.PALLET.L / 2} mm`);
         ok('払い出し方向が操作側（+Z＝装入設備と同じ側）',
            E.Z_DROP > 0 && K.SUPPLY.SIDE_Z > 0, `Z_DROP ${E.Z_DROP} / 操作側 +Z`);
       }
@@ -492,8 +502,8 @@ const run = async () => {
       ok('駆動系（ピニオンスタンド・減速機・電動機）が床上にある', db.min.y / sc >= -1, `最下点 ${(db.min.y / sc).toFixed(0)} mm`);
       const S = K.SUPPLY;
       ok('転倒軸はベッド面より軸半径以上低い（軸が板に当たらない）', S.PIVOT_DROP >= S.SHAFT_D / 2 + 20, `PIVOT_DROP ${S.PIVOT_DROP} ≥ ${S.SHAFT_D / 2 + 20}`);
-      ok('装入スラブの移載位置がサイドガイドの外側', Math.abs(S.ENTRY_X) - K.SLAB.LEN_MAX / 2 > Math.abs(gb.max.x) / sc || Math.abs(S.ENTRY_X) - K.SLAB.LEN_MAX / 2 > Math.abs(gb.min.x) / sc,
-         `スラブ端 ${(Math.abs(S.ENTRY_X) - K.SLAB.LEN_MAX / 2).toFixed(0)} / ガイド外端 ${(Math.max(Math.abs(gb.min.x), Math.abs(gb.max.x)) / sc).toFixed(0)} mm`);
+      ok('装入スラブの降ろし位置がサイドガイドの外側', Math.abs(S.TILTER_X) - K.SLAB.LEN_MAX > Math.max(Math.abs(gb.min.x), Math.abs(gb.max.x)) / sc,
+         `スラブ端 ${(Math.abs(S.TILTER_X) - K.SLAB.LEN_MAX).toFixed(0)} / ガイド外端 ${(Math.max(Math.abs(gb.min.x), Math.abs(gb.max.x)) / sc).toFixed(0)} mm`);
     }
     // --- 材質・温度・反り ---
     {

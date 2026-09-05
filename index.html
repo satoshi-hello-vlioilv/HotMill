@@ -243,6 +243,50 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
   #metrics { grid-template-columns:repeat(5,minmax(0,1fr)); }
   .mc .val { font-size:19px; }
 }
+
+/* ---------- サイドバー: 主操作バー / 区分の要約 / 折りたたみ ---------- */
+#action-bar { flex:none; padding:10px 16px 12px; border-bottom:1px solid var(--line); background:var(--s-1); }
+#action-bar .btn-row { margin-top:7px; }
+.brand { position:relative; }
+#btn-collapse { position:absolute; right:10px; top:50%; transform:translateY(-50%); width:30px; height:30px; border-radius:8px;
+  border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; cursor:pointer; font-size:12px; }
+#btn-collapse:hover { background:rgba(255,255,255,.18); }
+#btn-expand { position:fixed; left:14px; top:14px; z-index:11; display:none; width:40px; height:40px; border-radius:10px; border:1px solid var(--line);
+  background:rgba(255,255,255,.92); color:var(--ink-2); cursor:pointer; box-shadow:var(--shadow-2); font-size:15px; }
+body.sb-collapsed { --sb-w:0px; }
+body.sb-collapsed #sidebar { transform:translateX(-100%); }
+body.sb-collapsed #btn-expand { display:block; }
+#sidebar { transition:transform .22s ease; }
+.sec > summary .step { width:18px; height:18px; border-radius:50%; background:var(--accent); color:#fff; font-size:10.5px; display:grid;
+  place-items:center; flex:none; letter-spacing:0; }
+.sec > summary .sum { margin-left:auto; font-weight:600; text-transform:none; letter-spacing:0; color:var(--ink-3); font-size:10.5px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:230px; font-variant-numeric:tabular-nums; }
+.sec > summary .chev { margin-left:0; }
+.sec[open] > summary .sum { display:none; }
+.note { font-size:10.5px; color:var(--ink-3); line-height:1.6; }
+.note.ok { color:#0a7a0a; }
+
+/* ---------- 画面上部ツールバー（視点・断面・ラベル）: 運転中に頻繁に使う操作を探させない ---------- */
+#toolbar { pointer-events:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  background:rgba(255,255,255,.90); backdrop-filter:blur(10px); border:1px solid var(--line); border-radius:var(--r-l);
+  padding:7px 9px; box-shadow:var(--shadow-2); max-width:calc(100vw - var(--sb-w) - 32px); }
+#toolbar .tb-label { font-size:10px; font-weight:800; color:var(--ink-3); letter-spacing:.06em; text-transform:uppercase; margin:0 2px 0 4px; }
+#toolbar .tb-sep { width:1px; height:26px; background:var(--line); margin:0 3px; }
+#cam-chips { display:flex; gap:5px; }
+#cam-chips .chip { flex-direction:row; padding:6px 9px; gap:6px; font-size:11px; white-space:nowrap; }
+#cam-chips .chip .kbd { font-size:9px; font-weight:700; color:var(--ink-3); border:1px solid var(--line); border-radius:3px; padding:0 3px; }
+#cam-chips .chip[aria-pressed="true"] .kbd { color:var(--accent); border-color:var(--accent-2); }
+#toolbar .seg { padding:3px; }
+#toolbar .seg button { padding:6px 10px; white-space:nowrap; }
+.tb-btn { border:1px solid var(--line); background:var(--s-1); border-radius:8px; padding:6px 10px; cursor:pointer; font:inherit;
+  font-size:11px; font-weight:700; color:var(--ink-2); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.tb-btn i { color:var(--ink-3); }
+.tb-btn[aria-pressed="true"] { background:var(--accent-soft); border-color:var(--accent-2); color:var(--accent); }
+.tb-btn[aria-pressed="true"] i { color:var(--accent); }
+.tb-btn:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px; }
+#hud-top { flex-wrap:wrap; }
+#legend { pointer-events:none; }
+.sec table.sched td:first-child { color:var(--ink-3); }
 </style>
 </head>
 <body>
@@ -262,6 +306,7 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
       <div class="n">HYPER MILL</div>
       <div class="sub">アルミニウム熱間可逆圧延機 / 4-High Reversing Mill</div>
     </div>
+    <button id="btn-collapse" title="メニューをたたむ（M）" aria-label="メニューをたたむ"><i class="fa-solid fa-chevron-left"></i></button>
   </header>
 
   <div id="status-banner">
@@ -272,60 +317,21 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
     </div>
   </div>
 
+  <!-- 主操作: 状態のすぐ下に常に見える（スクロールで探させない） -->
+  <div id="action-bar">
+    <button class="btn btn-primary" id="btn-start">
+      <i class="fa-solid fa-play"></i><span id="btn-start-tx">圧延サイクル開始</span><span class="kbd">Space</span>
+    </button>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="btn-pause"><i class="fa-solid fa-pause"></i>一時停止<span class="kbd">P</span></button>
+      <button class="btn btn-danger" id="btn-reset"><i class="fa-solid fa-rotate-left"></i>リセット<span class="kbd">R</span></button>
+    </div>
+  </div>
+
   <div id="panels">
 
-    <details class="sec" open>
-      <summary><i class="fa-solid fa-play"></i> 運転<i class="fa-solid fa-chevron-right chev"></i></summary>
-      <div class="body">
-        <div class="seg" role="group" aria-label="運転モード" style="margin-bottom:11px;">
-          <button id="mode-auto"   aria-pressed="true">自動スケジュール</button>
-          <button id="mode-manual" aria-pressed="false">手動操作</button>
-        </div>
-
-        <div id="auto-controls">
-          <button class="btn btn-primary" id="btn-start">
-            <i class="fa-solid fa-play"></i><span id="btn-start-tx">圧延サイクル開始</span><span class="kbd">Space</span>
-          </button>
-          <div class="btn-row" style="margin-top:7px;">
-            <button class="btn btn-ghost" id="btn-pause"><i class="fa-solid fa-pause"></i>一時停止</button>
-            <button class="btn btn-danger" id="btn-reset"><i class="fa-solid fa-rotate-left"></i>リセット</button>
-          </div>
-          <div class="fld" style="margin-top:13px;">
-            <div class="top"><span class="k">シミュレーション速度</span><span class="v" id="lbl-timescale">1.0<em>×</em></span></div>
-            <input type="range" id="rng-timescale" min="0.25" max="8" value="1" step="0.25">
-            <div class="derived">実時間比。実機の1サイクルは10分規模なので、早送りで通して見られます。物理計算は速度に依らず同一結果です。</div>
-          </div>
-        </div>
-
-        <div id="manual-controls" style="display:none;">
-          <div class="fld">
-            <div class="top"><span class="k">ロールギャップ（圧下）</span><span class="v" id="lbl-gap">400<em>mm</em></span></div>
-            <input type="range" id="rng-gap" min="10" max="600" value="400" step="1">
-            <div class="derived" id="der-gap">圧下量 0 mm / 圧下率 0.0 %</div>
-          </div>
-          <div class="fld">
-            <div class="top"><span class="k">ライン速度</span><span class="v" id="lbl-speed">0<em>mpm</em></span></div>
-            <input type="range" id="rng-speed" min="-300" max="300" value="0" step="5">
-            <div class="derived"><i class="fa-solid fa-backward"></i> 逆行 ←　0　→ 前進 <i class="fa-solid fa-forward"></i></div>
-          </div>
-          <button class="btn btn-ghost" id="btn-stopline"><i class="fa-solid fa-stop"></i>ライン停止</button>
-        </div>
-      </div>
-    </details>
-
-    <details class="sec" open>
-      <summary><i class="fa-solid fa-list-check"></i> パススケジュール<i class="fa-solid fa-chevron-right chev"></i></summary>
-      <div class="body">
-        <table class="sched">
-          <thead><tr><th>Pass</th><th>出側厚</th><th>圧下率</th><th>速度</th><th>荷重</th></tr></thead>
-          <tbody id="sched-body"></tbody>
-        </table>
-        <div class="derived" style="margin-top:7px;" id="sched-note"></div>
-      </div>
-    </details>
-
-    <details class="sec">
-      <summary><i class="fa-solid fa-cube"></i> 素材（スラブ）<i class="fa-solid fa-chevron-right chev"></i></summary>
+    <details class="sec" open id="sec-material">
+      <summary><span class="step">1</span> 素材と目標<span class="sum" id="sum-material"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="fld">
           <div class="top"><span class="k">材質（JIS 合金）</span></div>
@@ -362,7 +368,7 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
         </div>
         <div class="fld">
           <div class="top"><span class="k">仕上げ形態</span><span class="v" id="lbl-finish"></span></div>
-          <div class="derived">板厚から自動で決まります。10 mm 以下はコイルに巻き取り、10 mm 超は板材として出側へ送り出してパイラーへ払い出します。</div>
+          <div class="derived">板厚から自動で決まります。10 mm 以下はコイル巻取、10 mm 超は板材（30 mm 以下は 30 mm シャー、75 mm 以下は 75 mm シャーで定尺に切り分けてパイラーへ、75 mm 超はクレーンで板置き場へ）。</div>
         </div>
         <div class="fld">
           <div class="top"><span class="k">トリム量（片側）</span><span class="v" id="lbl-trim">15<em>mm</em></span></div>
@@ -370,41 +376,64 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
           <div class="derived" id="der-trim"></div>
         </div>
         <div class="derived" id="der-slab" style="margin-bottom:9px;"></div>
-        <button class="btn btn-ghost" id="btn-apply-size"><i class="fa-solid fa-check"></i>適用してリセット</button>
+        <div class="note ok" id="note-apply"><i class="fa-solid fa-circle-check"></i> 待機中の変更は即時に反映されます（適用操作は不要）。</div>
+        <button class="btn btn-ghost" id="btn-apply-size" style="display:none;"><i class="fa-solid fa-check"></i>変更を適用（運転を中止してやり直す）</button>
       </div>
     </details>
 
-    <details class="sec" open>
-      <summary><i class="fa-solid fa-video"></i> 視点<i class="fa-solid fa-chevron-right chev"></i></summary>
+    <details class="sec" open id="sec-sched">
+      <summary><span class="step">2</span> パススケジュール<span class="sum" id="sum-sched"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
-        <div class="chips" id="cam-chips"></div>
-        <div class="derived" style="margin-top:8px;">
-          左ドラッグ回転 / 右ドラッグ平行移動 / ホイール拡大縮小　<kbd>1</kbd>–<kbd>6</kbd> で切替
+        <table class="sched">
+          <thead><tr><th>Pass</th><th>出側厚</th><th>圧下率</th><th>速度</th><th>荷重</th></tr></thead>
+          <tbody id="sched-body"></tbody>
+        </table>
+        <div class="derived" style="margin-top:7px;" id="sched-note"></div>
+      </div>
+    </details>
+
+    <details class="sec" open id="sec-run">
+      <summary><span class="step">3</span> 運転<span class="sum" id="sum-run"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body">
+        <div class="seg" role="group" aria-label="運転モード" style="margin-bottom:11px;">
+          <button id="mode-auto"   aria-pressed="true">自動スケジュール</button>
+          <button id="mode-manual" aria-pressed="false">手動操作</button>
+        </div>
+
+        <div id="auto-controls">
+          <div class="fld">
+            <div class="top"><span class="k">シミュレーション速度</span><span class="v" id="lbl-timescale">1.0<em>×</em></span></div>
+            <input type="range" id="rng-timescale" min="0.25" max="8" value="1" step="0.25">
+            <div class="derived">実時間比。実機の1サイクルは10分規模なので、早送りで通して見られます。物理計算は速度に依らず同一結果です。</div>
+          </div>
+        </div>
+
+        <div id="manual-controls" style="display:none;">
+          <div class="fld">
+            <div class="top"><span class="k">ロールギャップ（圧下）</span><span class="v" id="lbl-gap">400<em>mm</em></span></div>
+            <input type="range" id="rng-gap" min="10" max="600" value="400" step="1">
+            <div class="derived" id="der-gap">圧下量 0 mm / 圧下率 0.0 %</div>
+          </div>
+          <div class="fld">
+            <div class="top"><span class="k">ライン速度</span><span class="v" id="lbl-speed">0<em>mpm</em></span></div>
+            <input type="range" id="rng-speed" min="-300" max="300" value="0" step="5">
+            <div class="derived"><i class="fa-solid fa-backward"></i> 逆行 ←　0　→ 前進 <i class="fa-solid fa-forward"></i></div>
+          </div>
+          <button class="btn btn-ghost" id="btn-stopline"><i class="fa-solid fa-stop"></i>ライン停止</button>
         </div>
       </div>
     </details>
 
-    <details class="sec">
-      <summary><i class="fa-solid fa-sliders"></i> 表示<i class="fa-solid fa-chevron-right chev"></i></summary>
+    <details class="sec" id="sec-view">
+      <summary><i class="fa-solid fa-eye"></i> 見え方<span class="sum" id="sum-view"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="fld">
           <div class="top"><span class="k">断面表示</span><span class="v" id="cut-mode-v">半断面</span></div>
-          <div class="seg" role="group" aria-label="断面表示">
-            <button id="cut-solid" aria-pressed="false">実体</button>
-            <button id="cut-half"  aria-pressed="true">半断面</button>
-            <button id="cut-xray"  aria-pressed="false">透視</button>
-          </div>
-          <div class="derived" id="der-cut">半断面は手前側（オペレータ側）の構造だけを透過し、奥行きを保ったまま中を見せます。</div>
+          <div class="derived" id="der-cut">半断面は手前側（オペレータ側）と天面の構造だけを透過し、奥行きを保ったまま中を見せます。切替は画面上部のツールバー、または <kbd>C</kbd>。</div>
           <div class="top" style="margin-top:8px;"><span class="k">適用する設備</span></div>
           <div class="chips" id="cut-scope" role="group" aria-label="断面表示を適用する設備"></div>
         </div>
-        <div class="row"><span class="lbl">設備ラベル<small>主要機器の名称を重畳</small></span>
-          <label class="switch"><input type="checkbox" id="chk-labels" checked><span class="sl"></span></label></div>
-        <div class="row"><span class="lbl">ロールクーラント<small>水主体エマルジョン（油分約6%）のロール噴射</small></span>
-          <label class="switch"><input type="checkbox" id="chk-coolant" checked><span class="sl"></span></label></div>
-        <div class="row"><span class="lbl">水蒸気<small>エマルジョン（水主体）の蒸発</small></span>
-          <label class="switch"><input type="checkbox" id="chk-steam" checked><span class="sl"></span></label></div>
-        <div class="fld" style="margin-top:6px;">
+        <div class="fld">
           <div class="top"><span class="k">描画品質</span></div>
           <div class="seg" role="group" aria-label="描画品質">
             <button id="q-high" aria-pressed="false">高</button>
@@ -413,13 +442,26 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
           </div>
           <div class="derived" id="der-quality">標準：環境反射あり・影あり・解像度 1.5×まで</div>
         </div>
-        <div class="row"><span class="lbl">供給アニメーション<small>転倒→縦送り→横送り</small></span>
+        <div class="derived">視点は画面上部のツールバー（<kbd>1</kbd>–<kbd>8</kbd>）、設備ラベルは <kbd>L</kbd> で切り替えます。左ドラッグ回転 / 右ドラッグ平行移動 / ホイール拡大縮小。</div>
+      </div>
+    </details>
+
+    <details class="sec" id="sec-env">
+      <summary><i class="fa-solid fa-droplet"></i> 演出・環境<span class="sum" id="sum-env"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body">
+        <div class="row"><span class="lbl">ロールクーラント<small>水主体エマルジョン（油分約6%）のロール噴射</small></span>
+          <label class="switch"><input type="checkbox" id="chk-coolant" checked><span class="sl"></span></label></div>
+        <div class="row"><span class="lbl">板面クーラント<small>サイドガイド上のヘッダから板の上面へ噴射（熱計算に反映）</small></span>
+          <label class="switch"><input type="checkbox" id="chk-stripcool" checked><span class="sl"></span></label></div>
+        <div class="row"><span class="lbl">水蒸気<small>エマルジョン（水主体）の蒸発</small></span>
+          <label class="switch"><input type="checkbox" id="chk-steam" checked><span class="sl"></span></label></div>
+        <div class="row"><span class="lbl">装入アニメーション<small>炉出し→転倒→トランスファークレーン</small></span>
           <label class="switch"><input type="checkbox" id="chk-supply-anim" checked><span class="sl"></span></label></div>
       </div>
     </details>
 
-    <details class="sec">
-      <summary><i class="fa-solid fa-gears"></i> 設備諸元<i class="fa-solid fa-chevron-right chev"></i></summary>
+    <details class="sec" id="sec-spec">
+      <summary><i class="fa-solid fa-gears"></i> 設備諸元<span class="sum" id="sum-spec"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="fld">
           <div class="top"><span class="k">ロール研削状態</span><span class="v" id="lbl-roll">新品</span></div>
@@ -427,16 +469,20 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
           <div class="derived" id="der-roll"></div>
         </div>
         <table class="sched"><tbody id="spec-body"></tbody></table>
+        <div class="top" style="margin-top:12px;"><span class="k">テーブル区分（図面）</span></div>
+        <table class="sched"><thead><tr><th>区分</th><th>範囲 m</th><th>本数</th><th>ピッチ</th><th>選択</th></tr></thead><tbody id="table-body"></tbody></table>
+        <div class="derived" id="table-note" style="margin-top:6px;"></div>
       </div>
     </details>
 
     <div class="shortcuts">
       <b>ショートカット</b>
       <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
-      <span><kbd>L</kbd>ラベル</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>7</kbd>視点</span>
+      <span><kbd>L</kbd>ラベル</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>8</kbd>視点</span><span><kbd>M</kbd>メニュー</span>
     </div>
   </div>
 </aside>
+<button id="btn-expand" title="メニューを開く（M）" aria-label="メニューを開く"><i class="fa-solid fa-bars"></i></button>
 
 
 <div id="metrics">
@@ -452,6 +498,19 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
 </div>
 
 <div id="hud-top">
+  <div id="toolbar">
+    <span class="tb-label">視点</span>
+    <div id="cam-chips" role="group" aria-label="視点"></div>
+    <div class="tb-sep"></div>
+    <span class="tb-label">断面</span>
+    <div class="seg" role="group" aria-label="断面表示">
+      <button id="cut-solid" aria-pressed="false">実体</button>
+      <button id="cut-half"  aria-pressed="true">半断面</button>
+      <button id="cut-xray"  aria-pressed="false">透視</button>
+    </div>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="tb-labels" aria-pressed="true" title="設備ラベル（L）"><i class="fa-solid fa-tag"></i>ラベル</button>
+  </div>
   <div id="legend"><b>凡例</b><span id="legend-items"></span></div>
   <div id="toast"></div>
 </div>
@@ -539,46 +598,91 @@ const CONFIG = {
     ROLL_D_END: 281.6, ROLL_D_MID: 219.6,
     ROLL_FLAT: 95, ROLL_TAPER: 900, ROLL_MID: 500,
     BARREL: 2490, COLLAR_D: 210, COLLAR_L: 150, JOURNAL_D: 150, JOURNAL_L: 300,
-    PITCH_NEAR: 900, PITCH_FAR: 1500, NEAR_ZONE: 22000,
     X_MIN: -121800, X_MAX: 80100,
-    // ハウジング（全幅 4,300 → 外面 ±2,150）の内側にはローラを置けない。ここは敷板
-    // （エプロン）で埋め、最初のローラはハウジング外面の外側（2,700 mm）から始める。
-    CLEAR: 2400,
+    /* テーブル区分（図面「各テーブルローラ本数」と区間長）。x0/x1 はミル中心からの距離 [mm]、
+     * side −1 = 入側 / +1 = 出側。pitch は «ミル側から» の軸間の並びで、図面の
+     * 「370×11 460×2」をそのまま "460 370×11 460" と書く（460 は両端）。
+     * 区間長に本数×ピッチが（胴端半径＋余裕をもって）収まらない区分と、逆に余りすぎる区分（A-1）は区間内に等配する（概算）。
+     * E-1 / E-2 はハウジング内の敷板（エプロン）でローラを持たない。3ロール下の 2 本（軸間 260）
+     * はスリーロール自身の下ロール。75 mm シャーは 29.8〜31.4 m、30 mm シャーは J-3 の先。 */
+    SECTIONS: [
+      { name: 'D',   side: -1, x0:   2500, x1:   7500, n: 14, pitch: '460 370×11 460' },
+      { name: 'C-2', side: -1, x0:   7500, x1:  11400, n:  7, pitch: '510×3 600×3' },
+      { name: 'C-1', side: -1, x0:  11400, x1:  18600, n: 12, pitch: 600 },
+      { name: 'B-1', side: -1, x0:  18600, x1:  25800, n: 12, pitch: 600 },
+      { name: 'A-9', side: -1, x0:  25800, x1:  34800, n: 12, pitch: 750 },
+      { name: 'A-8', side: -1, x0:  34800, x1:  43800, n: 12, pitch: 750 },
+      { name: 'A-7', side: -1, x0:  43800, x1:  52800, n: 12, pitch: 750 },
+      { name: 'A-6', side: -1, x0:  52800, x1:  61800, n: 12, pitch: 750 },
+      { name: 'A-5', side: -1, x0:  61800, x1:  70800, n: 12, pitch: 750 },
+      { name: 'A-4', side: -1, x0:  70800, x1:  84300, n: 18, pitch: 750 },
+      { name: 'A-3', side: -1, x0:  84300, x1:  97800, n: 18, pitch: 750 },
+      { name: 'A-2', side: -1, x0:  97800, x1: 109800, n: 16, pitch: 750 },
+      { name: 'A-1', side: -1, x0: 109800, x1: 121800, n: 15, pitch: 750 },
+      { name: 'F',   side:  1, x0:   2500, x1:   5300, n:  8, pitch: '460 370×5 460' },
+      { name: 'ﾃﾞﾌﾟﾚｯｼﾝｸﾞ', side: 1, x0: 7500, x1:   8900, n:  2, pitch: 650 },   // リール下の 2 本
+      { name: 'G-1', side:  1, x0:   9000, x1:  14900, n: 10, pitch: 650 },
+      { name: 'G-2', side:  1, x0:  14900, x1:  22300, n: 10, pitch: 750 },
+      { name: 'G-3', side:  1, x0:  22300, x1:  29800, n: 10, pitch: 750 },
+      { name: 'H-1', side:  1, x0:  31400, x1:  38900, n: 11, pitch: 750 },
+      { name: 'H-2', side:  1, x0:  38900, x1:  47100, n: 11, pitch: 750 },
+      { name: 'J-1', side:  1, x0:  47100, x1:  56100, n: 12, pitch: 750 },
+      { name: 'J-2', side:  1, x0:  56100, x1:  66600, n: 14, pitch: 750 },
+      { name: 'J-3', side:  1, x0:  66600, x1:  80100, n: 18, pitch: 750 },
+    ],
+    /* テーブル選択（図面）。パスで板が載る範囲に応じて駆動する区間を選び、選ばれた区間の
+     * ローラだけが回る。1 ⊂ 2 ⊂ 3 ⊂ 4 の入れ子。 */
+    SELECT: [
+      { id: 1, from: 'C-1', to: 'G-1' },
+      { id: 2, from: 'B-1', to: 'G-3' },
+      { id: 3, from: 'A-6', to: 'H-2' },
+      { id: 4, from: 'A-1', to: 'J-3' },
+    ],
     // サイドガイドは入出側対称なので位置は ±X の1値で持つ（進行方向から上流側を選ぶ）。
     // 可動のガイドバーはテーブル架台の外側（BASE_Z）に床から立つ固定架台のアーム軸受を
-    // 貫いて開閉する。ハウジングの外（2,450〜）から装入スラブの手前（4,350）までの長さ。
+    // 貫いて開閉する。ハウジングの外（2,450〜）から 4,350 までの長さ。
     GUIDE: { X: 3400, LEN: 1900, H: 700, ROLL_D: 260, N: 3, OPEN_MARGIN: 600, RATE: 500,
-             BASE_Z: 2300, ARM_L: 1700, ARM_Y: 300 },
+             BASE_Z: 2300, ARM_L: 1700, ARM_Y: 300,
+             // 板面クーラントヘッダ。ガイド架台の外側に立てた門型（柱 POST_X/POST_Z、梁 BEAM_Y）から
+             // 2 本のヘッダ（ステーション中心 ±DX、パスライン上 Y、Φ D）を吊り、板の上面へ噴射する。
+             // 1 本あたりの冷却域は ZONE。※各寸法は推定値
+             // 柱はミル側がピット壁の天端（|x| ≥ 2,300）、外側がガイド開閉アーム（|x| ≤ 810）の外に立つ
+             HEADER: { DX: 500, Y: 950, D: 140, POST_X: 960, POST_W: 240, POST_Z: 2900, BEAM_Y: 1600, ZONE: 600 } },
   },
 
-  /* スラブ装入設備 —— ライン直近（側方 3.8 m）のオペレータ側に置く。
-   * 縦置きインゴットを転倒装置で倒す → そのまま進行方向(+X)へ縦送り
-   * → 横送りローラが上昇してライン側(-Z)へ移載、という実機の流れをそのまま再現する。
+  /* スラブ装入設備 —— 実機配置では転倒機とその周辺（ピット炉・クレーン）は入側テーブル
+   * A-8 / A-9 / B-1 の操作側（+Z）にある。縦置きスラブを転倒機で倒し、倒したスラブは
+   * «トランスファークレーン» が吊り上げてラインへ横移動する（テーブルローラによる送り出し
+   * ではない）。ラインに降ろされたスラブは A-9 テーブルからミルへ搬送される。
    * 駆動側(-Z)にはスピンドル・ピニオンスタンド・主電動機があるため装入設備は置けない。 */
   SUPPLY: {
-    SIDE_Z: 3800,                            // ラインからの側方距離（主テーブル架台と190 mm離隔）
-    ENTRY_X: -6500,                          // 移載完了位置（＝装入時のスラブ中心）。サイドガイドの外側
-    TILTER_X: -13200,                        // 転倒軸。移載位置まで 6.7 m
+    SIDE_Z: 3800,                            // ラインから転倒機ベッド中心までの側方距離
+    TILTER_X: -33000,                        // 転倒軸（A-9 / A-8 境界付近）。倒したスラブはここからミル側へ横たわる
     ARM_L: 4600,                             // 転倒アーム長（最大スラブ長 4200 mm を受ける）
-    ARM_W: 2900,                             // 転倒アーム幅（最大スラブ幅 2200 mm を受ける）
+    ARM_W: 3100,                             // 転倒アーム幅（最大スラブ幅 2200 mm と開いたクランプを受ける）
     // 転倒軸はベッド面（＝パスライン）より PIVOT_DROP 下に置く。軸（Φ560）がベッド面から
     // 突き出ると、寝かせた板にも立てた板にも軸が食い込む。立てた板は受け面（リップ）に載り、
     // その底面はパスラインより PIVOT_DROP 低い。
     PIVOT_DROP: 330, SHAFT_D: 560, HUB_D: 640, BEARING_Z: 1700,
-    BARREL: 2400,                            // 縦送りローラ胴長（主テーブルより短くして離隔を確保）
-    // 縦送りローラは主テーブルと同じ 900 mm グリッド、横送りローラはその中間に置く
-    RUNIN_X: [-8100, -7200, -6300, -5400, -4500, -3600, -2700],
-    CROSS_X: [-7650, -6750, -5850, -4950],
-    CROSS_Z0: -1350, CROSS_Z1: 5150, CROSS_PITCH: 900,
-    CROSS_ROLL_L: 420,   // 主テーブル(ピッチ900)の隙間に収める
-    CROSS_LIFT: 260,     // 横送りローラの昇降ストローク（退避時は縦送りローラ面より下）
-    ROLL_D: 280,
+    LIP_H: 1510,                             // 受け面（立ち上がり）の高さ
+  },
+  /* トランスファークレーン —— 倒した（平置きの）スラブをクランプで吊り、ラインへ横移動する。
+   * 装入クレーンと同じ走行路を走る 2 台目の橋形クレーン。装入クレーンが転倒機で作業する間は
+   * ミル側 PARK_DX へ退避し、転倒後にスラブの真上へ走行して吊る。 */
+  TRANSFER: {
+    PARK_DX: 4300,                           // 待機位置（転倒軸からミル側へ）
+    LIFT: 1700,                              // 横移動時のスラブ底面高さ（パスライン上）。転倒機の受け面 1,510 を越える
+    TONG_OPEN: 150,                          // クランプの開き（片側）。開いても転倒機のサイドレールの内側
+    TONG_DX: 1100,                           // クランプ 2 対のビーム中心からの X
+    BEAM_L: 3200,
   },
 
   /* ピット炉 —— スラブは立てた状態で加熱され、装入クレーンで吊り上げられて
    * 転倒機に立てかけられる。ここではその一連の動きを再現する。 */
   FURNACE: { Z: 10800, DEPTH: 5200, W: 2800, L: 2400, WALL: 500, LID_T: 380 },
-  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -20000, GIRDER_Z1: 16000,   // 走行桁の柱は設備の外側に置く
+  /* クレーン走行路 —— ライン方向（X）の走行桁 2 本に、装入クレーンとトランスファークレーンの
+   * 2 台の橋（桁は Z 方向）が載る。RUN_X0/X1 は転倒軸からの相対距離（ミル側が正）。 */
+  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -3800, RUN_X1: 6600, COL_PITCH: 5200,
              TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600 },
 
   /* 装入シーケンス。[フェーズ, 進捗キー, 所要秒, 表示文] を並べるだけで工程が決まる。 */
@@ -588,8 +692,9 @@ const CONFIG = {
     ['TRAVERSE', 'traverse', 3.4, '転倒機まで横行しています'],
     ['SET',      'set',      2.6, '転倒機にスラブを立てかけています'],
     ['TILT',     'tilt',     3.6, '転倒装置でスラブを倒しています'],
-    ['RUNIN',    'runIn',    4.0, '縦送りで圧延機側へ搬送しています'],
-    ['CROSS',    'cross',    3.4, '横送りでミルラインへ移載しています'],
+    ['GRAB',     'grab',     3.2, 'トランスファークレーンが倒したスラブをクランプで吊り上げています'],
+    ['TRANSFER', 'transfer', 3.2, 'トランスファークレーンでミルラインへ横移動しています'],
+    ['LOWER',    'lower',    2.6, '入側テーブル（A-9）へ降ろしています'],
   ],
 
   /* 巻取機（出側リール）—— 板材放出だけでなくコイル巻取ができる。
@@ -660,16 +765,32 @@ const CONFIG = {
     RAKE: 0.035,                             // 刃の傾斜（剪断を端から進める）
     UPPER_CLR: 90,                           // 固定上刃の刃先（パスライン上）。最大板厚 75 を通す
     OVERTRAVEL: 60,                          // 下刃先が上刃先を越える量（切り離しの余裕）
-    BED_L: 1800,                             // 下台（昇降テーブル）の長さ。上流側のローラ間を受け持つ
-    APRON_L: 1400,                           // 端材エプロン（下流側・固定）の長さ
+    // シャーは図面のテーブル区分どおり 29.8〜31.4 m（G-3 と H-1 の間）に収める。
+    BED_L: 640,                              // 下台（昇降テーブル）の長さ。上流側（G-3 側）
+    APRON_L: 700,                            // 端材エプロン（下流側・固定）の長さ。H-1 の手前まで
+    ZONE: [29800, 31400],                    // 図面のシャー区間（ミル中心からの距離）
     CUT_MIN: 300, CUT_MAX: 500, MARGIN: 120, // 1 カットの長さ範囲と、欠陥長に足す余裕
     TOTAL_MIN: 300, TOTAL_MAX: 2400,         // 総切断長の設計範囲（板厚 60 mm 換算）
     APPROACH: 45,                            // 端部をシャーへ寄せるときの速度 [mpm]
     T_CUT: 0.9, T_RETURN: 0.8, T_EJECT: 1.6,
-    // 端材の払い出し: 駆動側(−Z)のプッシャで操作側(+Z)のシュートへ押し出す。
-    // Z_HOME はプッシャ面の待機位置、Z_DROP はエプロンの端（ここで端材が落ちる）。
-    EJECT: { Z_HOME: -1900, Z_DROP: 2200, CHUTE_Z: 2900 },
+    // 架構: 柱は剪断面の上流側（COL_X）、Z は ±COL_Z。プッシャがエプロン上を通れるよう
+    // 柱はエプロンの X 範囲の外に置く。クロスヘッドは柱の上に架かり、上刃ホルダを吊る。
+    FRAME: { COL_X: -250, COL_W: 600, COL_D: 760, COL_Z: 2400 },
+    // 端材の払い出し: 駆動側(−Z)のプッシャ（クロスヘッド下のレールを走る台車）が端材を
+    // 操作側(+Z)へ押し、エプロン端 Z_DROP からコンベアへ落とす。
+    EJECT: { Z_HOME: -1750, Z_DROP: 2200, RAIL_Y: 330 },
+    // 端材コンベア（ローラ式）: エプロン端の下から操作側へ運び、末端でパレットへ落とす
+    CONVEYOR: { Z0: 2100, Z1: 6400, TOP: 650, ROLL_D: 160, PITCH: 250, SPEED: 700 },
+    // 端材パレット（床上の受け箱）。コンベア末端から落ちた端材が積み重なる
+    PALLET: { Z: 7900, L: 3000, W: 900, H: 200 },
   },
+
+  /* 30 mm シャー —— J-3 テーブルの先（80.1 m 以降）にある切断シャー。板厚 30 mm 以下の
+   * 板材を所定長（PILER.SHEET_L）に切り分け、その先のパイラーへ送る。下刃固定・上刃下降式
+   * （油圧、板押え付き）。板厚 30 mm 超は切れないので、30〜75 mm は 75 mm シャーで切り分け、
+   * 75 mm 超はテーブル上で止めてクレーンで板置き場へ払い出す。※寸法は推定値 */
+  SHEAR30: { X: 80900, MAX_TH: 30, BLADE_T: 30, BLADE_H: 120, BLADE_L: 2500, STROKE: 260, HOLD_STROKE: 200,
+             ZONE: [80100, 81700], T_CUT: 0.8, T_RETURN: 0.7 },
 
   /* サイドトリマー。上下軸の円板刃で板の両耳を切り落として幅を仕上げる。
    * ミル中心から 5,875 mm（図面）。厚板パス中は刃を開いて板を素通りさせる。 */
@@ -695,7 +816,7 @@ const CONFIG = {
   // ピット幅（X）はハウジングのソールプレート（±2,200）が収まる最小に留める。ピットの
   // 真上には何も立てない（テーブル架台・エプロン脚はピット壁の上か床の上に置く）。
   // 深さはソールプレート下面（BOT_Y）に一致させ、ハウジングはピット床に接地する。
-  BUILDING: { X0: -132000, X1: 92000, Z: 34000, PIT: { X: 2300, Z: 6000, DEPTH: 3600 } },
+  BUILDING: { X0: -132000, X1: 98000, Z: 34000, PIT: { X: 2300, Z: 6000, DEPTH: 3600 } },
 
   /* --- 材料・プロセス定数（アルミニウム熱間圧延） ---------------------------
    * 変形抵抗   k = C·exp(−b(T−Tref))·ε̇^m          [MPa]
@@ -726,10 +847,15 @@ const CONFIG = {
     OVERHANG: { TH_K: 3.0, WID_K: 0.30 },
   },
 
-  /* 板材の払い出し（パイラー相当）。最終パスの板は出側テーブルを走って STOP_X で止まり、
-   * 操作側へ横移送されて板置き場（架台上 PALLET_H）へ降ろされる。パイラー本体は未実装なので
-   * 動きだけを再現する。板厚 10 mm 超の仕上げでここへ払い出す。 */
-  PILER: { STOP_X: 77600, SIDE_Z: 6000, PALLET_H: 300, PALLET_W: 2600, SPEED: 90, T_SIDE: 4.0, T_DROP: 1.5 },
+  /* パイラー —— 30 mm シャーの先にある板積み装置。シャーで切り分けた板（シート）を
+   * 片持ちのローラアーム（OS/DS の 2 列）で受け、アームが左右へ開いて下のリフトテーブル上の
+   * 山に落とす。山が高くなるぶんリフトテーブルが下がり、受け面の高さを保つ。
+   * 板厚 75 mm 超はどちらのシャーでも切れないので、J-3 の末端で止めてクレーンで駆動側の
+   * 板置き場（YARD）へ払い出す（パイラー本体は使わない）。※寸法は推定値 */
+  PILER: { X0: 82300, X1: 92300, SHEET_L: 9000, STOP_X: 91800, SPEED: 90, GAP: 600,
+           ROLL_D: 200, PITCH: 750, ARM_L: 1250, OPEN: 1400, T_OPEN: 0.9, DROP: 300, T_DROP: 0.6,
+           PIT: { DEPTH: 1200, DZ: 1250, MARGIN: 300 },   // リフトテーブルのピット（山が高くなるぶん天板が下がる）
+           STOP_THICK_X: 79500, YARD: { Z: -6000, H: 300, W: 2600, X0: 55000, X1: 80000, PITCH: 3000 }, T_SIDE: 4.0, T_LOWER: 1.5 },
 
   /* 材質。JIS でよく扱われる代表組成を 1000〜7000 系から選ぶ。
    *   変形抵抗 kf = C·exp(−b(T − 450))·ε̇^m [MPa]  （C: 450 ℃・ε̇ = 1/s の値）
@@ -762,6 +888,10 @@ const CONFIG = {
     // 400 ℃ 級の面では膜沸騰（ライデンフロスト）になるので熱伝達率は 1 kW/m²K 未満に留まる。
     // 冷却域はミル前後 COOL_ZONE で、板が通過する時間だけ効く。
     LAYERS: 9, H_COOL_TOP: 800, H_COOL_BOT: 250, T_COOL: 40, COOL_ZONE: 2400,
+    // 板面クーラント（サイドガイド上のヘッダ）。板の上面へ直接噴射するので膜沸騰域でも
+    // ロールからの流れ落ちより強い。冷却域はヘッダごとに TABLE.GUIDE.HEADER.ZONE、
+    // 板がその下を通過している割合だけ効く。ENABLED は表示メニューのトグルと連動する。
+    GUIDE_COOL: { H_TOP: 700, ENABLED: true },
     CHILL_DEPTH_K: 2.0,                                // ロール抜熱の浸透深さ ＝ K·√(α·接触時間)
     // 温度下限は工程と材質で変わる: 圧延中は熱間域下限 − 30 ℃、巻取中は巻取温度 − 30 ℃
     T_MARGIN: 30,
@@ -813,10 +943,11 @@ const CONFIG = {
     { id:'stand',    name:'圧延機',     icon:'fa-industry',         pos:[ 17000,  8000, 21000], tgt:[     0,  1900,     0] },
     { id:'bite',     name:'ロールバイト', icon:'fa-magnifying-glass', pos:[  6600,  2000,  2200], tgt:[   200,  1150,     0] },
     { id:'drive',    name:'駆動側',     icon:'fa-gears',            pos:[ 34000, 13000,-16000], tgt:[     0,  1400, -9500] },
-    { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[-26000, 11000, 21000], tgt:[-10000,   700,  2200] },
+    { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[-44000,  9500, 20000], tgt:[-30500,   900,  3000] },
     { id:'coiler',   name:'巻取設備',   icon:'fa-arrows-spin',      pos:[ 15500,  4600,  9500], tgt:[  8000,  2500,     0] },
     // 75 mm シャーはワークロールから約 30.6 m。他の視点では画面外なので専用の視点を置く。
-    { id:'shear',    name:'75mmシャー', icon:'fa-scissors',         pos:[ 37000,  6000, 12000], tgt:[ 30600,  1400,     0] },
+    { id:'shear',    name:'75mmシャー', icon:'fa-scissors',         pos:[ 36500,  5200, 11500], tgt:[ 30800,  1200,  1500] },
+    { id:'piler',    name:'30mmシャー・パイラー', icon:'fa-layer-group', pos:[ 92000,  7000, 17000], tgt:[ 85500,  1000,     0] },
   ],
 };
 
@@ -833,11 +964,11 @@ const CONFIG = {
   C.CROP_SHEAR.X = neg(C.CROP_SHEAR.X);
   C.COILER.X = neg(C.COILER.X);
   C.COILER.DEFLECTOR_X = neg(C.COILER.DEFLECTOR_X);
-  C.PILER.STOP_X = neg(C.PILER.STOP_X);
-  C.SUPPLY.ENTRY_X = neg(C.SUPPLY.ENTRY_X);
+  for (const k of ['X0', 'X1', 'STOP_X', 'STOP_THICK_X']) C.PILER[k] = neg(C.PILER[k]);
+  [C.PILER.YARD.X0, C.PILER.YARD.X1] = [neg(C.PILER.YARD.X1), neg(C.PILER.YARD.X0)];
+  C.SHEAR30.X = neg(C.SHEAR30.X);
   C.SUPPLY.TILTER_X = neg(C.SUPPLY.TILTER_X);
-  C.SUPPLY.RUNIN_X = C.SUPPLY.RUNIN_X.map(neg).sort((a, b) => a - b);
-  C.SUPPLY.CROSS_X = C.SUPPLY.CROSS_X.map(neg).sort((a, b) => a - b);
+  for (const s of C.TABLE.SECTIONS) s.side = -s.side;
   for (const v of C.VIEWS) { v.pos[0] = neg(v.pos[0]); v.tgt[0] = neg(v.tgt[0]); }
 })(CONFIG.FLIP);
 
@@ -872,6 +1003,70 @@ const Sim = {
   u: (mm) => mm * CONFIG.SCALE,                       // mm → scene unit
   mm: (u) => u / CONFIG.SCALE,
   v3: (a) => new THREE.Vector3(Sim.u(a[0]), Sim.u(a[1]), Sim.u(a[2])),
+};
+
+/**
+ * 図面のテーブル区分からローラ配置と駆動区間を導く（純関数）。
+ * 配置の «概算» ルール: 区間に本数×ピッチが胴端半径＋余裕をもって収まればそのピッチで区間の
+ * 中央に置き、収まらなければ区間内に等配する。得られた X は正準向きで、mirrorLayout 後の
+ * CONFIG（side を反転済み）をそのまま読むので呼び出し側は向きを意識しない。
+ */
+const Layout = {
+  /** "460 370×11 460" → [460, 370, …, 460]。数値なら n−1 個の等ピッチ。 */
+  pitches(spec, n) {
+    if (typeof spec === 'number') return Array(Math.max(n - 1, 0)).fill(spec);
+    const out = [];
+    for (const tok of String(spec).trim().split(/\s+/)) {
+      const m = tok.match(/^(\d+(?:\.\d+)?)(?:[×x*](\d+))?$/);
+      if (!m) throw new Error('pitch spec: ' + spec);
+      for (let k = 0; k < (m[2] ? +m[2] : 1); k++) out.push(+m[1]);
+    }
+    return out;
+  },
+  /** 1 区分のローラ X（世界座標、mm）。uniform: 等配に切り替えたかどうか。 */
+  section(sec) {
+    const T = CONFIG.TABLE, len = sec.x1 - sec.x0, p = Layout.pitches(sec.pitch, sec.n);
+    const span = p.reduce((a, b) => a + b, 0), margin = (len - span) / 2;
+    const xs = [];
+    // 収まらない（余裕が胴端半径 + 20 mm 未満）か、逆に余りすぎる（両端の余白がピッチの 3/4 超）なら等配する
+    const uniform = !(margin >= T.ROLL_D_END / 2 + 20 && margin <= 0.75 * Math.max(...p) && p.length === sec.n - 1);
+    if (!uniform) { let x = sec.x0 + margin; xs.push(x); for (const q of p) { x += q; xs.push(x); } }
+    else { const d = len / sec.n; for (let i = 0; i < sec.n; i++) xs.push(sec.x0 + (i + 0.5) * d); }
+    return { xs: xs.map(x => sec.side * x), uniform, pitchUsed: uniform ? len / sec.n : null };
+  },
+  /** 全ローラ [{x, sec, g}] を X 昇順で。g は «このローラを含む最小のテーブル選択番号»。 */
+  rolls() {
+    const out = [];
+    for (const s of CONFIG.TABLE.SECTIONS) for (const x of Layout.section(s).xs) out.push({ x, sec: s.name, g: Layout.groupOf(s.name) });
+    return out.sort((a, b) => a.x - b.x);
+  },
+  /** 区分の世界 X 範囲 [min, max] */
+  range(name) {
+    const s = CONFIG.TABLE.SECTIONS.find(q => q.name === name);
+    if (!s) return null;
+    const a = s.side * s.x0, b = s.side * s.x1;
+    return [Math.min(a, b), Math.max(a, b)];
+  },
+  /** 区分名の並び順（入側の遠方 → 出側の遠方）。区間の中心 X で並べる。 */
+  order() { return [...CONFIG.TABLE.SECTIONS].sort((a, b) => (a.side * (a.x0 + a.x1)) - (b.side * (b.x0 + b.x1))).map(s => s.name); },
+  groupRange(g) {
+    const ord = Layout.order(), i0 = ord.indexOf(g.from), i1 = ord.indexOf(g.to);
+    const names = ord.slice(Math.min(i0, i1), Math.max(i0, i1) + 1);
+    const rs = names.map(Layout.range);
+    return [Math.min(...rs.map(r => r[0])), Math.max(...rs.map(r => r[1]))];
+  },
+  /** ある区分を含む最小のテーブル選択番号（入れ子）。どのグループにも無ければ最大番号+1。 */
+  groupOf(name) {
+    for (const g of CONFIG.TABLE.SELECT) { const r = Layout.groupRange(g), q = Layout.range(name); if (q[0] >= r[0] - 1 && q[1] <= r[1] + 1) return g.id; }
+    return CONFIG.TABLE.SELECT[CONFIG.TABLE.SELECT.length - 1].id + 1;
+  },
+  /** テーブル選択: 区間 [xa, xb] を覆う最小のグループ。覆えなければ最大のグループ。 */
+  select(xa, xb) {
+    for (const g of CONFIG.TABLE.SELECT) { const r = Layout.groupRange(g); if (xa >= r[0] && xb <= r[1]) return g; }
+    return CONFIG.TABLE.SELECT[CONFIG.TABLE.SELECT.length - 1];
+  },
+  /** 倒したスラブの中心 X（転倒軸からミル側へ L/2）。ラインへの移載位置もこの X。 */
+  entryX(length) { return CONFIG.SUPPLY.TILTER_X + CONFIG.FLIP * length / 2; },
 };
 
 class EventBus {
@@ -1097,8 +1292,10 @@ const Rolling = {
     // パス中の板は入側厚の部分と出側厚の部分が混在する。表面からの放熱に効く実効板厚は
     // 体積 ÷ 平均長さ ＝ 2·hOut/(1 + hOut/hIn)（運転時の hEff と同じ考え方）
     const hEff = 2 * hOut / (1 + hOut / hIn) / 1000;
-    // クーラント: 冷却域 COOL_ZONE を通過する時間だけ上下面に効く（上面が強い）
-    const cool = (M.H_COOL_TOP + M.H_COOL_BOT) * (T - M.T_COOL) * (M.COOL_ZONE / v) / (rc * hEff);
+    // クーラント: 冷却域 COOL_ZONE を通過する時間だけ上下面に効く（上面が強い）。
+    // 板面クーラント（サイドガイド上のヘッダ 4 本）は上面だけに、その冷却域の通過時間だけ効く
+    const gz = M.GUIDE_COOL.ENABLED ? 4 * CONFIG.TABLE.GUIDE.HEADER.ZONE : 0;
+    const cool = ((M.H_COOL_TOP + M.H_COOL_BOT) * M.COOL_ZONE + M.GUIDE_COOL.H_TOP * gz) * (T - M.T_COOL) / v / (rc * hEff);
     // パス時間 ≒ 材長 / 速度。板厚が薄いほど表面放熱で冷えやすい。
     const Tk = T + 273.15, Ak = M.T_AMBIENT + 273.15;
     const q = M.EMISSIVITY * 5.67e-8 * (Tk ** 4 - Ak ** 4) + M.H_AIR * (T - M.T_AMBIENT);
@@ -1243,6 +1440,21 @@ const Rolling = {
     return { ok: reasons.length === 0, maxF, tEnd, reasons, notes };
   },
 
+  /**
+   * 端部欠陥（舌・ワニ口）の影響範囲 [mm]。欠陥長に比例（3 倍、ただし 600 mm 以上・全長の 1/4 以下）。
+   */
+  endZone(oh, L) { return Num.clamp(3 * oh, 600, L * 0.25); },
+  /**
+   * 端部の張り出し形状。端から dEnd だけ内側の材料点が、板厚方向位置 ny（−1 下面〜+1 上面）・
+   * 幅方向位置 nz（−1〜+1）でどれだけ端の向きへ伸びるか [mm]。舌（幅中央が伸びる）と
+   * ワニ口（表裏が開く）の合成で、端の最大変位が oh になる。描画（板・端材・シート）は
+   * すべてこの 1 式を参照する。
+   */
+  endOffset(dEnd, oh, zone, ny, nz) {
+    if (!(oh > 0) || dEnd >= zone) return 0;
+    const e = 1 - dEnd / zone;
+    return oh * e * e * 0.5 * ((1 - nz * nz) + ny * ny);
+  },
   /** ロールバイト内の板厚プロファイル h(x) と下面高さ。x は圧延中心からの mm。 */
   profile(x, hIn, gap, dir) {
     const R = CONFIG.MILL.WR_D / 2, dh = hIn - gap;
@@ -1278,12 +1490,17 @@ class SlabState {
     this.alloyKey = spec.alloy || CONFIG.MATERIAL.ALLOY; this.alloy = Rolling.alloy(this.alloyKey);
     this.initialThickness = thickness; this.initialTemp = temp; this.initialLength = length;
     this.thickness = thickness; this.width = width; this.length = length;
-    this.xCenter = CONFIG.SUPPLY.ENTRY_X;
+    this.xCenter = Layout.entryX(length);            // トランスファークレーンが降ろす位置（倒したスラブの真横）
     this.xMin = this.xCenter - length / 2; this.xMax = this.xCenter + length / 2;
+    // 端部の切断面。シャーが張り出し（舌・ワニ口）の途中で切ると、端はそこで平らに打ち切られ、
+    // 残った張り出しは次のカットへ持ち越す。値は «健全端から切断面までの残り長さ»（板と一緒に動く）。
+    // null は切断面なし。
+    this.cut = { 1: null, '-1': null };
     // 板厚方向の層温度（上面 → 下面）。炉出しは均一
     this.T = new Float64Array(CONFIG.MATERIAL.LAYERS).fill(temp);
     this.inBite = false; this.rollingActive = false; this.onLine = false; this.biteOk = true;
     this.cropped = false; this.croppedEnd = 0;      // どちら側の端を切ったか (+1: xMax 側 / −1: xMin 側)
+    this.tailCut = 0;                                // 尾端側の切断面（30 mm / 75 mm シャーで切り分けた面）の有無
     this.rollForce = 0; this.rollTorque = 0; this.rollPower = 0; this.contactLength = 0;
     this.currentSpeed = 0; this.strainRate = 0; this.flowStress = 0;
     this.dir = 1;
@@ -1326,8 +1543,34 @@ class SlabState {
     const cold = Num.clamp((al.T_ROLL[1] - this.temperature) / (al.T_ROLL[1] - al.T_ROLL[0]), 0, 1);
     return r * r * al.end * (1 + 0.8 * cold) * (O.TH_K * this.thickness + O.WID_K * this.width);
   }
-  /** 材料の実際の先端／尾端（張り出しを含む）。F は第1パス方向。 */
-  tipX(end) { return end > 0 ? this.xMax + this.overhangAt(1) : this.xMin - this.overhangAt(-1); }
+  /** 材料の実際の先端／尾端（張り出しを含む。切断面があればそこで打ち切る）。 */
+  tipX(end) {
+    const c = this.cut[end];
+    if (end > 0) { const t = this.xMax + this.overhangAt(1); return c === null ? t : Math.min(t, this.xMax + c); }
+    const t = this.xMin - this.overhangAt(-1); return c === null ? t : Math.max(t, this.xMin - c);
+  }
+  /**
+   * 板の形状パラメータ（描画とピース生成で共有）。end ごとの健全端 xE・張り出し oh・影響範囲 zone・
+   * 切断面 cut。長さ方向の座標 x（世界）と ny/nz を受け取り、張り出し込みの X を返す関数も持つ。
+   */
+  shape(x0 = this.xMin, x1 = this.xMax, ohP = this.overhangAt(1), ohM = this.overhangAt(-1)) {
+    const L = Math.max(x1 - x0, 1);
+    const ends = {
+      1:    { xE: x1, oh: ohP, zone: Rolling.endZone(ohP, L), cut: this.cut[1] },
+      '-1': { xE: x0, oh: ohM, zone: Rolling.endZone(ohM, L), cut: this.cut['-1'] },
+    };
+    return {
+      x0, x1, ends,
+      /** 材料点 (x, ny, nz) の張り出し込み X。切断面があればそこで打ち切る。 */
+      map(x, ny, nz) {
+        const e = x > (x0 + x1) / 2 ? ends[1] : ends['-1'], sgn = x > (x0 + x1) / 2 ? 1 : -1;
+        const dEnd = sgn > 0 ? e.xE - x : x - e.xE;
+        let xo = x + sgn * Rolling.endOffset(Math.max(dEnd, 0), e.oh, e.zone, ny, nz);
+        if (e.cut !== null) xo = sgn > 0 ? Math.min(xo, e.xE + e.cut) : Math.max(xo, e.xE - e.cut);
+        return xo;
+      },
+    };
+  }
 }
 
 class MillState {
@@ -1341,6 +1584,7 @@ class MillState {
     this.motorRpm = 0;
     this.rollAngle = 0; this.tableAngle = 0;
     this.bendingForce = 0;
+    this.tableGroup = CONFIG.TABLE.SELECT[CONFIG.TABLE.SELECT.length - 1];   // 駆動するテーブル区間（図面のテーブル選択）
   }
   get passLine() { return CONFIG.MILL.PASS_LINE; }
   /** 下ワークロール上面 = パスライン（下ロールはパスライン調整装置の上で固定） */
@@ -1378,12 +1622,22 @@ class FinishState {
     this.cropStage = 'IDLE'; this.cropDone = false;
     this.cropBlade = 0;        // 下台の昇降 0:待機（上面＝パスライン） → 1:上死点
     this.cropCuts = 0; this.cropIndex = 0; this.cropEach = 0; this.cropTotal = 0; this.cropNeed = 0;
-    this.cropPush = 0;         // プッシャ 0:待機 → 1:払い出し完了
+    this.cropPush = 0;         // プッシャ 0:待機 → 1:押し出し完了
     this.cropFace = CONFIG.CROP_SHEAR.EJECT.Z_HOME;   // プッシャ面の Z
     this.cropForceT = 0;       // その切断で要した剪断力 [tonf]
-    this.cropVisible = false; this.cropX = 0; this.cropY = 0; this.cropZ = 0;
-    this.cropVY = 0; this.cropLen = 0; this.cropSound = 0; this.cropTh = 0;
-    this.gripped = false; this.thread = 0; this.coiledLen = 0; this.od = CONFIG.COILER.MANDREL_D;
+    this.cropLen = 0; this.cropSound = 0; this.cropTh = 0;
+    // 切り落とした端材。切断時の変形形状（舌・ワニ口）を保ったまま、エプロン → プッシャ →
+    // コンベア → パレットと運ばれる。1 カット 1 個で、複数個が同時に搬送中でもよい。
+    //   stage: BED(下台上) → APRON(エプロン上で静止) → PUSH(押されている) → FALL(コンベアへ落下)
+    //          → CONVEY(コンベア上) → DROP(パレットへ落下) → REST(パレット上)
+    this.scraps = []; this.scrapRest = 0; this.pileTh = 0;   // scrapRest/pileTh: パレットに積まれた枚数と山の高さ
+    this.conveyorRun = false; this.tableSpeed = 0; this.pilerRun = false;
+    this.conveyorAngle = 0; this.pilerAngle = 0;   // コンベア／パイラーローラの積分角（描画は読むだけ）
+    // 30 mm シャー（上刃下降式）と 75 mm シャーの切り分け、パイラー
+    this.cut30Blade = 0; this.cut30Hold = 0; this.divideStage = 'IDLE'; this.divideShear = null;
+    this.sheets = []; this.piled = 0; this.pileH = 0; this.pilerOpen = 0; this.pilerStage = 'CLOSED';
+    this.sheetCount = 0;
+    this.gripped = false; this.threading = false; this.thread = 0; this.coiledLen = 0; this.od = CONFIG.COILER.MANDREL_D;
     this.tensionKg = 0;
     this.mandrelAngle = 0; this.tension = 0; this.winding = false; this.done = false;
     // 巻き層の状態。turns は板の周速から積分した巻き数（マンドレル 1 回転＝1 巻）。
@@ -1391,9 +1645,15 @@ class FinishState {
     this.entry = 0;            // 板の入口の極角（world, rad）
     this.expand = 0;           // マンドレルセグメント 0:縮小 → 1:拡張
     this.tailPast = 0;         // 尾端が板の入口 A を過ぎてから進んだ距離 [mm]
-    // 板材モードの払い出し（パイラー相当）
+    // 板材モードの払い出し。板厚 75 mm 超だけがテーブル末端からクレーンで板置き場へ
     this.plateStage = 'IDLE'; this.plateZ = 0; this.plateY = 0; this.plateT = 0;
     this.phase = 'IDLE';
+  }
+  /** 板材をどこで切り分けるか。30 mm 以下は 30 mm シャー、75 mm 以下は 75 mm シャー、それ以上は切らない。 */
+  static divider(th) {
+    if (th <= CONFIG.SHEAR30.MAX_TH) return 'S30';
+    if (th <= CONFIG.CROP_SHEAR.MAX_TH) return 'S75';
+    return null;
   }
   /** 巻取方向の符号（第1パス方向 F で決まる。下巻き＝板は下から入って奥へ回る） */
   get windSign() { return CONFIG.FLIP; }
@@ -1456,8 +1716,19 @@ class MillController {
   begin() {
     this.slab.onLine = true;
     this.mill.mode = 'AUTO'; this.mill.passIndex = 0; this.mill.passPhase = 'SETUP';
+    this._selectTables();
     this.bus.emit('SYS_MESSAGE', { text: '圧延開始', kind: 'info' });
     this.bus.emit('STATE_PASS', 0);
+  }
+  /**
+   * テーブル選択（図面の 1〜4）。このパスで板が載る範囲（今の位置から、パス終了時に板が
+   * 止まる位置まで）を覆う最小の駆動区間を選ぶ。選ばれた区間のローラだけが回る。
+   */
+  _selectTables() {
+    const sch = CONFIG.SCHEDULE[this.mill.passIndex]; if (!sch) return;
+    const s = this.slab, L2 = s.length * s.thickness / Math.max(sch.gap, 1), reach = CONFIG.SAFE_CLEAR + L2 + 2000;
+    const xa = sch.dir > 0 ? s.xMin : -reach, xb = sch.dir > 0 ? reach : s.xMax;
+    this.mill.tableGroup = Layout.select(Math.min(xa, xb), Math.max(xa, xb));
   }
   update(finish) {
     const m = this.mill, s = this.slab;
@@ -1497,6 +1768,7 @@ class MillController {
       this.bus.emit('STATE_LAST_PASS_DONE');
     } else {
       m.passPhase = 'SETUP';
+      this._selectTables();
       this.bus.emit('STATE_PASS', m.passIndex);
     }
   }
@@ -1514,12 +1786,20 @@ class FinishController {
     this.bus = bus; this.s = state; this.slab = slab; this.mill = mill;
     bus.on('CMD_RESET', () => this.s.reset());
     bus.on('CMD_START_WIND', () => {
-      if (this.s.gripped) this.s.winding = true;          // コイルモード: 残りを巻き取る
-      else if (this.s.mode === 'PLATE') {                 // 板材モード: 出側へ送り出し、パイラーへ払い出す
-        this.s.plateStage = 'RUNOUT';
-        bus.emit('SYS_MESSAGE', { text: `板材 ${this.slab.thickness.toFixed(1)} mm: 出側テーブルを走らせてパイラーへ払い出します`, kind: 'info' });
+      const s = this.s, th = this.slab.thickness, PL = CONFIG.PILER;
+      if (s.gripped) s.winding = true;                    // コイルモード: 残りを巻き取る
+      else if (s.mode === 'PLATE') {                      // 板材モード: 切り分けてパイラーへ、または末端でクレーン払い出し
+        this.mill.tableGroup = CONFIG.TABLE.SELECT[CONFIG.TABLE.SELECT.length - 1];
+        s.divideShear = FinishState.divider(th);
+        if (s.divideShear) {
+          s.plateStage = 'DIVIDE'; s.divideStage = 'ADVANCE';
+          bus.emit('SYS_MESSAGE', { text: `板材 ${th.toFixed(1)} mm: ${s.divideShear === 'S30' ? '30 mm' : '75 mm'} シャーで ${(PL.SHEET_L / 1000).toFixed(0)} m ごとに切り分け、パイラーへ積みます`, kind: 'info' });
+        } else {
+          s.plateStage = 'RUNOUT';
+          bus.emit('SYS_MESSAGE', { text: `板材 ${th.toFixed(1)} mm: 75 mm 超はシャーで切れないため、J-3 末端で止めてクレーンで板置き場へ払い出します`, kind: 'info' });
+        }
       }
-      else { this.s.done = true; bus.emit('STATE_FINISHED'); }
+      else { s.done = true; bus.emit('STATE_FINISHED'); }
     });
   }
   /** 進行方向の先端座標 */
@@ -1611,27 +1891,26 @@ class FinishController {
         if (s.cropBlade <= 0) s.cropStage = 'EJECT';
         break;
 
-      // 端材をエプロン上で操作側へ押し出し、シュートへ落とす。
+      // 端材をエプロン上で操作側へ押し出し、エプロン端からコンベアへ落とす。
       // プッシャ面が端材の後面に触れてから押し出す。触れるまで端材は動かない。
       case 'EJECT': {
         s.cropPush = Math.min(1, s.cropPush + dt / S.T_EJECT);
         const back = sl.width / 2;
         s.cropFace = Num.lerp(E.Z_HOME, E.Z_DROP - back, s.cropPush);
-        s.cropZ = Math.max(0, s.cropFace + back);
+        const sc = s.scraps[s.scraps.length - 1];
+        if (sc && (sc.stage === 'APRON' || sc.stage === 'PUSH') && sc.y <= 0) { sc.stage = 'PUSH'; sc.z = Math.max(0, s.cropFace + back); }
         if (s.cropPush >= 1) {
-          s.cropStage = 'DROP'; s.cropVY = 0;
+          if (sc && sc.stage === 'PUSH') { sc.stage = 'FALL'; sc.vy = 0; sc.t = 0; }
+          s.cropStage = 'RETRACT';
           this.bus.emit('SYS_MESSAGE', {
-            text: `75 mm シャー: 端材 ${s.cropLen.toFixed(0)} mm を操作側へ払い出しました`, kind: 'info' });
+            text: `75 mm シャー: 端材 ${s.cropLen.toFixed(0)} mm を操作側のコンベアへ払い出しました`, kind: 'info' });
         }
         break;
       }
 
-      case 'DROP':                                       // エプロン端からシュートへ落ちる
-        s.cropVY -= 9810 * dt; s.cropY += s.cropVY * dt;
-        s.cropZ += 1200 * dt;
-        s.cropFace = Math.min(s.cropFace + 300 * dt, E.Z_DROP);
-        if (s.cropY < -1200) {
-          s.cropVisible = false; s.cropPush = 0; s.cropFace = E.Z_HOME;
+      // プッシャが待機位置へ戻るまで板を動かさない（戻る途中のプッシャが板の通り道を横切る）
+      case 'RETRACT':
+        if (s.cropPush <= 0) {
           s.cropIndex++;
           if (s.cropIndex < s.cropCuts) s.cropStage = 'ALIGN';       // 次のカットへ（板を送って再度切る）
           else {
@@ -1641,10 +1920,47 @@ class FinishController {
         }
         break;
     }
-    // 切り離し前の端材（まだ板の一部）は下台と一緒に持ち上がっている
-    if (s.cropVisible && s.cropStage === 'EJECT' && s.cropY > 0) {   // 下台が降りたあと端材はエプロンへ落ち着く
-      s.cropVY -= 9810 * dt; s.cropY = Math.max(0, s.cropY + s.cropVY * dt); if (s.cropY === 0) s.cropVY = 0;
+    // プッシャの戻り（押し出し中以外は待機位置へ）
+    if (s.cropStage !== 'EJECT' && s.cropPush > 0) {
+      s.cropPush = Math.max(0, s.cropPush - dt / S.T_EJECT);
+      s.cropFace = Num.lerp(E.Z_HOME, E.Z_DROP - sl.width / 2, s.cropPush);
     }
+  }
+
+  /**
+   * 端材の搬送。切り離した端材は下台の高さからエプロンへ落ち着き、プッシャで押されて
+   * エプロン端からコンベアへ落ち、コンベアで操作側へ運ばれて末端からパレットへ落ちて積み重なる。
+   * y はパスライン基準、z は世界座標。複数個が同時に搬送中でもよい。
+   */
+  _scraps(dt) {
+    const s = this.s, S = CONFIG.CROP_SHEAR, E = S.EJECT, CV = S.CONVEYOR, PA = S.PALLET, P = CONFIG.MILL.PASS_LINE, g = 9810;
+    const convTop = CV.TOP - P;
+    let running = false;
+    for (const sc of s.scraps) {
+      switch (sc.stage) {
+        case 'BED':                                       // 切り離された端材は支えを失い、下台の高さからエプロンへ落ち着く
+          sc.vy -= g * dt; sc.y = Math.max(0, sc.y + sc.vy * dt); if (sc.y === 0) { sc.vy = 0; sc.stage = 'APRON'; }
+          break;
+        case 'APRON': case 'PUSH': break;                 // 位置は _crop の EJECT が決める
+        case 'FALL': {                                    // エプロン端からコンベアへ。前へ滑りながら落ちる
+          sc.vy -= g * dt; sc.y += sc.vy * dt; sc.z += 900 * dt; sc.rot = Num.clamp(sc.rot - 1.4 * dt, -0.45, 0);
+          if (sc.y <= convTop) { sc.y = convTop; sc.vy = 0; sc.rot = 0; sc.z = Math.max(sc.z, CV.Z0 + sc.w / 2 + 50); sc.stage = 'CONVEY'; }
+          break;
+        }
+        case 'CONVEY':                                    // コンベア上を操作側へ
+          sc.z += CV.SPEED * dt; running = true;
+          if (sc.z - sc.w / 2 > CV.Z1) { sc.stage = 'DROP'; sc.vy = 0; }
+          break;
+        case 'DROP': {                                    // 末端からパレットへ。山の上に載る
+          const land = PA.H + s.pileTh - P;
+          sc.vy -= g * dt; sc.y += sc.vy * dt; sc.z += 300 * dt;
+          if (sc.y <= land) { sc.y = land; sc.vy = 0; sc.stage = 'REST'; s.scrapRest++; s.pileTh += sc.th; }
+          break;
+        }
+      }
+    }
+    s.conveyorRun = running;
+    if (running) s.conveyorAngle += CV.SPEED / (CV.ROLL_D / 2) * dt;
   }
 
   /** 切り離し。板の先端を «刃の位置» に更新し、刃より先にあった材料を端材にする。 */
@@ -1653,19 +1969,37 @@ class FinishController {
     const tip = this._tip(), before = F > 0 ? sl.xMax : sl.xMin;
     const cut = Math.abs(tip - S.X);                 // 刃より先にあった材料の長さ
     const end = F > 0 ? 1 : -1;                      // 先端がどちら側か
-    // 論理端は «刃の位置から張り出しぶん手前»。切った側の張り出しは無くなる。
-    if (end > 0) sl.xMax = S.X; else sl.xMin = S.X;
-    sl.cropped = true; sl.croppedEnd = end;
-    sl.length = sl.xMax - sl.xMin;
-    s.cropLen = cut;                                 // 切り落とした全長（張り出しを含む）
-    s.cropSound = Math.abs(before - S.X);            // うち健全部（板長として減る分）
     s.cropTh = this._headThickness();
+    // 端材は切断時の形（舌・ワニ口、前回の切断面）をそのまま持つ。形状は板と同じ 1 式から取る
+    const piece = this._piece(sl.shape(), end, S.X, tip, s.cropTh);
+    piece.stage = 'BED'; piece.y = this.bedLift(); piece.z = 0; piece.rot = 0;
+    s.scraps.push(piece);
+    // 刃が張り出しの途中なら端はそこで平らに打ち切られ（残りの張り出しは次のカットへ）、
+    // 健全部まで切り込んだら論理端を刃の位置にして張り出しは無くなる。
+    if (F * (S.X - before) > 0) { sl.cut[end] = Math.abs(S.X - before); s.cropSound = 0; }
+    else {
+      if (end > 0) sl.xMax = S.X; else sl.xMin = S.X;
+      sl.cut[end] = null; sl.cropped = true; sl.croppedEnd = end;
+      sl.length = sl.xMax - sl.xMin;
+      s.cropSound = Math.abs(before - S.X);          // 健全部（板長として減る分）
+    }
+    s.cropLen = cut;                                 // 切り落とした全長（張り出しを含む）
     s.cropForceT = Rolling.cropForce(s.cropTh, sl.width);
-    // 端材は刃の «先» 側のエプロン上に残る。切り離した瞬間は下台と同じ高さにあり、そこから落ち着く
-    s.cropX = S.X + F * cut / 2; s.cropY = this.bedLift(); s.cropVY = 0; s.cropZ = 0; s.cropVisible = true;
     this.bus.emit('SYS_MESSAGE', {
       text: `75 mm シャー: カット ${s.cropIndex + 1}/${s.cropCuts} ＝ ${cut.toFixed(0)} mm ／ 剪断力 ${s.cropForceT.toFixed(0)} t`
           + `（定格 ${S.RATED_FORCE_T} t）`, kind: 'info' });
+  }
+
+  /**
+   * 板から切り離したピース（端材・シート）の記述。ピースは刃の位置 xCut から板端側 tip までで、
+   * 幅方向・板厚方向の各点の端の X は板の形状関数（張り出し・切断面）から取る。描画側は
+   * これを 1 度だけジオメトリに焼く。x/len は世界座標（切り離した瞬間）。
+   */
+  _piece(shape, end, xCut, tip, th) {
+    const sl = this.slab;
+    const xEndAt = (ny, nz) => { const xe = shape.map(shape.ends[end].xE, ny, nz); return end > 0 ? Math.max(xe, xCut) : Math.min(xe, xCut); };
+    return { id: ++FinishController._pid, th, w: sl.width, len: Math.abs(tip - xCut), x: (xCut + tip) / 2, end, xCut,
+             xEndAt, y: 0, z: 0, vy: 0, rot: 0, t: 0, stage: 'NEW' };
   }
 
   update(dt) {
@@ -1674,6 +2008,9 @@ class FinishController {
 
     if (!sl.onLine) return;
     this._crop(dt);
+    this._scraps(dt);
+    this._sheets(dt);
+    s.tableSpeed = 0;
     if (s.cropStage !== 'IDLE' && s.cropStage !== 'DONE') return;   // クロップ中はライン制御を占有
     const finalPass = this.mill.passIndex === CONFIG.SCHEDULE.length - 1;
     const head = this._head();
@@ -1696,16 +2033,19 @@ class FinishController {
     s.expand = Num.rateTo(s.expand, wantExpand ? 1 : 0, 1 / CO.T_EXPAND, dt);
 
     // --- リールへの通板と把持（マンドレルが拡張し切ってから先端を掴む）---
-    if (s.mode === 'COIL' && finalPass && !s.gripped && headPast > 0) {
-      if (s.expand >= 1) s.thread = Math.min(1, s.thread + dt / CO.T_THREAD);
+    // 先端が入口 A を過ぎたら板はマンドレルに巻き付き始める（通板中）。巻き数と巻いた長さは
+    // どちらも A を基準に数えるので、通板の長さが «巻かれていないのに巻き長さに入る» ことがない。
+    if (s.mode === 'COIL' && finalPass && !s.gripped && headPast > 0 && s.expand >= 1) {
+      s.threading = true;
+      s.thread = Math.min(1, s.thread + dt / CO.T_THREAD);
       if (s.thread >= 1) {
-        s.gripped = true;
+        s.gripped = true; s.threading = false;
         this.bus.emit('SYS_MESSAGE', { text: 'リール: マンドレル拡張・先端を把持しました（張力付与開始）', kind: 'info' });
       }
     }
 
     // --- 巻取中の諸量。巻き数は «板の周速 ÷ 巻き付け半径» の積分で、1 回転＝1 巻 ---
-    if (s.gripped) {
+    if (s.gripped || s.threading) {
       // 巻かれているのは «圧延後» の板。噛み込み中は板全体の thickness がまだ入側厚なので、
       // 先端の実厚（＝ロールギャップ）で巻き層と外径を数える。
       const h = this._headThickness(), w = s.finishedWidth(sl.width);
@@ -1731,6 +2071,7 @@ class FinishController {
       const cy = CONFIG.MILL.PASS_LINE + CO.Y_ABOVE;
       const e = Rolling.coilEntry(A.x, A.y, CO.X, cy, s.layR);
       const bridgeLen = e ? Math.hypot(e.tx - A.x, e.ty - A.y) : 0;
+      s.tableSpeed = F * v;
       if (F * (A.x - tail) > 0) { sl.xMin += F * v * dt; sl.xMax += F * v * dt; }
       else if (s.tailPast < bridgeLen) { s.tailPast += v * dt; sl.xMin += F * v * dt; sl.xMax += F * v * dt; }
       else if (!s.done) {
@@ -1742,39 +2083,165 @@ class FinishController {
       }
     }
 
-    // --- 板材モード: 出側へ送り出し → 横移送 → 板置き場へ降ろす（パイラー相当）---
-    this._plate(dt);
+    // --- 板材モード: シャーで切り分けてパイラーへ、または末端でクレーン払い出し ---
+    if (s.plateStage === 'DIVIDE') this._divide(dt); else this._plate(dt);
   }
 
-  /** 板材の払い出し。パイラー本体は未実装だが、払い出しの動きはこの順で再現する。 */
-  _plate(dt) {
-    const s = this.s, sl = this.slab, F = CONFIG.FLIP, PL = CONFIG.PILER, P = CONFIG.MILL.PASS_LINE;
-    switch (s.plateStage) {
-      case 'RUNOUT': {                                     // 先端が STOP_X に着くまで出側テーブルで送る
-        const v = PL.SPEED / 60 * 1000, rest = F * (PL.STOP_X - this._head());
-        const step = Math.min(v * dt, Math.max(rest, 0));
-        sl.xMin += F * step; sl.xMax += F * step;
-        if (rest <= 1) { s.plateStage = 'SIDE'; s.plateT = 0; }
+  /** 板を +F 方向へ送る（テーブル搬送）。返り値は実際に進んだ量。 */
+  _feed(dt, stopX) {
+    const sl = this.slab, F = CONFIG.FLIP, v = CONFIG.PILER.SPEED / 60 * 1000;
+    const rest = F * (stopX - this._tip()), step = Math.min(v * dt, Math.max(rest, 0));
+    sl.xMin += F * step; sl.xMax += F * step;
+    this.s.tableSpeed = step > 0 ? F * v : 0;
+    return rest;
+  }
+
+  /**
+   * 切り分け（板厚 ≤ 75 mm の板材）。板を SHEET_L だけシャーの先へ送り、切り離したシートを
+   * パイラーへ送る。シャーの先（送る区間 + 隙間）にシートが残っていれば送らない。
+   * 残りが SHEET_L 以下になったら切らず、板そのものを最後のシートとしてパイラーへ送る。
+   */
+  _divide(dt) {
+    const s = this.s, sl = this.slab, F = CONFIG.FLIP, PL = CONFIG.PILER, S30 = CONFIG.SHEAR30, S75 = CONFIG.CROP_SHEAR;
+    const sx = s.divideShear === 'S30' ? S30.X : S75.X;
+    const zoneFree = () => s.sheets.every(sh => sh.stage !== 'RUN' || F * (sh.x - F * sh.len / 2 - sx) > PL.SHEET_L + PL.GAP)
+                           && s.pilerStage === 'CLOSED';
+    switch (s.divideStage) {
+      case 'ADVANCE': {
+        // 残りの板全体（頭がどこにあっても板長で判定する）が定尺 + 余裕以下なら切らずに丸ごと送る
+        if (sl.length <= PL.SHEET_L + 200) { s.divideStage = 'LAST'; break; }
+        if (!zoneFree()) { s.tableSpeed = 0; break; }
+        if (this._feed(dt, sx + F * PL.SHEET_L) <= 1) { s.divideStage = 'CUT'; s.cut30Hold = 0; s.cut30Blade = 0; s.cropBlade = 0; }
         break;
       }
-      case 'SIDE':                                         // 操作側の板置き場へ横移送
+      case 'CUT': {                                            // シャーの 1 サイクル
+        if (s.divideShear === 'S30') {
+          // 板押えが先に降り、上刃が下降。板厚の半分まで食い込んだところで切り離す
+          s.cut30Hold = Math.min(1, s.cut30Hold + dt / 0.4);
+          if (s.cut30Hold >= 1) {
+            const b0 = s.cut30Blade; s.cut30Blade = Math.min(1, s.cut30Blade + dt / S30.T_CUT);
+            const th = sl.thickness, through = b => b * S30.STROKE >= S30.STROKE - th * 0.5;
+            if (!through(b0) && through(s.cut30Blade)) this._severSheet(sx);
+            if (s.cut30Blade >= 1) s.divideStage = 'RETURN';
+          }
+        } else {                                               // 75 mm シャー: 下台上昇（クロップと同じ機構）
+          const b0 = s.cropBlade, th = sl.thickness; s.cropBlade = Math.min(1, s.cropBlade + dt / S75.T_CUT);
+          const through = b => this.bedLift(b) >= S75.UPPER_CLR - th * 0.5;
+          if (!through(b0) && through(s.cropBlade)) this._severSheet(sx);
+          if (s.cropBlade >= 1) s.divideStage = 'RETURN';
+        }
+        break;
+      }
+      case 'RETURN':
+        if (s.divideShear === 'S30') {
+          s.cut30Blade = Math.max(0, s.cut30Blade - dt / S30.T_RETURN);
+          if (s.cut30Blade <= 0) { s.cut30Hold = Math.max(0, s.cut30Hold - dt / 0.4); if (s.cut30Hold <= 0) s.divideStage = 'ADVANCE'; }
+        } else { s.cropBlade = Math.max(0, s.cropBlade - dt / S75.T_RETURN); if (s.cropBlade <= 0) s.divideStage = 'ADVANCE'; }
+        break;
+      case 'LAST': {                                           // 板そのものを最後のシートとして送る
+        if (!zoneFree() && F * (this._tip() - sx) < PL.SHEET_L) { s.tableSpeed = 0; break; }
+        const rest = this._feed(dt, PL.STOP_X);
+        if (rest <= 1 && s.pilerStage === 'CLOSED') { s.pilerStage = 'OPENING'; s.divideStage = 'PILE'; s.plateT = 0; }
+        break;
+      }
+      case 'PILE':                                             // アームが開き、板が山の上へ落ちる
+        if (s.pilerOpen >= 1 && s.plateStage !== 'DONE') {
+          s.plateT = Math.min(1, s.plateT + dt / PL.T_DROP);
+          s.plateY = -PL.DROP * s.plateT * s.plateT;
+          if (s.plateT >= 1) {
+            s.plateY = -PL.DROP; s.piled++; s.pileH += sl.thickness; s.sheetCount++;
+            s.plateStage = 'DONE'; s.done = true; s.pilerStage = 'CLOSING';
+            this.bus.emit('SYS_MESSAGE', {
+              text: `パイラー: 払い出し完了 ／ 板厚 ${sl.thickness.toFixed(1)} mm × 幅 ${sl.width} mm ／ ${s.sheetCount} 枚（${(PL.SHEET_L / 1000).toFixed(0)} m 定尺）`, kind: 'info' });
+            this.bus.emit('STATE_FINISHED');
+          }
+        }
+        break;
+    }
+  }
+
+  /** 切り分け: 刃より先の材料をシートとして切り離し、板の先端を刃の位置にする。 */
+  _severSheet(sx) {
+    const s = this.s, sl = this.slab, F = CONFIG.FLIP, end = F > 0 ? 1 : -1;
+    const tip = this._tip();
+    const piece = this._piece(sl.shape(), end, sx, tip, sl.thickness);
+    piece.stage = 'RUN'; piece.y = 0; piece.z = 0;
+    s.sheets.push(piece); s.sheetCount++;
+    if (end > 0) sl.xMax = sx; else sl.xMin = sx;
+    sl.cut[end] = null; sl.cropped = true; sl.croppedEnd = end;   // 切り分け面は平ら
+    sl.length = sl.xMax - sl.xMin;
+    this.bus.emit('SYS_MESSAGE', { text: `${s.divideShear === 'S30' ? '30 mm' : '75 mm'} シャー: シート ${s.sheetCount} 枚目（${(piece.len / 1000).toFixed(1)} m）を切り分けました`, kind: 'info' });
+  }
+
+  /**
+   * シートの搬送とパイラー。シートはテーブル上を +F へ走り、パイラーの停止位置（または前の
+   * シートの手前）で止まる。先頭のシートが停止位置に着き、パイラーが閉じていればアームを
+   * 開いて山へ落とし、閉じる。山が高くなるぶんリフトテーブルが下がる（受け面の高さは一定）。
+   */
+  _sheets(dt) {
+    const s = this.s, F = CONFIG.FLIP, PL = CONFIG.PILER, v = PL.SPEED / 60 * 1000;
+    const run = s.sheets.filter(sh => sh.stage === 'RUN');
+    let moved = false;
+    run.forEach((sh, i) => {
+      const prev = run[i - 1];
+      const limit = prev ? F * (prev.x - F * prev.len / 2) - PL.GAP : F * PL.STOP_X;   // 先端が行ける限界（F 座標）
+      const head = F * (sh.x + F * sh.len / 2), step = Math.min(v * dt, Math.max(limit - head, 0));
+      if (step > 0) { sh.x += F * step; moved = true; }
+      sh.atStop = !prev && (limit - head) <= 1;
+    });
+    // 板そのものがパイラーの上を走っているときもローラは回る
+    const tip = this._tip();
+    if (!moved && s.tableSpeed !== 0 && (tip - PL.X0) * (tip - PL.X1) < 0) moved = true;
+    s.pilerRun = moved;
+    if (moved) s.pilerAngle += -F * v / (PL.ROLL_D / 2) * dt;   // 材料 +F → ローラは −F·Z 回転
+    // パイラー: 先頭のシートが停止位置に着いたらアームを開いて落とす
+    switch (s.pilerStage) {
+      case 'CLOSED':
+        if (run[0] && run[0].atStop) s.pilerStage = 'OPENING';
+        break;
+      case 'OPENING':
+        s.pilerOpen = Math.min(1, s.pilerOpen + dt / PL.T_OPEN);
+        if (s.pilerOpen >= 1) { const sh = run[0]; if (sh && sh.atStop) { sh.stage = 'DROP'; sh.t = 0; } else if (s.divideStage !== 'PILE') s.pilerStage = 'CLOSING'; }
+        break;
+      case 'CLOSING':
+        s.pilerOpen = Math.max(0, s.pilerOpen - dt / PL.T_OPEN);
+        if (s.pilerOpen <= 0) s.pilerStage = 'CLOSED';
+        break;
+    }
+    for (const sh of s.sheets) if (sh.stage === 'DROP') {
+      sh.t = Math.min(1, sh.t + dt / PL.T_DROP);
+      sh.y = -PL.DROP * sh.t * sh.t;                      // 受け面から山の上（受け面の DROP 下）へ
+      if (sh.t >= 1) { sh.stage = 'PILED'; sh.y = -PL.DROP; sh.k = s.piled; s.piled++; s.pileH += sh.th; s.pilerStage = 'CLOSING'; }
+    }
+  }
+
+  /** 板厚 75 mm 超の板材。J-3 末端で止め、クレーンで駆動側の板置き場へ横移送して降ろす。 */
+  _plate(dt) {
+    const s = this.s, sl = this.slab, PL = CONFIG.PILER, P = CONFIG.MILL.PASS_LINE;
+    switch (s.plateStage) {
+      case 'RUNOUT':                                       // 先端が J-3 末端に着くまで出側テーブルで送る
+        if (this._feed(dt, PL.STOP_THICK_X) <= 1) { s.plateStage = 'SIDE'; s.plateT = 0; }
+        break;
+      case 'SIDE':                                         // 駆動側の板置き場へ横移送（クレーン）
         s.plateT = Math.min(1, s.plateT + dt / PL.T_SIDE);
-        s.plateZ = PL.SIDE_Z * Num.smoothstep(0, 1, s.plateT);
+        s.plateZ = PL.YARD.Z * Num.smoothstep(0, 1, s.plateT);
+        s.plateY = 600 * Math.sin(Math.PI * Num.smoothstep(0, 1, s.plateT));   // 吊り上げて越える
         if (s.plateT >= 1) { s.plateStage = 'DROP'; s.plateT = 0; }
         break;
       case 'DROP':                                         // 架台の上へ降ろす
-        s.plateT = Math.min(1, s.plateT + dt / PL.T_DROP);
-        s.plateY = -(P - PL.PALLET_H) * Num.smoothstep(0, 1, s.plateT);
+        s.plateT = Math.min(1, s.plateT + dt / PL.T_LOWER);
+        s.plateY = -(P - PL.YARD.H) * Num.smoothstep(0, 1, s.plateT);
         if (s.plateT >= 1) {
           s.plateStage = 'DONE'; s.done = true;
           this.bus.emit('SYS_MESSAGE', {
-            text: `払い出し完了: 板厚 ${sl.thickness.toFixed(1)} mm × 幅 ${sl.width} mm × 長さ ${(sl.length / 1000).toFixed(1)} m`, kind: 'info' });
+            text: `払い出し完了: 板厚 ${sl.thickness.toFixed(1)} mm × 幅 ${sl.width} mm × 長さ ${(sl.length / 1000).toFixed(1)} m を板置き場へ降ろしました`, kind: 'info' });
           this.bus.emit('STATE_FINISHED');
         }
         break;
     }
   }
 }
+FinishController._pid = 0;
 
 /* =============================================================================
  * 6. PHYSICS ENGINE
@@ -1788,7 +2255,7 @@ class PhysicsEngine {
     this.bus = bus;
     this.slab = new SlabState(); this.mill = new MillState();
     this.supply = new SupplyState(); this.finish = new FinishState();
-    this.env = { coolant: true, steam: true };
+    this.env = { coolant: true, steam: true, stripCool: true };
     this.millCtrl   = new MillController(bus, this.mill, this.slab);
     this.supplyCtrl = new SupplyController(bus, this.supply);
     this.finishCtrl = new FinishController(bus, this.finish, this.slab, this.mill);
@@ -1797,7 +2264,8 @@ class PhysicsEngine {
     this._acc = 0;
     bus.on('CMD_RESET', () => this.reset());
     bus.on('CMD_SET_SLAB', (d) => { this._pending = d; this.reset(); });
-    bus.on('CMD_SET_ENV', (d) => Object.assign(this.env, d));
+    bus.on('CMD_SET_ENV', (d) => { Object.assign(this.env, d);
+      if (d.stripCool !== undefined) CONFIG.MATERIAL.GUIDE_COOL.ENABLED = !!d.stripCool; });   // スケジュール予測と運転で同じ前提を見る
     bus.on('CMD_SET_SUPPLY_ANIM', (v) => { this.supply.enabled = v; });
     bus.on('CMD_PAUSE', (v) => { this.paused = v; });
     bus.on('CMD_STOP_LINE', () => { this.mill.targetSpeed = 0; });
@@ -1968,6 +2436,8 @@ class PhysicsEngine {
     const cooling = this.env.coolant && s.inBite && Math.abs(this.mill.currentSpeed) > 3;
     const dil = cooling ? Math.min(M.COOL_ZONE / Math.max(s.length, 1), 1) : 0;
     const hc = [M.H_COOL_TOP * dil, M.H_COOL_BOT * dil];
+    // 板面クーラント（サイドガイド上のヘッダ）。板がヘッダの下を通過している割合だけ上面に効く
+    hc[0] += M.GUIDE_COOL.H_TOP * this.guideCoolFrac;
     // 表面の有効熱伝達率と環境温度（放射・対流は周囲温度へ、クーラントは液温へ）
     const surf = (j, side) => {
       const hr = hRad(T[j]) + M.H_AIR, hcc = hc[side];
@@ -1986,13 +2456,27 @@ class PhysicsEngine {
     for (let j = n - 2; j >= 0; j--) T[j] = (d[j] - c[j] * T[j + 1]) / b[j];
   }
 
+  /** 板面クーラントの有効割合: 板がヘッダ（4 本）の冷却域の下を通過している長さ ÷ 板長 */
+  get guideCoolFrac() {
+    const s = this.slab, M = CONFIG.MATERIAL, G = CONFIG.TABLE.GUIDE, HD = G.HEADER;
+    if (!(this.env.stripCool && M.GUIDE_COOL.ENABLED && s.onLine && Math.abs(this.mill.currentSpeed) > 3)) return 0;
+    let cover = 0;
+    for (const sx of [-1, 1]) for (const d of [-1, 1]) {
+      const hx = sx * G.X + d * HD.DX;
+      cover += Math.max(0, Math.min(hx + HD.ZONE / 2, s.xMax) - Math.max(hx - HD.ZONE / 2, s.xMin));
+    }
+    return Math.min(cover / Math.max(s.length, 1), 1);
+  }
+
   _rollKinematics(dt) {
     // ロール角度は「材料表面速度」から積分する。描画側は角度を読むだけにして
     // 回転が表示フレームレートに依存しないようにする。
     const m = this.mill, s = this.slab;
     const surf = (s.inBite ? Math.sign(m.currentSpeed) * s.currentSpeed : m.currentSpeed) / 60 * 1000; // mm/s
     m.rollAngle  += (surf / (m.wrDia / 2)) * dt;
-    m.tableAngle += (surf / (CONFIG.TABLE.ROLL_D_END / 2)) * dt;
+    // テーブルは圧延中は板速度で、仕上げ（巻取・切り分け・払い出し）中は搬送速度で回る
+    const tbl = m.passIndex < 0 && s.onLine ? (this.finish.tableSpeed || 0) : surf;
+    m.tableAngle += (tbl / (CONFIG.TABLE.ROLL_D_END / 2)) * dt;
   }
 
   /**
@@ -2133,11 +2617,12 @@ const G = {
    * build には (sz, geometry) を受け取る add 関数を渡す。sz=0 は中央部材。
    */
   sided(build) {
-    const bin = { 1: [], '-1': [], 0: [] };
+    const bin = { 1: [], '-1': [], 0: [], top: [] };
     build((sz, geo) => bin[sz].push(geo));
     const out = {};
     for (const [k, v] of Object.entries(bin)) if (v.length) out[k] = G.merge(v);
-    return { near: out[1], far: out['-1'], mid: out[0] };
+    // top: 板の上に架かる部材（クロスヘッド・梁）。半断面でも透過して、下で起きていることを見せる
+    return { near: out[1], far: out['-1'], mid: out[0], top: out.top };
   },
   roundedRect(path, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
@@ -2178,7 +2663,7 @@ const Parts = {
     const H = CONFIG.MILL.HOUSING, outer = H.INNER_Z + H.THICK_Z;
     const soleX = H.POST_X * 2 + H.WIN_X + 100;              // ソールプレート幅（ピット幅 ±2,300 に収まる）
     const parts = [
-      G.at(G.box(1500, 900, outer * 2 + 200), 0, H.TOP_Y - 450, 0),          // 上部タイビーム
+      G.at(G.box(1500, 900, (H.INNER_Z - 35) * 2 + 20), 0, H.TOP_Y - 450, 0), // 上部タイビーム（ハウジング内面＝ベベル込みの面の間に渡す）
       G.at(G.box(soleX, H.SOLE_T, outer * 2 + 1200), 0, H.BOT_Y + H.SOLE_T / 2, 0),   // ソールプレート（ピット床に接地）
     ];
     for (const sz of [-1, 1]) for (const sx of [-1, 1])   // アンカーボルト柱
@@ -2193,7 +2678,7 @@ const Parts = {
   millApron() {
     const M = CONFIG.MILL, H = M.HOUSING, T = CONFIG.TABLE, P = M.PASS_LINE, A = M.APRON;
     const hOuter = H.POST_X + H.WIN_X / 2, zIn = H.INNER_Z;
-    const firstRoll = Math.ceil((T.CLEAR + 1) / T.PITCH_NEAR) * T.PITCH_NEAR;
+    const firstRoll = Math.min(...Layout.rolls().map(r => Math.abs(r.x)));   // D / F テーブルの最初のローラ
     const xr = firstRoll - T.ROLL_D_END / 2 - 20, parts = [];
     for (const sx of [-1, 1]) {
       const xi0 = M.WR_D / 2 + 80, xi1 = hOuter - 20, li = xi1 - xi0;
@@ -2381,6 +2866,49 @@ const Parts = {
     return G.merge(parts);
   },
   sideGuideRoll() { const g = CONFIG.TABLE.GUIDE; return G.cyl(g.ROLL_D, g.H * 0.92, 'y', 14); },
+  /**
+   * 板面クーラントの門型架台（片側の柱 2 本）。原点＝ステーション中心（床）、+Z 側の柱。
+   * ガイドの開閉アーム（x = ±650・z ≤ 3,900）の外側に立てる。
+   */
+  guideHeaderPosts() {
+    const H = CONFIG.TABLE.GUIDE.HEADER, P = CONFIG.MILL.PASS_LINE, parts = [];
+    for (const sx of [-1, 1]) parts.push(G.at(G.box(H.POST_W, P + H.BEAM_Y, 300), sx * H.POST_X, (P + H.BEAM_Y) / 2, H.POST_Z));
+    parts.push(G.at(G.box(2 * H.POST_X + H.POST_W, 240, 300), 0, P + H.BEAM_Y + 120, H.POST_Z));   // 柱頭のつなぎ
+    return G.merge(parts);
+  },
+  /** 門型の梁（Z 方向 2 本）と、ヘッダを吊る横つなぎ・吊り材。板の上に架かるので «天面» 扱い。 */
+  guideHeaderBeams() {
+    const H = CONFIG.TABLE.GUIDE.HEADER, P = CONFIG.MILL.PASS_LINE, parts = [];
+    for (const sx of [-1, 1]) parts.push(G.at(G.box(H.POST_W, 300, 2 * H.POST_Z + 300), sx * H.POST_X, P + H.BEAM_Y + 150, 0));   // 梁
+    for (const z of [-900, 900]) {
+      parts.push(G.at(G.box(2 * H.POST_X - H.POST_W, 200, 200), 0, P + H.BEAM_Y + 100, z));            // 横つなぎ
+      for (const sx of [-1, 1]) parts.push(G.at(G.box(120, H.BEAM_Y - H.Y - H.D / 2, 120), sx * H.DX, P + (H.BEAM_Y + H.Y + H.D / 2) / 2, z));   // 吊り
+    }
+    return G.merge(parts);
+  },
+  /** ヘッダ 1 本（Z 方向のパイプ + 下向きノズル列）。原点＝パイプ中心。 */
+  guideHeader() {
+    const H = CONFIG.TABLE.GUIDE.HEADER, W = CONFIG.TABLE.BARREL + 200, parts = [G.cyl(H.D, W, 'z', 12)];
+    for (let z = -W / 2 + 150; z <= W / 2 - 150; z += 300) parts.push(G.at(G.cyl(44, 120, 'y', 6), 0, -H.D / 2 - 50, z));
+    parts.push(G.at(G.cyl(H.D * 0.7, 300, 'y', 8), 0, H.D / 2 + 150, -W / 2 + 200));   // 給液口
+    return G.merge(parts);
+  },
+  /**
+   * 板から切り離したピース（端材・シート）のジオメトリ。板と同じ端部形状関数で、幅方向・板厚方向の
+   * 各点の端の X を焼き込む。原点＝ピース中心（X）・下面（Y）・幅中央（Z）。
+   */
+  plateSegment(piece, nx = 8) {
+    const geo = new THREE.BoxGeometry(1, 1, 1, nx, 2, 6), pos = geo.attributes.position, base = pos.clone();
+    for (let i = 0; i < pos.count; i++) {
+      const bx = base.getX(i) + 0.5, by = base.getY(i) + 0.5, bz = base.getZ(i);
+      const xe = piece.xEndAt(by * 2 - 1, bz * 2);
+      const x = piece.end > 0 ? Num.lerp(piece.xCut, xe, bx) : Num.lerp(xe, piece.xCut, bx);
+      pos.setXYZ(i, u(x - piece.x), u(by * piece.th), u(bz * piece.w));
+    }
+    geo.computeVertexNormals(); geo.computeBoundingSphere();
+    geo.userData.base = base;
+    return geo;
+  },
 
   /* --- 75 mm クロップシャー（上刃固定・下台上昇式） ------------------------- */
   /**
@@ -2392,39 +2920,55 @@ const Parts = {
    *  ・板押えは持たない（下台ごと板を持ち上げて上刃に当てる方式）。
    */
   cropShearFrame() {
-    const P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR, E = S.EJECT;
+    const P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR, E = S.EJECT, FR = S.FRAME, CV = S.CONVEYOR, PA = S.PALLET;
     const BL = S.BLADE_L, bt = S.BLADE_T;
     const xKnife = -F * (bt / 2 + S.CLEARANCE / 2), xFixed = F * (bt / 2 + S.CLEARANCE / 2);
-    const zc = BL / 2 + 620;                                    // 側フレーム（柱）の中心 Z
     const yHolder = P + S.UPPER_CLR + S.BLADE_H, top = yHolder + 300;   // 上刃ホルダ上面 / クロスヘッド下面
     const bedX = xKnife - F * (S.BED_L / 2 + bt / 2);          // 下台の中心 X
+    const colX = F * FR.COL_X, zc = FR.COL_Z;                  // 柱は剪断面の上流側、エプロンの X 範囲の外
+    const ax = xFixed + F * (S.APRON_L / 2 + 60), az0 = E.Z_HOME - 300, az1 = E.Z_DROP;   // エプロン中心 X / Z 範囲
     return G.sided(add => {
       for (const sz of [-1, 1]) {
-        add(sz, G.at(G.box(2200, 300, 1300), 0, 150, sz * zc));                          // 据付ベース
-        add(sz, G.at(G.box(1400, top + 500 - 300, 760), 0, (top + 500 + 300) / 2, sz * zc));  // 柱（ベースの上）
-        // 下台の昇降ガイド柱（下台の両端を挟む。床上ベースから）
+        add(sz, G.at(G.box(FR.COL_W + 100, 300, FR.COL_D + 200), colX, 150, sz * zc));               // 据付ベース（エプロン・コンベアの X 範囲の外）
+        add(sz, G.at(G.box(FR.COL_W, top + 500 - 300, FR.COL_D), colX, (top + 500 + 300) / 2, sz * zc));   // 柱（ベースの上）
+        // 下台の昇降ガイド柱（下台のガイドシューと同じ X で、シューの外面に接する。床上ベースから）
         for (const sx of [-1, 1])
-          add(sz, G.at(G.box(150, P + 260, 360), bedX + sx * (S.BED_L / 2 + 120), (P + 260) / 2, sz * (BL / 2 + 430)));
+          add(sz, G.at(G.box(150, P + 260, 360), bedX + sx * (S.BED_L / 2 - 120), (P + 260) / 2, sz * ((BL + 400) / 2 + 120 + 180)));
         // 下台の昇降シリンダ本体（床上）。ロッドは下台側にあり、この中を伸縮する
         add(sz, G.at(G.cyl(360, 450, 'y', 14), bedX, 225, sz * (BL / 2 + 100)));
       }
-      add(0, G.at(G.box(1700, 500, BL + 1500), 0, top + 250, 0));                           // クロスヘッド（柱の上部を結ぶ）
-      add(0, G.at(G.box(bt + 380, 300, BL + 300), xFixed, yHolder + 150, 0));               // 上刃ホルダ
-      add(0, G.at(G.box(bt, S.BLADE_H, BL), xFixed, P + S.UPPER_CLR + S.BLADE_H / 2, 0));   // 固定上刃
+      // --- 天面: クロスヘッド（柱の上に架かる）・上刃ホルダ・プッシャのレール。半断面で透過する ---
+      add('top', G.at(G.box(1700, 500, 2 * zc + FR.COL_D), colX + F * 300, top + 250, 0));
+      add('top', G.at(G.box(bt + 380, 300, BL + 300), xFixed, yHolder + 150, 0));
+      add('top', G.at(G.box(200, top - (P + E.RAIL_Y), 2600 - az0), ax, (top + P + E.RAIL_Y) / 2, (az0 + 2600) / 2));   // プッシャレール（クロスヘッド下面から）
       // --- 端材エプロン（固定）: 上面はパスライン。床上の脚で受ける ---
-      const ax = xFixed + F * (S.APRON_L / 2 + 60), az0 = E.Z_HOME - 300, az1 = E.Z_DROP;
       add(0, G.at(G.box(S.APRON_L, 120, az1 - az0), ax, P - 60, (az0 + az1) / 2));
       for (const k of [-0.8, 0, 0.8])                                                     // エプロン脚
         add(0, G.at(G.box(S.APRON_L - 200, P - 120, 240), ax, (P - 120) / 2, (az0 + az1) / 2 + k * (az1 - az0) / 2));
-      // 側レール（端材の脱線防止）。板の通る範囲（|Z| ≤ 板幅/2）には出さない
-      const rz0 = 900, rl = az1 - rz0;
+      // 側レール（端材の脱線防止）。板の通る範囲（|Z| ≤ トリム前最大巾/2）には出さない
+      const rz0 = CONFIG.TRIMMER.WIDTH_IN_MAX / 2 + 60, rl = az1 - rz0;
       for (const sx of [-1, 1])
         add(0, G.at(G.box(140, 260, rl), ax + sx * (S.APRON_L / 2 - 70), P + 10, rz0 + rl / 2));
-      // --- 操作側のスクラップシュートと箱（床上）---
-      add(0, G.at((() => { const g = G.box(S.APRON_L, 140, 1400); g.rotateX(0.52); return g; })(), ax, P - 380, E.CHUTE_Z));
-      add(0, G.at(G.box(S.APRON_L + 400, 1100, 1800), ax, 550, E.CHUTE_Z + 800));
+      // --- 端材コンベア（ローラ式）の架構。ローラは可動なので別メッシュ。末端の下にパレット ---
+      const cl = CV.Z1 - CV.Z0, cy = CV.TOP - CV.ROLL_D / 2;
+      for (const sx of [-1, 1]) {
+        add(0, G.at(G.box(80, 320, cl), ax + sx * (S.APRON_L / 2 - 40), cy, (CV.Z0 + CV.Z1) / 2));       // 側枠
+        for (const z of [CV.Z0 + 250, (CV.Z0 + CV.Z1) / 2, CV.Z1 - 250])
+          add(0, G.at(G.box(80, cy - 160, 120), ax + sx * (S.APRON_L / 2 - 40), (cy - 160) / 2, z));    // 脚
+      }
+      add(0, G.at(G.box(S.APRON_L - 100, 320, 220), ax, cy - 100, CV.Z1 + 110));                       // 末端の駆動箱
+      add(0, G.at(G.box(PA.W, PA.H, PA.L), ax, PA.H / 2, PA.Z));                                       // パレット（受け箱の底）
+      for (const sx of [-1, 1]) add(0, G.at(G.box(60, PA.H + 260, PA.L), ax + sx * (PA.W / 2 - 30), (PA.H + 260) / 2, PA.Z));   // 側板
+      add(0, G.at(G.box(PA.W, PA.H + 260, 60), ax, (PA.H + 260) / 2, PA.Z + PA.L / 2 - 30));           // 奥の側板
     });
   },
+  /** 固定上刃。刃物色で描き、断面表示でも透過しない（切断そのものが見えるべき部材）。 */
+  cropShearUpperKnife() {
+    const P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
+    return G.at(G.box(S.BLADE_T, S.BLADE_H, S.BLADE_L), F * (S.BLADE_T / 2 + S.CLEARANCE / 2), P + S.UPPER_CLR + S.BLADE_H / 2, 0);
+  },
+  /** 端材コンベアのローラ 1 本（X 軸、側枠の内側に収まる長さ）。 */
+  scrapConveyorRoll() { const S = CONFIG.CROP_SHEAR; return G.cyl(S.CONVEYOR.ROLL_D, S.APRON_L - 180, 'x', 12); },
   /**
    * 下台（昇降テーブル）。原点＝下刃の刃先（剪断面、待機時はパスライン高さ）。
    * 下刃 75 × 180 × 2500 を下流端に持ち、その上流側に板を載せるテーブルが続く。
@@ -2435,26 +2979,101 @@ const Parts = {
     const S = CONFIG.CROP_SHEAR, F = CONFIG.FLIP, BL = S.BLADE_L, bt = S.BLADE_T;
     const bx = -F * (S.BED_L / 2 + bt / 2);                     // テーブルの中心（刃の上流側）
     return G.merge([
-      G.at((() => { const g = G.box(bt, S.BLADE_H, BL); g.rotateX(S.RAKE); return g; })(), 0, -S.BLADE_H / 2, 0),  // 下刃
       G.at(G.box(bt + 240, 260, BL + 500), 0, -S.BLADE_H - 130, 0),          // 刃物台
       G.at(G.box(S.BED_L, 400, BL + 400), bx, -200, 0),                       // テーブル（板を載せる面＝原点高さ）
-      G.at(G.box(300, 300, 120), bx - S.BED_L / 2 + 150, -250,  (BL + 400) / 2 + 60),   // ガイドシュー
-      G.at(G.box(300, 300, 120), bx - S.BED_L / 2 + 150, -250, -(BL + 400) / 2 - 60),
-      G.at(G.box(300, 300, 120), bx + S.BED_L / 2 - 150, -250,  (BL + 400) / 2 + 60),
-      G.at(G.box(300, 300, 120), bx + S.BED_L / 2 - 150, -250, -(BL + 400) / 2 - 60),
+      G.at(G.box(240, 300, 120), bx - S.BED_L / 2 + 120, -250,  (BL + 400) / 2 + 60),   // ガイドシュー
+      G.at(G.box(240, 300, 120), bx - S.BED_L / 2 + 120, -250, -(BL + 400) / 2 - 60),
+      G.at(G.box(240, 300, 120), bx + S.BED_L / 2 - 120, -250,  (BL + 400) / 2 + 60),
+      G.at(G.box(240, 300, 120), bx + S.BED_L / 2 - 120, -250, -(BL + 400) / 2 - 60),
       G.at(G.cyl(200, 520, 'y', 12), bx, -400 - 260,  (BL / 2 + 100)),        // 昇降シリンダのロッド
       G.at(G.cyl(200, 520, 'y', 12), bx, -400 - 260, -(BL / 2 + 100)),
     ]);
   },
-  /** 端材払い出しプッシャ。駆動側から出て端材を操作側のシュートへ押し出す。 */
+  /** 下台の下刃（刃物色）。原点＝刃先。レーキ角を付け、剪断を端から順に進める。 */
+  cropShearLowerKnife() {
+    const S = CONFIG.CROP_SHEAR, g = G.box(S.BLADE_T, S.BLADE_H, S.BLADE_L); g.rotateX(S.RAKE);
+    return G.at(g, 0, -S.BLADE_H / 2, 0);
+  },
+  /**
+   * 端材払い出しプッシャ。クロスヘッド下面のレールを走る台車から押し板を下げ、駆動側の
+   * 待機位置から操作側へ端材を押す。原点＝押し板の前面（z = 0）・パスライン。
+   */
   cropPusher() {
-    const S = CONFIG.CROP_SHEAR, P = CONFIG.MILL.PASS_LINE;
+    const S = CONFIG.CROP_SHEAR, P = CONFIG.MILL.PASS_LINE, E = S.EJECT;
     return G.merge([
-      G.at(G.box(S.CUT_MAX + 100, 320, 160), 0, P + 160, 0),    // 押し板（エプロン面の上）
-      G.at(G.cyl(160, 900, 'z', 10), 0, P + 160, -530),          // ロッド
-      G.at(G.box(420, 420, 900), 0, P + 160, -1430),             // シリンダ
+      G.at(G.box(S.CUT_MAX + 100, 320, 160), 0, P + 160, -80),                   // 押し板
+      G.at(G.box(320, 150, 560), 0, P + E.RAIL_Y - 75, -280),                    // レール下の台車
+      G.at(G.box(80, 400, 560),  150, P + E.RAIL_Y + 50, -280),                  // レールを抱く側板
+      G.at(G.box(80, 400, 560), -150, P + E.RAIL_Y + 50, -280),
     ]);
   },
+
+  /* --- 30 mm シャー（下刃固定・上刃下降式、板押え付き）。J-3 の先で板材を切り分ける --- */
+  shear30Frame() {
+    const P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, S = CONFIG.SHEAR30, BL = S.BLADE_L, bt = S.BLADE_T;
+    const zc = BL / 2 + 700, top = P + S.STROKE + S.BLADE_H + 760;       // 柱の中心 Z（下刃台の外）/ クロスヘッド下面
+    const xLo = -F * (bt / 2 + 2);                                         // 下刃（上流側）
+    return G.sided(add => {
+      for (const sz of [-1, 1]) {
+        add(sz, G.at(G.box(1700, 300, 1200), 0, 150, sz * zc));                              // 据付ベース
+        add(sz, G.at(G.box(1100, top + 700 - 300, 820), 0, (top + 700 + 300) / 2, sz * zc));  // 柱（ラムの案内を兼ねる）
+      }
+      add('top', G.at(G.box(1300, 700, 2 * zc + 820), 0, top + 350, 0));                     // クロスヘッド（シリンダ台）
+      add('top', G.at(G.cyl(520, 800, 'y', 16), 0, top + 700 + 400, 0));                     // 主シリンダ
+      for (const sz of [-1, 1]) add('top', G.at(G.cyl(200, 500, 'y', 10), -F * 420, top + 700 + 250, sz * (BL / 2 - 200)));   // 板押えシリンダ
+      add(0, G.at(G.box(bt + 300, 260, BL + 100), xLo, P - S.BLADE_H - 130, 0));             // 下刃ホルダ
+      add(0, G.at(G.box(1200, P - S.BLADE_H - 260, BL - 100), -F * 450, (P - S.BLADE_H - 260) / 2, 0));   // 下刃台の基礎（床上。J-3 末端の架台の手前）
+    });
+  },
+  shear30LowerKnife() {
+    const P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, S = CONFIG.SHEAR30;
+    return G.at(G.box(S.BLADE_T, S.BLADE_H, S.BLADE_L), -F * (S.BLADE_T / 2 + 2), P - S.BLADE_H / 2, 0);
+  },
+  /** 上刃スライド（ラム）。原点＝上死点での刃先中心。刃は別メッシュ（刃物色）。 */
+  shear30Ram() {
+    const S = CONFIG.SHEAR30, BL = S.BLADE_L, bt = S.BLADE_T;
+    return G.merge([
+      G.at(G.box(bt + 300, 320, BL + 200), 0, S.BLADE_H + 160, 0),               // 刃物ホルダ
+      G.at(G.box(700, 560, BL + 900), 0, S.BLADE_H + 320 + 280, 0),              // ラム本体（柱の案内に入る）
+      G.at(G.cyl(260, 900, 'y', 12), 0, S.BLADE_H + 600 + 450, 0),               // 主シリンダのロッド
+    ]);
+  },
+  shear30UpperKnife() { const S = CONFIG.SHEAR30; return G.at(G.box(S.BLADE_T, S.BLADE_H, S.BLADE_L), 0, S.BLADE_H / 2, 0); },
+  /** 板押え（上流側）。原点＝押え面の中心。 */
+  shear30Hold() {
+    const S = CONFIG.SHEAR30, BL = S.BLADE_L;
+    return G.merge([G.at(G.box(240, 160, BL + 100), 0, 80, 0),
+      G.at(G.cyl(120, 600, 'y', 8), 0, 160 + 300, (BL / 2 - 200)), G.at(G.cyl(120, 600, 'y', 8), 0, 160 + 300, -(BL / 2 - 200))]);
+  },
+
+  /* --- パイラー: 片持ちローラアーム（左右へ開く）とリフトテーブル ---------------- */
+  /** 固定部: アーム台車の走行レール（床上）、入側ガイド、リフトテーブルの基礎。 */
+  pilerFrame() {
+    const PL = CONFIG.PILER, P = CONFIG.MILL.PASS_LINE;
+    const x0 = Math.min(PL.X0, PL.X1), x1 = Math.max(PL.X0, PL.X1), L = x1 - x0, xc = (x0 + x1) / 2;
+    const zi = PL.ARM_L + 60;                                             // 台車の内面 Z（閉じたとき）
+    return G.sided(add => {
+      for (const sz of [-1, 1]) for (const x of [x0 + 600, xc, x1 - 600])
+        add(sz, G.at(G.box(400, 260, PL.OPEN + 400), x, 130, sz * (zi + 200 + PL.OPEN / 2)));   // 台車の走行レール（Z 方向、ピットの外）
+      add(0, G.at(G.box(1400, 300, 1400), xc, -PL.PIT.DEPTH + 150, 0));                            // 昇降装置のベース（ピット床上）
+    });
+  },
+  /** アーム台車（片側）。原点＝台車の内面・パスライン、+Z が外側。ローラは別（回転する）。 */
+  pilerCarriage() {
+    const PL = CONFIG.PILER, P = CONFIG.MILL.PASS_LINE;
+    const L = Math.abs(PL.X1 - PL.X0);
+    return G.merge([
+      G.at(G.box(L - 200, 500, 400), 0, -250, 200),                                   // 台車本体（ローラ軸受を持つ梁）
+      ...[-1, 0, 1].map(k => G.at(G.box(400, P - 500 - 260, 400), k * (L / 2 - 700), -(P - 500 - 260) / 2 - 500, 200)),   // 脚（レール上を走る）
+    ]);
+  },
+  /** 片持ちローラ 1 本（Z 軸、台車の内面から中央へ伸びる）。原点＝台車の内面側の端。 */
+  pilerArmRoll() { const PL = CONFIG.PILER; return G.at(G.cyl(PL.ROLL_D, PL.ARM_L, 'z', 12), 0, 0, -PL.ARM_L / 2); },
+  /** リフトテーブル（天板と昇降柱）。原点＝天板の上面中心。柱は scale.y で伸縮する。 */
+  pilerLift() { const PL = CONFIG.PILER; const L = Math.abs(PL.X1 - PL.X0); return G.at(G.box(L - 1000, 200, 2 * PL.PIT.DZ - 100), 0, -100, 0); },
+  pilerLiftColumn() { return G.box(900, 1000, 900); },
+  /** 板厚 75 mm 超の板置き場スキッド（駆動側）。1 本ぶん。 */
+  yardSkid() { const Y = CONFIG.PILER.YARD; return G.box(400, Y.H, Y.W); },
 
   /* --- サイドトリマー。上下軸の円板刃が板の両耳を切り落として幅を仕上げる ------ */
   /**
@@ -2467,7 +3086,7 @@ const Parts = {
     const zp = T.SHAFT_Z, hp = P + 1800, H = CONFIG.COILER.HOLD;
     return G.sided(add => {
       for (const sz of [-1, 1]) {
-        add(sz, G.at(G.box(1600, 300, 1100), 0, 150, sz * zp));                      // 据付ベース
+        add(sz, G.at(G.box(900, 300, 1100), 0, 150, sz * zp));                       // 据付ベース（F テーブル架台と 3ロール基礎の間に収める）
         add(sz, G.at(G.box(800, hp - 300, 800), 0, (hp + 300) / 2, sz * zp));        // 柱（ベースの上）
         // 耳くずスクラップチョッパー（切り落とした耳を細断して落とす）。筐体は床から
         const zc = sz * (zp + 800);
@@ -2507,10 +3126,10 @@ const Parts = {
     // 上部つなぎは柱の上。柱の X はトリマー架構（±400）と巻取機架構（±650）の間に収める。
     return G.sided(add => {
       for (const sz of [-1, 1]) {
-        add(sz, G.at(G.box(1500, 220, 700), 0, 110, sz * z));                         // ベースプレート
+        add(sz, G.at(G.box(1100, 220, 700), 0, 110, sz * z));                         // ベースプレート（トリマー基礎と巻取機架台の間）
         for (const sx of [-1, 1])                                                     // 前後の柱
-          add(sz, G.at(G.box(200, hp - 220, 380), sx * 480, (hp + 220) / 2, sz * z));
-        add(sz, G.at(G.box(1160, 260, 380), 0, hp + 130, sz * z));                    // 上部つなぎ（柱の上）
+          add(sz, G.at(G.box(200, hp - 220, 380), sx * 420, (hp + 220) / 2, sz * z));
+        add(sz, G.at(G.box(1040, 260, 380), 0, hp + 130, sz * z));                    // 上部つなぎ（柱の上）
         add(sz, G.at(G.box(760, 560, 420), 0, P + 400, sz * z));                      // 上ロール軸受（柱間）
       }
     });
@@ -2528,13 +3147,13 @@ const Parts = {
   /* --- 巻取リール。パスラインより上に置かれ、コイル下端がパスラインを侵さない ---- */
   coilerFrame() {
     const C = CONFIG.COILER, P = CONFIG.MILL.PASS_LINE, W = CONFIG.TABLE.BARREL;
-    const cy = P + C.Y_ABOVE, zd = W / 2 + 750, zo = W / 2 + 900;   // リール軸心 / 駆動側・操作側の軸受 Z
+    const cy = P + C.Y_ABOVE, zd = W / 2 + 1000, zo = W / 2 + 900;  // リール軸心 / 駆動側・操作側の軸受 Z（駆動側はテーブル架台 ±1,745 の外）
     // アウトボードベアリング付きの片持ちリール。駆動側に主軸受、その背後に減速機と
     // 電動機を同軸で並べる。操作側はコイル抜き取りのため «開いた» 補助軸受だけにする。
     // 実機同様、鉄板で囲った箱にはしない（囲うとコイルもラインも見えなくなる）。
     return G.sided(add => {
       // --- 駆動側(−Z): 主軸受ハウジング → 減速機 → 電動機（すべて床上ベースの上）---
-      const stand = (w, l, z, top) => { add(-1, G.at(G.box(w + 300, 300, l + 300), 0, 150, z));
+      const stand = (w, l, z, top) => { add(-1, G.at(G.box(w + 300, 300, l), 0, 150, z));
                                          add(-1, G.at(G.box(w, top - 300, l), 0, (top + 300) / 2, z)); };
       stand(1300, 900, -zd, cy - 250);
       add(-1, G.at(G.cyl(1050, 800, 'z', 20), 0, cy, -zd));                                   // 主軸受ハウジング
@@ -2580,8 +3199,6 @@ const Parts = {
   holdDownCyl() {
     return G.merge([G.at(G.cyl(280, 560, 'x', 12), 280, 0, 0), G.at(G.cyl(150, 1000, 'x', 10), 500, 0, 0)]);
   },
-  /** 板置き場のスキッド（パイラー相当の受け架台）。1 本ぶん。 */
-  pilerSkid() { const PL = CONFIG.PILER; return G.box(400, PL.PALLET_H, PL.PALLET_W); },
   /** 押えロール（面長 600 mm）。コイル外周に当てて巻き広がりを抑える。 */
   holdDownRoll() {
     const H = CONFIG.COILER.HOLD;
@@ -2616,41 +3233,47 @@ const Parts = {
    *  ・床下へ潜る «支持脚» は持たない。寝かせたアームは床上の受け台（tilterBase）に載る。
    */
   tilterArm() {
-    const S = CONFIG.SUPPLY, L = S.ARM_L, W = S.ARM_W, D = S.PIVOT_DROP, zr = W / 2 - 130, parts = [];
+    const S = CONFIG.SUPPLY, L = S.ARM_L, W = S.ARM_W, D = S.PIVOT_DROP, zr = W / 2 - 80, parts = [];
     for (const sz of [-1, 1]) {
-      parts.push(G.at(G.box(L - 480, 480, 260), 480 + (L - 480) / 2, D - 240, sz * zr));   // サイドレール
+      parts.push(G.at(G.box(L - 480, 480, 160), 480 + (L - 480) / 2, D - 240, sz * zr));   // サイドレール
       parts.push(G.at(G.cyl(S.HUB_D, 300, 'z', 20), 0, 0, sz * zr));                      // 軸ハブ
-      parts.push(G.at(G.box(480, S.HUB_D * 0.9, 260), 240, 0, sz * zr));                   // ハブ→レール
+      parts.push(G.at(G.box(480, S.HUB_D * 0.9, 160), 240, 0, sz * zr));                   // ハブ→レール
     }
     for (let i = 0; i < 7; i++)                                                           // クロスメンバ
-      parts.push(G.at(G.box(240, 180, W - 200), 560 + i * (L - 900) / 6, D - 390, 0));
-    parts.push(G.at(G.box(260, 1510, W), -130, D + 745, 0));                              // 立ち上がり（受け面）
+      parts.push(G.at(G.box(240, 180, W - 400), 560 + i * (L - 900) / 6, D - 390, 0));
+    // ベッド面（倒した状態でパスライン）。ローラは無く、トランスファークレーンが吊り上げる
+    parts.push(G.at(G.box(L - 560, 60, W - 2 * 160 - 40), 520 + (L - 560) / 2, D - 30, 0));
+    parts.push(G.at(G.box(260, S.LIP_H, W), -130, D - 10 + S.LIP_H / 2, 0));               // 立ち上がり（受け面）
     return G.merge(parts);
   },
-  /** 転倒アームのベッドローラ（倒した状態で上面＝パスライン） */
-  tilterArmRoll() { return G.cyl(CONFIG.SUPPLY.ROLL_D, CONFIG.SUPPLY.BARREL, 'z', 12); },
   /** 転倒装置の固定部。原点＝転倒軸。床は y = −(PASS_LINE − PIVOT_DROP)。 */
   tilterBase() {
     const S = CONFIG.SUPPLY, y0 = -(CONFIG.MILL.PASS_LINE - S.PIVOT_DROP), zb = S.BEARING_Z, parts = [];
-    parts.push(G.at(G.box(3000, 200, 2 * zb + 900), -700, y0 + 100, 0));                  // 据付ベース（床上）
+    parts.push(G.at(G.box(3000, 200, 2 * zb + 300), -700, y0 + 100, 0));                  // 据付ベース（床上。主テーブル架台の手前まで）
     for (const sz of [-1, 1]) {
       const h = -y0 - 200;
       parts.push(G.at(G.box(900, h, 500), 0, y0 + 200 + h / 2, sz * zb));                 // 軸受台
       parts.push(G.at(G.cyl(940, 440, 'z', 16), 0, 0, sz * zb));                          // 軸受
-      parts.push(G.at(G.box(600, 420, 400), S.ARM_L - 400, y0 + 210, sz * (S.ARM_W / 2 - 130)));  // 寝かせたアームの受け台
+      parts.push(G.at(G.box(600, 420, 400), S.ARM_L - 400, y0 + 210, sz * (S.ARM_W / 2 - 80)));   // 寝かせたアームの受け台
     }
     parts.push(G.at(G.cyl(S.SHAFT_D, 2 * zb + 440, 'z', 16), 0, 0, 0));                   // 転倒軸
-    const zc = -(S.ARM_W / 2 + 350);
+    const zc = -(S.ARM_W / 2 + 250);                                                        // アームの外側、主テーブル架台の手前
     parts.push(G.at(G.cyl(360, 2600, 'x', 12), -1900, y0 + 420, zc));                     // 転倒シリンダ
-    parts.push(G.at(G.box(500, 420, 600), -3100, y0 + 210, zc));                          // シリンダ受け（床上）
+    parts.push(G.at(G.box(500, 420, 440), -3100, y0 + 210, zc));                          // シリンダ受け（床上）
     return G.merge(parts);
   },
-  /** 横送りローラ。昇降する軸受ステム付き（固定ベースの中を伸縮する）。原点＝ローラ軸心 */
-  crossRoll() {
-    const S = CONFIG.SUPPLY;
-    return G.merge([G.cyl(S.ROLL_D, S.CROSS_ROLL_L, 'x', 12), G.at(G.cyl(120, 450, 'y', 8), 0, -285, 0)]);
+  /* --- トランスファークレーンの吊りビーム（X 方向）とクランプ ------------------- */
+  /** 吊りビーム。原点＝ビーム中心。両端のハンガーにクランプ（別メッシュ）が付く。 */
+  transferBeam() {
+    const T = CONFIG.TRANSFER, parts = [G.at(G.box(T.BEAM_L, 420, 600), 0, 0, 0)];
+    for (const sx of [-1, 1]) parts.push(G.at(G.box(360, 360, 900), sx * T.TONG_DX, -300, 0));   // ハンガー（クランプの軸受）
+    for (const sx of [-1, 1]) parts.push(G.at(G.box(240, 260, 320), sx * (T.BEAM_L * 0.34), 340, 0));   // ワイヤ受け
+    return G.merge(parts);
   },
-  crossBase() { return G.box(240, 300, 240); },
+  /** クランプ 1 本（縦棒 + 板の側面に当たる爪）。原点＝上端。長さ 1000 で作り scale.y で伸ばす。 */
+  transferTong() {
+    return G.merge([G.at(G.box(160, 1000, 120), 0, -500, 0), G.at(G.box(360, 120, 120), 0, -1000 + 60, 0)]);
+  },
 
   /* --- ピット炉（スラブを立てたまま加熱する） ----------------------------- */
   furnacePit() {
@@ -2683,11 +3306,18 @@ const Parts = {
       G.at(G.box(1500, 180, len), 0, -740, 0),
     ]);
   },
+  /**
+   * クレーン走行路。ライン方向（X）の走行桁 2 本（Z = GIRDER_Z0 / Z1）を柱で受け、
+   * 装入クレーンとトランスファークレーンの橋（Z 方向の桁）がこの上を X 方向に走る。原点＝転倒軸。
+   */
   craneRunway() {
-    const C = CONFIG.CRANE, parts = [];
+    const C = CONFIG.CRANE, F = CONFIG.FLIP, parts = [];
+    const x0 = F * C.RUN_X0, x1 = F * C.RUN_X1, len = Math.abs(x1 - x0) + 1200, xc = (x0 + x1) / 2;
     for (const z of [C.GIRDER_Z0, C.GIRDER_Z1]) {
-      parts.push(G.at(G.box(900, C.GIRDER_Y, 900), 0, C.GIRDER_Y / 2, z));
-      parts.push(G.at(G.box(4200, 400, 700), 0, C.GIRDER_Y + 200, z));
+      for (let k = 0; k * C.COL_PITCH <= Math.abs(x1 - x0) + 1; k++)
+        parts.push(G.at(G.box(900, C.GIRDER_Y, 900), x0 + F * k * C.COL_PITCH, C.GIRDER_Y / 2, z));   // 柱
+      parts.push(G.at(G.box(len, 600, 700), xc, C.GIRDER_Y + 300, z));                                // 走行桁
+      parts.push(G.at(G.box(len, 120, 220), xc, C.GIRDER_Y + 660, z));                                // レール
     }
     return G.merge(parts);
   },
@@ -2728,9 +3358,21 @@ const Parts = {
     hole(-P.X, -P.Z, P.X, P.Z);                                                       // 圧延機ピット
     const fx = FU.L / 2 + FU.WALL, fz = FU.W / 2 + FU.WALL;
     hole(S.TILTER_X - fx, FU.Z - fz, S.TILTER_X + fx, FU.Z + fz);                     // ピット炉
+    const PP = CONFIG.PILER, px0 = Math.min(PP.X0, PP.X1) + PP.PIT.MARGIN, px1 = Math.max(PP.X0, PP.X1) - PP.PIT.MARGIN;
+    hole(px0, -PP.PIT.DZ, px1, PP.PIT.DZ);                                            // パイラーのピット
     const geo = new THREE.ExtrudeGeometry(shape, { depth: u(t), bevelEnabled: false });
     geo.rotateX(Math.PI / 2);          // 形状の Y → 世界 Z、押出 +Z → 世界 −Y（床版は床面から下へ）
     return geo;
+  },
+  /** パイラーのピット（リフトテーブルが下がる）。壁の天端は床面、床版は −DEPTH。 */
+  pilerPit() {
+    const PP = CONFIG.PILER, D = PP.PIT.DEPTH, w = 300;
+    const x0 = Math.min(PP.X0, PP.X1) + PP.PIT.MARGIN, x1 = Math.max(PP.X0, PP.X1) - PP.PIT.MARGIN, xc = (x0 + x1) / 2, L = x1 - x0, Z = PP.PIT.DZ;
+    return G.merge([
+      G.at(G.box(L + 2 * w, D, w), xc, -D / 2, -Z - w / 2), G.at(G.box(L + 2 * w, D, w), xc, -D / 2, Z + w / 2),
+      G.at(G.box(w, D, 2 * Z), x0 - w / 2, -D / 2, 0), G.at(G.box(w, D, 2 * Z), x1 + w / 2, -D / 2, 0),
+      G.at(G.box(L, 300, 2 * Z), xc, -D - 150, 0),
+    ]);
   },
   /** 圧延機ピット。壁の天端は床面（y=0）、床版の天端は −DEPTH でソールプレート下面に一致する。 */
   pit() {
@@ -3191,48 +3833,49 @@ class DriveView {
 class TableView {
   constructor(scene) {
     const T = CONFIG.TABLE, P = CONFIG.MILL.PASS_LINE;
-    // ローラピッチはミル近傍を密に、遠方を粗に取る（実機同様、かつインスタンス数を抑える）。
-    // 圧延機直下とクロップシャー直下は設備が占有するのでローラを置かない。
-    const blocked = [{ x: 0, half: T.CLEAR }, { x: CONFIG.TRIMMER.X, half: 1100 },
-                     { x: CONFIG.COILER.DEFLECTOR_X, half: 1100 },
-                     { x: CONFIG.CROP_SHEAR.X, half: 1300 }];
-    const free = x => blocked.every(b => Math.abs(x - b.x) > b.half);
-    this.xs = [];
-    for (let x = 0; x >= T.X_MIN; x -= (Math.abs(x) < T.NEAR_ZONE ? T.PITCH_NEAR : T.PITCH_FAR))
-      if (free(x)) this.xs.push(x);
-    for (let x = T.PITCH_NEAR; x <= T.X_MAX; x += (Math.abs(x) < T.NEAR_ZONE ? T.PITCH_NEAR : T.PITCH_FAR))
-      if (free(x)) this.xs.push(x);
+    // ローラ配置は図面の区分（本数・ピッチ・区間長）から Layout が導く。圧延機直下・シャー直下は
+    // 区分そのものが無いので、そこにローラは並ばない。
+    this.rolls = Layout.rolls();                       // [{x, sec, g}] X 昇順
+    this.xs = this.rolls.map(r => r.x);
     // 200 m のテーブルを1つの InstancedMesh にすると常に全数が描画されてしまう。
     // 区間に分けて境界球を持たせ、視界外の区間をフラスタムカリングで落とす。
-    this.xs.sort((a, b) => a - b);
     // 材料は胴端 Φ281.6 部で支持されるので、ロール軸心はその半径だけ下がる
     const y = P - T.ROLL_D_END / 2, ZONE = 28;
     const jz = T.BARREL / 2 + T.COLLAR_L + T.JOURNAL_L / 2;
     const rollGeo = Parts.tableRoll(), pedGeo = Parts.tablePedestal();
     this.zones = [];
-    for (let s0 = 0; s0 < this.xs.length; s0 += ZONE) {
-      const seg = this.xs.slice(s0, s0 + ZONE);
+    for (let s0 = 0; s0 < this.rolls.length; s0 += ZONE) {
+      const seg = this.rolls.slice(s0, s0 + ZONE);
       const rolls = new Instances(rollGeo, MAT.rollFace, seg.length, { dynamic: true, name: 'テーブルローラ' });
       const peds  = new Instances(pedGeo, MAT.tableFrame, seg.length * 2, { receive: true, name: 'テーブル架台' });
-      seg.forEach((x, i) => {
-        rolls.set(i, x, y, 0);
-        peds.set(i * 2,     x, 0,  jz);
-        peds.set(i * 2 + 1, x, 0, -jz);
+      seg.forEach((r, i) => {
+        rolls.set(i, r.x, y, 0);
+        // 架台（軸受台）の幅は隣のローラとの間隔に収める（細ピッチの D / F では狭い架台になる）
+        const k = this.rolls.indexOf(r), pitch = Math.min(k > 0 ? r.x - this.rolls[k - 1].x : 1e9, k < this.rolls.length - 1 ? this.rolls[k + 1].x - r.x : 1e9);
+        const sx = Math.min(1, (pitch - 30) / 520);
+        peds.set(i * 2,     r.x, 0,  jz, 0, 0, 0, sx, 1, 1);
+        peds.set(i * 2 + 1, r.x, 0, -jz, 0, 0, 0, sx, 1, 1);
       });
       rolls.commit().finalize(); peds.commit().finalize();
       scene.add(rolls.mesh, peds.mesh);
-      this.zones.push({ xs: seg, rolls, peds });
+      this.zones.push({ xs: seg.map(r => r.x), gs: seg.map(r => r.g), angles: new Float64Array(seg.length), rolls, peds });
     }
     this.y = y;
   }
   update(mill) {
     const a = -mill.tableAngle;                      // 材料 +X → テーブルローラは −Z 回転
     this.rollAngle = a;
-    if (a === this._a) return;                       // 停止中は行列更新もアップロードも省く
-    this._a = a;
+    const gid = mill.tableGroup ? mill.tableGroup.id : 99;
+    if (a === this._a) { this._g = gid; return; }    // 停止中は行列更新もアップロードも省く
+    const da = this._a === undefined ? 0 : a - this._a;
+    this._a = a; this._g = gid;
+    if (da === 0) return;
+    // テーブル選択で選ばれた区間のローラだけが回る。選ばれていない区間は止まったまま
     for (const z of this.zones) {
-      if (!z.rolls.mesh.visible) continue;
-      for (let i = 0; i < z.xs.length; i++) z.rolls.set(i, z.xs[i], this.y, 0, 0, 0, a);
+      let any = false;
+      for (let i = 0; i < z.xs.length; i++) if (z.gs[i] <= gid) { z.angles[i] += da; any = true; }
+      if (!any || !z.rolls.mesh.visible) continue;
+      for (let i = 0; i < z.xs.length; i++) z.rolls.set(i, z.xs[i], this.y, 0, 0, 0, z.angles[i]);
       z.rolls.commit();
     }
   }
@@ -3269,6 +3912,26 @@ class GuideView {
       });
       return { x, sides };
     });
+    // --- 板面クーラント: ガイドの上に門型架台を立て、2 本のヘッダを吊って板の上面へ噴射する ---
+    //  柱は手前/奥、梁と吊りは «天面»（板の上に架かる）として断面表示に従う。ヘッダ自体は透過しない
+    const H = g.HEADER, postGeo = Parts.guideHeaderPosts(), beamGeo = Parts.guideHeaderBeams(), hdrGeo = Parts.guideHeader();
+    this.sided.top = [];
+    this.headers = new Instances(hdrGeo, MAT.tableFrame, 4, { cull: false, cast: true, name: '板面クーラントヘッダ' });
+    this.headerXs = [];
+    let hi = 0;
+    for (const x of [-g.X, g.X]) {
+      for (const s of [1, -1]) {
+        const m = ghostable(new THREE.Mesh(postGeo, MAT.guide), MAT.guide);
+        m.name = '板面クーラント架台'; m.castShadow = m.receiveShadow = true;
+        m.position.set(u(x), 0, 0); if (s < 0) m.rotation.y = Math.PI;
+        this.sided[s > 0 ? 'near' : 'far'].push(m); scene.add(m);
+      }
+      const b = ghostable(new THREE.Mesh(beamGeo, MAT.guide), MAT.guide);
+      b.name = '板面クーラント梁'; b.castShadow = true; b.position.set(u(x), 0, 0);
+      this.sided.top.push(b); scene.add(b);
+      for (const d of [-1, 1]) { const hx = x + d * H.DX; this.headers.set(hi++, hx, P + H.Y, 0); this.headerXs.push(hx); }
+    }
+    this.headers.commit().finalize(); scene.add(this.headers.mesh);
   }
   update(mill) {
     // 原点＝開口面なので、そのまま開口の半分を Z に置けばローラが板の耳に当たる
@@ -3291,14 +3954,14 @@ class FinishView {
     this.P = P;
     // 出側設備もミルと同じ半断面切替に従う。手前(オペレータ側)の架構が
     // 透過すれば、トリミング〜通板〜巻取までライン上の材料が隠れずに見える。
-    this.sided = { near: [], far: [] };
+    this.sided = { near: [], far: [], top: [] };
 
-    /** G.sided() が返す near/far/mid を、透過切替できる3メッシュとして配置する。 */
-    const addFrame = (parent, geos) => {
+    /** G.sided() が返す near/far/mid/top を、透過切替できるメッシュとして配置する。 */
+    const addFrame = (parent, geos, name = '架構') => {
       for (const [key, geo] of Object.entries(geos)) {
         if (!geo) continue;
         const m = ghostable(new THREE.Mesh(geo, MAT.shearBody), MAT.shearBody);
-        m.castShadow = m.receiveShadow = true;
+        m.castShadow = m.receiveShadow = true; m.name = name + (key === 'top' ? '(天面)' : key === 'near' ? '(OS)' : key === 'far' ? '(DS)' : '');
         if (key !== 'mid') this.sided[key].push(m);
         parent.add(m);
       }
@@ -3364,29 +4027,92 @@ class FinishView {
     // 3ロール出側からコイルへの渡り板（板の入口 A からコイル外周の接点へ、接線方向に張る）
     this.bridge = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
     this.bridge.name = '渡り板'; this.bridge.visible = false; this.bridge.castShadow = true; scene.add(this.bridge);
-    // 板置き場（パイラー相当の受け架台）。出側テーブルの操作側に沿って並ぶスキッド
-    const PL = CONFIG.PILER, xs = [];
-    for (let x = 9000; x <= Math.abs(PL.STOP_X); x += 3000) xs.push(F * x);
-    const skids = new Instances(Parts.pilerSkid(), MAT.tableFrame, xs.length, { receive: true, name: '板置き場スキッド' });
-    xs.forEach((x, i) => skids.set(i, x, PL.PALLET_H / 2, PL.SIDE_Z));
+    // 板厚 75 mm 超の板置き場（駆動側）。J テーブルに沿って並ぶスキッド
+    const PL = CONFIG.PILER, Y = PL.YARD, xs = [];
+    for (let x = Math.min(Y.X0, Y.X1); x <= Math.max(Y.X0, Y.X1); x += Y.PITCH) xs.push(x);
+    const skids = new Instances(Parts.yardSkid(), MAT.tableFrame, xs.length, { receive: true, name: '板置き場スキッド' });
+    xs.forEach((x, i) => skids.set(i, x, Y.H / 2, Y.Z));
     skids.commit().finalize(); scene.add(skids.mesh); this.pallet = skids;
 
     // --- 75 mm クロップシャー（出側の遠方。端部のワニ口を切り落とす）---
     const CS = CONFIG.CROP_SHEAR;
     this.cropShear = new THREE.Group(); this.cropShear.name = '75mmシャー'; this.cropShear.position.x = u(CS.X); scene.add(this.cropShear);
-    addFrame(this.cropShear, Parts.cropShearFrame());
+    addFrame(this.cropShear, Parts.cropShearFrame(), '75mmシャー架構');
     const xKnife = -F * (CS.BLADE_T / 2 + CS.CLEARANCE / 2);
+    // 固定上刃（刃物色。断面表示でも透過しない）
+    this.cropUpperKnife = new THREE.Mesh(Parts.cropShearUpperKnife(), MAT.blade); this.cropUpperKnife.name = '固定上刃';
+    this.cropUpperKnife.castShadow = true; this.cropShear.add(this.cropUpperKnife);
     // 下台（下刃付きの昇降テーブル）。原点＝下刃の刃先で、待機時はパスライン高さ
-    this.cropBed = new THREE.Mesh(Parts.cropShearBed(), MAT.blade); this.cropBed.name = 'シャー下台';
+    this.cropBed = new THREE.Mesh(Parts.cropShearBed(), MAT.shearBody); this.cropBed.name = 'シャー下台';
     this.cropBed.castShadow = true; this.cropBed.position.set(u(xKnife), u(P), 0);
+    this.cropKnife = new THREE.Mesh(Parts.cropShearLowerKnife(), MAT.blade); this.cropKnife.name = '下刃';
+    this.cropBed.add(this.cropKnife);
     this.cropShear.add(this.cropBed);
-    // 端材払い出しプッシャ（駆動側 → 操作側）。押し板は刃より下流側に寄せる
+    // 端材払い出しプッシャ（駆動側 → 操作側）。クロスヘッド下のレールを走る台車で、押し板はエプロンの上
+    const apronX = -xKnife + F * (CS.APRON_L / 2 + 60);
     this.cropPusher = new THREE.Mesh(Parts.cropPusher(), MAT.hydraulic); this.cropPusher.name = '端材プッシャ';
-    this.cropPusher.castShadow = true;
-    this.cropPusher.position.x = u(-xKnife + F * (CS.CUT_MAX / 2 + 100));
+    this.cropPusher.castShadow = true; this.cropPusher.position.x = u(apronX);
     this.cropShear.add(this.cropPusher);
-    this.cropPiece = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces); this.cropPiece.name = '端材';
-    this.cropPiece.castShadow = true; this.cropPiece.visible = false; scene.add(this.cropPiece);
+    // 端材コンベア（ローラ式）。ローラは搬送中に回る
+    const CV = CS.CONVEYOR, czs = [];
+    for (let z = CV.Z0 + CV.PITCH / 2; z <= CV.Z1 - CV.PITCH / 2 + 1; z += CV.PITCH) czs.push(z);
+    this.convRolls = new Instances(Parts.scrapConveyorRoll(), MAT.rollNeck, czs.length, { dynamic: true, cull: false, name: '端材コンベアローラ' });
+    this.convZs = czs; this.convY = CV.TOP - CV.ROLL_D / 2; this.convX = apronX;
+    czs.forEach((z, i) => this.convRolls.set(i, apronX, this.convY, z));
+    this.convRolls.commit(); this.cropShear.add(this.convRolls.mesh);
+    // 切り落とした端材（切断時の形を保った個別メッシュ）。物理側の piece.id をキーに作る
+    this.scraps = new Map(); this.sheets = new Map();
+    this.pieceHost = new THREE.Group(); this.pieceHost.name = '端材・シート'; scene.add(this.pieceHost);
+
+    // --- 30 mm シャー（J-3 の先。板材を定尺に切り分ける）---
+    const S3 = CONFIG.SHEAR30;
+    this.shear30 = new THREE.Group(); this.shear30.name = '30mmシャー'; this.shear30.position.x = u(S3.X); scene.add(this.shear30);
+    addFrame(this.shear30, Parts.shear30Frame(), '30mmシャー架構');
+    this.s30Lower = new THREE.Mesh(Parts.shear30LowerKnife(), MAT.blade); this.s30Lower.name = '30mm下刃'; this.shear30.add(this.s30Lower);
+    this.s30Ram = new THREE.Mesh(Parts.shear30Ram(), MAT.shearBody); this.s30Ram.name = '30mmラム'; this.s30Ram.castShadow = true;
+    this.s30Ram.position.set(u(F * (S3.BLADE_T / 2 + 2)), u(P + S3.STROKE), 0); this.shear30.add(this.s30Ram);
+    this.s30Upper = new THREE.Mesh(Parts.shear30UpperKnife(), MAT.blade); this.s30Upper.name = '30mm上刃'; this.s30Ram.add(this.s30Upper);
+    this.s30Hold = new THREE.Mesh(Parts.shear30Hold(), MAT.hydraulic); this.s30Hold.name = '30mm板押え';
+    this.s30Hold.position.set(u(-F * (S3.BLADE_T / 2 + 2 + 270)), u(P + S3.HOLD_STROKE + 60), 0); this.shear30.add(this.s30Hold);
+
+    // --- パイラー（片持ちローラアームが左右へ開き、シートをリフトテーブル上の山へ落とす）---
+    this.piler = new THREE.Group(); this.piler.name = 'パイラー'; scene.add(this.piler);
+    addFrame(this.piler, Parts.pilerFrame(), 'パイラー架構');
+    const pit = new THREE.Mesh(Parts.pilerPit(), MAT.pit); pit.name = 'パイラーピット'; pit.receiveShadow = true; this.piler.add(pit);
+    const px0 = Math.min(PL.X0, PL.X1), px1 = Math.max(PL.X0, PL.X1), pxc = (px0 + px1) / 2;
+    this.pilerXc = pxc; this.pilerZi = PL.ARM_L + 60;
+    const armX = []; for (let x = px0 + PL.PITCH / 2; x <= px1 - PL.PITCH / 2 + 1; x += PL.PITCH) armX.push(x - pxc);
+    this.pilerArmX = armX;
+    this.pilerSides = [1, -1].map(s => {
+      const grp = new THREE.Group(); grp.name = 'パイラーアーム台車';
+      const car = ghostable(new THREE.Mesh(Parts.pilerCarriage(), MAT.shearBody), MAT.shearBody);
+      car.name = 'パイラーアーム台車'; car.castShadow = true; grp.add(car); this.sided[s > 0 ? 'near' : 'far'].push(car);
+      const rolls = new Instances(Parts.pilerArmRoll(), MAT.rollFace, armX.length, { dynamic: true, cull: false, name: 'パイラーローラ' });
+      armX.forEach((x, i) => rolls.set(i, x, -PL.ROLL_D / 2, 0));
+      rolls.commit(); grp.add(rolls.mesh);
+      grp.position.set(u(pxc), u(P), u(s * this.pilerZi)); if (s < 0) grp.rotation.y = Math.PI;
+      this.piler.add(grp);
+      return { s, grp, rolls };
+    });
+    this.pilerLift = new THREE.Mesh(Parts.pilerLift(), MAT.tableFrame); this.pilerLift.name = 'リフトテーブル'; this.pilerLift.receiveShadow = true;
+    this.pilerLift.position.set(u(pxc), u(P - PL.DROP), 0); this.piler.add(this.pilerLift);
+    this.pilerCol = new THREE.Mesh(Parts.pilerLiftColumn(), MAT.hydraulic); this.pilerCol.name = '昇降柱'; this.pilerCol.position.x = u(pxc); this.piler.add(this.pilerCol);
+  }
+
+  /** 物理側のピース（端材・シート）に対応するメッシュを 1 度だけ作る。形状は切断時のまま。 */
+  _pieceMesh(map, piece, name) {
+    let m = map.get(piece.id);
+    if (!m) {
+      m = new THREE.Mesh(Parts.plateSegment(piece), MAT.slabFaces);
+      m.name = name; m.castShadow = true; m.userData.base = m.geometry.userData.base;
+      map.set(piece.id, m); this.pieceHost.add(m);
+    }
+    return m;
+  }
+  /** 物理側に無くなったピースのメッシュを捨てる（リセット時） */
+  _pruneMeshes(map, list) {
+    const ids = new Set(list.map(p => p.id));
+    for (const [id, m] of map) if (!ids.has(id)) { this.pieceHost.remove(m); m.geometry.dispose(); map.delete(id); }
   }
 
   update(fin, slab, mill) {
@@ -3435,7 +4161,7 @@ class FinishView {
       this.segments.commit();
     }
     // コイル: 完成した層の環 + 巻きかけの扇形。板は入口 A から接線でコイル外周へ入る
-    const wound = fin.gripped && fin.turns > 0.002;
+    const wound = (fin.gripped || fin.threading) && fin.turns > 0.002;
     this.coil.visible = wound;
     const h = slab.inBite ? mill.gap : slab.thickness, w = fin.finishedWidth(slab.width), r0 = C.MANDREL_D / 2;
     if (wound) this.coilGeo.update(r0 + (fin.expand - 1) * C.SEG_STROKE, fin.r1, h, w, fin.frac, fin.entry, fin.windSign);
@@ -3469,20 +4195,52 @@ class FinishView {
     }
 
     // 75 mm シャー。下台の持ち上げ量は物理側と同じ式（FinishController.bedLift）を使う。
-    const CS = CONFIG.CROP_SHEAR;
+    const CS = CONFIG.CROP_SHEAR, CV = CS.CONVEYOR;
     this.cropBed.position.y = u(P + fin.cropBlade * (CS.UPPER_CLR + CS.OVERTRAVEL));
     this.cropPusher.position.z = u(fin.cropFace);
-    this.cropPiece.visible = fin.cropVisible;
-    if (fin.cropVisible) {
-      this.cropPiece.scale.set(u(Math.max(fin.cropLen, 1)), u(Math.max(fin.cropTh, 1)), u(slab.width));
-      this.cropPiece.position.set(u(fin.cropX), u(P + fin.cropY + fin.cropTh / 2), u(fin.cropZ));
-      this.cropPiece.rotation.x = Num.clamp(-fin.cropY / 700, -0.9, 0);
+    // 端材コンベアのローラ（+X 回転で上面が +Z へ動く）
+    if (fin.conveyorAngle !== this._convA) {
+      this._convA = fin.conveyorAngle;
+      this.convZs.forEach((z, i) => this.convRolls.set(i, this.convX, this.convY, z, fin.conveyorAngle, 0, 0));
+      this.convRolls.commit();
+    }
+    // 端材: 物理側の位置（x, パスライン基準の y, z, 傾き）をそのまま置く。形は切断時のまま
+    this._pruneMeshes(this.scraps, fin.scraps);
+    for (const sc of fin.scraps) {
+      const m = this._pieceMesh(this.scraps, sc, '端材');
+      m.position.set(u(sc.x), u(P + sc.y), u(sc.z)); m.rotation.x = sc.rot;
+    }
+    // 30 mm シャー: 板押えが板の上面まで降り、ラム（上刃）が STROKE だけ下降する
+    const S3 = CONFIG.SHEAR30;
+    this.s30Ram.position.y = u(P + S3.STROKE - fin.cut30Blade * S3.STROKE);
+    this.s30Hold.position.y = u(P + Num.lerp(S3.HOLD_STROKE + 60, slab.thickness, fin.cut30Hold));
+    // パイラー: アーム台車が左右へ開く。ローラは搬送中に回る。リフトテーブルは山の高さぶん下がる
+    const PL = CONFIG.PILER;
+    for (const side of this.pilerSides) {
+      side.grp.position.z = u(side.s * (this.pilerZi + fin.pilerOpen * PL.OPEN));
+      if (fin.pilerAngle !== this._pilerA) {
+        this.pilerArmX.forEach((x, i) => side.rolls.set(i, x, -PL.ROLL_D / 2, 0, 0, 0, side.s * fin.pilerAngle));
+        side.rolls.commit();
+      }
+    }
+    this._pilerA = fin.pilerAngle;
+    const liftTop = P - PL.DROP - fin.pileH;
+    this.pilerLift.position.y = u(liftTop);
+    { const y0 = -PL.PIT.DEPTH + 300, len = Math.max(liftTop - 200 - y0, 50);
+      this.pilerCol.position.y = u(y0 + len / 2); this.pilerCol.scale.y = len / 1000; }
+    // シート: 走行中は物理側の x、山に積まれたら積み順で高さを決める（山の上面は受け面の DROP 下）
+    this._pruneMeshes(this.sheets, fin.sheets);
+    for (const sh of fin.sheets) {
+      const m = this._pieceMesh(this.sheets, sh, 'シート');
+      const y = sh.stage === 'PILED' ? liftTop + sh.k * sh.th : P + sh.y;
+      m.position.set(u(sh.x), u(y), 0);
     }
 
     // 渡り板: 入口 A から巻き付け半径の円への接点 T まで、接線方向に張る。
     // 尾端が A を過ぎたあとは A 側から縮み、T に達したところで消える。
-    const Apt = fin.entryPoint(h), e = fin.gripped ? Rolling.coilEntry(Apt.x, Apt.y, C.X, this.mandrelY, fin.layR) : null;
-    this.bridge.visible = !!e && fin.gripped;
+    const engaged = fin.gripped || fin.threading;
+    const Apt = fin.entryPoint(h), e = engaged ? Rolling.coilEntry(Apt.x, Apt.y, C.X, this.mandrelY, fin.layR) : null;
+    this.bridge.visible = !!e && engaged;
     if (e) {
       const dx = e.tx - Apt.x, dy = e.ty - Apt.y, full = Math.hypot(dx, dy), len = Math.max(full - fin.tailPast, 0);
       this.bridge.visible = len > 1;
@@ -3501,11 +4259,9 @@ class FinishView {
  */
 class SupplyView {
   constructor(scene) {
-    const S = CONFIG.SUPPLY, F = CONFIG.FLIP, P = CONFIG.MILL.PASS_LINE;
-    const rT = CONFIG.TABLE.ROLL_D_END / 2, rC = S.ROLL_D / 2;
+    const S = CONFIG.SUPPLY, F = CONFIG.FLIP, P = CONFIG.MILL.PASS_LINE, TR = CONFIG.TRANSFER;
     this.group = new THREE.Group(); scene.add(this.group);
-    // 装入設備は全体がオペレータ側にあるので «手前» 扱い。搬送ローラは残し、
-    // 視界を塞ぐ炉体・クレーン・転倒装置・架台だけを透過対象にする。
+    // 装入設備は全体がオペレータ側にあるので «手前» 扱い。視界を塞ぐ炉体・クレーン・転倒装置を透過対象にする。
     this.sided = { near: [], far: [] };
     const near = (m, mat) => { this.sided.near.push(ghostable(m, mat)); return m; };
 
@@ -3520,24 +4276,41 @@ class SupplyView {
     this.lid.position.copy(this.lidHome); this.group.add(this.lid);
     this.lidTravel = FU.W + 2 * FU.WALL + 900;
 
-    // --- 装入クレーン ----------------------------------------------------
+    // --- クレーン走行路（X 方向の走行桁 2 本）と 2 台の橋 ------------------
     const CR = CONFIG.CRANE;
     const runway = near(new THREE.Mesh(Parts.craneRunway(), MAT.base), MAT.base);
     runway.name = 'クレーン走行路'; runway.position.x = u(S.TILTER_X); runway.castShadow = true; this.group.add(runway);
-    // 桁は柱頭（GIRDER_Y〜+400）の上に載せる。下フランジ下面 = GIRDER_Y + 400
-    const girder = near(new THREE.Mesh(Parts.craneGirder(), MAT.tableFrame), MAT.tableFrame);
-    girder.name = 'クレーン桁';
-    girder.position.set(u(S.TILTER_X), u(CR.GIRDER_Y + 400 + 830), u((CR.GIRDER_Z0 + CR.GIRDER_Z1) / 2));
-    girder.castShadow = true; this.group.add(girder);
+    // 橋（Z 方向の桁）は走行桁のレール（GIRDER_Y + 720）の上に載る。桁の下フランジ下面 = 中心 − 830
+    this.girderY = CR.GIRDER_Y + 720 + 830;
+    this.trolleyY = CR.GIRDER_Y + 720 - CR.TROLLEY.H / 2 - 100;      // 吊下げ式: 上面が桁の下フランジ
+    const zc = (CR.GIRDER_Z0 + CR.GIRDER_Z1) / 2, girderGeo = Parts.craneGirder();
+    const mkGirder = (name) => { const g = near(new THREE.Mesh(girderGeo, MAT.tableFrame), MAT.tableFrame);
+      g.name = name; g.castShadow = true; g.position.set(u(S.TILTER_X), u(this.girderY), u(zc)); this.group.add(g); return g; };
+    // (1) 装入クレーン: 炉から立てたスラブを吊り、転倒機に立てかける。桁は転倒軸の真上に固定
+    this.girder = mkGirder('装入クレーン桁');
     this.trolley = new THREE.Mesh(Parts.craneTrolley(), MAT.hydraulic);
     this.trolley.name = 'トロリ'; this.trolley.castShadow = true; this.group.add(this.trolley);
     this.hookBeam = new THREE.Mesh(Parts.craneBeam(), MAT.hydraulic);
     this.hookBeam.name = '吊りビーム'; this.hookBeam.castShadow = true; this.group.add(this.hookBeam);
     this.ropes = [-1, 1].map(() => { const m = new THREE.Mesh(Parts.craneRope(), MAT.rod);
       m.name = 'ワイヤ'; this.group.add(m); return m; });
-    this.trolleyY = CR.GIRDER_Y + 400 - CR.TROLLEY.H / 2 - 100;      // 吊下げ式: 上面が桁の下フランジ
+    // (2) トランスファークレーン: 倒した（平置きの）スラブをクランプで吊り、ラインへ横移動する。
+    //     桁は走行桁の上を X 方向に走る（待機位置 → スラブの真上）
+    this.girderT = mkGirder('トランスファークレーン桁');
+    this.trolleyT = new THREE.Mesh(Parts.craneTrolley(), MAT.hydraulic);
+    this.trolleyT.name = 'トランスファートロリ'; this.trolleyT.castShadow = true; this.group.add(this.trolleyT);
+    this.beamT = new THREE.Mesh(Parts.transferBeam(), MAT.hydraulic);
+    this.beamT.name = '吊りビーム（クランプ）'; this.beamT.castShadow = true; this.group.add(this.beamT);
+    this.ropesT = [-1, 1].map(() => { const m = new THREE.Mesh(Parts.craneRope(), MAT.rod); m.name = 'ワイヤ'; this.group.add(m); return m; });
+    const tongGeo = Parts.transferTong();
+    this.tongs = [];
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const m = new THREE.Mesh(tongGeo, MAT.hydraulic); m.name = 'クランプ'; m.castShadow = true;
+      m.userData.sx = sx; m.userData.sz = sz; this.group.add(m); this.tongs.push(m);
+    }
+    this._crane = { z: CONFIG.FURNACE.Z, beamY: null };   // 装入クレーンの現在位置（急に戻さず速度制限で戻す）
 
-    // --- 転倒装置（縦置きスラブを 90° 倒す）------------------------------
+    // --- 転倒装置（縦置きスラブを 90° 倒す。ローラは持たない）------------------
     // 転倒軸はベッド面（パスライン）より PIVOT_DROP 下。軸がベッド面から突き出さない
     this.tilterPivot = new THREE.Group();
     this.tilterPivot.position.set(u(S.TILTER_X), u(P - S.PIVOT_DROP), u(S.SIDE_Z));
@@ -3546,57 +4319,26 @@ class SupplyView {
     const arm = near(new THREE.Mesh(Parts.tilterArm(), MAT.hydraulic), MAT.hydraulic); arm.castShadow = true;
     arm.name = '転倒アーム';
     this.tilterArm.add(arm);
-    const nArm = 6, armRolls = new Instances(Parts.tilterArmRoll(), MAT.rollFace, nArm, { dynamic: true, cull: false, name: '転倒アームローラ' });
-    this.armRollXs = []; this.armRollY = S.PIVOT_DROP - rC;
-    for (let i = 0; i < nArm; i++) {
-      const x = 640 + i * (S.ARM_L - 960) / (nArm - 1);
-      this.armRollXs.push(x); armRolls.set(i, x, this.armRollY, 0);
-    }
-    armRolls.commit(); this.tilterArm.add(armRolls.mesh); this.armRolls = armRolls;
     this.tilterPivot.add(this.tilterArm);
     const tb = near(new THREE.Mesh(Parts.tilterBase(), MAT.base), MAT.base); tb.receiveShadow = true;
     tb.name = '転倒装置基部';
     this.tilterPivot.add(tb);
     this.group.add(this.tilterPivot);
 
-    // --- 縦送りテーブル ---------------------------------------------------
-    this.runXs = S.RUNIN_X;
-    this.runIn = new Instances(Parts.tableRoll(S.BARREL), MAT.rollFace, this.runXs.length, { dynamic: true, cull: false, name: '縦送りローラ' });
-    const rp = new Instances(Parts.tablePedestal(), MAT.tableFrame, this.runXs.length * 2, { cull: false, name: '縦送り架台' });
-    const jz = S.BARREL / 2 + CONFIG.TABLE.COLLAR_L + CONFIG.TABLE.JOURNAL_L / 2;
-    this.runXs.forEach((x, i) => {
-      this.runIn.set(i, x, P - rT, S.SIDE_Z);
-      rp.set(i * 2,     x, 0, S.SIDE_Z + jz);
-      rp.set(i * 2 + 1, x, 0, S.SIDE_Z - jz);
-    });
-    this.runIn.commit(); rp.commit(); this.group.add(this.runIn.mesh, rp.mesh); this.runPeds = rp;
-    near(rp.mesh, MAT.tableFrame);
-
-    // --- 横送りローラ（移載時のみ上昇する可動スキッド）--------------------
-    this.crossSlots = [];
-    for (const x of S.CROSS_X)
-      for (let z = S.CROSS_Z0; z <= S.CROSS_Z1; z += S.CROSS_PITCH) this.crossSlots.push([x, z]);
-    this.cross = new Instances(Parts.crossRoll(), MAT.rollFace, this.crossSlots.length, { dynamic: true, cull: false, name: '横送りローラ' });
-    this.crossY = P - rC - S.CROSS_LIFT;
-    this.crossSlots.forEach(([x, z], i) => this.cross.set(i, x, this.crossY, z));
-    this.cross.commit(); this.group.add(this.cross.mesh);
-    // 各ローラの固定ベース（床上）。ローラ側のステムがこの中を伸縮する
-    const cb = new Instances(Parts.crossBase(), MAT.tableFrame, this.crossSlots.length, { cull: false, name: '横送りローラ架台' });
-    this.crossSlots.forEach(([x, z], i) => cb.set(i, x, 150, z));
-    cb.commit(); this.group.add(cb.mesh); this.crossBase = cb;
-
     this.slab = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
     this.slab.name = '装入スラブ'; this.slab.castShadow = true; scene.add(this.slab);
     this._state = {};
+    void TR;
   }
 
   /** 各フェーズにおけるスラブ中心位置（mm）と姿勢を返す */
   _pose(sup, slab, P) {
-    const S = CONFIG.SUPPLY, FU = CONFIG.FURNACE, CR = CONFIG.CRANE, F = CONFIG.FLIP;
+    const S = CONFIG.SUPPLY, FU = CONFIG.FURNACE, CR = CONFIG.CRANE, TR = CONFIG.TRANSFER, F = CONFIG.FLIP;
     const th = slab.thickness, L = slab.length, p = sup.p, D = S.PIVOT_DROP;
     // 立てた板は転倒アームの受け面（転倒軸より D 上のベッド面が立ち上がったもの）に
     // 寄りかかり、底面はリップ（軸より D 下）に載る。
     const xStand = S.TILTER_X - F * (D + th / 2);        // 立てかけ時のスラブ中心 X
+    const xFlat = Layout.entryX(L);                      // 倒したスラブの中心 X（＝ラインへ降ろす X）
     const yPit = -FU.DEPTH + L / 2;                      // 炉内（底に着地）
     const yHi  = P + CR.HOIST_CLEAR + L / 2;             // 吊上げ高さ
     const yStand = P - D + L / 2;                        // 立てかけ高さ（底面がリップ上）
@@ -3606,73 +4348,95 @@ class SupplyView {
       case 'HOIST':    return { x: xStand, y: Num.lerp(yPit, yHi, p.hoist), z: FU.Z, rot: Math.PI / 2, hung: true };
       case 'TRAVERSE': return { x: xStand, y: yHi, z: Num.lerp(FU.Z, S.SIDE_Z, p.traverse), rot: Math.PI / 2, hung: true };
       case 'SET':      return { x: xStand, y: Num.lerp(yHi, yStand, p.set), z: S.SIDE_Z, rot: Math.PI / 2, hung: p.set < 1 };
-      default: {
+      case 'TILT': {
         // 転倒中: 板はアームと一体に転倒軸まわりを回る。アームのローカル系で板の中心は
         // (L/2, D + th/2)。これを角度 tilt で回して軸位置に足すだけで、立位・倒位の両端で
         // 上の xStand / yStand と P + th/2 に一致する。
         const tilt = (1 - p.tilt) * Math.PI / 2, c = Math.cos(tilt), sn = Math.sin(tilt);
-        if (ph === 'TILT')
-          return { x: S.TILTER_X + F * (L / 2 * c - (D + th / 2) * sn), y: (P - D) + (L / 2 * sn + (D + th / 2) * c),
-                   z: S.SIDE_Z, rot: tilt, hung: false };
-        if (ph === 'RUNIN')
-          return { x: Num.lerp(S.TILTER_X + F * L / 2, S.ENTRY_X, p.runIn), y: P + th / 2,
-                   z: S.SIDE_Z, rot: 0, hung: false };
-        return { x: S.ENTRY_X, y: P + th / 2, z: Num.lerp(S.SIDE_Z, 0, p.cross), rot: 0, hung: false };
+        return { x: S.TILTER_X + F * (L / 2 * c - (D + th / 2) * sn), y: (P - D) + (L / 2 * sn + (D + th / 2) * c),
+                 z: S.SIDE_Z, rot: tilt, hung: false };
       }
+      // トランスファークレーン: クランプで掴んで吊り上げ（GRAB）→ 横移動（TRANSFER）→ 降ろす（LOWER）
+      case 'GRAB':     return { x: xFlat, y: P + th / 2 + TR.LIFT * Num.smoothstep(0.75, 1, p.grab), z: S.SIDE_Z, rot: 0, hung: false };
+      case 'TRANSFER': return { x: xFlat, y: P + th / 2 + TR.LIFT, z: Num.lerp(S.SIDE_Z, 0, Num.smoothstep(0, 1, p.transfer)), rot: 0, hung: false };
+      case 'LOWER':    return { x: xFlat, y: P + th / 2 + TR.LIFT * (1 - Num.smoothstep(0, 0.6, p.lower)), z: 0, rot: 0, hung: false };
+      default:         return { x: xFlat, y: P + th / 2, z: 0, rot: 0, hung: false };
     }
   }
 
-  update(sup, slab, mill) {
-    const S = CONFIG.SUPPLY, F = CONFIG.FLIP, P = mill.passLine, p = sup.p;
-    const rT = CONFIG.TABLE.ROLL_D_END / 2, rC = S.ROLL_D / 2;
+  /** トランスファークレーンの姿勢: 桁の X・トロリの Z・吊りビームの下面高さ・クランプの開き(0〜1) */
+  _transferPose(sup, slab, P, pose) {
+    const S = CONFIG.SUPPLY, TR = CONFIG.TRANSFER, F = CONFIG.FLIP, p = sup.p, th = slab.thickness;
+    const park = S.TILTER_X + F * TR.PARK_DX, xFlat = Layout.entryX(slab.length);
+    const grabBot = P + th + 700, high = grabBot + TR.LIFT;        // 掴む高さ（板上面 + 700）／ 吊り上げ高さ
+    const ph = sup.active ? sup.phase : (slab.onLine ? 'DONE' : 'LID');
+    switch (ph) {
+      case 'GRAB': {
+        const g = p.grab;
+        return { x: Num.lerp(park, xFlat, Num.smoothstep(0, 0.35, g)), z: S.SIDE_Z,
+                 beamBot: Num.lerp(high, grabBot, Num.smoothstep(0.35, 0.6, g)) + TR.LIFT * Num.smoothstep(0.75, 1, g),
+                 open: 1 - Num.smoothstep(0.6, 0.75, g) };
+      }
+      case 'TRANSFER': return { x: xFlat, z: pose.z, beamBot: pose.y + th / 2 + 700, open: 0 };
+      case 'LOWER': {
+        const l = p.lower;
+        return { x: xFlat, z: 0, beamBot: pose.y + th / 2 + 700 + (high - grabBot) * Num.smoothstep(0.8, 1, l), open: Num.smoothstep(0.6, 0.8, l) };
+      }
+      case 'DONE':     return { x: xFlat, z: 0, beamBot: high, open: 1 };
+      default:         return { x: park, z: S.SIDE_Z, beamBot: high, open: 1 };
+    }
+  }
+
+  update(sup, slab, mill, dt = 1 / 60) {
+    const S = CONFIG.SUPPLY, F = CONFIG.FLIP, P = mill.passLine, p = sup.p, TR = CONFIG.TRANSFER;
 
     this.tilterArm.rotation.z = (1 - p.tilt) * Math.PI / 2;
 
     // 炉蓋は開いたら閉じない（材料が出た後にゆっくり閉じる演出は行わない）
     this.lid.position.z = this.lidHome.z + u(this.lidTravel * Num.smoothstep(0, 1, p.lid));
 
-    // 横送りローラは移載区間の前後で昇降する（実機の可動スキッド）
-    const lift = Num.smoothstep(0, 0.12, p.cross) * (1 - Num.smoothstep(0.88, 1, p.cross));
-    const crossY = P - rC - S.CROSS_LIFT * (1 - lift), crossA = -p.cross * 26;
-    if (crossY !== this._state.crossY || crossA !== this._state.crossA) {
-      this._state.crossY = crossY; this._state.crossA = crossA;
-      this.crossSlots.forEach(([x, z], i) => this.cross.set(i, x, crossY, z, crossA, 0, 0));
-      this.cross.commit();
-    }
-
     const active = sup.active || !slab.onLine;
     this.slab.visible = active;
     const pose = this._pose(sup, slab, P);
+    const th = slab.thickness, w = slab.width, L = slab.length;
 
-    // クレーン（トロリ・吊具・ワイヤ）は吊っている間だけ材料に追従する
+    // --- 装入クレーン（トロリ・吊具・ワイヤ）: 吊っている間は材料に追従、離したら速度制限で炉へ戻る ---
     const CR = CONFIG.CRANE;
     const hung = active && pose.hung;
-    const beamY = hung ? pose.y + slab.length / 2 + 760 : CR.GIRDER_Y - 2600;
-    const trolleyZ = hung ? pose.z : CONFIG.FURNACE.Z;
-    this.trolley.position.set(u(S.TILTER_X), u(this.trolleyY), u(trolleyZ));
-    this.hookBeam.position.set(u(S.TILTER_X), u(beamY), u(trolleyZ));
-    const ropeLen = Math.max(this.trolleyY - CR.TROLLEY.H / 2 - beamY - 230, 10);
+    const beamHome = this.trolleyY - CR.TROLLEY.H / 2 - 1800, c = this._crane;
+    if (c.beamY === null) { c.beamY = beamHome; c.z = CONFIG.FURNACE.Z; }
+    if (hung) { c.beamY = pose.y + L / 2 + 760; c.z = pose.z; }
+    else { c.beamY = Num.rateTo(c.beamY, beamHome, 1800, dt); c.z = Num.rateTo(c.z, CONFIG.FURNACE.Z, 2200, dt); }
+    this.trolley.position.set(u(S.TILTER_X), u(this.trolleyY), u(c.z));
+    this.hookBeam.position.set(u(S.TILTER_X), u(c.beamY), u(c.z));
+    const ropeLen = Math.max(this.trolleyY - CR.TROLLEY.H / 2 - c.beamY - 230, 10);
     this.ropes.forEach((m, i) => {
-      m.position.set(u(S.TILTER_X), u(beamY + 230 + ropeLen / 2), u(trolleyZ + (i ? 1 : -1) * CR.BEAM_L * 0.34));
+      m.position.set(u(S.TILTER_X), u(c.beamY + 230 + ropeLen / 2), u(c.z + (i ? 1 : -1) * CR.BEAM_L * 0.34));
       m.scale.y = ropeLen / 1000;
     });
 
+    // --- トランスファークレーン ---
+    const t = this._transferPose(sup, slab, P, pose);
+    this.girderT.position.x = u(t.x);
+    this.trolleyT.position.set(u(t.x), u(this.trolleyY), u(t.z));
+    this.beamT.position.set(u(t.x), u(t.beamBot + 210), u(t.z));
+    const ropeT = Math.max(this.trolleyY - CR.TROLLEY.H / 2 - (t.beamBot + 680), 10);
+    this.ropesT.forEach((m, i) => {
+      m.position.set(u(t.x + (i ? 1 : -1) * TR.BEAM_L * 0.34), u(t.beamBot + 680 + ropeT / 2), u(t.z));
+      m.scale.y = ropeT / 1000;
+    });
+    // クランプ: ハンガー下端（ビーム下面 − 270）から板の底面 + 100 まで。開閉は Z
+    const tongLen = Math.max(330 + th, 200), tongTop = t.beamBot - 270;
+    for (const m of this.tongs) {
+      const { sx, sz } = m.userData;
+      m.position.set(u(t.x + sx * TR.TONG_DX), u(tongTop), u(t.z + sz * (w / 2 + 60 + t.open * TR.TONG_OPEN)));
+      m.scale.y = tongLen / 1000;
+    }
+
     if (!active) return;
-    const th = slab.thickness, w = slab.width, L = slab.length;
     this.slab.scale.set(u(L), u(th), u(w));
     this.slab.position.set(u(pose.x), u(pose.y), u(pose.z));
     this.slab.rotation.set(0, 0, F * pose.rot);
-
-    if (sup.phase === 'RUNIN') {
-      const a = -p.runIn * 34;
-      if (a !== this._state.runA) {
-        this._state.runA = a;
-        this.runXs.forEach((x2, i) => this.runIn.set(i, x2, P - rT, S.SIDE_Z, 0, 0, a));
-        this.runIn.commit();
-        this.armRollXs.forEach((x2, i) => this.armRolls.set(i, x2, this.armRollY, 0, 0, 0, a));
-        this.armRolls.commit();
-      }
-    }
   }
 }
 
@@ -3741,7 +4505,7 @@ class SlabView {
     // 尾端が A を過ぎたら板はすべてコイル側にあり、このメッシュは消える。
     const F = CONFIG.FLIP;
     let x0 = slab.xMin, x1 = slab.xMax, clipHead = false;
-    if (fin && fin.gripped) {
+    if (fin && (fin.gripped || fin.threading)) {
       const ax = fin.entryPoint(slab.thickness).x;
       if (F > 0) { if (x1 > ax) { x1 = ax; clipHead = true; } } else if (x0 < ax) { x0 = ax; clipHead = true; }
     }
@@ -3755,7 +4519,7 @@ class SlabView {
     // 形状が変わっていなければ頂点更新も法線再計算も行わない（停止中のコストをゼロに）
     const sig = x0 + ':' + x1 + ':' + slab.thickness + ':' + slab.width + ':'
               + mill.gap + ':' + mill.passLine + ':' + slab.inBite + ':' + slab.dir + ':'
-              + slab.cropped + ':' + slab.croppedEnd + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig;
+              + slab.cropped + ':' + slab.croppedEnd + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig;
     if (sig === this._sig) return;
     this._sig = sig;
     const L = x1 - x0, w = slab.width, P = mill.passLine;
@@ -3774,27 +4538,17 @@ class SlabView {
       const pw = Math.max(1 - pl - pr, 1e-6);
       this._map = { xMin: x0, L, a, b, pl, pw, pr };
     }
-    // 端部の張り出しは実際の先尾端にだけ付く。コイル側で打ち切った端には付けない
+    // 端部の張り出しは実際の先尾端にだけ付く。コイル側で打ち切った端には付けない。
+    // 形状（舌・ワニ口・切断面での打ち切り）は板・端材・シートで同じ関数（SlabState.shape）を使う
     const ohP = (clipHead && F > 0) ? 0 : slab.overhangAt(1), ohM = (clipHead && F < 0) ? 0 : slab.overhangAt(-1);
+    const shape = slab.shape(x0, x1, ohP, ohM);
 
     const pos = this.geo.attributes.position, base = this.base, n = pos.count;
     for (let i = 0; i < n; i++) {
       const bx = base.getX(i) + 0.5, by = base.getY(i) + 0.5, bz = base.getZ(i);
       let x = this._map ? this._mapX(bx) : x0 + bx * L, h = hIn, dip = 0;
       if (rolling) { const p = Rolling.profile(x, hIn, gap, slab.dir); h = p.h; dip = p.dip; }
-      // 端部の張り出し（舌＝幅中央が伸び、ワニ口＝表裏が伸びる）。
-      // 切り落とした側は張り出しが無くなる（slab.overhangAt が 0 を返す）。
-      const sgn = bx > 0.5 ? 1 : -1, oh = sgn > 0 ? ohP : ohM;
-      if (oh > 0) {
-        // 端部欠陥の影響範囲は欠陥長に比例（3 倍、ただし 600 mm 以上・全長の 1/4 以下）
-        const zone = Num.clamp(3 * oh, 600, L * 0.25), dEnd = (1 - Math.abs(bx * 2 - 1)) * L / 2;
-        const e = 1 - dEnd / zone;
-        if (e > 0) {
-          // 舌（幅中央が伸びる）と ワニ口（表裏が開く）の合成。端の最大変位が oh になる。
-          const ramp = e * e, nz = bz * 2, ny = by * 2 - 1;
-          x += sgn * oh * ramp * 0.5 * ((1 - nz * nz) + ny * ny);
-        }
-      }
+      x = shape.map(x, by * 2 - 1, bz * 2);
       let yl = 0;
       if (lift > 0) {                     // 下台（刃の上流 BED_L）に載る区間は全量、その上流 2 m で滑らかに 0 へ
         const sBed = F * (x - (CS.X - F * CS.BED_L));
@@ -3825,8 +4579,12 @@ class SprayView {
     this.steam = new ParticleField(scene, { count: 300, map: Sprite.puff(),
       color: 0xffffff, color2: 0xd7e2ea, opacity: 0.62,
       buoy: 2000, drag: 0.95, swirl: 620, grow: 2.6, fadeIn: 0.22 });  // 終端上昇速度 2.1 m/s
+    // 板面クーラント: サイドガイド上のヘッダから板の上面へ落とす液滴。床＝板の上面
+    this.strip = new ParticleField(scene, { count: 600, map: Sprite.drop(),
+      color: C.COOLANT, color2: 0xbed3e0, opacity: 0.50,
+      buoy: -9810, drag: 0.45, grow: 1.3, fadeIn: 0.05 });
     this.density = 1;
-    this._acc = { coolant: 0, steam: 0 };
+    this._acc = { coolant: 0, steam: 0, strip: 0 };
   }
   /** 描画品質に合わせて放出量を落とす（粒が大きいぶん塗り面積が効くため）。 */
   setDensity(x) { this.density = x; }
@@ -3855,6 +4613,22 @@ class SprayView {
     }
     this.coolant.update(dt, mill.passLine - 800);
 
+    // 板面クーラント: 板がヘッダの下を通過している間だけ、そのヘッダから噴射する
+    if (env.stripCool && CONFIG.MATERIAL.GUIDE_COOL.ENABLED && running) {
+      const G = CONFIG.TABLE.GUIDE, H = G.HEADER, T = CONFIG.TABLE;
+      const active = [];
+      for (const sx of [-1, 1]) for (const d of [-1, 1]) {
+        const hx = sx * G.X + d * H.DX;
+        if (slab.xMax > hx - H.ZONE && slab.xMin < hx + H.ZONE) active.push(hx);
+      }
+      if (active.length) this._emit('strip', 140 * active.length, dt, 20, r => {
+        const hx = active[Math.floor(r() * active.length)];
+        this.strip.spawn(hx + (r() - .5) * 160, mill.passLine + H.Y - H.D / 2 - 120, (r() - .5) * T.BARREL,
+          (r() - .5) * 320, -2200 - r() * 900, (r() - .5) * 320, 0.32 + r() * 0.25, 60 + r() * 60);
+      });
+    }
+    this.strip.update(dt, mill.passLine + (slab.inBite ? mill.gap : slab.thickness));
+
     // 水蒸気の発生量は «水がどれだけ蒸発できるか» で決まるので、材料温度に効かせる。
     // 熱いパスほど白煙が立ち、仕上げの低温パスでは薄くなる（実機の見え方と同じ）。
     const hot = Num.clamp((slab.temperature - CONFIG.MATERIAL.T_STEAM_MIN) /
@@ -3875,7 +4649,7 @@ class SprayView {
     }
     this.steam.update(dt);
   }
-  clear(which) { if (which === 'coolant') this.coolant.clear(); else this.steam.clear(); }
+  clear(which) { if (which === 'coolant') this.coolant.clear(); else if (which === 'strip') this.strip.clear(); else this.steam.clear(); }
 }
 
 /** 3D上の設備ラベル（DOMを投影。ジオメトリを増やさない） */
@@ -3895,12 +4669,17 @@ class LabelView {
       ['ピニオンスタンド',                          0,  3500,    -9500, 42000],
       ['主電動機',                                  0,  3700, D.MOTOR_Z, 60000],
       ['サイドガイド',                   F * -3300,  1900,     2300, 18000],
-      ['入側テーブル',                   F *-26000,  1600,        0, 95000],
-      ['出側テーブル',                   F * 26000,  1600,        0, 95000],
+      ['板面クーラントヘッダ',           F *  3400,  M.PASS_LINE + 2100, 0, 18000],
+      ['入側テーブル',                   F *-16000,  1600,        0, 95000],
+      ['出側テーブル',                   F * 18000,  1600,        0, 95000],
       ['転倒装置',                        S.TILTER_X,  3600, S.SIDE_Z,  75000],
-      ['横送り設備',                        S.ENTRY_X,  2300, S.SIDE_Z / 2, 55000],
+      ['トランスファークレーン',  Layout.entryX(3000), CONFIG.CRANE.GIRDER_Y + 900, S.SIDE_Z / 2, 90000],
       ['サイドトリマー',            CONFIG.TRIMMER.X,  4200,        0, 40000],
       ['75 mm クロップシャー',   CONFIG.CROP_SHEAR.X,  2900,        0, 95000],
+      ['端材コンベア・パレット', CONFIG.CROP_SHEAR.X + F * 400, 1500, 5200, 40000],
+      ['30 mm シャー',              CONFIG.SHEAR30.X,  3200,        0, 95000],
+      ['パイラー',   (CONFIG.PILER.X0 + CONFIG.PILER.X1) / 2, 2600, 0, 95000],
+      ['板置き場（75 mm 超）', (CONFIG.PILER.YARD.X0 + CONFIG.PILER.YARD.X1) / 2, 1500, CONFIG.PILER.YARD.Z, 60000],
       ['スリーロール',      CONFIG.COILER.DEFLECTOR_X,  CONFIG.MILL.PASS_LINE + 1750, 0, 30000],
       ['巻取リール',                  CONFIG.COILER.X, CONFIG.MILL.PASS_LINE + CONFIG.COILER.Y_ABOVE + CONFIG.COILER.OD_DRAWING / 2 + 350, 0, 45000],
       ['ピット炉',                        S.TILTER_X,  1800, CONFIG.FURNACE.Z, 80000],
@@ -4025,6 +4804,7 @@ class World3D {
       const m = this.cutScope[g.id] ? this.cutaway : 'solid';
       setGhost(v.sided.near, m !== 'solid');
       setGhost(v.sided.far,  m === 'xray');
+      setGhost(v.sided.top ?? [], m !== 'solid');    // 天面（クロスヘッド・梁）は半断面でも透過して中を見せる
     }
   }
   /**
@@ -4119,11 +4899,55 @@ const $ = (id) => document.getElementById(id);
 class UIManager {
   constructor(bus) {
     this.bus = bus; this.busy = false; this.paused = false; this.warn = null;
-    this.timeScale = 1; this.passIndex = -1; this.cutaway = 'half';
+    this.timeScale = 1; this.passIndex = -1; this.cutaway = 'half'; this.labelsOn = true; this.quality = 'std';
     this._acc = 0;
-    this._buildViews(); this._buildSpec(); this._buildLegend(); this._buildCast(); this._buildAlloys(); this._buildCutScope();
+    this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend(); this._buildCast(); this._buildAlloys(); this._buildCutScope();
     this._bind(); this._listen();
-    this.dims(); this._rollState(); this.renderSchedule(); this._banner('idle');
+    this.dims(); this._rollState(); this.renderSchedule(); this._banner('idle'); this._summaries();
+  }
+
+  /**
+   * 区分を閉じていても «今どうなっているか» が分かるよう、各区分の見出しに要約を出す
+   * （探させない・思い出させない）。値はすべて状態から作る。
+   */
+  _summaries() {
+    const d = this._dims, K = CONFIG, set = (id, t) => { const el = $(id); if (el && el.textContent !== t) el.textContent = t; };
+    if (d) {
+      const th = d.cast - 2 * d.scalp;
+      set('sum-material', `${d.alloy} ${th}×${d.width}×${d.length} → ${d.target} mm ${d.mode === 'COIL' ? 'コイル' : '板材'}`);
+      const sch = this.previewSchedule || K.SCHEDULE, maxF = Math.max(0, ...sch.map(q => q.force || 0));
+      set('sum-sched', this.passIndex >= 0 ? `第 ${this.passIndex + 1} / ${K.SCHEDULE.length} パス` : `${sch.length} パス ・ 最大 ${Math.round(maxF).toLocaleString()} t（予測）`);
+    }
+    set('sum-run', `${$('mode-auto').getAttribute('aria-pressed') === 'true' ? '自動' : '手動'} ・ ${this.timeScale.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}×`);
+    set('sum-view', `${{ solid: '実体', half: '半断面', xray: '透視' }[this.cutaway]} ・ ${{ high: '高', std: '標準', lite: '軽量' }[this.quality]}`);
+    const env = [['chk-coolant', 'ロール'], ['chk-stripcool', '板面'], ['chk-steam', '水蒸気'], ['chk-supply-anim', '装入']]
+      .filter(([id]) => $(id)?.checked).map(([, n]) => n);
+    set('sum-env', env.length ? env.join('・') : 'すべて OFF');
+    set('sum-spec', $('lbl-roll')?.textContent ? `ロール ${$('lbl-roll').textContent}` : '');
+  }
+  setLabels(on) {
+    this.labelsOn = !!on;
+    $('tb-labels').setAttribute('aria-pressed', String(this.labelsOn));
+    this.bus.emit('CMD_VIEW', { labels: this.labelsOn });
+  }
+  setSidebar(open) {
+    document.body.classList.toggle('sb-collapsed', !open);
+    $('btn-collapse').setAttribute('aria-expanded', String(!!open));
+  }
+  /** 図面のテーブル区分と、概算で置いたローラの実ピッチ・テーブル選択番号を一覧にする。 */
+  _buildTables() {
+    const rows = [...CONFIG.TABLE.SECTIONS].sort((a, b) => (a.side * (a.x0 + a.x1)) - (b.side * (b.x0 + b.x1)));
+    const F = CONFIG.FLIP;
+    $('table-body').innerHTML = rows.map(s => {
+      const L = Layout.section(s), g = Layout.groupOf(s.name);
+      const pitch = typeof s.pitch === 'number' ? `${s.pitch}` : s.pitch.replace(/×/g, '×');
+      const used = L.uniform ? `<span style="color:var(--ink-3)">→ 等配 ${L.pitchUsed.toFixed(0)}</span>` : '';
+      const side = (s.side * F) < 0 ? '入' : '出';
+      return `<tr><td style="text-align:left">${s.name} <span style="color:var(--ink-3)">${side}</span></td><td>${(s.x0 / 1000).toFixed(1)}–${(s.x1 / 1000).toFixed(1)}</td><td>${s.n}</td><td style="white-space:nowrap">${pitch} ${used}</td><td>${g <= CONFIG.TABLE.SELECT.length ? g : '–'}</td></tr>`;
+    }).join('');
+    const total = rows.reduce((a, s) => a + s.n, 0);
+    $('table-note').textContent = `全 ${total} 本（入側 ${rows.filter(s => s.side * F < 0).reduce((a, s) => a + s.n, 0)} / 出側 ${rows.filter(s => s.side * F > 0).reduce((a, s) => a + s.n, 0)}）。` +
+      `区間に本数×ピッチが収まらない区分は区間内に等配（概算）。テーブル選択 1: C-1〜G-1 / 2: B-1〜G-3 / 3: A-6〜H-2 / 4: A-1〜J-3。パスごとに板が載る範囲を覆う最小の選択番号で駆動します。`;
   }
 
   /* ---- 静的な表の構築 ---- */
@@ -4157,8 +4981,8 @@ class UIManager {
     const host = $('cam-chips');
     this.chips = CONFIG.VIEWS.map((v, i) => {
       const b = document.createElement('button');
-      b.className = 'chip'; b.setAttribute('aria-pressed', i === 1 ? 'true' : 'false');
-      b.innerHTML = `<i class="fa-solid ${v.icon}"></i>${v.name}`;
+      b.className = 'chip'; b.setAttribute('aria-pressed', i === 1 ? 'true' : 'false'); b.title = `${v.name}（${i + 1}）`;
+      b.innerHTML = `<i class="fa-solid ${v.icon}"></i>${v.name}<span class="kbd">${i + 1}</span>`;
       b.onclick = () => this.selectView(i);
       host.appendChild(b); return b;
     });
@@ -4185,8 +5009,8 @@ class UIManager {
   _cutNote() {
     const on = CONFIG.CUTAWAY.filter(g => this.cutScope[g.id]).map(g => g.name);
     const how = { solid: '選んだ設備をすべて実体で描きます。',
-                  half:  '選んだ設備の手前側（オペレータ側）だけを透過します。',
-                  xray:  '選んだ設備を手前・奥とも透過します。' }[this.cutaway];
+                  half:  '選んだ設備の手前側（オペレータ側）と天面（クロスヘッド・梁）を透過します。',
+                  xray:  '選んだ設備を手前・奥・天面とも透過します。' }[this.cutaway];
     $('der-cut').textContent = how + (on.length ? `対象: ${on.join('・')}` : '対象なし（すべて実体）');
   }
   _buildCast() {
@@ -4254,7 +5078,11 @@ class UIManager {
       ['巻取張力', `最大 ${C.TENSION_MAX_KG.toLocaleString()} kg（設定変更で ${C.TENSION_LIMIT_KG.toLocaleString()} kg）` +
                   ` <span style="color:var(--ink-3)">Φ${C.OD_MAX} で ${(Rolling.coilTensionKg(C.OD_MAX) / 1000).toFixed(1)} t</span>`],
       ['巻取速度', `${C.SPEED_MAX} mpm（巻取パス圧延速度 ${C.ROLL_SPEED_MAX} mpm）`],
-      ['クロップシャー', `75 mm 対応 ／ ミル中心から ${Math.abs(CS.X).toLocaleString()} mm`],
+      ['75 mm シャー', `ミル中心から ${Math.abs(CS.X).toLocaleString()} mm（${CS.ZONE[0] / 1000}〜${CS.ZONE[1] / 1000} m 区間）／ 端材はコンベアでパレットへ`],
+      ['30 mm シャー', `ミル中心から ${Math.abs(CONFIG.SHEAR30.X).toLocaleString()} mm（J-3 の先）／ 板厚 ${CONFIG.SHEAR30.MAX_TH} mm 以下を定尺 ${CONFIG.PILER.SHEET_L / 1000} m に切り分け`],
+      ['パイラー', `ミル中心から ${(Math.min(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)}〜${(Math.max(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)} m ／ 開閉アーム式・リフトテーブル付`],
+      ['装入設備', `転倒機 ミル中心から ${(Math.abs(CONFIG.SUPPLY.TILTER_X) / 1000).toFixed(1)} m（A-9 / A-8 の操作側）／ トランスファークレーンで横移動`],
+      ['板面クーラント', `サイドガイド上 各 2 本（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 上面 ${CONFIG.MATERIAL.GUIDE_COOL.H_TOP} W/m²K`],
       ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
     ];
     $('spec-body').innerHTML = rows.map(([k, v]) =>
@@ -4275,8 +5103,11 @@ class UIManager {
       $('auto-controls').style.display = auto ? 'block' : 'none';
       $('manual-controls').style.display = auto ? 'none' : 'block';
       this.bus.emit('CMD_SET_MODE', auto ? 'AUTO' : 'MANUAL');
-      this._banner(auto ? 'idle' : 'manual');
+      this._banner(auto ? 'idle' : 'manual'); this._summaries();
     };
+    on('btn-collapse', 'click', () => this.setSidebar(false));
+    on('btn-expand', 'click', () => this.setSidebar(true));
+    on('tb-labels', 'click', () => this.setLabels(!this.labelsOn));
     on('mode-auto', 'click', () => setMode(true));
     on('mode-manual', 'click', () => setMode(false));
 
@@ -4295,12 +5126,12 @@ class UIManager {
       $('der-roll').innerHTML =
         `WR Φ${wr.toFixed(0)} ／ BUR Φ${br.toFixed(0)}<br>` +
         `減径ぶん <b>${lift.toFixed(1)} mm</b> をパスライン調整ウェッジが持ち上げ、パスラインは ${M.PASS_LINE} mm で一定に保たれます。`;
-      this.bus.emit('CMD_SET_ROLLS', t);
+      this.bus.emit('CMD_SET_ROLLS', t); this._summaries();
     };
     on('rng-roll', 'input', rollState);
     this._rollState = rollState;
 
-    on('rng-timescale', 'input', e => { this.timeScale = +e.target.value; $('lbl-timescale').innerHTML = this.timeScale.toFixed(2).replace(/0$/, '') + '<em>×</em>'; });
+    on('rng-timescale', 'input', e => { this.timeScale = +e.target.value; $('lbl-timescale').innerHTML = this.timeScale.toFixed(2).replace(/0$/, '') + '<em>×</em>'; this._summaries(); });
 
     this.dims = () => {
       const FIN = CONFIG.SLAB.FINISH;
@@ -4311,6 +5142,7 @@ class UIManager {
                   target, trim: +$('rng-trim').value };
       const AL = Rolling.alloy(d.alloy);
       d.mode = Rolling.finishMode(target);
+      this._dims = d;
       if (document.activeElement !== $('num-target')) $('num-target').value = target;
       $('lbl-finish').innerHTML = d.mode === 'COIL'
         ? '<span class="badge"><i class="fa-solid fa-arrows-spin"></i> コイル（巻取）</span>'
@@ -4338,9 +5170,13 @@ class UIManager {
       if (Math.abs(reached - d.target) > 0.6) warn.push(`テーブル長の制約で ${reached.toFixed(1)} mm までしか到達できません（この板厚はコイルでなければ作れません）`);
       if (!feas.ok) warn.push(`このラインでは成立しません: ${feas.reasons.join('、')}（運転すると過負荷停止します）`);
       else feas.notes.forEach(t => note.push(t));
+      const divider = FinishState.divider(d.target), sheets = Math.ceil(outLen / CONFIG.PILER.SHEET_L);
       $('der-target').textContent = coil
         ? `${sch.length} パスで ${d.target} mm まで圧延し、最終パスで巻取機へ巻き取ります（コイル可能厚 ${CONFIG.COILER.TH_MIN}〜${CONFIG.COILER.TH_MAX} mm）。`
-        : `${sch.length} パスで ${d.target} mm まで圧延し、出側テーブルへ送り出します。${d.target <= CONFIG.CROP_SHEAR.MAX_TH ? '75 mm シャーで端部を切り落とします。' : '板厚 75 mm 超なので 75 mm シャーは使いません。'}`;
+        : `${sch.length} パスで ${d.target} mm まで圧延し、出側テーブルへ送り出します。` +
+          (d.target <= CONFIG.CROP_SHEAR.MAX_TH ? '75 mm シャーで先端を切り落とし、' : '板厚 75 mm 超なので 75 mm シャーは使わず、') +
+          (divider ? `${divider === 'S30' ? '30 mm' : '75 mm'} シャーで ${CONFIG.PILER.SHEET_L / 1000} m 定尺に切り分けてパイラーへ積みます（約 ${sheets} 枚）。`
+                   : 'J-3 末端で止めてクレーンで板置き場へ払い出します。');
       if (coil && (d.target < CONFIG.COILER.TH_MIN)) note.push(`板厚 ${d.target} mm は巻取機の板厚範囲（${CONFIG.COILER.TH_MIN}〜${CONFIG.COILER.TH_MAX} mm）を下回ります`);
       if (d.width > T2.WIDTH_IN_MAX) warn.push(`トリム前巾が最大 ${T2.WIDTH_IN_MAX} mm を超えます`);
       if (finW < T2.WIDTH_OUT_MIN || finW > T2.WIDTH_OUT_MAX)
@@ -4358,6 +5194,7 @@ class UIManager {
                 `／ 巻取張力 ${(Rolling.coilTensionKg(od) / 1000).toFixed(1)} t` : '') +
         (note.length ? `<br><span style="color:#8a5b00">△ ${note.join(' / ')}</span>` : '') +
         (warn.length ? `<br><span style="color:var(--crit);font-weight:700">※ ${warn.join(' / ')}</span>` : '');
+      this._summaries();
       return d;
     };
     // 目標板厚は数値入力とスライダのどちらからでも。待機中の変更は即座に反映して
@@ -4374,12 +5211,13 @@ class UIManager {
     for (const [id, mode] of [['cut-solid', 'solid'], ['cut-half', 'half'], ['cut-xray', 'xray']])
       on(id, 'click', () => this.setCutaway(mode));
 
-    on('chk-labels',  'change', e => this.bus.emit('CMD_VIEW', { labels: e.target.checked }));
     for (const [id, q] of [['q-high', 'high'], ['q-std', 'std'], ['q-lite', 'lite']])
       on(id, 'click', () => this.setQuality(q));
-    on('chk-coolant', 'change', e => this.bus.emit('CMD_SET_ENV', { coolant: e.target.checked }));
-    on('chk-steam',   'change', e => this.bus.emit('CMD_SET_ENV', { steam: e.target.checked }));
-    on('chk-supply-anim', 'change', e => this.bus.emit('CMD_SET_SUPPLY_ANIM', e.target.checked));
+    on('chk-coolant', 'change', e => { this.bus.emit('CMD_SET_ENV', { coolant: e.target.checked }); this._summaries(); });
+    // 板面クーラントは熱計算に入るので、待機中ならスケジュール予測も作り直す
+    on('chk-stripcool', 'change', e => { this.bus.emit('CMD_SET_ENV', { stripCool: e.target.checked }); this._slabChanged(); });
+    on('chk-steam',   'change', e => { this.bus.emit('CMD_SET_ENV', { steam: e.target.checked }); this._summaries(); });
+    on('chk-supply-anim', 'change', e => { this.bus.emit('CMD_SET_SUPPLY_ANIM', e.target.checked); this._summaries(); });
 
     addEventListener('keydown', e => {
       if (e.target.matches('input,select,textarea')) return;
@@ -4387,30 +5225,36 @@ class UIManager {
       if (k === ' ') { e.preventDefault(); this.toggleRun(); }
       else if (k === 'p') this.togglePause();
       else if (k === 'r') this.bus.emit('CMD_RESET');
-      else if (k === 'l') { const c = $('chk-labels'); c.checked = !c.checked; c.dispatchEvent(new Event('change')); }
+      else if (k === 'l') this.setLabels(!this.labelsOn);
+      else if (k === 'm') this.setSidebar(document.body.classList.contains('sb-collapsed'));
       else if (k === 'c') this.setCutaway(this.cutaway === 'half' ? 'xray' : this.cutaway === 'xray' ? 'solid' : 'half');
       else if (k >= '1' && k <= String(CONFIG.VIEWS.length)) this.selectView(+k - 1);
     });
     this._manualLabels();
   }
 
-  /** 素材パネルの変更。待機中なら即時反映、運転中は表示だけ更新して «適用» に委ねる。 */
+  /**
+   * 素材パネルの変更。待機中なら即時反映（適用ボタンは出さない）、運転中は表示だけ更新して
+   * «変更を適用（運転を中止してやり直す）» に委ねる。
+   */
   _slabChanged() {
     const d = this.dims();
     clearTimeout(this._applyT);
     if (!this.busy) this._applyT = setTimeout(() => this.bus.emit('CMD_SET_SLAB', d), 180);
-    $('btn-apply-size').innerHTML = this.busy
-      ? '<i class="fa-solid fa-check"></i>適用してリセット（運転を中止して反映）'
-      : '<i class="fa-solid fa-check"></i>適用してリセット';
+    this._applyVisibility();
+  }
+  _applyVisibility() {
+    $('btn-apply-size').style.display = this.busy ? 'flex' : 'none';
+    $('note-apply').style.display = this.busy ? 'none' : 'block';
   }
 
   _listen() {
     this.bus.on('STATE_UPDATE', p => this.onState(p));
-    this.bus.on('STATE_PASS', i => { this.passIndex = i; this.renderSchedule(); });
+    this.bus.on('STATE_PASS', i => { this.passIndex = i; this.renderSchedule(); this._summaries(); });
     this.bus.on('STATE_RESET', () => { this.busy = false; this.paused = false; this.passIndex = -1;
-      this.peak = {}; this.renderSchedule(); this._startBtn(); this._banner('idle'); });
-    this.bus.on('STATE_FINISHED', () => { this.busy = false; this._startBtn(); this._banner('done'); });
-    this.bus.on('STATE_TRIP', (text) => { this.busy = false; this.tripText = text; this._startBtn(); this._banner('trip'); });
+      this.peak = {}; this.renderSchedule(); this._startBtn(); this._banner('idle'); this._applyVisibility(); this._summaries(); });
+    this.bus.on('STATE_FINISHED', () => { this.busy = false; this._startBtn(); this._banner('done'); this._applyVisibility(); });
+    this.bus.on('STATE_TRIP', (text) => { this.busy = false; this.tripText = text; this._startBtn(); this._banner('trip'); this._applyVisibility(); });
     this.bus.on('SYS_MESSAGE', m => this.toast(m.text, m.kind));
     this.bus.on('STATE_WARN', w => { this.warn = w; if (w) this.toast(w.text, w.kind); this._banner(); });
     this.peak = {};
@@ -4420,10 +5264,10 @@ class UIManager {
   toggleRun() {
     if (this.busy) { this.bus.emit('CMD_RESET'); return; }
     this.busy = true; this.paused = false; this.bus.emit('CMD_PAUSE', false);
-    this.bus.emit('CMD_START_AUTO'); this._startBtn();
+    this.bus.emit('CMD_START_AUTO'); this._startBtn(); this._applyVisibility();
   }
   togglePause() { if (!this.busy) return; this.paused = !this.paused; this.bus.emit('CMD_PAUSE', this.paused);
-    $('btn-pause').innerHTML = this.paused ? '<i class="fa-solid fa-play"></i>再開' : '<i class="fa-solid fa-pause"></i>一時停止';
+    $('btn-pause').innerHTML = (this.paused ? '<i class="fa-solid fa-play"></i>再開' : '<i class="fa-solid fa-pause"></i>一時停止') + '<span class="kbd">P</span>';
     this._banner(); }
   _startBtn() {
     const b = $('btn-start');
@@ -4431,7 +5275,7 @@ class UIManager {
     b.innerHTML = this.busy
       ? '<i class="fa-solid fa-stop"></i><span>運転を中止</span><span class="kbd">Space</span>'
       : '<i class="fa-solid fa-play"></i><span>圧延サイクル開始</span><span class="kbd">Space</span>';
-    $('btn-pause').innerHTML = '<i class="fa-solid fa-pause"></i>一時停止';
+    $('btn-pause').innerHTML = '<i class="fa-solid fa-pause"></i>一時停止<span class="kbd">P</span>';
   }
   selectView(i) {
     this.chips.forEach((c, k) => c.setAttribute('aria-pressed', k === i));
@@ -4443,11 +5287,13 @@ class UIManager {
       $(id).setAttribute('aria-pressed', m === mode);
     $('cut-mode-v').textContent = { solid: '実体', half: '半断面', xray: '透視' }[mode];
     this.bus.emit('CMD_VIEW', { cutaway: mode });
-    this._cutNote();
+    this._cutNote(); this._summaries();
   }
   setQuality(q) {
+    this.quality = q;
     for (const [id, k] of [['q-high', 'high'], ['q-std', 'std'], ['q-lite', 'lite']])
       $(id).setAttribute('aria-pressed', k === q);
+    this._summaries();
     $('der-quality').textContent = {
       high: '高：環境反射あり・影あり・解像度 2×まで。GPU に余裕がある場合に。',
       std:  '標準：環境反射あり・影あり・解像度 1.5×まで',
@@ -4531,12 +5377,29 @@ class UIManager {
       }
       else if (p.finish.winding) { cls = 'is-run'; ic = 'fa-arrows-spin'; st = 'コイル巻取中';
         hint = `外径 Φ${p.finish.od.toFixed(0)} mm ／ ${(p.finish.coilMass / 1000).toFixed(1)} t ／ 張力 ${(p.finish.tensionKg / 1000).toFixed(1)} t`; }
+      else if (p.finish.cropStage !== 'IDLE' && p.finish.cropStage !== 'DONE') {
+        const f = p.finish; cls = 'is-run'; ic = 'fa-scissors'; st = `75 mm シャー 端部切断 ${Math.min(f.cropIndex + 1, f.cropCuts)}/${f.cropCuts}`;
+        hint = { STOP: '先端を刃の手前で減速・停止', ALIGN: `先端を刃から ${f.cropEach} mm 先へ位置決め`, CUT: '下台が上昇し、固定上刃で剪断',
+                 RETURN: '下台が下降', EJECT: '端材をプッシャでコンベアへ押し出し', RETRACT: 'プッシャが待機位置へ戻る' }[f.cropStage] ?? '';
+        hint += ` ／ 端材はコンベアでパレットへ（${f.scrapRest} 個積載）`;
+      }
+      else if (p.finish.plateStage === 'DIVIDE') {
+        const f = p.finish, PL = CONFIG.PILER; cls = 'is-run'; ic = 'fa-layer-group';
+        st = `${f.divideShear === 'S30' ? '30 mm' : '75 mm'} シャーで切り分け・パイラー積み`;
+        hint = { ADVANCE: `板を ${PL.SHEET_L / 1000} m 送っています`, CUT: '剪断中', RETURN: '刃が戻る', LAST: '残りの板をパイラーへ送っています', PILE: 'アームが開いて山へ落とします' }[f.divideStage] ?? '';
+        hint += ` ／ シート ${f.sheetCount} 枚（積載 ${f.piled}）`;
+      }
+      else if (p.finish.plateStage === 'RUNOUT' || p.finish.plateStage === 'SIDE' || p.finish.plateStage === 'DROP') {
+        cls = 'is-run'; ic = 'fa-truck-ramp-box'; st = '板材の払い出し（75 mm 超）';
+        hint = { RUNOUT: 'J-3 末端まで送っています', SIDE: 'クレーンで駆動側の板置き場へ横移送', DROP: '板置き場へ降ろしています' }[p.finish.plateStage];
+      }
       else if (m.passIndex >= 0) {
-        const sch = CONFIG.SCHEDULE[m.passIndex];
+        const sch = CONFIG.SCHEDULE[m.passIndex], g = m.tableGroup;
         cls = 'is-run'; ic = 'fa-arrows-left-right'; st = `第 ${sch.pass} パス ${m.passPhase === 'SETUP' ? 'セットアップ' : '圧延中'}`;
-        hint = m.passPhase === 'SETUP'
+        hint = (m.passPhase === 'SETUP'
           ? `圧下シリンダでギャップを ${sch.gap} mm へ設定中（現在 ${m.gap.toFixed(0)} mm）`
-          : `出側厚 ${sch.gap} mm ／ ${sch.dir > 0 ? '前進' : '逆行'} ${sch.speed} mpm`;
+          : `出側厚 ${sch.gap} mm ／ ${sch.dir > 0 ? '前進' : '逆行'} ${sch.speed} mpm`)
+          + (g ? ` ／ テーブル選択 ${g.id}（${g.from}〜${g.to}）` : '');
       }
     }
     const b = $('status-banner');

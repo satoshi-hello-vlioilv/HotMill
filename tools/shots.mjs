@@ -21,7 +21,7 @@ const F = await page.evaluate(() => window.__CFG.FLIP);
 const fx = (x) => x * F;      // 正準向き（第1パス +X）で書いた X を実配置へ
 
 // 1) ミル周り: 地面の無いピット上に立つ架台・支柱を斜め下から
-await page.evaluate(() => { const c = document.getElementById('chk-labels'); c.checked = false; c.dispatchEvent(new Event('change')); });
+await page.evaluate(() => window.__app.ui.setLabels(false));
 await page.evaluate(() => window.__app.ui.setCutaway('solid'));
 const cut = async (m) => page.evaluate((m) => window.__app.ui.setCutaway(m), m);
 await page.evaluate(([p, t]) => window.__cam(p, t), [[fx(9000), 1200, 9000], [fx(1500), 300, 0]]);
@@ -37,10 +37,15 @@ await shot('drive');
 
 // 3) 転倒機: スラブを立てた瞬間（SET 完了）と倒し切った瞬間
 await page.evaluate(() => { window.__startAuto(true); window.__ff(P => P.supply.phase === 'TILT'); });
-await page.evaluate(([p, t]) => window.__cam(p, t), [[fx(-20000), 3500, 9000], [fx(-13200), 1500, 3800]]);
+await page.evaluate(([p, t]) => window.__cam(p, t), [[fx(-40000), 3500, 9000], [fx(-33000), 1500, 3800]]);
 await shot('tilter-set');
-await page.evaluate(() => window.__ff(P => P.supply.phase === 'RUNIN'));
+await page.evaluate(() => window.__ff(P => P.supply.phase === 'GRAB'));
 await shot('tilter-down');
+await page.evaluate(() => window.__ff(P => P.supply.phase === 'TRANSFER' && P.supply.p.transfer > 0.5));
+await page.evaluate(([p, t]) => window.__cam(p, t), [[fx(-24000), 6000, 9000], [fx(-31000), 2200, 2000]]);
+await shot('transfer-mid');
+await page.evaluate(() => window.__ff(P => !P.supply.active));
+await shot('transfer-done');
 
 // 3b) 反り: 厚板パスでロールから出た先端が反り上がり、自重で垂れて着地する様子（第3パス）
 await cut('half');
@@ -84,5 +89,22 @@ await shot('shear-cut2');
 await page.evaluate(() => window.__ff(P => P.finish.cropDone));
 await page.evaluate(() => window.__ff((P, n) => n > 240));
 await shot('shear-after');
+await page.evaluate(() => window.__ff((P, n) => n > 120 * 12));
+await page.evaluate(([p, t]) => window.__cam(p, t), [[fx(34500), 3000, 10800], [fx(31000), 300, 7000]]);
+await shot('scrap-pallet');
+// 6) 板材 (24 mm): 30 mm シャーで切り分け → パイラー
+// 運転中は素材変更が即時反映されないので、先にリセットして待機状態にしてから目標板厚を変える
+await page.evaluate(() => { document.getElementById('btn-reset').click(); const r = document.getElementById('rng-target'); r.value = 24; r.dispatchEvent(new Event('input')); });
+await page.waitForTimeout(500);
+await page.evaluate(() => { window.__startAuto(false); window.__ff(P => P.finish.sheets.length >= 1 && P.finish.divideStage === 'CUT'); });
+await page.evaluate(([p, t]) => window.__cam(p, t), [[fx(88000), 5000, 13000], [fx(84500), 800, 0]]);
+await shot('piler-cut');
+await page.evaluate(([p, t]) => window.__cam(p, t), [[fx(78000), 3000, 6000], [fx(81200), 900, 0]]);
+await shot('shear30-cut');
+await page.evaluate(([p, t]) => window.__cam(p, t), [[fx(88000), 5000, 13000], [fx(84500), 800, 0]]);
+await page.evaluate(() => window.__ff(P => P.finish.piled >= 2));
+await shot('piler-piled');
+await page.evaluate(() => window.__ff(P => P.finish.done));
+await shot('piler-done');
 
 await browser.close();

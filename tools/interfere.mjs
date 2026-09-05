@@ -24,8 +24,10 @@ const out = await p.evaluate(async () => {
   for (const st of W.guideView.stations) for (const g of st.sides)
     g.children.forEach(c => { if (c.isInstancedMesh) allow.add(c); });   // サイドガイドローラ
   const F = W.finishView;
-  add([F.knives, F.lowerRolls, F.upperRoll, F.mandrel, F.coil, F.bridge, F.cropBed, F.cropPiece,
-       F.holdRoll, F.holdArm, F.holdCyl, F.knifeShafts, F.segments, F.pallet]);
+  add([F.knives, F.lowerRolls, F.upperRoll, F.mandrel, F.coil, F.bridge, F.cropBed, F.cropPiece, F.cropKnife, F.cropUpperKnife,
+       F.holdRoll, F.holdArm, F.holdCyl, F.knifeShafts, F.segments, F.pallet, F.pieceHost, F.s30Lower, F.s30Upper, F.s30Hold, F.pilerLift]);
+  for (const side of (F.pilerSides ?? [])) add(side.rolls);
+  W.guideView.headers && add(W.guideView.headers);
   const S = W.supplyView;
   add([S.runIn, S.cross, S.armRolls, S.tilterArm]);
 
