@@ -4,38 +4,14 @@
 //  3. シーン中の全メッシュを三角形単位の AABB に落とし、スラブボックスと重なるものを拾う
 //  4. «当たってよい部材»（圧延ロール・テーブルロール・サイドガイドローラ・刃物など）を
 //     除外し、残ったものを干渉として報告する
-import { chromium } from 'playwright';
-import fs from 'node:fs'; import path from 'node:path';
-const T = path.resolve('node_modules/three');
-const b = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox','--disable-dev-shm-usage']});
-const p = await b.newPage({viewport:{width:900,height:520}});
-p.setDefaultTimeout(600000);
-p.on('pageerror', e=>console.log('[ERR]', e.message));
-p.on('console', m=>{ if(m.type()==='error' && !m.text().includes('ERR_CONNECTION')) console.log('[CONSOLE]', m.text()); });
-await p.route('**/__three__', r=>r.fulfill({contentType:'application/javascript', body:fs.readFileSync(T+'/build/three.module.js','utf8')}));
-await p.route('**/examples/jsm/**', r=>{ const rel=new URL(r.request().url()).pathname.split('/examples/jsm/')[1];
-  const f=T+'/examples/jsm/'+rel; if(!fs.existsSync(f)) return r.fulfill({status:404,body:''});
-  r.fulfill({contentType:'application/javascript', body:fs.readFileSync(f,'utf8').replace(/from ['"]three['"]/g,"from '/__three__'")});});
-await p.route('**/font-awesome/**', r=>r.fulfill({contentType:'text/css', body:''}));
-await p.route('**/index.html', r=>{ let h=fs.readFileSync('/home/user/HotMill/index.html','utf8');
-  h=h.replace(/\bnew App\(\);/,'window.__CFG=CONFIG; window.__app=new App();');
-  h=h.replace(/"three":\s*"[^"]+"/,'"three": "/__three__"').replace(/"three\/addons\/":\s*"[^"]+"/,'"three/addons/": "/x/examples/jsm/"');
-  r.fulfill({contentType:'text/html', body:h}); });
-await p.goto('http://localhost/index.html',{waitUntil:'load'});
-await p.waitForFunction(()=>!!window.__app,null,{timeout:25000});
-await p.waitForTimeout(1200);
+import { openApp, installHelpers } from './harness.mjs';
+const { browser: b, page: p } = await openApp({ viewport: { width: 900, height: 520 }, quiet: false });
+await installHelpers(p);
 
 const out = await p.evaluate(async () => {
   const A = window.__app, W = A.world, P = A.physics, K = window.__CFG, sc = K.SCALE;
-  const THREE = W.scene.constructor.prototype.constructor === undefined ? null : null; // 未使用
-
-  A._probed = true;
-  const anim = document.getElementById('chk-supply-anim');
-  anim.checked = false; anim.dispatchEvent(new Event('change'));
-  document.getElementById('btn-reset').click();
-  document.getElementById('btn-start').click();
-  window.requestAnimationFrame = () => 0;
+  
+  window.__startAuto(false);
 
   // --- 当たってよい部材（参照で照合する） ---
   const allow = new Set();
@@ -48,8 +24,8 @@ const out = await p.evaluate(async () => {
   for (const st of W.guideView.stations) for (const g of st.sides)
     g.children.forEach(c => { if (c.isInstancedMesh) allow.add(c); });   // サイドガイドローラ
   const F = W.finishView;
-  add([F.knives, F.lowerRolls, F.upperRoll, F.mandrel, F.coil, F.bridge, F.cropRam, F.cropPiece,
-       F.holdRoll, F.holdArm, F.knifeShafts, F.cropHold]);
+  add([F.knives, F.lowerRolls, F.upperRoll, F.mandrel, F.coil, F.bridge, F.cropBed, F.cropPiece,
+       F.holdRoll, F.holdArm, F.holdCyl, F.knifeShafts, F.segments, F.pallet]);
   const S = W.supplyView;
   add([S.runIn, S.cross, S.armRolls, S.tilterArm]);
 
@@ -92,9 +68,11 @@ const out = await p.evaluate(async () => {
   const sample = () => {
     const sl = P.slab, m = P.mill;
     if (!sl.onLine || sl.length < 1) return;
-    const y0 = m.passLine, y1 = m.passLine + sl.thickness;
+    // 板材の払い出し中は横移送・降下のオフセットを含める（描画と同じ量）
+    const fz = P.finish.plateZ || 0, fy = P.finish.plateY || 0;
+    const y0 = m.passLine + fy, y1 = m.passLine + sl.thickness + fy;
     const box = { x0: Math.min(sl.xMin, sl.xMax), x1: Math.max(sl.xMin, sl.xMax),
-                  y0, y1, z0: -sl.width/2, z1: sl.width/2 };
+                  y0, y1, z0: -sl.width/2 + fz, z1: sl.width/2 + fz };
     // 端の «かすり» を無視するため各方向に eps だけ縮める
     const bx0=box.x0+eps, bx1=box.x1-eps, by0=box.y0+eps, by1=box.y1-eps, bz0=box.z0+eps, bz1=box.z1-eps;
     if (bx1<=bx0 || by1<=by0 || bz1<=bz0) return;

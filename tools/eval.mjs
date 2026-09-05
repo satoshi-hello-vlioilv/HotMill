@@ -4,49 +4,15 @@
  * 外部CDNへ到達できない環境のため three.js はローカルへルーティングする。
  * index.html 自体は `new App()` を window に露出する1行だけの改変で評価する。
  */
-import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { openApp, __dirname, DEFAULT_TARGET } from './harness.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const THREE_DIR = path.join(__dirname, 'node_modules/three');
-const TARGET = process.argv[2] || '/home/user/HotMill/index.html';
+const TARGET = process.argv[2] || DEFAULT_TARGET;
 const LABEL = process.argv[3] || 'baseline';
 
-const readThree = () => fs.readFileSync(path.join(THREE_DIR, 'build/three.module.js'), 'utf8');
-
 const run = async () => {
-  const browser = await chromium.launch({
-    executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
-           '--no-sandbox', '--disable-dev-shm-usage'],
-  });
-  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
-
-  const consoleErrors = [];
-  page.on('console', m => { if (m.type() === 'error' && !/ERR_CONNECTION_REFUSED/.test(m.text())) consoleErrors.push(m.text()); });
-  page.on('pageerror', e => consoleErrors.push('pageerror: ' + e.message));
-
-  await page.route('**/__three__', r => r.fulfill({ contentType: 'application/javascript', body: readThree() }));
-  await page.route('**/examples/jsm/**', r => {
-    const rel = new URL(r.request().url()).pathname.split('/examples/jsm/')[1];
-    const f = path.join(THREE_DIR, 'examples/jsm', rel);
-    if (!fs.existsSync(f)) return r.fulfill({ status: 404, body: '' });
-    r.fulfill({ contentType: 'application/javascript',
-      body: fs.readFileSync(f, 'utf8').replace(/from ['"]three['"]/g, `from '/__three__'`) });
-  });
-  await page.route('**/font-awesome/**', r => r.fulfill({ contentType: 'text/css', body: '' }));
-  await page.route('**/index.html', r => {
-    let h = fs.readFileSync(TARGET, 'utf8');
-    h = h.replace(/\bnew App\(\);/, 'window.__CFG = CONFIG; window.__ROLL = Rolling; window.__app = new App();');
-    h = h.replace(/"three":\s*"[^"]+"/, '"three": "/__three__"');
-    h = h.replace(/"three\/addons\/":\s*"[^"]+"/, '"three/addons/": "/x/examples/jsm/"');
-    r.fulfill({ contentType: 'text/html', body: h });
-  });
-
-  await page.goto('http://localhost/index.html', { waitUntil: 'load' }).catch(() => {});
-  await page.waitForFunction(() => !!window.__app, null, { timeout: 25000 });
+  const { browser, page, errors: consoleErrors } = await openApp({ target: TARGET, viewport: { width: 1920, height: 1080 }, quiet: true });
 
   // 実インスタンスを掴んでレンダラを計装する（render はインスタンスプロパティ）
   await page.evaluate(async () => {
@@ -328,7 +294,7 @@ const run = async () => {
     // 9) 巻取パス以外は必ずテーブルに載る（載らない厚みまで薄くしない）
     const R2 = window.__ROLL;
     const th0 = CFG.CAST_TH[0] - 2 * 12, L0 = CFG.LEN_DEFAULT, W0 = CFG.WID_DEFAULT;
-    const sch = R2.buildSchedule(th0, K.SLAB.FINISH.COIL.def, W0, CFG.TEMP_DEFAULT, { coil: true, length: L0 });
+    const sch = R2.buildSchedule(th0, K.SLAB.FINISH.DEFAULT, W0, CFG.TEMP_DEFAULT, { coil: true, length: L0 });
     let overMax = 0, overPass = 0;
     for (const q of sch) {
       if (q.coil) continue;                                  // 巻取パスはコイルに巻き取るので対象外
@@ -448,39 +414,26 @@ const run = async () => {
     ok('リール中心は 3ロールから 1,450 mm・パスライン上 1,200 mm（図面）',
        Math.abs(Math.abs(K.COILER.X - K.COILER.DEFLECTOR_X) - 1450) < 1 && K.COILER.Y_ABOVE === 1200,
        `水平 ${Math.abs(K.COILER.X - K.COILER.DEFLECTOR_X)} mm / 高さ ${K.COILER.Y_ABOVE} mm`);
-    // アップカットは «刃がベッドを貫いてせり上がれる» ことが成立条件。
-    // ベッド側の三角形が刃の通り道（スリット）に入り込んでいないかを実形状で見る。
+    // 75 mm シャー（上刃固定・下台上昇式）の成立条件
     {
-      const S = K.CROP_SHEAR, F = K.FLIP, sc = K.SCALE;
-      const xKnife = -F * S.BLADE_T / 2, half = S.SLOT / 2;
-      const grp = window.__app.world.finishView.cropShear;
-      let intrude = 0;
-      grp.children.forEach(o => {
-        if (!o.isMesh || o === window.__app.world.finishView.cropRam) return;
-        if (o === window.__app.world.finishView.cropHold) return;
-        if (o === window.__app.world.finishView.cropPusher) return;   // 可動の払い出し機構
-        const pos = o.geometry.attributes.position;
-        const zw = K.TABLE.BARREL / 2 + 120;          // 刃の胴幅（この範囲だけが通り道）
-        for (let i = 0; i < pos.count; i++) {
-          const x = pos.getX(i) / sc + o.position.x / sc, y = pos.getY(i) / sc, z = pos.getZ(i) / sc;
-          // 通り道を見るのはベッド（パスラインより下）。パスラインより上は固定上刃が
-          // 刃と隣り合うのが正しい構造なので対象外にする。
-          if (y > K.MILL.PASS_LINE - 900 && y < K.MILL.PASS_LINE - 5 &&
-              Math.abs(z) < zw && Math.abs(x - xKnife) < half)
-            { const d = half - Math.abs(x - xKnife);
-              if (d > intrude) { intrude = d; window.__intr = { i: grp.children.indexOf(o),
-                x: Math.round(x), y: Math.round(y), z: Math.round(z), n: pos.count }; } }
-        }
-      });
-      ok('アップカット刃の通り道（ベッドのスリット）が塞がっていない', intrude === 0,
-         `スリット幅 ${S.SLOT} mm ／ 侵入 ${intrude.toFixed(0)} mm ${JSON.stringify(window.__intr ?? {})}`);
-      const travelTop = K.MILL.PASS_LINE + S.MAX_TH + S.UPPER_CLR + 60;
-      ok('刃の上昇端が固定上刃を越える（切り離せる）',
-         travelTop >= K.MILL.PASS_LINE + S.UPPER_CLR + 10,
-         `刃先の上昇端 ${travelTop} mm ＞ 固定上刃の下端 ${K.MILL.PASS_LINE + S.UPPER_CLR} mm`);
-      ok('押えの退避位置が最大板厚を越える',
-         S.HOLD_OPEN > S.MAX_TH, `退避 ${S.HOLD_OPEN} mm ＞ 最大板厚 ${S.MAX_TH} mm`);
-      ok('端材長は実機の範囲（800 mm 以下）', S.CROP_LEN <= 800, `${S.CROP_LEN} mm`);
+      const S = K.CROP_SHEAR, FV = window.__app.world.finishView, sc = K.SCALE, P0 = K.MILL.PASS_LINE;
+      ok('下台の行程で下刃先が固定上刃を越える（切り離せる）', S.UPPER_CLR + S.OVERTRAVEL >= S.UPPER_CLR + 10,
+         `行程 ${S.UPPER_CLR + S.OVERTRAVEL} mm ＞ 上刃刃先 ${S.UPPER_CLR} mm`);
+      ok('固定上刃の刃先は最大板厚 75 mm を通す高さ', S.UPPER_CLR >= S.MAX_TH, `刃先 ${S.UPPER_CLR} mm ≥ ${S.MAX_TH} mm`);
+      const bb = new window.__T.Box3().setFromObject(FV.cropShear);
+      ok('シャー架構はコンパクト（最上部がパスライン上 1.5 m 以内）', bb.max.y / sc <= P0 + 1500, `最上部 ${(bb.max.y / sc - P0).toFixed(0)} mm`);
+      ok('板押えを持たない', FV.cropHold === undefined && FV.cropBed !== undefined, `下台=${!!FV.cropBed} 押え=${!!FV.cropHold}`);
+      // 端部切断の計画: 板厚 60 mm 換算で、全材質・全幅・温度域で 1 カット 300〜500、総量 300〜2400
+      const sl = window.__app.physics.slab, keep = { th: sl.thickness, w: sl.width, T: Array.from(sl.T), al: sl.alloy, h0: sl.initialThickness };
+      let cutMin = 1e9, cutMax = 0, totMin = 1e9, totMax = 0;
+      for (const [k, a] of Object.entries(K.ALLOYS)) for (const w of [900, 1500, 2200]) for (const T of [a.T_ROLL[0], a.T_ROLL[1]]) {
+        sl.thickness = 60; sl.width = w; sl.initialThickness = 382; sl.alloy = a; sl.T.fill(T); sl.cropped = false;
+        const plan = window.__ROLL.cropPlan(sl.overhangAt(1));
+        cutMin = Math.min(cutMin, plan.each); cutMax = Math.max(cutMax, plan.each); totMin = Math.min(totMin, plan.total); totMax = Math.max(totMax, plan.total);
+      }
+      sl.thickness = keep.th; sl.width = keep.w; sl.T.set(keep.T); sl.alloy = keep.al; sl.initialThickness = keep.h0;
+      ok('1 カットは 300〜500 mm（板厚 60 mm・全材質・全幅・温度域）', cutMin >= S.CUT_MIN && cutMax <= S.CUT_MAX, `${cutMin}〜${cutMax} mm`);
+      ok('総切断長は 300〜2,400 mm（板厚 60 mm 換算）', totMin >= S.TOTAL_MIN && totMax <= S.TOTAL_MAX, `${totMin}〜${totMax} mm`);
       // --- 実機仕様との突き合わせ ---
       ok('シャー刃の寸法が実機仕様（75 × 180 × 2500 mm）',
          S.BLADE_T === 75 && S.BLADE_H === 180 && S.BLADE_L === 2500,
@@ -494,9 +447,6 @@ const run = async () => {
         ok('実運用の最大板幅でも定格剪断力を超えない', fw <= S.RATED_FORCE_T,
            `板厚 ${S.MAX_TH} × 幅 ${K.TRIMMER.WIDTH_IN_MAX} mm → ${fw.toFixed(0)} t`);
       }
-      ok('刃の行程が «待機はベッド下・上死点は固定上刃を越える»',
-         S.PARK > 0 && S.PARK + S.UPPER_CLR + S.OVERTRAVEL > S.PARK + S.MAX_TH,
-         `待機 パスライン下 ${S.PARK} mm → 上死点 パスライン上 ${S.UPPER_CLR + S.OVERTRAVEL} mm`);
       ok('上下刃のサイドクリアランスが板厚の 3〜8 %',
          S.CLEARANCE / S.MAX_TH >= 0.03 && S.CLEARANCE / S.MAX_TH <= 0.08,
          `${S.CLEARANCE} mm ＝ 板厚 ${S.MAX_TH} mm の ${(100 * S.CLEARANCE / S.MAX_TH).toFixed(1)} %`);
@@ -509,9 +459,54 @@ const run = async () => {
            E.Z_DROP > 0 && K.SUPPLY.SIDE_Z > 0, `Z_DROP ${E.Z_DROP} / 操作側 +Z`);
       }
     }
-    ok('75 mm シャーはアップカット（可動刃が下、固定刃が上）',
-       K.CROP_SHEAR.UPPER_CLR >= K.CROP_SHEAR.MAX_TH,
-       `固定上刃の下端はパスライン上 ${K.CROP_SHEAR.UPPER_CLR} mm（最大板厚 ${K.CROP_SHEAR.MAX_TH} mm）`);
+    // --- 巻取: 段付きコイル・拡縮マンドレル・押えアーム ---
+    {
+      const C = K.COILER, R2 = window.__ROLL, FV = window.__app.world.finishView, sc = K.SCALE, P0 = K.MILL.PASS_LINE;
+      const L56 = R2.coilLayers(56, 8);
+      ok('段数モデルの外径が図面の巻数（8 mm × 56 巻 = Φ1510）を再現する', Math.abs(L56.od - 1510) < 8, `56 巻 → Φ${L56.od.toFixed(0)}`);
+      const shrink = 2 * C.SEG_STROKE * Math.cos(Math.PI / 4);
+      ok('マンドレルの縮小でコイル内径 Φ610 から 20 mm 以上離れる', shrink >= 20, `外接径の減少 ${shrink.toFixed(0)} mm（ストローク ${C.SEG_STROKE}）`);
+      const eLo = R2.coilEntry(FV.coiler.position.x / sc + K.COILER.DEFLECTOR_X - C.X + K.FLIP * C.ROLL_LO_PITCH / 2, P0 + 4, C.X, P0 + C.Y_ABOVE, C.MANDREL_D / 2);
+      const eHi = R2.coilEntry(K.COILER.DEFLECTOR_X + K.FLIP * C.ROLL_LO_PITCH / 2, P0 + 4, C.X, P0 + C.Y_ABOVE, C.OD_MAX / 2 - 4);
+      ok('3ロール出側からコイルへの接線が最小径〜最大径で存在し、接点は下半分（下巻き）', !!eLo && !!eHi && Math.sin(eLo.phi) < 0 && Math.sin(eHi.phi) < 0,
+         `接点角 Φ610: ${eLo ? (eLo.phi * 180 / Math.PI).toFixed(0) : '-'}° / Φ1900: ${eHi ? (eHi.phi * 180 / Math.PI).toFixed(0) : '-'}°`);
+      const pvx = FV.holdPivot.x + C.X, pvy = FV.holdPivot.y;
+      ok('押えアームの支点がサイドトリマー架構の梁の位置にある', Math.abs(pvx - K.TRIMMER.X) <= 1200 && pvy >= P0 + 1500 && pvy <= P0 + 2100,
+         `支点 x=${pvx.toFixed(0)}（トリマー ${K.TRIMMER.X}）/ y=パスライン上 ${(pvy - P0).toFixed(0)} mm`);
+      ok('仕上げ形態は板厚で決まる（10 mm 以下はコイル、10 mm 超は板材）', R2.finishMode(10) === 'COIL' && R2.finishMode(10.5) === 'PLATE' && R2.finishMode(4) === 'COIL',
+         `10 → ${R2.finishMode(10)} / 10.5 → ${R2.finishMode(10.5)}`);
+    }
+    // --- 構造: ピット・ハウジング・ガイド・転倒機・駆動系 ---
+    {
+      const H = K.MILL.HOUSING, sc = K.SCALE, W3 = window.__app.world, T3 = window.__T;
+      const hOuter = H.POST_X + H.WIN_X / 2;
+      ok('テーブルローラはハウジング外面の外側から始まる', Math.min(...allX.map(Math.abs)) - CFG.ROLL_D_END / 2 > hOuter,
+         `最近接ローラ ${Math.min(...allX.map(Math.abs))} mm / ハウジング外面 ${hOuter} mm`);
+      const gb = new T3.Box3().setFromObject(W3.guideView.stations[0].sides[0]);
+      const gIn = Math.min(Math.abs(gb.min.x), Math.abs(gb.max.x)) / sc;
+      ok('サイドガイドはハウジングの外側にある', gIn > hOuter, `ガイド内端 ${gIn.toFixed(0)} mm / ハウジング外面 ${hOuter} mm`);
+      ok('ピット幅はソールプレートより広く、深さはソールプレート下面に一致する',
+         K.BUILDING.PIT.X * 2 > H.POST_X * 2 + H.WIN_X + 100 && K.BUILDING.PIT.DEPTH === -H.BOT_Y,
+         `ピット ±${K.BUILDING.PIT.X} / 深さ ${K.BUILDING.PIT.DEPTH} / BOT_Y ${H.BOT_Y}`);
+      const db = new T3.Box3().setFromObject(W3.driveView.group);
+      ok('駆動系（ピニオンスタンド・減速機・電動機）が床上にある', db.min.y / sc >= -1, `最下点 ${(db.min.y / sc).toFixed(0)} mm`);
+      const S = K.SUPPLY;
+      ok('転倒軸はベッド面より軸半径以上低い（軸が板に当たらない）', S.PIVOT_DROP >= S.SHAFT_D / 2 + 20, `PIVOT_DROP ${S.PIVOT_DROP} ≥ ${S.SHAFT_D / 2 + 20}`);
+      ok('装入スラブの移載位置がサイドガイドの外側', Math.abs(S.ENTRY_X) - K.SLAB.LEN_MAX / 2 > Math.abs(gb.max.x) / sc || Math.abs(S.ENTRY_X) - K.SLAB.LEN_MAX / 2 > Math.abs(gb.min.x) / sc,
+         `スラブ端 ${(Math.abs(S.ENTRY_X) - K.SLAB.LEN_MAX / 2).toFixed(0)} / ガイド外端 ${(Math.max(Math.abs(gb.min.x), Math.abs(gb.max.x)) / sc).toFixed(0)} mm`);
+    }
+    // --- 材質・温度・反り ---
+    {
+      const M = K.MATERIAL, R2 = window.__ROLL;
+      ok('材質表: 巻取温度 < 熱間域下限 < 上限（全材質）', Object.values(K.ALLOYS).every(a => a.T_COIL < a.T_ROLL[0] && a.T_ROLL[0] < a.T_ROLL[1]),
+         Object.keys(K.ALLOYS).join(' '));
+      ok('変形抵抗は温度が低いほど高い（全材質）', Object.keys(K.ALLOYS).every(k => R2.flowStress(350, 5, K.ALLOYS[k]) > R2.flowStress(450, 5, K.ALLOYS[k])),
+         Object.keys(K.ALLOYS).map(k => `${k}:${R2.flowStress(450, 5, K.ALLOYS[k]).toFixed(0)}`).join(' '));
+      ok('クーラント冷却は上面が強い（上面が冷えやすい）', M.H_COOL_TOP > M.H_COOL_BOT, `${M.H_COOL_TOP} / ${M.H_COOL_BOT} W/m²K`);
+      const sp = R2.curlSpan(2e-5, 60, 1500);
+      ok('反りの自重釣り合い: 60 mm 板・R=50 m で浮き上がり長 2〜15 m', sp.liftOff > 2000 && sp.liftOff < 15000, `ℓ=${(sp.liftOff / 1000).toFixed(1)} m / 先端 ${sp.tip.toFixed(0)} mm`);
+      ok('板厚方向の層数は奇数（中心層を持つ）', M.LAYERS % 2 === 1 && M.LAYERS >= 5, `${M.LAYERS} 層`);
+    }
     // 上下の刃を同じ Z に置くと刃どうしが食い込む。実配置を読んで軸方向の離れを見る。
     {
       const m = window.__app.world.finishView.knives.mesh.instanceMatrix.array, sc = K.SCALE;
