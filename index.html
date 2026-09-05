@@ -4367,7 +4367,11 @@ class SupplyView {
   /** トランスファークレーンの姿勢: 桁の X・トロリの Z・吊りビームの下面高さ・クランプの開き(0〜1) */
   _transferPose(sup, slab, P, pose) {
     const S = CONFIG.SUPPLY, TR = CONFIG.TRANSFER, F = CONFIG.FLIP, p = sup.p, th = slab.thickness;
-    const park = S.TILTER_X + F * TR.PARK_DX, xFlat = Layout.entryX(slab.length);
+    // xFlat は「転倒後にトランスファークレーンが降ろした位置」で固定。slab.length は圧延で
+    // 板が伸びるにつれ変化するため、そこから毎フレーム計算すると圧延終了間際に桁が
+    // 出側へ流れてしまう（実際には降ろした後クレーンはその場に留まる）。降ろした時点の
+    // 長さ（= 装入時の長さ）で固定した slab.initialLength を使う。
+    const park = S.TILTER_X + F * TR.PARK_DX, xFlat = Layout.entryX(slab.initialLength);
     const grabBot = P + th + 700, high = grabBot + TR.LIFT;        // 掴む高さ（板上面 + 700）／ 吊り上げ高さ
     const ph = sup.active ? sup.phase : (slab.onLine ? 'DONE' : 'LID');
     switch (ph) {
