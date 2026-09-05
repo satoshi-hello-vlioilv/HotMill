@@ -1,0 +1,4 @@
+tools/node_modules/
+tools/*.png
+tools/shots/
+tools/*.json
