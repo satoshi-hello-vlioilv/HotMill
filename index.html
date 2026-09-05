@@ -740,7 +740,7 @@ const CONFIG = {
    * 数値は熱間圧延域の公表データからの代表値（推定を含む）。 */
   ALLOYS: {
     A1050: { name: 'A1050  純アルミ',        series: 1000, C: 20, b: 0.0050, m: 0.15, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
-    A3003: { name: 'A3003  Al-Mn',          series: 3000, C: 32, b: 0.0055, m: 0.13, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
+    A3003: { name: 'A3003  Al-Mn（既定）',    series: 3000, C: 32, b: 0.0055, m: 0.13, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
     A4045: { name: 'A4045  Al-Si（ろう材）',  series: 4000, C: 30, b: 0.0060, m: 0.12, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
     A5052: { name: 'A5052  Al-2.5Mg',       series: 5000, C: 52, b: 0.0060, m: 0.12, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
     A5083: { name: 'A5083  Al-4.5Mg',       series: 5000, C: 75, b: 0.0068, m: 0.11, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
@@ -749,7 +749,7 @@ const CONFIG = {
   },
 
   MATERIAL: {
-    ALLOY: 'A5052',                                    // 選択中の材質（ALLOYS のキー）
+    ALLOY: 'A3003',                                    // 選択中の材質（ALLOYS のキー）。既定は汎用の 3003
     TREF: 450,                                         // 変形抵抗モデルの基準温度
     // 可逆圧延で材料温度を決める主因はロール抜熱。接触熱伝達率は熱間圧延の実測域
     // （20〜100 kW/m²K）の上側を採る。
@@ -1094,12 +1094,15 @@ const Rolling = {
     const tc = r.Ld / v;
     const x = 2 * M.H_ROLL * tc / (rc * (hOut / 1000));
     const chill = (T - M.T_ROLL) * (1 - Math.exp(-x));
+    // パス中の板は入側厚の部分と出側厚の部分が混在する。表面からの放熱に効く実効板厚は
+    // 体積 ÷ 平均長さ ＝ 2·hOut/(1 + hOut/hIn)（運転時の hEff と同じ考え方）
+    const hEff = 2 * hOut / (1 + hOut / hIn) / 1000;
     // クーラント: 冷却域 COOL_ZONE を通過する時間だけ上下面に効く（上面が強い）
-    const cool = (M.H_COOL_TOP + M.H_COOL_BOT) * (T - M.T_COOL) * (M.COOL_ZONE / v) / (rc * (hOut / 1000));
+    const cool = (M.H_COOL_TOP + M.H_COOL_BOT) * (T - M.T_COOL) * (M.COOL_ZONE / v) / (rc * hEff);
     // パス時間 ≒ 材長 / 速度。板厚が薄いほど表面放熱で冷えやすい。
     const Tk = T + 273.15, Ak = M.T_AMBIENT + 273.15;
     const q = M.EMISSIVITY * 5.67e-8 * (Tk ** 4 - Ak ** 4) + M.H_AIR * (T - M.T_AMBIENT);
-    const surface = 2 * q * passTime / (rc * (hOut / 1000));
+    const surface = 2 * q * passTime / (rc * hEff);
     return r.heat - chill - cool - surface;
   },
 
@@ -1194,8 +1197,13 @@ const Rolling = {
         while (v > 10 && Rolling.solve(hh, hOut, width, v, TT, 0, al).powerKW > pLimit) v -= 5;
         const T0 = TT;
         TT += Rolling.passTempChange(hh, hOut, v, TT, Rolling.passTime(L0 * h0 / hOut, v), al);
-        // 予測荷重: パス終端温度で見た荷重に、表層硬化ぶん（層平均で 2〜3 割増）を掛ける
-        forces.push(Rolling.solve(hh, hOut, width, v, Math.min(T0, TT), 0, al).forceTon * P.LAYER_LOAD_K);
+        // 予測荷重: パス終端温度で見た荷重に、表層硬化ぶんを掛ける。表層の冷えは厚板ほど
+        // 残る（薄板は伝導で均される）ので、係数は板厚 10 mm で 1.0、60 mm 以上で LAYER_LOAD_K。
+        // 巻取パスは前方張力で荷重が下がる（運転時と同じ式）
+        const isCoilPass = coil && i === (coilPass >= 0 ? coilPass : drafts.length - 1);
+        const tens = isCoilPass ? Rolling.coilTension(hOut, width) : 0;
+        const layerK = 1 + (P.LAYER_LOAD_K - 1) * Num.clamp((hOut - 10) / 50, 0, 1);
+        forces.push(Rolling.solve(hh, hOut, width, v, Math.min(T0, TT), tens, al).forceTon * layerK);
         tEnds.push(TT);
         hh = hOut;
         return v;
@@ -1221,13 +1229,18 @@ const Rolling = {
     const M = CONFIG.MILL, maxF = Math.max(0, ...sch.map(q => q.force || 0));
     const last = sch[sch.length - 1], tEnd = last ? last.tEnd : Infinity;
     const floor = Rolling.tempFloor(coil, alloy);
-    const reasons = [];
-    if (maxF > M.RATED_FORCE_T) {
-      const over = sch.find(q => q.force > M.RATED_FORCE_T);
-      reasons.push(`第 ${over.pass} パスの予測荷重 ${maxF > 9999 ? '9,999 t 以上' : Math.round(maxF).toLocaleString() + ' t'} が常用最大 ${M.RATED_FORCE_T.toLocaleString()} t を超えます`);
+    const reasons = [], notes = [];
+    const fmt = (f) => f > 9999 ? '9,999 t 以上' : Math.round(f).toLocaleString() + ' t';
+    // 予測の不確かさ（±10 % 程度）を見込み、非常最大の 1.1 倍を超える場合を «成立しない» とする
+    if (maxF > M.LIMIT_FORCE_T * 1.1) {                             // 非常最大超過 → 過負荷停止する
+      const over = sch.find(q => q.force > M.LIMIT_FORCE_T * 1.1);
+      reasons.push(`第 ${over.pass} パスの予測荷重 ${fmt(maxF)} が非常最大 ${M.LIMIT_FORCE_T.toLocaleString()} t を超えます`);
+    } else if (maxF > M.RATED_FORCE_T * 0.9) {                        // 常用最大に余裕が無い
+      notes.push(`予測荷重 ${fmt(maxF)} は常用最大 ${M.RATED_FORCE_T.toLocaleString()} t に対して余裕がありません`);
     }
-    if (tEnd < floor) reasons.push(`最終パスの終端温度 ${tEnd} ℃ が下限 ${floor} ℃ を割ります`);
-    return { ok: reasons.length === 0, maxF, tEnd, reasons };
+    if (tEnd < floor - 30) reasons.push(`最終パスの終端温度 ${tEnd} ℃ が下限 ${floor} ℃ を大きく割ります`);
+    else if (tEnd < floor) notes.push(`最終パスの終端温度 ${tEnd} ℃ が下限 ${floor} ℃ をわずかに割ります`);
+    return { ok: reasons.length === 0, maxF, tEnd, reasons, notes };
   },
 
   /** ロールバイト内の板厚プロファイル h(x) と下面高さ。x は圧延中心からの mm。 */
@@ -4324,6 +4337,7 @@ class UIManager {
       const T2 = CONFIG.TRIMMER, warn = [], note = [];
       if (Math.abs(reached - d.target) > 0.6) warn.push(`テーブル長の制約で ${reached.toFixed(1)} mm までしか到達できません（この板厚はコイルでなければ作れません）`);
       if (!feas.ok) warn.push(`このラインでは成立しません: ${feas.reasons.join('、')}（運転すると過負荷停止します）`);
+      else feas.notes.forEach(t => note.push(t));
       $('der-target').textContent = coil
         ? `${sch.length} パスで ${d.target} mm まで圧延し、最終パスで巻取機へ巻き取ります（コイル可能厚 ${CONFIG.COILER.TH_MIN}〜${CONFIG.COILER.TH_MAX} mm）。`
         : `${sch.length} パスで ${d.target} mm まで圧延し、出側テーブルへ送り出します。${d.target <= CONFIG.CROP_SHEAR.MAX_TH ? '75 mm シャーで端部を切り落とします。' : '板厚 75 mm 超なので 75 mm シャーは使いません。'}`;
