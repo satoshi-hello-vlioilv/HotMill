@@ -26,11 +26,13 @@ const out = await page.evaluate((EPS) => {
   for (const z of W.tableView.zones) add(z.rolls);
   for (const st of W.guideView.stations) for (const g of st.sides) add(g);
   const F = W.finishView;
-  for (const k of ['knives', 'lowerRolls', 'upperRoll', 'mandrel', 'coil', 'bridge', 'cropRam', 'cropBed', 'cropPiece',
-                   'holdRoll', 'holdArm', 'holdCyl', 'knifeShafts', 'cropHold', 'cropPusher', 'segments', 'strip', 'plate'])
+  for (const k of ['knives', 'lowerRolls', 'upperRoll', 'mandrel', 'coil', 'bridge', 'cropRam', 'cropBed', 'cropPiece', 'cropKnife',
+                   'holdRoll', 'holdArm', 'holdCyl', 'knifeShafts', 'cropHold', 'cropPusher', 'segments', 'strip', 'plate',
+                   'convRolls', 'pieceHost', 's30Ram', 's30Hold', 'pilerLift', 'pilerCol'])
     add(F[k]);
+  for (const side of (F.pilerSides ?? [])) add(side.grp);
   const S = W.supplyView;
-  for (const k of ['runIn', 'cross', 'crossStem', 'armRolls', 'tilterArm', 'trolley', 'hookBeam', 'ropes', 'lid'])
+  for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT', 'tongs'])
     add(S[k]);
   W.scene.traverse(o => { if (o.isPoints || o.userData.telescoping) moving.add(o); });
 
@@ -82,6 +84,9 @@ const out = await page.evaluate((EPS) => {
   // 接地している部材に触れている（10 mm 以内で接する）部材を順に «支持されている» とする。
   // 梁の上のブラケットのように最下点が宙にあっても、どこかで支持部材に結ばれていれば成立。
   const PITD = K.BUILDING.PIT.DEPTH, PITX = K.BUILDING.PIT.X, PITZ = K.BUILDING.PIT.Z;
+  // パイラーのピット（リフトテーブルが下がる）。この中では −DEPTH が床
+  const PP = K.PILER, PPX0 = Math.min(PP.X0, PP.X1) + PP.PIT.MARGIN, PPX1 = Math.max(PP.X0, PP.X1) - PP.PIT.MARGIN, PPZ = PP.PIT.DZ, PPD = PP.PIT.DEPTH;
+  const inPilerPit = (b) => b[0] > PPX0 - 1 && b[3] < PPX1 + 1 && b[2] > -PPZ - 1 && b[5] < PPZ + 1;
   const touch = (a, b, tol) => {
     if (a.b[3] < b.b[0] - tol || b.b[3] < a.b[0] - tol || a.b[4] < b.b[1] - tol || b.b[4] < a.b[1] - tol ||
         a.b[5] < b.b[2] - tol || b.b[5] < a.b[2] - tol) return false;
@@ -99,6 +104,8 @@ const out = await page.evaluate((EPS) => {
     const inPit = Math.abs(it.b[0]) < PITX && Math.abs(it.b[3]) < PITX && Math.abs(it.b[2]) < PITZ && Math.abs(it.b[5]) < PITZ;
     if (Math.abs(y0) <= 30) grounded.set(it.id, 'floor');
     else if (Math.abs(y0 + PITD) <= 30 && inPit) grounded.set(it.id, 'pit-floor');
+    else if (Math.abs(y0 + PPD) <= 30 && inPilerPit(it.b)) grounded.set(it.id, 'piler-pit-floor');
+    else if (y0 < -30 && inPilerPit(it.b)) { /* パイラーピット内の部材は連鎖で判定 */ }
     else if (y0 < -30 && !inPit) grounded.set(it.id, 'BELOW-FLOOR');   // 床版を貫いている（ピット外）
   }
   for (let pass = 0; pass < 6; pass++) {
@@ -120,7 +127,7 @@ const out = await page.evaluate((EPS) => {
 
   // --- B. ピット/炉の開口の真上に接地面が来ていないか ---
   const PIT = K.BUILDING.PIT, FU = K.FURNACE, SU = K.SUPPLY;
-  const inPit = (x, z) => Math.abs(x) < PIT.X && Math.abs(z) < PIT.Z;
+  const inPit = (x, z) => (Math.abs(x) < PIT.X && Math.abs(z) < PIT.Z) || (x > PPX0 && x < PPX1 && Math.abs(z) < PPZ);
   const inFurnace = (x, z) => Math.abs(x - SU.TILTER_X) < FU.L / 2 + FU.WALL && Math.abs(z - FU.Z) < FU.W / 2 + FU.WALL;
   const hover = [];
   for (const it of items) {
@@ -152,10 +159,61 @@ const out = await page.evaluate((EPS) => {
     if (worst > 0) pen.push({ a: a.id, b: b.id, pen: +worst.toFixed(0), at });
   }
   pen.sort((x, y) => y.pen - x.pen);
-  return { statics: items.length, support, hover, pen };
+
+  // --- D. 体積の食い込み（レイキャスト）---
+  // C の三角形 AABB 判定は、軸に平行な面どうし（箱と箱）の重なりを拾えない（平らな三角形は
+  // その軸方向の厚みが 0 なので重なり量が 0 になる）。そこで部材 A の頂点・三角形重心が
+  // 部材 B の «中» にあるかを +X 方向のレイの交差回数（偶奇）で判定し、中にある点から 6 軸方向に
+  // レイを飛ばして最も近い面までの距離を食い込み深さとする（面の上に載っている点は深さ 0）。
+  const ray = new T.Raycaster(), dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].map(d => new T.Vector3(...d));
+  const px = new T.Vector3(1, 0, 0);
+  const samplePoints = (o, limit) => {
+    o.updateWorldMatrix(true, false);
+    const pos = o.geometry.attributes.position, idx = o.geometry.index, n = idx ? idx.count : pos.count;
+    const inst = o.isInstancedMesh ? o.count : 1, pts = [], a = new T.Vector3(), b = new T.Vector3(), c = new T.Vector3();
+    const step = Math.max(1, Math.floor((n / 3) * inst / limit));
+    let k = 0;
+    for (let ii = 0; ii < inst; ii++) {
+      if (o.isInstancedMesh) { o.getMatrixAt(ii, m4); m4.premultiply(o.matrixWorld); } else m4.copy(o.matrixWorld);
+      for (let i = 0; i < n; i += 3) {
+        if (k++ % step) continue;
+        a.fromBufferAttribute(pos, idx ? idx.getX(i) : i).applyMatrix4(m4);
+        b.fromBufferAttribute(pos, idx ? idx.getX(i + 1) : i + 1).applyMatrix4(m4);
+        c.fromBufferAttribute(pos, idx ? idx.getX(i + 2) : i + 2).applyMatrix4(m4);
+        pts.push(a.clone(), new T.Vector3().addVectors(a, b).add(c).multiplyScalar(1 / 3));
+      }
+    }
+    return pts;
+  };
+  const depthInside = (pt, B) => {
+    ray.set(pt, px); ray.far = Infinity;
+    const hits = ray.intersectObject(B, false);
+    if (hits.length % 2 === 0) return 0;                       // 外
+    let d = Infinity;
+    for (const dir of dirs) { ray.set(pt, dir); const h = ray.intersectObject(B, false); if (h.length) d = Math.min(d, h[0].distance); }
+    return d === Infinity ? 0 : d / sc;
+  };
+  const vol = [];
+  const sides = new Map();
+  for (const it of items) { const m = it.o.material; if (m && !Array.isArray(m)) { sides.set(it.o, m.side); m.side = T.DoubleSide; } }
+  for (let i = 0; i < items.length; i++) for (let j = 0; j < items.length; j++) {
+    if (i === j) continue;
+    const a = items[i], b = items[j];
+    if (a.floor || b.floor) continue;                          // 床版は他の部材が載る前提
+    if (a.b[3] < b.b[0] + EPS || b.b[3] < a.b[0] + EPS || a.b[4] < b.b[1] + EPS || b.b[4] < a.b[1] + EPS ||
+        a.b[5] < b.b[2] + EPS || b.b[5] < a.b[2] + EPS) continue;
+    const pts = samplePoints(a.o, 600).filter(q => q.x / sc > b.b[0] + EPS && q.x / sc < b.b[3] - EPS && q.y / sc > b.b[1] + EPS &&
+                                                  q.y / sc < b.b[4] - EPS && q.z / sc > b.b[2] + EPS && q.z / sc < b.b[5] - EPS);
+    let worst = 0, at = null;
+    for (const q of pts) { const d = depthInside(q, b.o); if (d > worst) { worst = d; at = [Math.round(q.x / sc), Math.round(q.y / sc), Math.round(q.z / sc)]; } }
+    if (worst > EPS) vol.push({ a: a.id, b: b.id, pen: +worst.toFixed(0), at });
+  }
+  for (const [o, side] of sides) o.material.side = side;
+  vol.sort((x, y) => y.pen - x.pen);
+  return { statics: items.length, support, hover, pen, vol };
 }, EPS);
 
-const bad = { floating: out.support.filter(s => s.on === 'FLOATING' || s.on === 'BELOW-FLOOR'), hover: out.hover, pen: out.pen };
+const bad = { floating: out.support.filter(s => s.on === 'FLOATING' || s.on === 'BELOW-FLOOR'), hover: out.hover, pen: out.pen, vol: out.vol };
 if (process.argv.includes('-v')) for (const s of out.support) console.log('  ', s.on.padEnd(22), s.id, 'minY=' + s.minY);
 console.log(`static meshes: ${out.statics}`);
 console.log(`\n[A] 接地: 不成立 ${bad.floating.length} 件`);
@@ -164,5 +222,7 @@ console.log(`\n[B] ピット/炉の開口上に接地面: ${bad.hover.length} �
 for (const h of bad.hover) console.log('  ', h.id, `${h.overHole}/${h.of} faces over hole`);
 console.log(`\n[C] 静的部材の食い込み (> ${EPS} mm): ${bad.pen.length} 件`);
 for (const p of bad.pen) console.log('  ', String(p.pen).padStart(5), 'mm', p.a, '×', p.b, '@', p.at.join(','));
-console.log(`\nRESULT: ${bad.floating.length + bad.hover.length + bad.pen.length === 0 ? 'PASS' : 'FAIL'}`);
+console.log(`\n[D] 静的部材の体積の食い込み（レイキャスト、> ${EPS} mm）: ${bad.vol.length} 件`);
+for (const p of bad.vol) console.log('  ', String(p.pen).padStart(5), 'mm', p.a, 'が', p.b, 'の中 @', p.at.join(','));
+console.log(`\nRESULT: ${bad.floating.length + bad.hover.length + bad.pen.length + bad.vol.length === 0 ? 'PASS' : 'FAIL'}`);
 await browser.close();
