@@ -39,7 +39,7 @@ export async function openApp(opts = {}) {
   await page.route('**/font-awesome/**', r => r.fulfill({ contentType: 'text/css', body: '' }));
   await page.route('**/index.html', r => {
     let h = fs.readFileSync(target, 'utf8');
-    h = h.replace(/\bnew App\(\);/, 'window.__CFG = CONFIG; window.__ROLL = Rolling; window.__app = new App();');
+    h = h.replace(/\bnew App\(\);/, 'window.__CFG = CONFIG; window.__ROLL = Rolling; window.__TAIL = Tail; window.__app = new App();');
     h = h.replace(/"three":\s*"[^"]+"/, '"three": "/__three__"');
     h = h.replace(/"three\/addons\/":\s*"[^"]+"/, '"three/addons/": "/x/examples/jsm/"');
     r.fulfill({ contentType: 'text/html', body: h });

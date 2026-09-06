@@ -29,7 +29,7 @@ const out = await page.evaluate((EPS) => {
   for (const k of ['knives', 'lowerRolls', 'upperRoll', 'mandrel', 'coil', 'bridge', 'cropRam', 'cropBed', 'cropPiece', 'cropKnife',
                    'car', 'belt',
                    'holdRoll', 'holdArm', 'holdCyl', 'knifeShafts', 'cropHold', 'cropPusher', 'segments', 'strip', 'plate',
-                   'convRolls', 'pieceHost', 's30Ram', 's30Hold', 'pilerLift', 'pilerCol'])
+                   'convRolls', 'tailFlights', 'pieceHost', 's30Ram', 's30Hold', 'pilerLift', 'pilerCol'])
     add(F[k]);
   for (const side of (F.pilerSides ?? [])) add(side.grp);
   for (const w of (F.wrapRolls ?? [])) { add(w.roll); add(w.arms); }   // ベルトラッパー（揺動する）
@@ -91,6 +91,11 @@ const out = await page.evaluate((EPS) => {
   // パイラーのピット（リフトテーブルが下がる）。この中では −DEPTH が床
   const PP = K.PILER, PPX0 = Math.min(PP.X0, PP.X1) + PP.PIT.MARGIN, PPX1 = Math.max(PP.X0, PP.X1) - PP.PIT.MARGIN, PPZ = PP.PIT.DZ, PPD = PP.PIT.DEPTH;
   const inPilerPit = (b) => b[0] > PPX0 - 1 && b[3] < PPX1 + 1 && b[2] > -PPZ - 1 && b[5] < PPZ + 1;
+  // 後端の端材ピット兼トレンチ（傾斜コンベアが入る）。中の部材はピット壁・底との連鎖で判定する
+  const TP = K.CROP_SHEAR.TAIL.PIT, TF = K.FLIP, TCS = K.CROP_SHEAR.X;
+  const twx = (cx) => TCS + TF * cx;
+  const TPX0 = Math.min(twx(TP.X0), twx(TP.X1)), TPX1 = Math.max(twx(TP.X0), twx(TP.X1));
+  const inTailPit = (b) => b[3] > TPX0 && b[0] < TPX1 && b[5] > TP.Z_OUT && b[2] < TP.Z_IN;
   const touch = (a, b, tol) => {
     if (a.b[3] < b.b[0] - tol || b.b[3] < a.b[0] - tol || a.b[4] < b.b[1] - tol || b.b[4] < a.b[1] - tol ||
         a.b[5] < b.b[2] - tol || b.b[5] < a.b[2] - tol) return false;
@@ -109,7 +114,7 @@ const out = await page.evaluate((EPS) => {
     if (Math.abs(y0) <= 30) grounded.set(it.id, 'floor');
     else if (Math.abs(y0 + PITD) <= 30 && inPit) grounded.set(it.id, 'pit-floor');
     else if (Math.abs(y0 + PPD) <= 30 && inPilerPit(it.b)) grounded.set(it.id, 'piler-pit-floor');
-    else if (y0 < -30 && inPilerPit(it.b)) { /* パイラーピット内の部材は連鎖で判定 */ }
+    else if (y0 < -30 && (inPilerPit(it.b) || inTailPit(it.b))) { /* ピット内の部材は連鎖で判定 */ }
     else if (y0 < -30 && !inPit) grounded.set(it.id, 'BELOW-FLOOR');   // 床版を貫いている（ピット外）
   }
   for (let pass = 0; pass < 6; pass++) {
@@ -131,7 +136,10 @@ const out = await page.evaluate((EPS) => {
 
   // --- B. ピット/炉の開口の真上に接地面が来ていないか ---
   const PIT = K.BUILDING.PIT, FU = K.FURNACE, SU = K.SUPPLY;
-  const inPit = (x, z) => (Math.abs(x) < PIT.X && Math.abs(z) < PIT.Z) || (x > PPX0 && x < PPX1 && Math.abs(z) < PPZ);
+  const inTailHole = (x, z) => x > TPX0 && x < TPX1 &&
+    ((z > TP.BRIDGE[1] && z < TP.Z_IN) || (z > TP.Z_OUT && z < TP.BRIDGE[0]));
+  const inPit = (x, z) => (Math.abs(x) < PIT.X && Math.abs(z) < PIT.Z) ||
+                          (x > PPX0 && x < PPX1 && Math.abs(z) < PPZ) || inTailHole(x, z);
   const inFurnace = (x, z) => Math.abs(x - SU.TILTER_X) < FU.L / 2 + FU.WALL && Math.abs(z - FU.Z) < FU.W / 2 + FU.WALL;
   const hover = [];
   for (const it of items) {

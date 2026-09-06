@@ -888,21 +888,46 @@ const CONFIG = {
     // 先端の端材の払い出し: 駆動側(−Z)のプッシャ（クロスヘッド下のレールを走る台車）が端材を
     // 操作側(+Z)へ押し、エプロン端 Z_DROP からコンベアへ落とす。
     EJECT: { Z_HOME: -1750, Z_DROP: 2200, RAIL_Y: 330 },
-    /* 後端の端材の払い出し。
-     * 端材は «刃を挟んで切る端の側» に落ちるので、先端カットでは出側のエプロン、
-     * 後端カットでは «ミル側» —— つまり下刃を載せた昇降下台の上に載る。しかもそのとき
-     * 板は出側のエプロンを覆っているので、出側のプッシャは使えない（板とぶつかる）。
-     * そこで後端の端材は «下台と一緒に降ろし»、下台脇のシュートで操作側へ滑らせて
-     * 床上の端材箱へ落とす。DROP は下台がパスラインより下へ降りる量。 */
-    /* 後端の端材は下台の上に載ったまま、下台と一緒にパスラインより下へ降りる。
-     * DROP は下台の下降量で、下台の最下端（昇降ロッドの下端）が床を割らない範囲。
+    /* 後端の端材の払い出し —— 固定ストリッパシュートでパスライン下の端材ピットへ落とし、
+     * 傾斜コンベアで «ラインの下（テーブル架台の下）をくぐらせて» 駆動側の床上へ抜く。
      *
-     * ここから «横のシュートへ落とす» には空きが無いことを実測で確認している:
-     *   下台 X −30,718〜−29,883 / Z ±1,570、テーブル架台 Z=±1,545、シャー柱 Z=±2,400、
-     *   出側はエプロンとその脚。板巾 1,500 の端材を下台の外へ出すと、必ずどれかに当たる。
-     * そのため現状は «降ろした下台の上で静止» までを再現している（作業者が取り出す前提）。
-     * 横のシュート・受け箱を入れるには、シャー柱か下台の寸法を見直す必要がある。 */
-    TAIL: { DROP: 240, T_DROP: 1.6 },
+     * 端材は «刃を挟んで切る端の側» に落ちるので、後端カットの端材はミル側 ——
+     * 下刃を載せた昇降下台の上に載る。そのとき板は出側のエプロンを覆っているので、
+     * 出側のプッシャは使えない（動かすと板とぶつかる）。
+     *
+     * 出側（下流）は使えない。下台の刃物台が正準 X で −197〜+118 を上下に掃くので、
+     * その回廊にはシュートを固定できないため（実測）。そこで «上流側» へ落とす。
+     * 下台のテーブル上流端は正準 −717、上流のテーブルローラは −1,034 から始まるが、
+     * ローラは床上 618 mm より高いので、その «下» は掘れる。したがって
+     *   ・ピット開口   正準 X −1,400〜−720（幅 680）、Z ±1,050
+     *   ・テーブル架台 Z ±1,325〜±1,765 は開口の外なので足元を掘らない（実測）
+     * が成り立つ。ピットはそのまま駆動側へトレンチとして延び、架台の下だけ床でふさぐ
+     * （BRIDGE）ので、架台はその床版に載ったままになる。
+     *
+     * シュートは下台のテーブルに切った溝（FINGER_Z / SLOT_W）を貫いて固定されており、
+     * 下台が DROP だけ降りると端材だけがシュートに残る（すくい上げではなく «置き去り»）。
+     * 傾斜は摩擦角（μ ≒ 0.25 → 14°）より大きく取り、端材が自重で滑り落ちるようにする。
+     * X はシャー中心からの正準座標（下流が +）、Z・Y は世界の向き・パスライン基準。 */
+    TAIL: {
+      DROP: 240, T_DROP: 1.6,                   // 下台がパスラインより下へ降りる量と所要時間
+      // 固定ストリッパシュート。X_HI 側が高く（下流）、X_LO 側が低い（上流＝ピットの上）
+      CHUTE: { X_HI: -230, Y_HI: -40, X_LO: -820, Y_LO: -260,
+               FINGER_Z: [300, 700], FINGER_W: 200, FINGER_H: 160, SLOT_W: 240,
+               BEAM_X: -400, BASE_H: 200, BASE_Z: 1100, MU: 0.25 },
+      // 端材ピット兼トレンチ（床の開口）。Z_IN 側がミル線上、Z_OUT 側が駆動側の出口
+      // 開口は «テーブル架台の足元（Z ±1,325〜±1,765）を掘らない» ことと
+      // «最大板巾 2,200 の端材が落ちる» ことの両方を満たす Z ±1,280 に取る。
+      PIT: { X0: -1560, X1: -720, Z_IN: 1280, Z_OUT: -4200, WALL: 250, DEPTH: 2300,
+             BRIDGE: [-2100, -1280] },          // テーブル架台の下だけ床でふさぐ区間
+      // 傾斜スクラップコンベア（桟付き）。ピット底からラインの下をくぐって床上へ上がる。
+      // 勾配は «架台の下（BRIDGE）を端材と桟が頭を打たずに通れる» ことで決まる（≒15°）。
+      CONV: { Z0: 900, Y0: -2250, Z1: -8500, Y1: 300, W: 620, SPEED: 700,
+              DECK_T: 90, SIDE_H: 260, FLIGHT_H: 120, FLIGHT_W: 460, FLIGHT_PITCH: 900,
+              TIP_ANGLE: 0.7, TIP_ACC: 5,          // 頭部の刃口を支点に «こける» 角度と角加速度
+              SUP_Z: [400, -900, -2200, -3400, -5000, -6100, -7200] },
+      // 駆動側の床上に置く端材箱。コンベア末端から落ちた端材が積み重なる
+      BOX: { Z: -9200, L: 3600, W: 900, H: 250, WALL_H: 240 },
+    },
     // 端材コンベア（ローラ式）: エプロン端の下から操作側へ運び、末端でパレットへ落とす
     CONVEYOR: { Z0: 2100, Z1: 6400, TOP: 650, ROLL_D: 160, PITCH: 250, SPEED: 700 },
     // 端材パレット（床上の受け箱）。コンベア末端から落ちた端材が積み重なる
@@ -1787,7 +1812,9 @@ class FinishState {
     this.cropStage = 'IDLE'; this.cropDone = false;
     this.cropSide = 1;                              // 端材が落ちた側（+1: 出側エプロン / −1: ミル側の下台）
     this.bedDrop = 0;                               // 下台がパスラインより下へ降りている割合（後端の払い出し）
-    this.tailRest = 0;                              // 下台上で静止している後端端材の数
+    this.tailRest = 0;                              // 端材箱に収まった後端端材の数
+    this.tailPileTh = 0;                            // 端材箱の山の高さ
+    this.tailConvRun = false; this.tailConvPhase = 0;  // 傾斜スクラップコンベアの運転と桟の位相 [mm]
     this.cropEnd = 0;                               // いま切っている端（+1: xMax 側 / −1: xMin 側）
     this.cropEndsDone = { 1: false, '-1': false };  // 端ごとの完了
     this.cropBlade = 0;        // 下台の昇降 0:待機（上面＝パスライン） → 1:上死点
@@ -1798,8 +1825,11 @@ class FinishState {
     this.cropLen = 0; this.cropSound = 0; this.cropTh = 0;
     // 切り落とした端材。切断時の変形形状（舌・ワニ口）を保ったまま、エプロン → プッシャ →
     // コンベア → パレットと運ばれる。1 カット 1 個で、複数個が同時に搬送中でもよい。
-    //   stage: BED(下台上) → APRON(エプロン上で静止) → PUSH(押されている) → FALL(コンベアへ落下)
-    //          → CONVEY(コンベア上) → DROP(パレットへ落下) → REST(パレット上)
+    //   先端 stage: BED(下台上) → APRON(エプロン上で静止) → PUSH(押されている) → FALL(コンベアへ落下)
+    //               → CONVEY(コンベア上) → DROP(パレットへ落下) → REST(パレット上)
+    //   後端 stage: ONBED(下台上、下台と一緒に降りる) → CHUTE(シュートを滑り落ちる)
+    //               → PITFALL(ピットへ落下) → TAILCONV(傾斜コンベア上) → TAILDROP(端材箱へ落下)
+    //               → REST(端材箱の中)
     this.scraps = []; this.scrapRest = 0; this.pileTh = 0;   // scrapRest/pileTh: パレットに積まれた枚数と山の高さ
     this.conveyorRun = false; this.tableSpeed = 0; this.pilerRun = false;
     this.conveyorAngle = 0; this.pilerAngle = 0;   // コンベア／パイラーローラの積分角（描画は読むだけ）
@@ -1955,6 +1985,40 @@ class MillController {
 }
 
 /**
+ * 後端の端材の «落とし口» の幾何。物理（世界座標で動かす）と描画（シャー基準の正準座標で
+ * 形を作る）が同じ 1 式を参照するための小さなヘルパ。ここに寸法の解釈をまとめておくことで、
+ * «シュートの傾きが図と物理で食い違う» 種類の誤りが構造的に起きないようにする。
+ */
+const Tail = {
+  get cfg() { return CONFIG.CROP_SHEAR.TAIL; },
+  /** シャー中心からの正準 X（下流が +）と世界 X の相互変換。 */
+  cx(worldX) { return CONFIG.FLIP * (worldX - CONFIG.CROP_SHEAR.X); },
+  wx(cx)     { return CONFIG.CROP_SHEAR.X + CONFIG.FLIP * cx; },
+  /** シュート上面の高さ（パスライン基準）。範囲外は端の高さで頭打ちにする。 */
+  chuteY(cx) {
+    const C = this.cfg.CHUTE;
+    return Num.lerp(C.Y_LO, C.Y_HI, Num.clamp((cx - C.X_LO) / (C.X_HI - C.X_LO), 0, 1));
+  },
+  /** シュートの傾き dy/dcx（正準）と、世界 X に対する傾き（メッシュの回転に使う）。 */
+  get chuteGrad() { const C = this.cfg.CHUTE; return (C.Y_HI - C.Y_LO) / (C.X_HI - C.X_LO); },
+  get chuteRotZ() { return Math.atan(CONFIG.FLIP * this.chuteGrad); },
+  /** 端材がシュートを滑り出す加速度 [mm/s²]（a = g(sinθ − μcosθ)）。 */
+  get chuteAccel() {
+    const th = Math.atan(this.chuteGrad);
+    return Math.max(0, 9810 * (Math.sin(th) - this.cfg.CHUTE.MU * Math.cos(th)));
+  },
+  /** 傾斜コンベアの上面高さ（パスライン基準）と、その傾き・メッシュ回転。 */
+  convY(z) {
+    const V = this.cfg.CONV;
+    return Num.lerp(V.Y0, V.Y1, Num.clamp((z - V.Z0) / (V.Z1 - V.Z0), 0, 1));
+  },
+  get convGrad() { const V = this.cfg.CONV; return (V.Y1 - V.Y0) / (V.Z1 - V.Z0); },
+  get convRotX() { return -Math.atan(this.convGrad); },
+  /** コンベアの中心（正準 X）。ピット開口の中央に置く。 */
+  get convCx() { const P = this.cfg.PIT; return (P.X0 + P.X1) / 2; },
+};
+
+/**
  * 仕上げ工程の制御。最終パス中に
  *   先端がドラムシャーを通過 → 走間クロップ
  *   先端がデフレクタを通過   → リールへ通板・把持し、以後は巻き取る
@@ -2066,12 +2130,9 @@ class FinishController {
     s.cropSide = end === Num.sign0(CONFIG.FLIP) ? 1 : -1;
     // 切り落とす量はその端の欠陥長（ワニ口・ラウンド）から計画する。1 カット 300〜500 mm
     const plan = Rolling.cropPlan(sl.overhangAt(end));
-    // 後端は 1 カットに限る。端材は下台の上に載ったまま降りて静止するので、2 個目を切ろうと
-    // すると «下台を上げる ＝ 1 個目が宙に浮く» ことになる（横へ出す空きが無い。CONFIG.TAIL 参照）。
-    const one = s.cropSide < 0;
-    s.cropCuts = one ? 1 : plan.n;
-    s.cropEach = one ? Math.min(CONFIG.CROP_SHEAR.CUT_MAX, plan.total) : plan.each;
-    s.cropTotal = one ? s.cropEach : plan.total;
+    // 先端・後端とも払い出し先（先端＝エプロン→パレット、後端＝ピット→傾斜コンベア→端材箱）が
+    // 空くので、カット数は欠陥長から決めた計画どおりで良い。端で分ける必要はない。
+    s.cropCuts = plan.n; s.cropEach = plan.each; s.cropTotal = plan.total;
     s.cropNeed = plan.need; s.cropIndex = 0;
     s.cropStage = 'STOP';
     this.bus.emit('SYS_MESSAGE', {
@@ -2079,6 +2140,8 @@ class FinishController {
           + `（板厚 ${this._cropThickness(end).toFixed(0)} mm）`, kind: 'info' });
   }
   _cropEndName(end) { return end === Num.sign0(CONFIG.FLIP) ? '先端' : '後端'; }
+  /** いま払い出し中の後端の端材（＝最後に切り離したピース）。 */
+  _tailScrap() { return this.s.scraps[this.s.scraps.length - 1]; }
 
   /**
    * 端部切断（上刃固定・下台上昇式）。実機の順序どおりに進める。
@@ -2131,22 +2194,29 @@ class FinishController {
         if (s.cropBlade <= 0) s.cropStage = s.cropSide > 0 ? 'EJECT' : 'BEDDOWN';
         break;
 
-      // 後端の端材を下台に載せたまま降ろす。降り切ったら端材はシュートへ滑り出す。
+      // 後端の端材を下台に載せたまま降ろす。下台が下がるとテーブルの溝を貫く固定シュートが
+      // 相対的に «せり上がり»、端材はシュートに置き去りにされて上流側へ滑り出す。
       case 'BEDDOWN': {
         s.bedDrop = Math.min(1, s.bedDrop + dt / S.TAIL.T_DROP);
         if (s.bedDrop >= 1) {
-          const sc = s.scraps[s.scraps.length - 1];
-          if (sc && sc.stage === 'ONBED') { sc.stage = 'ONBED_REST'; sc.vy = 0; s.scrapRest++; s.tailRest++; }
-          s.cropStage = 'BEDUP';
+          const sc = this._tailScrap();
+          if (sc && sc.stage === 'ONBED') sc.stage = 'CHUTE';
+          s.cropStage = 'STRIP';
           this.bus.emit('SYS_MESSAGE', {
-            text: `75 mm シャー: 後端の端材 ${s.cropLen.toFixed(0)} mm を下台とともにパスライン下へ降ろしました`, kind: 'info' });
+            text: `75 mm シャー: 後端の端材 ${s.cropLen.toFixed(0)} mm をストリッパシュートへ移し、ライン下のピットへ落とします`, kind: 'info' });
         }
         break;
       }
-      // 端材が載っている間は下台を上げない。次のカットがあるときだけ戻す。
-      // 後端は 1 カットなので、端材を載せたまま下台は降りたままにする（上げると端材が浮く）
+      // 端材が «下台の真上» から抜けるまで下台を上げない（上げると端材を突き上げてしまう）
+      case 'STRIP': {
+        const sc = this._tailScrap();
+        if (!sc || (sc.stage !== 'ONBED' && sc.stage !== 'CHUTE')) s.cropStage = 'BEDUP';
+        break;
+      }
+      // 下台をパスラインへ戻す。戻り切ってから次のカット（または端の切り替え）へ進む
       case 'BEDUP':
-        this._cropCutDone();
+        s.bedDrop = Math.max(0, s.bedDrop - dt / S.TAIL.T_DROP);
+        if (s.bedDrop <= 0) this._cropCutDone();
         break;
 
       // 端材をエプロン上で操作側へ押し出し、エプロン端からコンベアへ落とす。
@@ -2225,25 +2295,88 @@ class FinishController {
   }
 
   /**
-   * 端材の搬送。切り離した端材は下台の高さからエプロンへ落ち着き、プッシャで押されて
-   * エプロン端からコンベアへ落ち、コンベアで操作側へ運ばれて末端からパレットへ落ちて積み重なる。
-   * y はパスライン基準、z は世界座標。複数個が同時に搬送中でもよい。
+   * 端材の搬送。行き先は端で分かれる。
+   *   先端 —— 下台の高さから出側エプロンへ落ち着き、プッシャで操作側へ押され、
+   *           エプロン端からローラコンベアへ落ちて末端のパレットに積み重なる。
+   *   後端 —— 下台と一緒に降り、固定シュートに置き去りにされて上流側へ滑り落ち、
+   *           パスライン下の端材ピットへ落下。傾斜コンベアがラインの下をくぐって
+   *           駆動側へ運び、末端で床上の端材箱へ落とす。
+   * y はパスライン基準、x・z は世界座標。複数個が同時に搬送中でもよい。
    */
   _scraps(dt) {
     const s = this.s, S = CONFIG.CROP_SHEAR, E = S.EJECT, CV = S.CONVEYOR, PA = S.PALLET, P = CONFIG.MILL.PASS_LINE, g = 9810;
-    const convTop = CV.TOP - P;
-    let running = false;
+    const T = S.TAIL, TV = T.CONV, convTop = CV.TOP - P;
+    let running = false, tailRunning = false;
     for (const sc of s.scraps) {
       switch (sc.stage) {
         case 'BED':                                       // 切り離された端材は支えを失い、下台の高さからエプロンへ落ち着く
           sc.vy -= g * dt; sc.y = Math.max(0, sc.y + sc.vy * dt); if (sc.y === 0) { sc.vy = 0; sc.stage = 'APRON'; }
           break;
         case 'APRON': case 'PUSH': break;                 // 位置は _crop の EJECT が決める
-        case 'ONBED':                                     // 後端の端材は下台の上に載って一緒に降りる
-          sc.y = this.bedLift() - s.bedDrop * S.TAIL.DROP;
+        // 後端の端材は下台の上に載って一緒に降りるが、シュートの高さまで下がったら
+        // そこで «置き去り» になる（下台だけがさらに下がる）。
+        case 'ONBED': {
+          const yChute = Tail.chuteY(Tail.cx(sc.x));
+          const yBed = this.bedLift() - s.bedDrop * S.TAIL.DROP;
+          sc.y = Math.max(yBed, yChute);
+          sc.rotZ = sc.y > yBed + 1 ? Tail.chuteRotZ : 0;
           break;
-        // 後端の端材は降ろした下台の上でそのまま静止する（横へ出す空きが無い。CONFIG.TAIL 参照）
-        case 'ONBED_REST': sc.y = -S.TAIL.DROP; break;
+        }
+        case 'CHUTE': {                                   // 自重でシュートを上流側へ滑り落ちる
+          sc.vx += Tail.chuteAccel * dt;                  // 斜面に沿った速さ（正準 −X 向き）
+          sc.x += CONFIG.FLIP * -sc.vx * dt;              // 正準 −X ＝ 世界では −FLIP 向き
+          sc.y = Tail.chuteY(Tail.cx(sc.x)); sc.rotZ = Tail.chuteRotZ;
+          if (Tail.cx(sc.x) <= T.CHUTE.X_LO) { sc.stage = 'PITFALL'; sc.vy = 0; }
+          break;
+        }
+        case 'PITFALL': {                                 // 端材ピットへ落下。傾斜コンベアに着床する
+          sc.vy -= g * dt; sc.y += sc.vy * dt;
+          // 上流側の壁に当たったらそこで水平方向の速さを失う（以後は真下へ落ちる）
+          const cxLim = T.PIT.X0 + sc.len / 2;
+          if (Tail.cx(sc.x) - sc.vx * dt <= cxLim) { sc.x = Tail.wx(cxLim); sc.vx = 0; }
+          else sc.x += CONFIG.FLIP * -sc.vx * dt;
+          // 落ちながらコンベアの傾きへ姿勢を合わせる。板巾ぶん（最大 2.2 m）だけ Z 方向に
+          // 広がっているので、水平のまま落とすと «上手側の縁» がデッキへ先に食い込む。
+          sc.rotZ = Num.approach(sc.rotZ, 0, 0.2, dt);
+          sc.rot = Num.approach(sc.rot, Tail.convRotX, 0.2, dt);
+          const land = Tail.convY(sc.z);
+          if (sc.y <= land) {
+            sc.y = land; sc.vy = 0; sc.vx = 0; sc.rotZ = 0; sc.rot = Tail.convRotX;
+            sc.x = Tail.wx(Num.clamp(Tail.cx(sc.x), T.PIT.X0 + sc.len / 2, T.PIT.X1 - sc.len / 2));
+            sc.stage = 'TAILCONV';
+          }
+          break;
+        }
+        case 'TAILCONV':                                  // 傾斜コンベアでラインの下をくぐって駆動側へ
+          sc.z += Math.sign(TV.Z1 - TV.Z0) * TV.SPEED * dt; sc.y = Tail.convY(sc.z); tailRunning = true;
+          if (sc.z <= TV.Z1) { sc.stage = 'TAILDROP'; sc.vy = 0; }
+          break;
+        case 'TAILDROP': {                                // 末端から端材箱へ。山の上に載る
+          const land = T.BOX.H + s.tailPileTh - P, B = T.BOX;
+          // まず頭部の刃口を支点に «こける»。重心が支点を過ぎた時点から回り始め、
+          // 板の後半はまだデッキの上にあるので持ち上がる。ここで平行に落とすと
+          // 後半がデッキを突き抜けてしまう（回転が先、落下はそのあと）。
+          const tip = Tail.convRotX - sc.rot;
+          if (tip < TV.TIP_ANGLE) {
+            sc.spin += TV.TIP_ACC * dt; sc.rot -= sc.spin * dt;
+            // 支点（刃口）に当たっている点は、回るにつれて重心から後端へ移っていく。
+            // その分だけ板は前へ・下へ進むので、後端は最後までデッキより上に居る。
+            const u = sc.w / 2 * Num.clamp(tip / TV.TIP_ANGLE, 0, 1);
+            sc.z = TV.Z1 - u * Math.cos(sc.rot);
+            sc.y = Tail.convY(TV.Z1) + u * Math.sin(sc.rot);
+            break;
+          }
+          sc.vy -= g * dt; sc.y += sc.vy * dt;
+          sc.z -= TV.SPEED / Math.hypot(1, Tail.convGrad) * dt;     // 頭部を出たときの水平速度を保つ
+          // 後端が刃口を離れてから水平に戻す。離れる前に戻すと後端がデッキを叩く
+          if (sc.z + sc.w / 2 * Math.cos(sc.rot) < TV.Z1 - 100) sc.rot = Num.approach(sc.rot, 0, 0.5, dt);
+          if (sc.y <= land) {
+            sc.y = land; sc.vy = 0; sc.rot = 0; sc.spin = 0; sc.stage = 'REST';
+            sc.z = Num.clamp(sc.z, B.Z - B.L / 2 + sc.w / 2, B.Z + B.L / 2 - sc.w / 2);
+            s.scrapRest++; s.tailRest++; s.tailPileTh += sc.th;
+          }
+          break;
+        }
         case 'FALL': {                                    // エプロン端からコンベアへ。前へ滑りながら落ちる
           sc.vy -= g * dt; sc.y += sc.vy * dt; sc.z += 900 * dt; sc.rot = Num.clamp(sc.rot - 1.4 * dt, -0.45, 0);
           if (sc.y <= convTop) { sc.y = convTop; sc.vy = 0; sc.rot = 0; sc.z = Math.max(sc.z, CV.Z0 + sc.w / 2 + 50); sc.stage = 'CONVEY'; }
@@ -2263,6 +2396,8 @@ class FinishController {
     }
     s.conveyorRun = running;
     if (running) s.conveyorAngle += CV.SPEED / (CV.ROLL_D / 2) * dt;
+    s.tailConvRun = tailRunning;
+    if (tailRunning) s.tailConvPhase = (s.tailConvPhase + TV.SPEED * dt) % TV.FLIGHT_PITCH;
   }
 
   /** 切り離し。板の先端を «刃の位置» に更新し、刃より先にあった材料を端材にする。 */
@@ -2321,8 +2456,12 @@ class FinishController {
   _piece(shape, end, xCut, tip, th) {
     const sl = this.slab;
     const xEndAt = (ny, nz) => { const xe = shape.map(shape.ends[end].xE, ny, nz); return end > 0 ? Math.max(xe, xCut) : Math.min(xe, xCut); };
-    return { id: ++FinishController._pid, th, w: sl.width, len: Math.abs(tip - xCut), x: (xCut + tip) / 2, end, xCut,
-             xEndAt, y: 0, z: 0, vy: 0, rot: 0, t: 0, stage: 'NEW' };
+    // x は «いまの位置»、x0 は «切り離した瞬間の位置»。形状（xCut / xEndAt）は切断時の世界座標で
+    // 表されているので、ジオメトリは必ず x0 を基準に焼く。描画側はピースが動き出したあとに
+    // メッシュを作ることがあり、x を基準にすると動いたぶんだけ形がずれる。
+    const x0 = (xCut + tip) / 2;
+    return { id: ++FinishController._pid, th, w: sl.width, len: Math.abs(tip - xCut), x: x0, x0, end, xCut,
+             xEndAt, y: 0, z: 0, vy: 0, vx: 0, rot: 0, rotZ: 0, spin: 0, t: 0, stage: 'NEW' };
   }
 
   update(dt) {
@@ -2332,9 +2471,11 @@ class FinishController {
     // コイルカーは «巻き終えたコイル» を扱うので、板がラインから外れていても進める
     // （板の状態で早期 return する前に呼ぶ）
     if (s.mode === 'COIL') this._coilCar(dt);
+    // 端材の搬送も «板がラインから外れたあと» まで続く（後端の端材は傾斜コンベアで
+    // 十数秒かけて運ばれる）。板の状態で早期 return する前に呼ぶ。
+    this._scraps(dt);
     if (!sl.onLine) return;
     this._crop(dt);
-    this._scraps(dt);
     this._sheets(dt);
     s.tableSpeed = 0;
     // 全パスが終わったあとの走行中（巻取の引き込み・板材の放出）に後端が刃へ来たら切る。
@@ -2981,7 +3122,7 @@ function initMaterials(envMap) {
  * ========================================================================== */
 const u = Sim.u;
 const G = {
-  box: (w, h, d) => new THREE.BoxGeometry(u(w), u(h), u(d)),
+  box: (w, h, d, sw = 1, sh = 1, sd = 1) => new THREE.BoxGeometry(u(w), u(h), u(d), sw, sh, sd),
   /** 軸方向を指定した円柱。axis: 'x'|'y'|'z' */
   cyl(d, len, axis = 'y', seg = 24, d2 = d, open = false) {
     const g = new THREE.CylinderGeometry(u(d2 / 2), u(d / 2), u(len), seg, 1, open);
@@ -3020,6 +3161,19 @@ const G = {
     for (const [k, v] of Object.entries(bin)) if (v.length) out[k] = G.merge(v);
     // top: 板の上に架かる部材（クロスヘッド・梁）。半断面でも透過して、下で起きていることを見せる
     return { near: out[1], far: out['-1'], mid: out[0], top: out.top };
+  },
+  /**
+   * 幅 zw の板に «Z 方向の通し溝» を空けたときに残る帯を返す。溝は ±zs（中心 Z）に
+   * 幅 sw で開ける。戻り値は [帯の幅, 帯の中心 Z] の配列。
+   */
+  zSlotted(_xl, _yh, zw, zs, sw) {
+    const cuts = [];
+    for (const z of zs) for (const sgn of [-1, 1]) cuts.push([sgn * z - sw / 2, sgn * z + sw / 2]);
+    cuts.sort((a, b) => a[0] - b[0]);
+    const out = []; let z0 = -zw / 2;
+    for (const [a, b] of cuts) { if (a > z0) out.push([a - z0, (z0 + a) / 2]); z0 = Math.max(z0, b); }
+    if (zw / 2 > z0) out.push([zw / 2 - z0, (z0 + zw / 2) / 2]);
+    return out;
   },
   roundedRect(path, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
@@ -3300,7 +3454,7 @@ const Parts = {
       const bx = base.getX(i) + 0.5, by = base.getY(i) + 0.5, bz = base.getZ(i);
       const xe = piece.xEndAt(by * 2 - 1, bz * 2);
       const x = piece.end > 0 ? Num.lerp(piece.xCut, xe, bx) : Num.lerp(xe, piece.xCut, bx);
-      pos.setXYZ(i, u(x - piece.x), u(by * piece.th), u(bz * piece.w));
+      pos.setXYZ(i, u(x - (piece.x0 ?? piece.x)), u(by * piece.th), u(bz * piece.w));
     }
     geo.computeVertexNormals(); geo.computeBoundingSphere();
     geo.userData.base = base;
@@ -3377,7 +3531,11 @@ const Parts = {
     const bx = -F * (S.BED_L / 2 + bt / 2);                     // テーブルの中心（刃の上流側）
     return G.merge([
       G.at(G.box(bt + 240, 260, BL + 500), 0, -S.BLADE_H - 130, 0),          // 刃物台
-      G.at(G.box(S.BED_L, 400, BL + 400), bx, -200, 0),                       // テーブル（板を載せる面＝原点高さ）
+      // テーブル（板を載せる面＝原点高さ）。固定ストリッパシュートのフィンガが貫くので、
+      // その Z 位置に長手方向の «通し溝» を空けて Z 方向の板に分ける（下台が降りても
+      // シュートは動かないので、溝は下台の全ストロークで有効でなければならない）。
+      ...G.zSlotted(S.BED_L, 400, BL + 400, S.TAIL.CHUTE.FINGER_Z, S.TAIL.CHUTE.SLOT_W)
+        .map(([w, z]) => G.at(G.box(S.BED_L, 400, w), bx, -200, z)),
       G.at(G.box(240, 300, 120), bx - S.BED_L / 2 + 120, -250,  (BL + 400) / 2 + 60),   // ガイドシュー
       G.at(G.box(240, 300, 120), bx - S.BED_L / 2 + 120, -250, -(BL + 400) / 2 - 60),
       G.at(G.box(240, 300, 120), bx + S.BED_L / 2 - 120, -250,  (BL + 400) / 2 + 60),
@@ -3404,6 +3562,91 @@ const Parts = {
       G.at(G.box(320, 150, 560), 0, P + E.RAIL_Y - 75, -280),                    // レール下の台車
       G.at(G.box(80, 400, 560),  150, P + E.RAIL_Y + 50, -280),                  // レールを抱く側板
       G.at(G.box(80, 400, 560), -150, P + E.RAIL_Y + 50, -280),
+    ]);
+  },
+
+  /**
+   * 後端の端材の固定ストリッパシュート。下台のテーブルに空けた通し溝を貫いて «固定» されて
+   * いるので、下台が降りると端材だけがここに残り、摩擦角より大きい傾斜で上流側へ滑り落ちて
+   * 端材ピットへ入る。支持は下台の «真下» に置いた土台と、溝の中を通す短い柱で取る
+   * （端材の落下経路に構造物を置かないための構成）。
+   */
+  tailChute() {
+    const P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, C = CONFIG.CROP_SHEAR.TAIL.CHUTE;
+    const xh = F * C.X_HI, xl = F * C.X_LO, yh = P + C.Y_HI, yl = P + C.Y_LO;
+    const len = Math.hypot(xl - xh, yl - yh), rz = Math.atan2(yl - yh, xl - xh);
+    const finger = G.at(G.box(len, C.FINGER_H, C.FINGER_W, Math.ceil(len / 200), 1, 1), 0, -C.FINGER_H / 2, 0);   // 上面が原点
+    const bx = F * C.BEAM_X, base = C.BASE_H, geos = [];
+    geos.push(G.at(G.box(300, base, 2 * C.BASE_Z), bx, base / 2, 0));                 // 下台の下の土台
+    for (const sz of [-1, 1]) for (const fz of C.FINGER_Z) {
+      geos.push(G.at(finger, (xh + xl) / 2, (yh + yl) / 2, sz * fz, 0, 0, rz));
+      const top = P + Tail.chuteY(C.BEAM_X) - C.FINGER_H;                             // フィンガ下面
+      geos.push(G.at(G.box(160, top - base, C.FINGER_W), bx, (top + base) / 2, sz * fz));   // 溝の中を通る柱
+    }
+    return G.merge(geos);
+  },
+  /**
+   * 端材ピット兼トレンチ（コンクリート）。ミル線の下からテーブル架台の下をくぐって
+   * 駆動側へ抜ける溝で、架台の足元だけは床版でふさぐ（BRIDGE）。底は傾斜コンベアに
+   * 沿った勾配を持ち、駆動側の端で床面と出会う（そこからコンベアは床上に出る）。
+   */
+  tailPit() {
+    const F = CONFIG.FLIP, T = CONFIG.CROP_SHEAR.TAIL, PT = T.PIT, w = PT.WALL, D = PT.DEPTH;
+    const x0 = F * PT.X0, x1 = F * PT.X1, xa = Math.min(x0, x1), xb = Math.max(x0, x1);
+    const xc = (xa + xb) / 2, L = xb - xa;
+    const z0 = PT.Z_OUT - w, z1 = PT.Z_IN + w, zc = (z0 + z1) / 2, zl = z1 - z0;
+    const izc = (z0 + z1) / 2, ilen = Math.hypot(zl, Tail.convGrad * zl);
+    return G.merge([
+      G.at(G.box(w, D, zl), xa - w / 2, -D / 2, zc), G.at(G.box(w, D, zl), xb + w / 2, -D / 2, zc),   // 側壁
+      G.at(G.box(L + 2 * w, D, w), xc, -D / 2, PT.Z_IN + w / 2),                                      // ミル線側の妻壁
+      G.at(G.box(L + 2 * w, 300, PT.BRIDGE[1] - PT.BRIDGE[0]), xc, -150,
+           (PT.BRIDGE[0] + PT.BRIDGE[1]) / 2),                                                        // 架台の下をふさぐ床版
+      G.at(G.box(L, 300, ilen, 1, 1, Math.ceil(ilen / 400)), xc,
+           CONFIG.MILL.PASS_LINE + Tail.convY(izc) - 560, izc, Tail.convRotX),                   // 勾配のついたピット底
+    ]);
+  },
+  /** 傾斜スクラップコンベアの架構（デッキと側板、床上に出てからの脚、頭部の駆動箱）。 */
+  tailConveyorFrame() {
+    const P = CONFIG.MILL.PASS_LINE, F = CONFIG.FLIP, T = CONFIG.CROP_SHEAR.TAIL, V = T.CONV;
+    const cx = F * Tail.convCx, len = Math.hypot(V.Z1 - V.Z0, V.Y1 - V.Y0), rx = Tail.convRotX;
+    const yc = P + (V.Y0 + V.Y1) / 2, zc = (V.Z0 + V.Z1) / 2, geos = [];
+    // 傾いた «長い» 箱は三角形の AABB が太くなり、干渉検査が偽陽性を出す。長手方向に
+    // 分割して 1 三角形あたりの広がりを小さくしておく（形は変わらない）。
+    const nz = Math.ceil(len / 400);
+    const deck = G.at(G.box(V.W, V.DECK_T, len, 1, 1, nz), 0, -V.DECK_T / 2, 0);
+    geos.push(G.at(deck, cx, yc, zc, rx));
+    for (const sx of [-1, 1])
+      geos.push(G.at(G.at(G.box(60, V.SIDE_H, len, 1, 1, nz), 0, V.SIDE_H / 2 - V.DECK_T, 0),
+                     cx + sx * (V.W / 2 + 30), yc, zc, rx));
+    // 支持。ピットの中では «側壁のあいだに渡した受け台» で（底版の上に載り、両側壁にも接する）、
+    // 床上に出てからは床に立てた脚で受ける。傾いたデッキの下面に合わせて上端を少し下げ、
+    // 受け台の角がデッキや底版へ食い込まないようにする。
+    const PT = CONFIG.CROP_SHEAR.TAIL.PIT;
+    const xa = Math.min(F * PT.X0, F * PT.X1), xb = Math.max(F * PT.X0, F * PT.X1);
+    for (const z of V.SUP_Z) {
+      const inPit = z > PT.Z_OUT && z < PT.Z_IN, deckY = P + Tail.convY(z);
+      const top = deckY - V.DECK_T - 20, base = inPit ? deckY - 410 + 20 : 0;
+      if (top - base < 60) continue;
+      geos.push(G.at(G.box(inPit ? xb - xa : V.W, top - base, 80), cx, (top + base) / 2, z));
+    }
+    // 頭部の駆動箱はデッキの «下» に置く。上に置くと、刃口でこける端材の後端が当たる
+    geos.push(G.at(G.box(V.W + 260, 460, 420), cx, P + V.Y1 - 330, V.Z1 + 210));
+    return G.merge(geos);
+  },
+  /** 傾斜コンベアの桟（端材を斜面で滑らせないための横桟）。原点＝デッキ上面。 */
+  tailConveyorFlight() {
+    const V = CONFIG.CROP_SHEAR.TAIL.CONV;
+    return G.at(G.box(V.FLIGHT_W, V.FLIGHT_H, 70), 0, V.FLIGHT_H / 2, 0);
+  },
+  /** 駆動側の床上に置く端材箱（コンベア末端から落ちた端材が積み重なる）。 */
+  tailBox() {
+    const F = CONFIG.FLIP, B = CONFIG.CROP_SHEAR.TAIL.BOX, cx = F * Tail.convCx, sw = 60, h = B.H + B.WALL_H;
+    return G.merge([
+      G.at(G.box(B.W, B.H, B.L), cx, B.H / 2, B.Z),
+      G.at(G.box(sw, h, B.L), cx - B.W / 2 + sw / 2, h / 2, B.Z),
+      G.at(G.box(sw, h, B.L), cx + B.W / 2 - sw / 2, h / 2, B.Z),
+      G.at(G.box(B.W, h, sw), cx, h / 2, B.Z - B.L / 2 + sw / 2),
+      G.at(G.box(B.W, h, sw), cx, h / 2, B.Z + B.L / 2 - sw / 2),
     ]);
   },
 
@@ -3969,6 +4212,10 @@ const Parts = {
     hole(S.TILTER_X - fx, FU.Z - fz, S.TILTER_X + fx, FU.Z + fz);                     // ピット炉
     const PP = CONFIG.PILER, px0 = Math.min(PP.X0, PP.X1) + PP.PIT.MARGIN, px1 = Math.max(PP.X0, PP.X1) - PP.PIT.MARGIN;
     hole(px0, -PP.PIT.DZ, px1, PP.PIT.DZ);                                            // パイラーのピット
+    // 後端の端材ピット兼トレンチ。テーブル架台の足元（BRIDGE）だけは床を残して架台を受ける
+    const PT = CONFIG.CROP_SHEAR.TAIL.PIT, tx0 = Tail.wx(PT.X0), tx1 = Tail.wx(PT.X1);
+    hole(Math.min(tx0, tx1), PT.BRIDGE[1], Math.max(tx0, tx1), PT.Z_IN);
+    hole(Math.min(tx0, tx1), PT.Z_OUT,     Math.max(tx0, tx1), PT.BRIDGE[0]);
     const geo = new THREE.ExtrudeGeometry(shape, { depth: u(t), bevelEnabled: false });
     geo.rotateX(Math.PI / 2);          // 形状の Y → 世界 Z、押出 +Z → 世界 −Y（床版は床面から下へ）
     return geo;
@@ -4694,6 +4941,24 @@ class FinishView {
     this.convZs = czs; this.convY = CV.TOP - CV.ROLL_D / 2; this.convX = apronX;
     czs.forEach((z, i) => this.convRolls.set(i, apronX, this.convY, z));
     this.convRolls.commit(); this.cropShear.add(this.convRolls.mesh);
+    // --- 後端の端材の払い出し（固定シュート → ライン下のピット → 傾斜コンベア → 端材箱）---
+    const TL = CS.TAIL, TV = TL.CONV;
+    const addStatic = (geo, mat, name, cast = true) => {
+      const m = new THREE.Mesh(geo, mat); m.name = name;
+      m.castShadow = cast; m.receiveShadow = true; this.cropShear.add(m); return m;
+    };
+    addStatic(Parts.tailChute(), MAT.tableFrame, '端材ストリッパシュート');
+    addStatic(Parts.tailPit(), MAT.pit, '端材ピット', false);
+    addStatic(Parts.tailConveyorFrame(), MAT.tableFrame, '端材傾斜コンベア架構');
+    addStatic(Parts.tailBox(), MAT.tableFrame, '端材箱');
+    // 桟は運転中に斜面を上っていく（位相は物理側が持つ）
+    this.tailLen = Math.hypot(TV.Z1 - TV.Z0, TV.Y1 - TV.Y0);
+    const nfl = Math.max(1, Math.round(this.tailLen / TV.FLIGHT_PITCH));
+    this.tailFlights = new Instances(Parts.tailConveyorFlight(), MAT.rollNeck, nfl,
+                                    { dynamic: true, cull: false, name: '端材コンベアの桟' });
+    this.tailFlightX = F * Tail.convCx; this.tailFlightN = nfl;
+    this.cropShear.add(this.tailFlights.mesh);
+    this._tailPhase = null;
     // 切り落とした端材（切断時の形を保った個別メッシュ）。物理側の piece.id をキーに作る
     this.scraps = new Map(); this.sheets = new Map();
     this.pieceHost = new THREE.Group(); this.pieceHost.name = '端材・シート'; scene.add(this.pieceHost);
@@ -4886,7 +5151,19 @@ class FinishView {
     this._pruneMeshes(this.scraps, fin.scraps);
     for (const sc of fin.scraps) {
       const m = this._pieceMesh(this.scraps, sc, '端材');
-      m.position.set(u(sc.x), u(P + sc.y), u(sc.z)); m.rotation.x = sc.rot;
+      m.position.set(u(sc.x), u(P + sc.y), u(sc.z));
+      m.rotation.x = sc.rot; m.rotation.z = sc.rotZ || 0;
+    }
+    // 傾斜スクラップコンベアの桟。線に沿って等間隔に並べ、位相ぶんだけ送る
+    if (fin.tailConvPhase !== this._tailPhase) {
+      this._tailPhase = fin.tailConvPhase;
+      const TV = CONFIG.CROP_SHEAR.TAIL.CONV, rx = Tail.convRotX, dir = Math.sign(TV.Z1 - TV.Z0);
+      for (let i = 0; i < this.tailFlightN; i++) {
+        const sPos = (i * TV.FLIGHT_PITCH + fin.tailConvPhase) % this.tailLen;
+        const t = sPos / this.tailLen, z = TV.Z0 + dir * Math.abs(TV.Z1 - TV.Z0) * t;
+        this.tailFlights.set(i, this.tailFlightX, P + Tail.convY(z), z, rx);
+      }
+      this.tailFlights.commit();
     }
     // 30 mm シャー: 板押えが板の上面まで降り、ラム（上刃）が STROKE だけ下降する
     const S3 = CONFIG.SHEAR30;
@@ -6152,10 +6429,12 @@ class UIManager {
         cls = 'is-run'; ic = 'fa-scissors'; st = `75 mm シャー ${en}切断 ${Math.min(f.cropIndex + 1, f.cropCuts)}/${f.cropCuts}`;
         hint = { STOP: `${en}を刃の手前で減速・停止`, ALIGN: `${en}を刃から ${f.cropEach} mm の位置へ位置決め`, CUT: '下台が上昇し、固定上刃で剪断',
                  RETURN: '下台が下降', EJECT: '端材をプッシャでコンベアへ押し出し', RETRACT: 'プッシャが待機位置へ戻る',
-                 BEDDOWN: '後端の端材を下台ごと降ろす', BEDUP: '下台がパスラインへ戻る' }[f.cropStage] ?? '';
-        // 端材の行き先は端で違う（先端＝出側エプロン → コンベア → パレット、後端＝下台の真下の受け箱）
+                 BEDDOWN: '後端の端材を下台ごと降ろし、固定シュートへ移す', STRIP: '端材がシュートを滑り、ライン下のピットへ落下',
+                 BEDUP: '下台がパスラインへ戻る' }[f.cropStage] ?? '';
+        // 端材の行き先は端で違う（先端＝出側エプロン → コンベア → パレット、
+        // 後端＝ライン下の端材ピット → 傾斜コンベア → 駆動側の端材箱）
         hint += f.cropSide > 0 ? ` ／ 端材はコンベアでパレットへ（${f.scrapRest - f.tailRest} 個積載）`
-                               : ` ／ 端材は下台とともにパスライン下へ（${f.tailRest} 個）`;
+                               : ` ／ 端材はライン下のピットから傾斜コンベアで駆動側の端材箱へ（${f.tailRest} 個）`;
       }
       else if (p.finish.plateStage === 'DIVIDE') {
         const f = p.finish, PL = CONFIG.PILER; cls = 'is-run'; ic = 'fa-layer-group';

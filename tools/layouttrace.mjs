@@ -190,34 +190,52 @@ const out = await page.evaluate(() => {
     }
     R.scrap = { spreadBefore: mm(spreadBefore), spreadPiece: mm(spreadPiece) };
     ok('端材が板端の変形（舌・ワニ口）を保っている', spreadPiece > 0.5 * spreadBefore && spreadBefore > 20, `切断前の先端の広がり ${mm(spreadBefore)} mm / 端材 ${mm(spreadPiece)} mm`);
-    // 端材の行き先: すべてのカットが終わって静止したとき、パレット上に載っているか
-    window.__ff(Pp => Pp.finish.cropDone);
-    window.__ff((Pp, n) => n > 120 * 25);
+    // 端材の行き先: すべてのカットが終わって静止したとき、先端はパレット、後端は
+    // ライン下のピット → 傾斜コンベア → 駆動側の端材箱へ収まっているか。
+    // 後端は搬送距離が長い（コンベアだけで十数秒）ので、そのぶん時間を進めて確かめる。
+    // 追跡は «切り始めてから» 続ける。後端の 1 個目は最後のカットより前に床上へ出てしまうので、
+    // 全部が切り終わってから見はじめると «床下を通った» 証拠を取り逃がす。
+    const tailMinY = new Map();                                   // 後端の端材が «床下を通った» ことの証拠
+    for (let k = 0; k < 160; k++) {
+      window.__ff((Pp, n) => n > 60);                             // 0.5 s ずつ
+      W.render(P, 1 / 60);
+      for (const [id, m] of (FV.scraps instanceof Map ? FV.scraps : new Map())) {
+        const b = new T.Box3().setFromObject(m);
+        tailMinY.set(id, Math.min(tailMinY.get(id) ?? 1e9, b.min.y / sc));
+      }
+      if (P.finish.cropDone && P.finish.scrapRest >= P.finish.cropCutsAll) break;
+    }
     W.render(P, 1 / 60);
     const pieces = (FV.scraps instanceof Map ? [...FV.scraps.values()] : [FV.cropPiece]).filter(m => m && m.visible);
-    const PAL = K.CROP_SHEAR.PALLET;
-    const onPallet = pieces.filter(m => { const b = new T.Box3().setFromObject(m); return PAL && b.min.y / sc >= PAL.H - 5 && b.min.y / sc < PAL.H + 2000 && Math.abs(b.getCenter(new T.Vector3()).z / sc - PAL.Z) < PAL.L / 2; });
+    const PAL = K.CROP_SHEAR.PALLET, TL = K.CROP_SHEAR.TAIL, BOX = TL.BOX;
+    const box3 = (m) => new T.Box3().setFromObject(m);
+    const onPallet = pieces.filter(m => { const b = box3(m); return PAL && b.min.y / sc >= PAL.H - 5 && b.min.y / sc < PAL.H + 2000 && Math.abs(b.getCenter(new T.Vector3()).z / sc - PAL.Z) < PAL.L / 2; });
     R.scrap.pieces = pieces.length; R.scrap.onPallet = onPallet.length;
-    R.scrap.rest = pieces.map(m => { const b = new T.Box3().setFromObject(m); return { y: mm(b.min.y / sc), z: mm(b.getCenter(new T.Vector3()).z / sc) }; });
+    R.scrap.rest = pieces.map(m => { const b = box3(m), c = b.getCenter(new T.Vector3());
+      return { y: mm(b.min.y / sc), z: mm(c.z / sc), x: mm(c.x / sc) }; });
     ok('先端と後端の両方をクロップする（そのまま板を送って後端も切る）',
        P.finish.cropEndsDone[1] && P.finish.cropEndsDone[-1] && P.finish.cropCutsAll >= 2,
        `先端 ${P.finish.cropEndsDone[-K.FLIP > 0 ? 1 : -1] ? '済' : '未'} / 後端 ${P.finish.cropEndsDone[K.FLIP > 0 ? 1 : -1] ? '済' : '未'} / 総カット ${P.finish.cropCutsAll}`);
-    // 後端の端材は下台と一緒に降りてシュート経由で端材箱へ落ちる（出側のプッシャは
-    // そのとき板がエプロンを覆っているので使えない）。先端の端材はコンベア → パレット。
-    // 後端の端材は下台に載ったままパスラインより下へ降りて静止する（横へ出す空きが無い）
-    const drop = K.CROP_SHEAR.TAIL.DROP;
-    const onBed = pieces.filter(m => { const b = new T.Box3().setFromObject(m);
-      const cy = b.getCenter(new T.Vector3()).y / sc;
-      return cy < PL0 - drop / 2 && cy > PL0 - drop - 200; });
-    R.scrap.onBed = onBed.length;
-    ok('後端の端材が下台と一緒にパスライン下へ降りて静止する',
-       P.finish.tailRest > 0 && onBed.length === P.finish.tailRest,
-       `下台上 ${onBed.length} 個（後端カット ${P.finish.tailRest}）／ 総カット ${P.finish.cropCutsAll}`);
-    // 端材はどれも装置の中に隠れず、先端はパレット、後端は降ろした下台の上で «見えたまま» 静止する
-    ok('端材はすべて可視のまま（先端はパレット、後端は下台の上）に納まる',
-       pieces.length > 0 && onPallet.length + onBed.length === pieces.length
+    // 後端の端材はライン下の端材ピットへ落ち、傾斜コンベアでラインの下をくぐって
+    // 駆動側の端材箱へ入る（出側のプッシャは、そのとき板がエプロンを覆っていて使えない）。
+    const inBox = pieces.filter(m => { const b = box3(m), c = b.getCenter(new T.Vector3());
+      return b.min.y / sc >= BOX.H - 5 && b.min.y / sc < BOX.H + 1200
+          && Math.abs(c.z / sc - BOX.Z) < BOX.L / 2 + 50; });
+    R.scrap.inBox = inBox.length;
+    ok('後端の端材がライン下のピット経由で駆動側の端材箱に収まる',
+       P.finish.tailRest > 0 && inBox.length === P.finish.tailRest,
+       `端材箱 ${inBox.length} 個（後端カット ${P.finish.tailRest}）／ 総カット ${P.finish.cropCutsAll}`);
+    // «ライン下を通した» ことの確認: 後端の端材はどこかで床面より下（パスライン下）を通る
+    const belowFloor = [...tailMinY.values()].filter(y => y < -50);
+    R.scrap.belowFloor = belowFloor.length;
+    ok('後端の端材が床面より下（ピット内）を通ってから排出される',
+       belowFloor.length >= P.finish.tailRest && P.finish.tailRest > 0,
+       `床下を通った端材 ${belowFloor.length} 個 / 最深 ${mm(Math.min(...[...tailMinY.values()], 0))} mm`);
+    // 端材はどれも装置の中に隠れず、先端はパレット、後端は端材箱で «見えたまま» 静止する
+    ok('端材はすべて可視のまま（先端はパレット、後端は端材箱）に納まる',
+       pieces.length > 0 && onPallet.length + inBox.length === pieces.length
        && onPallet.length === P.finish.cropCutsAll - P.finish.tailRest,
-       `可視 ${pieces.length} / パレット ${onPallet.length} + 下台 ${onBed.length}${PAL ? '' : '（パレット未定義）'}`);
+       `可視 ${pieces.length} / パレット ${onPallet.length} + 端材箱 ${inBox.length}${PAL ? '' : '（パレット未定義）'}`);
   }
 
   R.failed = R.checks.filter(c => !c.pass).length;
