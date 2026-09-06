@@ -1,10 +1,10 @@
-// 後端の端材の払い出し（固定ストリッパシュート → ライン下の端材ピット → 傾斜コンベア →
-// 駆動側の端材箱）を、幾何と運動の両面から確かめる評価器。
+// 後端の屑の払い出し（固定ストリッパシュート → ライン下の屑の受けピット → 傾斜コンベア →
+// 駆動側の屑箱）を、幾何と運動の両面から確かめる評価器。
 //
 // なぜ要るか: この払い出しは «固定部材が可動部材（下台）を貫いている» という、他のどの検査も
 // 見ていない構成を持つ。溝の位置が 1 つずれるだけでシュートが下台を切り裂くが、
 //   - structure.mjs は可動部を外すので下台とシュートの関係を見ない
-//   - interfere.mjs / layouttrace.mjs は «結果として端材がどこへ行ったか» しか見ない
+//   - interfere.mjs / layouttrace.mjs は «結果として屑がどこへ行ったか» しか見ない
 // ため、この穴を塞がないと «見た目は動くが機械としては成立しない» 構成が素通りする。
 import { openApp, installHelpers, DEFAULT_TARGET } from './harness.mjs';
 
@@ -14,8 +14,8 @@ const { browser, page } = await openApp({ target: TARGET, viewport: { width: 900
 await installHelpers(page);
 
 const out = await page.evaluate((EPS) => {
-  const A = window.__app, P = A.physics, W = A.world, K = window.__CFG, sc = K.SCALE, T = window.__T, TL = window.__TAIL;
-  const FV = W.finishView, CS = K.CROP_SHEAR, TC = CS.TAIL;
+  const A = window.__app, P = A.physics, W = A.world, K = window.__CFG, sc = K.SCALE, T = window.__T, TL = window.__SCRAP;
+  const FV = W.finishView, CS = K.CROP_SHEAR, TC = CS.SCRAP;
   const R = { checks: [] };
   const ok = (name, pass, detail = '') => R.checks.push({ name, pass: !!pass, detail });
   const mm = (v) => +(+v).toFixed(0);
@@ -65,11 +65,11 @@ const out = await page.evaluate((EPS) => {
   // 傾いた薄板どうしはワールド軸の AABB が太る。«どれか 1 つの系で分離していれば当たって
   // いない» という分離軸の考え方で、複数の系の最小値を食い込み量とする。
   const digN = (pairs) => pairs.map(([a, b]) => dig(a, b)).reduce((m, r) => r.best < m.best ? r : m);
-  const chute = FV.cropShear.children.find(o => o.name === '端材ストリッパシュート');
-  const pit   = FV.cropShear.children.find(o => o.name === '端材ピット');
-  const conv  = FV.cropShear.children.find(o => o.name === '端材傾斜コンベア架構');
-  const box   = FV.cropShear.children.find(o => o.name === '端材箱');
-  ok('固定シュート・端材ピット・傾斜コンベア・端材箱がある', !!(chute && pit && conv && box),
+  const chute = FV.cropShear.children.find(o => o.name === '屑ストリッパシュート');
+  const pit   = FV.cropShear.children.find(o => o.name === '屑の受けピット');
+  const conv  = FV.cropShear.children.find(o => o.name === '屑傾斜コンベア架構');
+  const box   = FV.cropShear.children.find(o => o.name === '屑箱');
+  ok('固定シュート・屑の受けピット・傾斜コンベア・屑箱がある', !!(chute && pit && conv && box),
      [chute, pit, conv, box].map(o => o ? o.name : '無し').join(' / '));
 
   /* --- 1. 下台の全ストロークでシュートが下台を貫かない（溝を通っている）--- */
@@ -95,11 +95,11 @@ const out = await page.evaluate((EPS) => {
        `最大の食い込み ${worst.pen} mm（上昇 ${worst.b}, 下降 ${worst.d}）`);
   }
 
-  /* --- 2. 端材ピットの開口がテーブル架台の足元を掘っていない --- */
+  /* --- 2. 屑の受けピットの開口がテーブル架台の足元を掘っていない --- */
   {
     const wx = (cx) => K.CROP_SHEAR.X + K.FLIP * cx;
     const x0 = Math.min(wx(TC.PIT.X0), wx(TC.PIT.X1)), x1 = Math.max(wx(TC.PIT.X0), wx(TC.PIT.X1));
-    const holes = [[TC.PIT.BRIDGE[1], TC.PIT.Z_IN], [TC.PIT.Z_OUT, TC.PIT.BRIDGE[0]]];
+    const holes = [[TC.PIT.BRIDGE[1], TC.PIT.Z0], [TC.PIT.Z_OUT, TC.PIT.BRIDGE[0]]];
     let hit = [], feet = 0;
     W.scene.traverse(o => {
       if (!(o.isMesh || o.isInstancedMesh) || !/架台|脚|ベース|柱|据付/.test(o.name || '')) return;
@@ -111,22 +111,23 @@ const out = await page.evaluate((EPS) => {
       }
     });
     R.feet = { checked: feet, hit: hit.length, sample: hit.slice(0, 3) };
-    ok('端材ピットの開口の真上に床置きの足が無い（架台の足元を掘っていない）', hit.length === 0,
+    ok('屑の受けピットの開口の真上に床置きの足が無い（架台の足元を掘っていない）', hit.length === 0,
        `床に接する三角形 ${feet} 個中 ${hit.length} 個が開口の上`);
   }
 
-  /* --- 3. 運転: 後端の端材が シュート → ピット → 傾斜コンベア → 端材箱 と進む --- */
+  /* --- 3. 運転: 先端・後端どちらの屑も ライン下の受け → 傾斜コンベア → 屑箱 と進む --- */
   {
     window.__startAuto(false);
-    const seqs = new Map();                       // ピースごとの経過（混ぜると順序が読めない）
+    const seqs = new Map(), ends = new Map();     // ピースごとの経過（混ぜると順序が読めない）
     let n = 0, minY = 1e9, maxCx = -1e9, minCx = 1e9, bedBack = false, sawDown = false;
     const cx = (x) => K.FLIP * (x - K.CROP_SHEAR.X);
     while (n++ < 120 * 420) {
       P.step(1 / 120);
       const f = P.finish;
       for (const s of f.scraps) {
-        if (!/ONBED|CHUTE|PITFALL|TAILCONV|TAILDROP/.test(s.stage) && !(seqs.has(s.id) && s.stage === 'REST')) continue;
-        const q = seqs.get(s.id) ?? (seqs.set(s.id, []), seqs.get(s.id));
+        if (!/ONBED|CHUTE|CHUTE_TIP|PITFALL|CONVEY|DROP/.test(s.stage) && !(seqs.has(s.id) && s.stage === 'REST')) continue;
+        if (!seqs.has(s.id)) { seqs.set(s.id, []); ends.set(s.id, s.stage === 'ONBED' ? -1 : 1); }
+        const q = seqs.get(s.id);
         if (q[q.length - 1] !== s.stage) q.push(s.stage);
         if (s.stage !== 'REST') { minY = Math.min(minY, s.y); minCx = Math.min(minCx, cx(s.x)); maxCx = Math.max(maxCx, cx(s.x)); }
       }
@@ -134,25 +135,31 @@ const out = await page.evaluate((EPS) => {
       if (sawDown && f.bedDrop <= 0.001) bedBack = true;
       if (f.cropDone && f.scrapRest >= f.cropCutsAll) break;
     }
-    const f = P.finish, order = ['ONBED', 'CHUTE', 'PITFALL', 'TAILCONV', 'TAILDROP', 'REST'];
-    const seq = [...seqs.values()];
-    R.run = { seq: seq.map(q => q.join('>')), tailRest: f.tailRest, cuts: f.cropCutsAll,
-              minY: mm(minY), cx: [mm(minCx), mm(maxCx)], t: mm(n / 120) };
-    ok('後端の端材が ONBED → CHUTE → PITFALL → TAILCONV → TAILDROP → REST の順に進む',
-       seq.length === f.tailRest && seq.length > 0 && seq.every(q => q.join('>') === order.join('>')),
-       seq.map(q => q.join(' → ')).join(' ／ '));
-    ok('後端の端材がパスラインより下（ピットの中）を通る', minY < -CS.TAIL.PIT.DEPTH / 2,
+    const f = P.finish;
+    const common = ['PITFALL', 'CONVEY', 'DROP', 'REST'];
+    const want = (e) => (e < 0 ? ['ONBED', 'CHUTE', 'CHUTE_TIP'] : []).concat(common).join('>');
+    const ids = [...seqs.keys()];
+    const seq = ids.map(id => seqs.get(id).join('>'));
+    R.run = { seq, rest: f.scrapRest, cuts: f.cropCutsAll, minY: mm(minY),
+              cx: [mm(minCx), mm(maxCx)], t: mm(n / 120) };
+    ok('先端の屑は刃の出側からそのまま受けへ落ち、後端の屑はシュートを経て同じ受けへ落ちる',
+       ids.length === f.cropCutsAll && ids.length > 0 && ids.every(id => seqs.get(id).join('>') === want(ends.get(id))),
+       seq.join(' ／ '));
+    ok('屑が先端・後端とも同じ経路（受け → 傾斜コンベア → 屑箱）で払い出される',
+       new Set(seq.map(q => q.split('>').slice(-4).join('>'))).size === 1,
+       `終端の 4 段階: ${[...new Set(seq.map(q => q.split('>').slice(-4).join('>')))].join(' / ')}`);
+    ok('屑がパスラインより下（受けの中）を通る', minY < -CS.SCRAP.PIT.DEPTH / 2,
        `最深 ${mm(minY)} mm（パスライン基準）`);
-    ok('後端の端材がピットの X 範囲から出ない', minCx > TC.PIT.X0 - 1 && maxCx < 1,
-       `X ${mm(minCx)}〜${mm(maxCx)}（ピット ${TC.PIT.X0}〜${TC.PIT.X1}）`);
+    ok('屑が受け開口の X 範囲から出ない', minCx > TC.PIT.X0 - 1 && maxCx < TC.PIT.X1 + 1,
+       `X ${mm(minCx)}〜${mm(maxCx)}（開口 ${TC.PIT.X0}〜${TC.PIT.X1}）`);
     ok('後端も複数カットでき、下台はカットのあいだにパスラインへ戻る',
-       f.tailRest >= 2 && bedBack && f.bedDrop <= 0.001,
-       `後端 ${f.tailRest} カット / 下台の戻り ${bedBack ? '有' : '無'} / 最終 bedDrop ${f.bedDrop.toFixed(3)}`);
-    ok('端材はすべて静止する（搬送の途中で止まらない）', f.scrapRest === f.cropCutsAll,
+       f.cropCutsAll >= 3 && bedBack && f.bedDrop <= 0.001,
+       `総カット ${f.cropCutsAll} / 下台の戻り ${bedBack ? '有' : '無'} / 最終 bedDrop ${f.bedDrop.toFixed(3)}`);
+    ok('屑はすべて静止する（搬送の途中で止まらない）', f.scrapRest === f.cropCutsAll,
        `静止 ${f.scrapRest} / 総カット ${f.cropCutsAll}`);
   }
 
-  /* --- 4. 搬送中の端材が固定設備へ食い込まない --- */
+  /* --- 4. 搬送中の屑が固定設備へ食い込まない --- */
   {
     A.reset ? null : null;
     R.dig = { pen: 0, at: null, stage: null };
@@ -161,9 +168,9 @@ const out = await page.evaluate((EPS) => {
     window.__startAuto(false);
     const fixed = [chute, pit, box, FV.cropShear.children.find(o => o.name === '75mmシャー架構')].filter(Boolean);
     const ax = -TL.convRotX, az = -TL.chuteRotZ;  // コンベア／シュートの傾きを打ち消す座標系
-    // 傾斜コンベアのデッキだけは «面» として厳密に見る。デッキも端材も傾いた薄板なので、
+    // 傾斜コンベアのデッキだけは «面» として厳密に見る。デッキも屑も傾いた薄板なので、
     // 三角形 AABB では（どの座標系で見ても）太りが残り、偽陽性と本物を分けられない。
-    // デッキ面は式で書けるのだから、端材の頂点の «面からの符号付き距離» を直接測る。
+    // デッキ面は式で書けるのだから、屑の頂点の «面からの符号付き距離» を直接測る。
     const V = TC.CONV, PLc = K.MILL.PASS_LINE, cxw = K.CROP_SHEAR.X + K.FLIP * TL.convCx;
     const ca = 1 / Math.hypot(1, TL.convGrad);
     const belowDeck = (m) => {
@@ -183,7 +190,7 @@ const out = await page.evaluate((EPS) => {
     while (n++ < 120 * 420) {
       P.step(1 / 120);
       const f = P.finish;
-      const moving = f.scraps.filter(s => /CHUTE|PITFALL|TAILCONV|TAILDROP/.test(s.stage));
+      const moving = f.scraps.filter(s => /CHUTE|CHUTE_TIP|PITFALL|CONVEY|DROP/.test(s.stage));
       if (moving.length && n % 6 === 0) {
         W.render(P, 0.05);
         for (const s of moving) {
@@ -200,7 +207,7 @@ const out = await page.evaluate((EPS) => {
       }
       if (f.cropDone && f.scrapRest >= f.cropCutsAll) break;
     }
-    ok('搬送中の後端の端材が固定設備へ食い込まない', R.dig.pen <= EPS,
+    ok('搬送中の後端の屑が固定設備へ食い込まない', R.dig.pen <= EPS,
        `最大の食い込み ${R.dig.pen} mm${R.dig.with ? `（${R.dig.with} / ${R.dig.stage}）` : ''}`);
   }
 

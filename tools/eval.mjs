@@ -251,19 +251,37 @@ const run = async () => {
        Math.abs((tv.y + CFG.ROLL_D_END / 2) - passLine) < 1e-6,
        `${(tv.y + CFG.ROLL_D_END / 2).toFixed(1)} mm`);
 
-    // 5) 圧延機直下・シャー直下にローラが無い
-    const allX = tv.zones.flatMap(z => z.xs);
-    ok('圧延機直下にローラ無し', allX.every(x => Math.abs(x) > 1000), `最近接 ${Math.min(...allX.map(Math.abs)).toFixed(0)} mm`);
-    const sx = K.CROP_SHEAR.X;
-    ok('75 mm シャー直下にローラ無し（区間 29.8〜31.4 m が空く）', allX.every(x => Math.abs(x - sx) > 1000),
-       `最近接 ${Math.min(...allX.map(x => Math.abs(x - sx))).toFixed(0)} mm`);
-    // 図面のテーブル区分どおりの本数か
+    // 5) ワークロール・シャーの刃に当たる位置にローラが無い
+    // E-1 / E-2（ミル直近の Φ380）はミル直下 1 m まで入るので «|x| > 1,000» では見ない。
+    // 見るべきはワークロール外周との軸間距離（下ワークロールは軸心がパスライン − WR/2）。
+    const allX = tv.xs;                                  // E-1 / E-2 を含む «段» の X
     {
-      const SEC = K.TABLE.SECTIONS, bad = [];
-      for (const s of SEC) { const lo = Math.min(s.side * s.x0, s.side * s.x1), hi = Math.max(s.side * s.x0, s.side * s.x1);
-        const n = allX.filter(x => x >= lo - 1 && x <= hi + 1).length; if (n !== s.n) bad.push(`${s.name}:${n}/${s.n}`); }
-      ok('図面の区分ごとのローラ本数が一致（全 ' + SEC.reduce((a, s) => a + s.n, 0) + ' 本）', bad.length === 0 && allX.length === SEC.reduce((a, s) => a + s.n, 0),
-         bad.join(' ') || `${allX.length} 本`);
+      const ER = K.TABLE.EROLL, rWR = K.MILL.WR_D / 2, P0 = K.MILL.PASS_LINE;
+      const worst = Math.min(...allX.map(x => {
+        const near = Math.abs(x) < 3000 ? K.TABLE.EROLL : null;   // ミル直近は E ロール、それ以外は主ローラ
+        const r = near ? ER.D_END / 2 : K.TABLE.ROLL_D_END / 2;
+        const ay = P0 - r, wy = P0 - rWR;                          // ローラ軸心 / 下ワークロール軸心
+        return Math.hypot(x, ay - wy) - (rWR + r);                 // 外周どうしの隙間
+      }));
+      ok('テーブルローラがワークロールに当たらない', worst > 0, `最小の隙間 ${worst.toFixed(0)} mm`);
+    }
+    const sx = K.CROP_SHEAR.X, SZ = K.CROP_SHEAR.ZONE;
+    // 図面のシャー区間（29.8〜31.4 m）の «内側» にローラが入っていないか。区間の境界に
+    // ローラが載る区分（H-1 は区間長 = ピッチの合計）があるので、境界そのものは許す。
+    ok('75 mm シャー区間（29.8〜31.4 m）の内側にローラ無し',
+       allX.filter(x => x * sx > 0).every(x => Math.abs(x) <= SZ[0] + 1 || Math.abs(x) >= SZ[1] - 1),
+       `最近接 ${Math.min(...allX.map(x => Math.abs(x - sx))).toFixed(0)} mm（刃から）`);
+    // 図面のテーブル区分どおりの本数か（E-1 / E-2 は 1 段 OS/DS の 2 本なので «段数» で見る）
+    {
+      const SEC = K.TABLE.SECTIONS, Lay = window.__LAYOUT, bad = [];
+      for (const s of SEC) {
+        const gen = Lay.section(s).xs, want = Lay.stages(s);
+        const n = allX.filter(x => gen.some(g => Math.abs(g - x) < 1)).length;
+        if (n !== want) bad.push(`${s.name}:${n}/${want}`);
+      }
+      const stages = SEC.reduce((a, s) => a + Lay.stages(s), 0);
+      ok('図面のテーブル区分どおりの段数（全 ' + stages + ' 段 / ' + SEC.reduce((a, s) => a + s.n, 0) + ' 本）',
+         bad.length === 0 && allX.length === stages, bad.join(' ') || `${allX.length} 段`);
     }
 
     // 6) テーブルローラ同士が干渉しない（ピッチ > 胴径）
@@ -475,12 +493,18 @@ const run = async () => {
          S.CLEARANCE / S.MAX_TH >= 0.03 && S.CLEARANCE / S.MAX_TH <= 0.08,
          `${S.CLEARANCE} mm ＝ 板厚 ${S.MAX_TH} mm の ${(100 * S.CLEARANCE / S.MAX_TH).toFixed(1)} %`);
       {
-        const E = S.EJECT, w = K.SLAB.WID_DEFAULT;
-        ok('端材払い出しがエプロン端まで届き、コンベア → パレットへ続く',
-           E.Z_DROP - w / 2 > E.Z_HOME && S.CONVEYOR.Z0 <= E.Z_DROP && S.CONVEYOR.Z1 > E.Z_DROP && S.PALLET.Z - S.PALLET.L / 2 <= S.CONVEYOR.Z1,
-           `プッシャ面 ${E.Z_HOME} → ${E.Z_DROP - w / 2} mm ／ コンベア ${S.CONVEYOR.Z0}〜${S.CONVEYOR.Z1} ／ パレット ${S.PALLET.Z - S.PALLET.L / 2}〜${S.PALLET.Z + S.PALLET.L / 2} mm`);
+        // クロップ屑は先端・後端とも «テーブルロールの下» の受けへ落とし、1 台の傾斜
+        // コンベアで操作側へ抜く。受け開口が刃の入側・出側の両方を跨いでいるかを見る。
+        const SC = S.SCRAP, PIT = SC.PIT, CV = SC.CONV, w = K.SLAB.WID_MAX;
+        ok('屑の受け開口が刃の入側・出側の両方に跨がる（正準 X の 0 を含む）',
+           PIT.X0 < 0 && PIT.X1 > 0, `開口 ${PIT.X0}〜${PIT.X1}（0 が剪断面）`);
+        ok('受け開口の Z が最大板巾より広い', Math.abs(PIT.BRIDGE[0] - PIT.Z0) > w,
+           `開口 ${PIT.Z0}〜${PIT.BRIDGE[0]} ＝ ${Math.abs(PIT.BRIDGE[0] - PIT.Z0)} mm / 最大板巾 ${w}`);
+        ok('屑コンベアの受け面が開口の全幅を受ける', CV.W >= (PIT.X1 - PIT.X0) - 120,
+           `受け面 ${CV.W} mm / 開口 ${PIT.X1 - PIT.X0} mm`);
         ok('払い出し方向が操作側（+Z＝装入設備と同じ側）',
-           E.Z_DROP > 0 && K.SUPPLY.SIDE_Z > 0, `Z_DROP ${E.Z_DROP} / 操作側 +Z`);
+           CV.Z1 > CV.Z0 && SC.BOX.Z > 0 && K.SUPPLY.SIDE_Z > 0,
+           `コンベア ${CV.Z0} → ${CV.Z1} ／ 屑箱 Z ${SC.BOX.Z}`);
       }
     }
     // --- 巻取: 段付きコイル・拡縮マンドレル・押えアーム ---
@@ -504,8 +528,14 @@ const run = async () => {
     {
       const H = K.MILL.HOUSING, sc = K.SCALE, W3 = window.__app.world, T3 = window.__T;
       const hOuter = H.POST_X + H.WIN_X / 2;
-      ok('テーブルローラはハウジング外面の外側から始まる', Math.min(...allX.map(Math.abs)) - CFG.ROLL_D_END / 2 > hOuter,
-         `最近接ローラ ${Math.min(...allX.map(Math.abs))} mm / ハウジング外面 ${hOuter} mm`);
+      // 主テーブル（長胴 Φ281.6）はハウジング外面の外側から。ミル直近の E-1 / E-2 は
+      // 胴が短く（857）OS/DS に分けてあるので、ハウジングの «内側» に入る。
+      const mainX = allX.filter(x => Math.abs(x) > 2400), eX = allX.filter(x => Math.abs(x) <= 2400);
+      ok('主テーブルローラはハウジング外面の外側から始まる', Math.min(...mainX.map(Math.abs)) - CFG.ROLL_D_END / 2 > hOuter,
+         `最近接 ${Math.min(...mainX.map(Math.abs))} mm / ハウジング外面 ${hOuter} mm`);
+      ok('E-1 / E-2 の短胴ローラはハウジングの内側幅に収まる',
+         eX.length === 8 && CFG.EROLL.Z_OUT + CFG.EROLL.COLLAR_L + CFG.EROLL.JOURNAL_L < H.INNER_Z,
+         `胴端 ${CFG.EROLL.Z_OUT} + 首 ${CFG.EROLL.COLLAR_L + CFG.EROLL.JOURNAL_L} < ハウジング内面 ${H.INNER_Z}（段 ${eX.length}）`);
       const gb = new T3.Box3().setFromObject(W3.guideView.stations[0].sides[0]);
       const gIn = Math.min(Math.abs(gb.min.x), Math.abs(gb.max.x)) / sc;
       ok('サイドガイドはハウジングの外側にある', gIn > hOuter, `ガイド内端 ${gIn.toFixed(0)} mm / ハウジング外面 ${hOuter} mm`);

@@ -101,7 +101,8 @@ const out = await page.evaluate(() => {
   /* ================= 5. テーブル配置 ================= */
   R.table = {};
   {
-    const xs = W.tableView.zones.flatMap(z => z.xs).sort((a, b) => a - b);
+    // E-1 / E-2 は 1 段を OS/DS の 2 本で持つので «段» の X で数える（tableView.xs が段の一覧）
+    const xs = W.tableView.xs.slice().sort((a, b) => a - b);
     const pitches = []; for (let i = 1; i < xs.length; i++) pitches.push(xs[i] - xs[i - 1]);
     const sx = K.CROP_SHEAR.X;
     // 設備（ミル・トリマー・3ロール・シャー）をまたぐ欠けは除いて、ローラ同士のピッチだけを見る
@@ -117,16 +118,56 @@ const out = await page.evaluate(() => {
     ok('テーブル全域でローラピッチが 800 mm 以下（設備をまたぐ欠けを除く）', plain.every(p => p <= 800), `最大 ${R.table.maxPitch.toFixed(0)} mm`);
     const SEC = K.TABLE.SECTIONS;
     if (SEC) {
-      const bad = [];
+      // 区分への割り当ては «その区分が生成した X と一致するか» で見る。区間の境界に
+      // ローラが載る区分（H-1 は区間長 = ピッチの合計なので端が境界に一致する）があるため、
+      // 範囲で数えると隣の区分と二重に数えてしまう。
+      const Lay0 = window.__LAYOUT, bad = [];
       for (const s of SEC) {
-        const lo = Math.min(s.side * s.x0, s.side * s.x1), hi = Math.max(s.side * s.x0, s.side * s.x1);
-        const inSec = xs.filter(x => x >= lo - 1 && x <= hi + 1);
-        if (inSec.length !== s.n) bad.push(`${s.name}: ${inSec.length}/${s.n}`);
+        const gen = Lay0.section(s).xs, want = Lay0.stages(s);       // split は 1 段 2 本
+        const inSec = xs.filter(x => gen.some(g => Math.abs(g - x) < 1));
+        if (inSec.length !== want) bad.push(`${s.name}: ${inSec.length}/${want}`);
       }
       R.table.sections = SEC.map(s => s.name + ':' + s.n);
       ok('図面の区分ごとのローラ本数が一致', bad.length === 0, bad.join(' ') || `${SEC.length} 区分すべて一致`);
+      // 図面の «本数» は E-1 / E-2 が 1 段 2 本なので、段数の合計とは一致しない。
+      // 段数（配置）と本数（実際に置かれたローラ）の両方を突き合わせる。
+      const stages = SEC.reduce((a, s) => a + window.__LAYOUT.stages(s), 0);
       const total = SEC.reduce((a, s) => a + s.n, 0);
-      ok('図面のローラ総数と一致', xs.length === total, `${xs.length} / 図面 ${total} 本`);
+      const placed = xs.length + (W.tableView.eXs ? W.tableView.eXs.length : 0);
+      ok('図面のローラ段数と一致', xs.length === stages, `${xs.length} 段 / 図面 ${stages} 段`);
+      ok('図面のローラ総数と一致（E-1 / E-2 は 1 段 OS/DS の 2 本）', placed === total,
+         `${placed} / 図面 ${total} 本`);
+      const eN = W.tableView.eRolls ? W.tableView.eRolls.mesh.count : 0;
+      ok('E-1 / E-2 のローラが OS/DS の 2 本ずつ置かれている',
+         eN === (W.tableView.eXs || []).length * 2 && eN === 16,
+         `${eN} 本（段 ${(W.tableView.eXs || []).length}）`);
+      // 短胴（857）なので、胴の外端が最大板巾の半分に届いていること
+      const EE = K.TABLE.EROLL;
+      ok('E テーブルのローラが図面どおり（Φ380 × 857L、胴の外端が最大板巾の半分）',
+         EE && EE.D_END === 380 && EE.BARREL === 857 && EE.Z_OUT >= K.SLAB.WID_MAX / 2 - 10,
+         EE ? `Φ${EE.D_END} × ${EE.BARREL}L / 胴外端 ${EE.Z_OUT}（最大板巾の半分 ${K.SLAB.WID_MAX / 2}）` : '未定義');
+      // 図面のピッチ（"460 370×5 460" など）どおりに並んでいるか。区間長がピッチの合計と
+      // ほぼ同じ区分（D / F / G-1 / H-1）は «等配» へ落ちやすく、落ちても本数は合うので
+      // 本数の検査だけでは通ってしまう。ピッチ列そのものを突き合わせる。
+      const Lay = window.__LAYOUT, uni = SEC.filter(s => Lay.section(s).uniform).map(s => s.name);
+      R.table.uniform = uni;
+      ok('全区分が図面のピッチどおりに並ぶ（等配へ落ちていない）', uni.length === 0,
+         uni.length ? `等配になった区分: ${uni.join(', ')}` : `${SEC.length} 区分すべて図面どおり`);
+      // リールの手前（ロール側）は F テーブル。図面どおり 8 本・370×5 / 460×2 で、
+      // リール・3ロールの手前で終わっているか
+      const fs = SEC.find(s => s.name === 'F'), fr = fs ? Lay.section(fs) : null;
+      if (fr) {
+        const fx = fr.xs.map(x => Math.abs(x)).sort((a, b) => a - b);
+        const fp = []; for (let i = 1; i < fx.length; i++) fp.push(Math.round(fx[i] - fx[i - 1]));
+        R.table.F = { n: fs.n, pitches: fp, x: [Math.round(fx[0]), Math.round(fx[fx.length - 1])] };
+        const want = [460, 370, 370, 370, 370, 370, 460];
+        ok('F テーブルが図面どおり（8 本・460 / 370×5 / 460）',
+           fs.n === 8 && fp.length === want.length && fp.every((v, i) => Math.abs(v - want[i]) < 1),
+           `${fs.n} 本 / ピッチ ${fp.join(' ')}`);
+        ok('F テーブルがリール・3ロールの手前で終わる',
+           fx[fx.length - 1] < Math.abs(K.COILER.DEFLECTOR_X) - 200 && fx[fx.length - 1] < Math.abs(K.COILER.X) - 200,
+           `F 末端 ${fx[fx.length - 1]} / 3ロール ${Math.abs(K.COILER.DEFLECTOR_X)} / リール ${Math.abs(K.COILER.X)}`);
+      }
     } else ok('図面のテーブル区分（CONFIG.TABLE.SECTIONS）が定義されている', false, '未定義');
     ok('テーブル全長が図面（121.8 + 80.1 = 201.9 m）', Math.abs(Math.abs(K.TABLE.X_MIN) + Math.abs(K.TABLE.X_MAX) - 201900) < 1,
        `${(Math.abs(K.TABLE.X_MIN) + Math.abs(K.TABLE.X_MAX)) / 1000} m`);
@@ -190,52 +231,45 @@ const out = await page.evaluate(() => {
     }
     R.scrap = { spreadBefore: mm(spreadBefore), spreadPiece: mm(spreadPiece) };
     ok('端材が板端の変形（舌・ワニ口）を保っている', spreadPiece > 0.5 * spreadBefore && spreadBefore > 20, `切断前の先端の広がり ${mm(spreadBefore)} mm / 端材 ${mm(spreadPiece)} mm`);
-    // 端材の行き先: すべてのカットが終わって静止したとき、先端はパレット、後端は
-    // ライン下のピット → 傾斜コンベア → 駆動側の端材箱へ収まっているか。
-    // 後端は搬送距離が長い（コンベアだけで十数秒）ので、そのぶん時間を進めて確かめる。
-    // 追跡は «切り始めてから» 続ける。後端の 1 個目は最後のカットより前に床上へ出てしまうので、
-    // 全部が切り終わってから見はじめると «床下を通った» 証拠を取り逃がす。
-    const tailMinY = new Map();                                   // 後端の端材が «床下を通った» ことの証拠
-    for (let k = 0; k < 160; k++) {
+    // 屑の行き先: 先端・後端とも «ラインの下の受け → 傾斜コンベア → 操作側の屑箱» の
+    // 1 系統。搬送距離が長い（コンベアだけで十数秒）ので、そのぶん時間を進めて確かめる。
+    const minYs = new Map();                                      // 屑が «床下を通った» ことの証拠
+    for (let k = 0; k < 200; k++) {
       window.__ff((Pp, n) => n > 60);                             // 0.5 s ずつ
       W.render(P, 1 / 60);
       for (const [id, m] of (FV.scraps instanceof Map ? FV.scraps : new Map())) {
         const b = new T.Box3().setFromObject(m);
-        tailMinY.set(id, Math.min(tailMinY.get(id) ?? 1e9, b.min.y / sc));
+        minYs.set(id, Math.min(minYs.get(id) ?? 1e9, b.min.y / sc));
       }
       if (P.finish.cropDone && P.finish.scrapRest >= P.finish.cropCutsAll) break;
     }
     W.render(P, 1 / 60);
     const pieces = (FV.scraps instanceof Map ? [...FV.scraps.values()] : [FV.cropPiece]).filter(m => m && m.visible);
-    const PAL = K.CROP_SHEAR.PALLET, TL = K.CROP_SHEAR.TAIL, BOX = TL.BOX;
+    const SC = K.CROP_SHEAR.SCRAP, BOX = SC.BOX;
     const box3 = (m) => new T.Box3().setFromObject(m);
-    const onPallet = pieces.filter(m => { const b = box3(m); return PAL && b.min.y / sc >= PAL.H - 5 && b.min.y / sc < PAL.H + 2000 && Math.abs(b.getCenter(new T.Vector3()).z / sc - PAL.Z) < PAL.L / 2; });
-    R.scrap.pieces = pieces.length; R.scrap.onPallet = onPallet.length;
+    R.scrap.pieces = pieces.length;
     R.scrap.rest = pieces.map(m => { const b = box3(m), c = b.getCenter(new T.Vector3());
       return { y: mm(b.min.y / sc), z: mm(c.z / sc), x: mm(c.x / sc) }; });
     ok('先端と後端の両方をクロップする（そのまま板を送って後端も切る）',
        P.finish.cropEndsDone[1] && P.finish.cropEndsDone[-1] && P.finish.cropCutsAll >= 2,
        `先端 ${P.finish.cropEndsDone[-K.FLIP > 0 ? 1 : -1] ? '済' : '未'} / 後端 ${P.finish.cropEndsDone[K.FLIP > 0 ? 1 : -1] ? '済' : '未'} / 総カット ${P.finish.cropCutsAll}`);
-    // 後端の端材はライン下の端材ピットへ落ち、傾斜コンベアでラインの下をくぐって
-    // 駆動側の端材箱へ入る（出側のプッシャは、そのとき板がエプロンを覆っていて使えない）。
+    // 先端・後端とも同じ屑箱に収まる（OS 側の 1 か所）
     const inBox = pieces.filter(m => { const b = box3(m), c = b.getCenter(new T.Vector3());
       return b.min.y / sc >= BOX.H - 5 && b.min.y / sc < BOX.H + 1200
           && Math.abs(c.z / sc - BOX.Z) < BOX.L / 2 + 50; });
     R.scrap.inBox = inBox.length;
-    ok('後端の端材がライン下のピット経由で駆動側の端材箱に収まる',
-       P.finish.tailRest > 0 && inBox.length === P.finish.tailRest,
-       `端材箱 ${inBox.length} 個（後端カット ${P.finish.tailRest}）／ 総カット ${P.finish.cropCutsAll}`);
-    // «ライン下を通した» ことの確認: 後端の端材はどこかで床面より下（パスライン下）を通る
-    const belowFloor = [...tailMinY.values()].filter(y => y < -50);
+    ok('先端・後端の屑がどちらも操作側の屑箱 1 か所に収まる',
+       pieces.length > 0 && inBox.length === pieces.length && inBox.length === P.finish.cropCutsAll,
+       `屑箱 ${inBox.length} 個 / 総カット ${P.finish.cropCutsAll}`);
+    ok('屑箱が操作側（+Z）にある', BOX.Z > 0, `屑箱 Z ${BOX.Z}`);
+    // «テーブルロールの下へ落とす» ことの確認: どの屑もどこかで床面より下を通る
+    const belowFloor = [...minYs.values()].filter(y => y < -50);
     R.scrap.belowFloor = belowFloor.length;
-    ok('後端の端材が床面より下（ピット内）を通ってから排出される',
-       belowFloor.length >= P.finish.tailRest && P.finish.tailRest > 0,
-       `床下を通った端材 ${belowFloor.length} 個 / 最深 ${mm(Math.min(...[...tailMinY.values()], 0))} mm`);
-    // 端材はどれも装置の中に隠れず、先端はパレット、後端は端材箱で «見えたまま» 静止する
-    ok('端材はすべて可視のまま（先端はパレット、後端は端材箱）に納まる',
-       pieces.length > 0 && onPallet.length + inBox.length === pieces.length
-       && onPallet.length === P.finish.cropCutsAll - P.finish.tailRest,
-       `可視 ${pieces.length} / パレット ${onPallet.length} + 端材箱 ${inBox.length}${PAL ? '' : '（パレット未定義）'}`);
+    ok('屑が先端・後端とも床面より下（ラインの下の受け）を通ってから排出される',
+       belowFloor.length === P.finish.cropCutsAll && P.finish.cropCutsAll > 0,
+       `床下を通った屑 ${belowFloor.length} / ${P.finish.cropCutsAll} 個 ／ 最深 ${mm(Math.min(...[...minYs.values()], 0))} mm`);
+    ok('屑はすべて可視のまま屑箱に納まる（装置の中に隠れない）',
+       pieces.length === P.finish.cropCutsAll, `可視 ${pieces.length} / 総カット ${P.finish.cropCutsAll}`);
   }
 
   R.failed = R.checks.filter(c => !c.pass).length;

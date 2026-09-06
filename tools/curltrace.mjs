@@ -14,6 +14,7 @@ const out = await page.evaluate(({ alloy, target }) => {
     window.__startAuto(false);
     const rows = [], checks = [], ok = (n, c, d) => checks.push({ name: n, pass: !!c, detail: d });
     let last = -2, maxAsym = 0, drawnMax = 0, analyticMax = 0, wasRolling = false;
+    let headKink = { drop: 0, x: null, pass: null };
     // 未圧延側（尾端）の反りがパス中に変わっていないか。ワークロールに触れていない部分は
     // 曲率も «自分の板厚から決まる浮き上がり長» も変わってはいけない。
     const tailProbe = [];
@@ -35,6 +36,25 @@ const out = await page.evaluate(({ alloy, target }) => {
           for (let i = 0; i < pos.count; i++) my = Math.max(my, pos.getY(i));
           const lift = my / sc - (K.MILL.PASS_LINE + p.mill.gap);
           drawnMax = Math.max(drawnMax, lift);
+          // 反りの «折れ» 検査: 板は両端が持ち上がるので、端から 1.2 m の窓の中だけを見て
+          // «端へ向かって高さが下がらない» ことを確かめる。端部の張り出し（ワニ口）で端より
+          // 外へ出た頂点だけが落ち込む種類の誤りは、この窓でしか捕まらない。
+          for (const end of [1, -1]) {
+            const base = W.slabView.base, pts = [];
+            for (let i = 0; i < pos.count; i++) {
+              if (base.getY(i) + 0.5 < 0.99 || Math.abs(base.getZ(i)) > 1e-6) continue;   // 上面・幅中央
+              pts.push([pos.getX(i) / sc * end, pos.getY(i) / sc]);
+            }
+            pts.sort((a, b) => a[0] - b[0]);
+            const x1 = pts[pts.length - 1][0];
+            if (x1 < 3000) continue;                                      // 端がまだミルの近く（バイト内）
+            // バイトの中は «ロールギャップまで薄くなる» ぶん上面が下がるのが正しいので窓から外す
+            const win = pts.filter(q => q[0] > Math.max(x1 - 1200, 1500));
+            for (let i = 1; i < win.length; i++) {
+              const drop = win[i - 1][1] - win[i][1];                    // 端へ向かって «下がった» 量
+              if (drop > headKink.drop) headKink = { drop, x: Math.round(win[i][0] * end), pass: p.mill.passIndex, end };
+            }
+          }
         }
       }
       const endOfPass = wasRolling && !s.rollingActive; wasRolling = s.rollingActive;
@@ -75,6 +95,8 @@ const out = await page.evaluate(({ alloy, target }) => {
     }
     ok('先端の浮き上がりが現実的（厚板で 50〜1500 mm）', rows.some(r => r.th > 20 && r.tip_mm >= 50 && r.tip_mm <= 1500), `最大 ${Math.max(...rows.map(r => r.tip_mm))} mm`);
     ok('描画の持ち上がりが現実的（1.5 m 以内、片持ちの立ち上がりを含む）', drawnMax <= 1500, `描画最大 ${drawnMax.toFixed(0)} mm ／ 着地後のスキー最大 ${analyticMax.toFixed(0)} mm`);
+    ok('板端が反りと逆へ折れない（張り出し部だけ落ち込まない）', headKink.drop <= 5,
+       `端へ向かう最大の落ち込み ${headKink.drop.toFixed(0)} mm${headKink.x === null ? '' : `（x=${headKink.x}, ${headKink.end > 0 ? 'xMax' : 'xMin'} 側, パス ${headKink.pass}）`}`);
     ok('圧延が完走した', P.finish.done, `done=${P.finish.done}`);
     ok('温度は NaN でない', Number.isFinite(s.temperature) && s.T.every(Number.isFinite), `${s.temperature.toFixed(1)} ℃`);
     res({ alloy: s.alloyKey, rows, checks, final: { th: +s.thickness.toFixed(1), T: +s.temperature.toFixed(0), passes: K.SCHEDULE.length, done: P.finish.done, mode: P.finish.mode } });

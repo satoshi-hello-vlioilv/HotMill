@@ -85,7 +85,9 @@ const out = await page.evaluate(() => {
     if (carOrder[carOrder.length - 1] !== f.carStage) carOrder.push(f.carStage);
     if (f.carStage === 'STRIP' && deckErr === null) {            // 受け取り切った瞬間
       W.render(P, 0.1);
-      deckErr = FV.car.position.y / sc - (FV.coil.position.y / sc - f.od / 2);
+      // V 受けなのでコイル芯は «デッキ上面 + V での芯高さ» に来る（下端が上面に一致するのではない）
+      const rC = Math.max(f.od, C.MANDREL_D) / 2;
+      deckErr = (FV.coil.position.y / sc - FV.car.position.y / sc) - window.__CRADLE.centerY(rC);
     }
     return f.carStage === 'REST';
   }, 120 * 2500, 0);
@@ -123,7 +125,7 @@ const out = await page.evaluate(() => {
   // 待機はリール下ではなく搬出位置。圧延中はリール下に板が通るので、そこで待つと当たる
   ok('コイルカーは圧延中リール下に居ない（搬出位置で待機する）',
      carOrder[0] === 'IDLE' && carOrder[1] === 'APPROACH', `待機 → ${carOrder[1] ?? '—'}`);
-  ok('受け取り時にデッキ上面がコイル下端に一致する（浮き／めり込みが無い）',
+  ok('受け取り時にコイルが V 受けに正しく載る（浮き／めり込みが無い）',
      deckErr !== null && Math.abs(deckErr) < 3, `差 ${deckErr === null ? '—' : deckErr.toFixed(1)} mm`);
   ok('搬出後のコイルがマンドレルの外（操作側）にある',
      coilZ !== null && coilZ >= C.CAR.TRAVEL_Z - 5, `コイル Z ${coilZ === null ? '—' : coilZ.toFixed(0)} mm（搬出 ${C.CAR.TRAVEL_Z}）`);
