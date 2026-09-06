@@ -22,13 +22,15 @@ const out = await page.evaluate(() => {
   const WR = C.WRAPPER;
   let wrapAtGrip = null, wrapAfterHold = null, gapClosed = [], beltErr = [];
   let carOrder = [], deckErr = null, coilZ = null;
-  // ラッパーは «マンドレル芯を原点» にしたグループ（FV.wrap）の中にあるので、
-  // ロールの position はそのまま芯からの相対座標になる（芯高さを引かない）
+  // ラッパーロールは «振り軸を原点とするキャリッジ» の中にあるので、
+  // 位置はワールド座標で読んでからマンドレル芯を引く（親のグループ構成に依存しない）
+  const wv = new T.Vector3(), cyM = K.MILL.PASS_LINE + C.Y_ABOVE;
   const rollGaps = () => {                   // 閉じたときのロール面とコイル外周の隙間 [mm]
     const f = P.finish, s = P.slab;
     const h = s.inBite ? P.mill.gap : s.thickness;
     return FV.wrapRolls.map(w => {
-      const dx = w.roll.position.x / sc, dy = w.roll.position.y / sc;
+      w.roll.getWorldPosition(wv);
+      const dx = wv.x / sc - C.X, dy = wv.y / sc - cyM;
       // コイルは 1 周ごとに段が付くので、当たりの極角での実半径と比べる（押えコロと同じ式）
       const rC = window.__ROLL.coilRadiusAt(Math.atan2(dy, dx), h, f.turns, f.entry, f.windSign);
       return Math.hypot(dx, dy) - C.WRAPPER.ROLL_D / 2 - rC;
@@ -78,10 +80,15 @@ const out = await page.evaluate(() => {
         // ベルトの実寸（頂点の座標）をロールの外接半径と突き合わせる。
         // ベルトは «3 本のロールに掛かる帯» を毎フレーム作るので、いちばん外のロールの
         // 外接半径がそのままベルトの最大半径になる
-        const rMax = Math.max(...FV.wrapRolls.map(w => Math.hypot(w.roll.position.x / sc, w.roll.position.y / sc)));
+        const rMax = Math.max(...FV.wrapRolls.map(w => {
+          w.roll.getWorldPosition(wv); return Math.hypot(wv.x / sc - C.X, wv.y / sc - cyM); }));
         const bp = FV.belt.geometry.attributes.position, bv = new T.Vector3();
         let rb = 0;
-        for (let i = 0; i < bp.count; i++) { bv.fromBufferAttribute(bp, i); rb = Math.max(rb, Math.hypot(bv.x / sc, bv.y / sc)); }
+        FV.belt.updateWorldMatrix(true, false);
+        for (let i = 0; i < bp.count; i++) {
+          bv.fromBufferAttribute(bp, i).applyMatrix4(FV.belt.matrixWorld);
+          rb = Math.max(rb, Math.hypot(bv.x / sc - C.X, bv.y / sc - cyM));
+        }
         beltErr.push(Math.abs(rb - (rMax + C.WRAPPER.ROLL_D / 2 + C.WRAPPER.BELT_T / 2)));
       }
       if (wrapAfterHold === null && f.turns > WR.TURNS_HOLD + 1) wrapAfterHold = f.wrap;
