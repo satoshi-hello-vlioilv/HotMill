@@ -117,9 +117,12 @@ const out = await page.evaluate(() => {
      samples.length > 0 && expandedR * 2 >= C.MANDREL_D - 2, `巻取中の外接径 Φ${(expandedR * 2).toFixed(0)}`);
   // --- コイルカー ---
   ok('コイルカーが 受け取り → マンドレル縮小 → 搬出 → 降ろす の順に進む',
-     ['IDLE', 'LIFT', 'STRIP', 'CARRY', 'SET', 'REST'].every((v, i) => carOrder[i] === v), carOrder.join(' → '));
+     ['IDLE', 'APPROACH', 'LIFT', 'STRIP', 'CARRY', 'SET', 'REST'].every((v, i) => carOrder[i] === v), carOrder.join(' → '));
   ok('マンドレルはカーが受けてから縮小する（コイルを落とさない）',
      carOrder.indexOf('LIFT') > 0 && carOrder.indexOf('LIFT') < carOrder.indexOf('STRIP'), carOrder.join(' → '));
+  // 待機はリール下ではなく搬出位置。圧延中はリール下に板が通るので、そこで待つと当たる
+  ok('コイルカーは圧延中リール下に居ない（搬出位置で待機する）',
+     carOrder[0] === 'IDLE' && carOrder[1] === 'APPROACH', `待機 → ${carOrder[1] ?? '—'}`);
   ok('受け取り時にデッキ上面がコイル下端に一致する（浮き／めり込みが無い）',
      deckErr !== null && Math.abs(deckErr) < 3, `差 ${deckErr === null ? '—' : deckErr.toFixed(1)} mm`);
   ok('搬出後のコイルがマンドレルの外（操作側）にある',

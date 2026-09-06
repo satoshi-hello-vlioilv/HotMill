@@ -1810,9 +1810,12 @@ class FinishState {
     // 巻き層の状態。turns は板の周速から積分した巻き数（マンドレル 1 回転＝1 巻）。
     this.turns = 0; this.layers = 0; this.frac = 0; this.layR = CONFIG.COILER.MANDREL_D / 2;
     this.entry = 0;            // 板の入口の極角（world, rad）
-    // コイルカー。carStage: IDLE → LIFT（受けに当てて持ち上げ）→ STRIP（マンドレル縮小）
+    // コイルカー。carStage: IDLE（搬出位置で待機）→ APPROACH（リール下へ入る）
+    //            → LIFT（受けに当てて持ち上げ）→ STRIP（マンドレル縮小）
     //            → CARRY（軸方向へ搬出）→ SET（降ろす）→ REST
-    this.carStage = 'IDLE'; this.carLift = 0; this.carZ = 0; this.coilOff = false;
+    // 待機はリール下ではなく «搬出位置»。リール下は圧延中に板が通る（出側テーブルは
+    // リールの先まで続く）ので、そこで待つと板と当たる。
+    this.carStage = 'IDLE'; this.carLift = 0; this.carZ = CONFIG.COILER.CAR.TRAVEL_Z; this.coilOff = false;
     this.expand = 0;           // マンドレルセグメント 0:縮小 → 1:拡張
     this.tailPast = 0;         // 尾端が板の入口 A を過ぎてから進んだ距離 [mm]
     // ベルトラッパー。wrap 0:開 → 1:閉。wrapDone はコイルが自立して開いたあと
@@ -2177,6 +2180,13 @@ class FinishController {
   _coilCar(dt) {
     const s = this.s, R = CONFIG.COILER.CAR;
     switch (s.carStage) {
+      case 'APPROACH':                                // 搬出位置からリールの真下へ入る
+        s.carZ = Math.max(0, s.carZ - R.SPEED_Z * dt);
+        if (s.carZ <= 0) {
+          s.carStage = 'LIFT';
+          this.bus.emit('SYS_MESSAGE', { text: 'コイルカー: リール下へ入り、コイルを受けます', kind: 'info' });
+        }
+        break;
       case 'LIFT':                                    // 受け台がコイル外周に当たるまで上げる
         s.carLift = Math.min(1, s.carLift + dt / R.T_LIFT);
         if (s.carLift >= 1) {
@@ -2349,7 +2359,7 @@ class FinishController {
     // −1 になると finalPass は偽になるので、それだけを条件にすると巻取の途中で縮んでしまう。
     // マンドレルは «巻き終えてコイルカーが受けるまで» 拡張したまま。全パス完了で passIndex が
     // −1 になると finalPass は偽になるので、それだけを条件にすると巻取の途中で縮んでしまう。
-    const holding = s.carStage === 'IDLE' || s.carStage === 'LIFT';
+    const holding = s.carStage === 'IDLE' || s.carStage === 'APPROACH' || s.carStage === 'LIFT';
     const wantExpand = s.mode === 'COIL' && (!s.done || holding)
                     && (s.gripped || s.winding || (finalPass && headPast > -CO.APPROACH));
     s.expand = Num.rateTo(s.expand, wantExpand ? 1 : 0, 1 / CO.T_EXPAND, dt);
@@ -2410,7 +2420,7 @@ class FinishController {
       if (F * (A.x - tail) > 0) { sl.xMin += F * v * dt; sl.xMax += F * v * dt; }
       else if (s.tailPast < bridgeLen) { s.tailPast += v * dt; sl.xMin += F * v * dt; sl.xMax += F * v * dt; }
       else if (!s.done) {
-        s.winding = false; s.done = true; s.carStage = 'LIFT';
+        s.winding = false; s.done = true; s.carStage = 'APPROACH';
         this.bus.emit('SYS_MESSAGE', {
           text: `巻取完了: 板厚 ${sl.thickness.toFixed(1)} mm × 幅 ${s.finishedWidth(sl.width)} mm ／ 外径 Φ${s.od.toFixed(0)} ／ ${(s._mass / 1000).toFixed(1)} t ／ ${s.turns.toFixed(0)} 巻`,
           kind: 'info' });
