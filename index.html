@@ -704,6 +704,7 @@ const VERSION = {
       { t: '既定の材質を A5052、呼び厚（鋳造厚）を 560 mm にした', w: 'MATERIAL.ALLOY / SLAB.CAST_DEFAULT' },
       { t: '«既定は選択肢の先頭» という暗黙の決めをやめ、CAST_DEFAULT を明示した', w: 'SLAB.CAST_DEFAULT' },
       { t: '既定の板長を 2,400 mm に。536 mm × 4,200 mm では 20 mm を切ると出側テーブルに載らず、8 mm コイルが成立しない（実測 28.7→8.2 mm・64,586 t）', w: 'SLAB.LEN_DEFAULT' },
+      { t: '素材スライダの範囲と初期値を CONFIG から入れるようにした（長さだけ 4,200 mm のまま置いていかれていた）', w: 'UIManager._buildRanges' },
     ] },
     { v: '1.2.0', base: 'ebdb7dd', date: '2026-09-06', title: 'ラッパーを押し込み式へ、圧延実績のロギング、視点操作とワイヤ', items: [
       { t: 'ベルトラッパーをリールの左上からシリンダーで押し込む C 型キャリッジへ', w: 'Wrapper / Parts.wrapperCarriage' },
@@ -6796,7 +6797,8 @@ class UIManager {
     this.bus = bus; this.busy = false; this.paused = false; this.warn = null;
     this.timeScale = 1; this.passIndex = -1; this.cutaway = 'half'; this.labelsOn = true; this.zonesOn = false; this.quality = 'std';
     this._acc = 0;
-    this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend(); this._buildCast(); this._buildAlloys(); this._buildCutScope();
+    this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
+    this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildCutScope();
     this._buildVersion();
     this._bind(); this._listen();
     this.dims(); this._rollState(); this.renderSchedule(); this._banner('idle'); this._summaries();
@@ -7006,6 +7008,26 @@ class UIManager {
                   half:  '選んだ設備の手前側（オペレータ側）と天面（クロスヘッド・梁）を透過します。',
                   xray:  '選んだ設備を手前・奥・天面とも透過します。' }[this.cutaway];
     $('der-cut').textContent = how + (on.length ? `対象: ${on.join('・')}` : '対象なし（すべて実体）');
+  }
+  /**
+   * 素材スライダの範囲と初期値を CONFIG から入れる。
+   * マークアップに書いた値は «目安» でしかなく、CONFIG を変えたときに置いていかれる
+   * （既定ロットを変えたのに長さスライダだけ 4,200 mm のまま、という食い違いが実際に起きた）。
+   * 範囲・刻み・初期値の真実は CONFIG.SLAB だけが持つ。
+   */
+  _buildRanges() {
+    const S = CONFIG.SLAB, F = S.FINISH;
+    const set = (id, min, max, val, step) => {
+      const el = $(id); if (!el) return;
+      el.min = min; el.max = max; if (step !== undefined) el.step = step;
+      el.value = Num.clamp(val, min, max);
+    };
+    set('rng-init-scalp', S.SCALP_MIN, S.SCALP_MAX, S.SCALP_DEFAULT, 1);
+    set('rng-init-wid',   S.WID_MIN,   S.WID_MAX,   S.WID_DEFAULT,  50);
+    set('rng-init-len',   S.LEN_MIN,   S.LEN_MAX,   S.LEN_DEFAULT, 100);
+    set('rng-init-temp',  S.TEMP_MIN,  S.TEMP_MAX,  S.TEMP_DEFAULT,  5);
+    set('rng-target',     F.TH_MIN,    F.TH_MAX,    S.TARGET_TH,   0.5);
+    const n = $('num-target'); if (n) { n.min = F.TH_MIN; n.max = F.TH_MAX; n.value = $('rng-target').value; }
   }
   _buildCast() {
     const host = $('seg-cast');
