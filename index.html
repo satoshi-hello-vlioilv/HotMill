@@ -65,6 +65,55 @@ canvas { display:block; }
 .brand .n { font-weight:800; font-size:15px; letter-spacing:.09em; line-height:1.15; }
 .brand .sub { font-size:10px; opacity:.62; letter-spacing:.05em; font-weight:600; }
 
+/* 版数バッジ: 製品名の «続き» として置き、常に見えるが主役にはならない明度に落とす。
+   押せることは枠線とホバーで示し、色相は増やさない（意味を持つ色を薄めない）。 */
+.brand .ver {
+  margin-left:9px; vertical-align:2px; padding:2px 7px; border-radius:999px;
+  font:800 9.5px/1.4 var(--font); letter-spacing:.07em; font-variant-numeric:tabular-nums;
+  color:#c9d8e6; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.24);
+  cursor:pointer; transition:background .15s ease, color .15s ease, border-color .15s ease;
+}
+.brand .ver:hover  { background:rgba(255,255,255,.24); border-color:rgba(255,255,255,.5); color:#fff; }
+.brand .ver:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+
+/* ---------- 版数と変更履歴のダイアログ ---------- */
+#dlg-ver {
+  width:min(680px,92vw); max-height:82vh; padding:0; border:none; border-radius:var(--r-l);
+  background:var(--s-1); color:var(--ink-1); box-shadow:var(--shadow-2); overflow:hidden;
+}
+#dlg-ver::backdrop { background:rgba(18,25,29,.42); backdrop-filter:blur(2px); }
+#dlg-ver header {
+  display:flex; align-items:flex-start; gap:12px; padding:15px 18px;
+  color:#fff; background:linear-gradient(135deg,#1b262c 0%,#2c3d47 100%);
+}
+#dlg-ver header .ttl { font-weight:800; font-size:14px; letter-spacing:.06em; }
+#dlg-ver header .sub { font-size:10.5px; opacity:.66; margin-top:3px; line-height:1.6; }
+#dlg-ver header .sub code { font-family:ui-monospace,Consolas,monospace; opacity:.9; }
+#btn-ver-close { margin-left:auto; flex:none; width:30px; height:30px; border-radius:8px; font-size:13px;
+  border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; cursor:pointer; }
+#btn-ver-close:hover { background:rgba(255,255,255,.2); }
+#dlg-ver .log { padding:6px 18px 14px; overflow-y:auto; max-height:calc(82vh - 132px); }
+#dlg-ver .rel { padding:13px 0; border-bottom:1px solid var(--line-2); }
+#dlg-ver .rel:last-child { border-bottom:none; }
+#dlg-ver .rel .hd { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; }
+#dlg-ver .rel .no { font-weight:800; font-size:12px; letter-spacing:.06em; font-variant-numeric:tabular-nums;
+  color:var(--ink-2); }
+#dlg-ver .rel .ttl { font-weight:700; font-size:12.5px; color:var(--ink-1); }
+#dlg-ver .rel .dt { margin-left:auto; font-size:10.5px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+#dlg-ver .rel .cur { padding:1px 7px; border-radius:999px; font-size:9.5px; font-weight:800; letter-spacing:.06em;
+  background:var(--accent-soft); color:var(--accent); border:1px solid #c5d9f2; }
+#dlg-ver .rel.is-cur .no { color:var(--accent); }
+#dlg-ver .rel ul { margin:8px 0 0; padding:0; list-style:none; }
+#dlg-ver .rel li { display:flex; gap:10px; align-items:baseline; padding:3px 0; font-size:11.5px;
+  color:var(--ink-2); line-height:1.65; }
+#dlg-ver .rel li::before { content:"–"; color:var(--ink-3); flex:none; }
+#dlg-ver .rel li .w { margin-left:auto; flex:none; font-family:ui-monospace,Consolas,monospace; font-size:10px;
+  color:var(--ink-3); background:var(--s-2); border:1px solid var(--line-2); border-radius:var(--r-s); padding:1px 6px;
+  white-space:nowrap; }
+#dlg-ver footer { display:flex; gap:16px; flex-wrap:wrap; padding:10px 18px; background:var(--s-2);
+  border-top:1px solid var(--line); font-size:10.5px; color:var(--ink-3); }
+#dlg-ver footer b { color:var(--ink-2); font-family:ui-monospace,Consolas,monospace; margin-right:4px; }
+
 /* 現在状態バナー: 「今どうなっていて、次に何をするか」を常に1か所に出す */
 #status-banner {
   flex:none; padding:11px 16px; display:flex; gap:11px; align-items:flex-start;
@@ -311,7 +360,8 @@ body.sb-collapsed #btn-expand { display:block; }
   <header class="brand">
     <i class="fa-solid fa-industry"></i>
     <div>
-      <div class="n">HYPER MILL</div>
+      <div class="n">HYPER MILL<button id="btn-ver" class="ver" type="button"
+        title="版数と変更履歴を見る（V）" aria-haspopup="dialog">VER.–</button></div>
       <div class="sub">アルミニウム熱間可逆圧延機 / 4-High Reversing Mill</div>
     </div>
     <button id="btn-collapse" title="メニューをたたむ（M）" aria-label="メニューをたたむ"><i class="fa-solid fa-chevron-left"></i></button>
@@ -486,7 +536,7 @@ body.sb-collapsed #btn-expand { display:block; }
     <div class="shortcuts">
       <b>ショートカット</b>
       <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
-      <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>8</kbd>視点</span><span><kbd>M</kbd>メニュー</span>
+      <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>8</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>V</kbd>版数と履歴</span>
     </div>
   </div>
 </aside>
@@ -530,6 +580,23 @@ body.sb-collapsed #btn-expand { display:block; }
 
 <div id="tags"></div>
 
+<!-- 版数と変更履歴。«今どの版か» と «その版で何が入ったか» を 1 画面で見せる -->
+<dialog id="dlg-ver">
+  <header>
+    <div>
+      <div class="ttl">版数と変更履歴</div>
+      <div class="sub">新しい版が上。各版のコミットには <code>v&lt;x.y.z&gt;</code> の git タグが付いています。</div>
+    </div>
+    <button id="btn-ver-close" type="button" title="閉じる（Esc）" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+  </header>
+  <div class="log" id="ver-log"></div>
+  <footer>
+    <span><b>x</b> 機構の作り直し・設計の前提が変わる改修</span>
+    <span><b>y</b> 設備や機能の追加・図面の反映</span>
+    <span><b>z</b> 不具合修正・数値の調整</span>
+  </footer>
+</dialog>
+
 <script type="importmap">
 { "imports": {
   "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -541,6 +608,82 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* =============================================================================
+ * 0. VERSION —— 版数と変更履歴（«どの版で何が入ったか» の単一の真実）
+ *
+ *    更新のたびに LOG の先頭へ 1 件足すだけでよい。画面のバッジ・履歴パネル・
+ *    評価器（tools/eval.mjs）はすべてここを見るので、書く場所はここ 1 か所しかない。
+ *
+ *    版数 x.y.z の付け方
+ *      x  機構そのものの作り直し・設計の前提が変わる改修（1.0.0 = 版数管理の起点）
+ *      y  設備や機能の追加、図面の反映
+ *      z  不具合修正・数値の調整だけの更新
+ *
+ *    各版のコミットには git tag `v<x.y.z>` を打ってある。
+ *      git show v1.0.0            … その版で何を変えたか
+ *      git log  v0.8.0..v1.0.0    … その版に入ったコミット
+ *    したがって «画面のバッジ → 版数 → タグ → 実装» が一本で辿れる。
+ *
+ *    items の w は «どこで実装したか»（主な関数・データの名前）。
+ * ========================================================================== */
+const VERSION = {
+  PREFIX: 'VER.',
+  LOG: [
+    { v: '1.0.0', date: '2026-09-06', title: '版数と変更履歴の表示を導入', items: [
+      { t: '版数バッジをサイドバーの製品名の横に置き、押すと変更履歴が開く', w: 'VERSION / UIManager._version' },
+      { t: '版数・日付・履歴をコードの 1 か所に集約し、画面と評価器が同じものを見る', w: 'VERSION.LOG' },
+      { t: '各版のコミットに git tag `v<x.y.z>` を打ち、版数から実装を辿れるようにした', w: 'git tag' },
+    ] },
+    { v: '0.8.0', date: '2026-09-06', title: 'ロールとチョックを図面（チョックをはめた状態）どおりに', items: [
+      { t: 'ロールの首を段付きへ。駆動側ワークロールの軸端は二又（フォーク）', w: 'Parts.roll / Parts.rollFork' },
+      { t: 'スピンドルのロール側に平頭（スペードブレード）を追加', w: 'Parts.spindleHead / DriveView.heads' },
+      { t: 'チョックにキーパー板・軸受カバー・給油ブロック・摺動ライナ・受け座', w: 'Parts.chock' },
+      { t: 'ロール組立ての評価器を新設（11 項目）', w: 'tools/rolltrace.mjs' },
+    ] },
+    { v: '0.7.0', date: '2026-09-06', title: 'クロップ屑の払い出しを OS 一本化、E テーブル追加', items: [
+      { t: '刃の入側・出側の屑をライン下の 1 本の傾斜コンベアで操作側へ抜く', w: 'Scrap / Parts.scrapConveyorFrame' },
+      { t: 'E-1 / E-2 テーブル（Φ380 × 857L を OS/DS 分割）を追加', w: 'CONFIG.TABLE.EROLL / Parts.eTableRoll' },
+      { t: 'テーブル区分の記号バッジを ON/OFF できるようにした', w: 'LabelView.zoneItems' },
+      { t: '先端ワニ口が反りと逆へ折れる描画の誤りを修正（実測 254 mm）', w: 'SlabView.update / _curlLift' },
+      { t: 'コイルカーの V スキッドの向きと芯高さの式を修正', w: 'Cradle.centerY' },
+    ] },
+    { v: '0.6.0', date: '2026-09-06', title: 'ベルトラッパー・コイルカー・トロリ・後端クロップ', items: [
+      { t: 'ベルトラッパーで巻き始め、巻取中のコイルの色を板の温度に追従させた', w: 'CoilerView' },
+      { t: '巻き終えたコイルをコイルカーで受けて操作側へ抜き取る', w: 'Parts.coilCar' },
+      { t: '75 mm シャーで後端もカットし、端材をライン下のピットへ落とす', w: 'FinishView / Scrap' },
+      { t: 'トランスファークレーンのトロリを平面図どおりのクラブトロリへ', w: 'Parts.craneTrolley' },
+    ] },
+    { v: '0.5.0', date: '2026-09-06', title: '装入の送りをローラ化、トングを図面どおりの挟み込み式へ', items: [
+      { t: 'プッシャを廃止し、転倒機ベッドと受取テーブルをテーブルローラに', w: 'CONFIG.SUPPLY.ROLLER' },
+      { t: 'トングをマスト＋受け梁＋2 本のアームの挟み込み式へ作り直した', w: 'Parts.tong / tools/tongtrace.mjs' },
+      { t: 'クーラント冷却をライデンフロスト込みで作り直した', w: 'PhysicsEngine' },
+    ] },
+    { v: '0.4.0', date: '2026-09-05', title: '装入をトランスファークレーン方式へ、図面のテーブル区分', items: [
+      { t: '図面の「各テーブルローラ本数」を転記し、区分ごとに配置する形へ', w: 'CONFIG.TABLE.SECTIONS / Layout' },
+      { t: '30 mm シャーとパイラーを追加し、板材を定尺に切り分けて積む', w: 'FinishView' },
+      { t: 'トランスファークレーンを専用の低いフレームで独立させた', w: 'CONFIG.TRANSFER.FRAME' },
+      { t: 'メニューを作業の流れ順に並べ替え、視点・断面をツールバーへ', w: 'UIManager' },
+    ] },
+    { v: '0.3.0', date: '2026-09-05', title: '物理的原理原則に基づく全面改良', items: [
+      { t: '段付きコイル、下台上昇式の 75 mm シャー、材質・温度分布・反り', w: 'CoilGeometry / Rolling' },
+      { t: '主機の駆動包絡線（直流の定トルク／定出力）と過負荷停止', w: 'PhysicsEngine' },
+      { t: '静的構造の全数検査を導入（接地・開口上の浮き・食い込み）', w: 'tools/structure.mjs' },
+    ] },
+    { v: '0.2.0', date: '2026-09-04', title: '実機諸元の反映と出側仕上げ設備', items: [
+      { t: 'サイドトリマー・スリーロール・巻取リール・75 mm シャーを追加', w: 'FinishView' },
+      { t: '入側／出側の左右反転とピット炉からの装入を再現', w: 'CONFIG.FLIP / SupplyView' },
+      { t: '断面表示（実体・半断面・透視）と板と設備の干渉検査', w: 'G.sided / tools/interfere.mjs' },
+    ] },
+    { v: '0.1.0', date: '2026-09-03', title: '初版（3D モデルとアプリの骨格）', items: [
+      { t: '4 段可逆圧延機・テーブル・パススケジュール・計器の骨格', w: 'App' },
+    ] },
+  ],
+  /** 現在の版（履歴の先頭が現在） */
+  get now() { return VERSION.LOG[0]; },
+  /** 画面に出す表記。«VER.1.0.0» */
+  get label() { return VERSION.PREFIX + VERSION.now.v; },
+};
 
 /* =============================================================================
  * 1. CONFIGURATION —— 単位は全て mm / ℃ / mpm / 秒。
@@ -6081,8 +6224,33 @@ class UIManager {
     this.timeScale = 1; this.passIndex = -1; this.cutaway = 'half'; this.labelsOn = true; this.zonesOn = false; this.quality = 'std';
     this._acc = 0;
     this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend(); this._buildCast(); this._buildAlloys(); this._buildCutScope();
+    this._buildVersion();
     this._bind(); this._listen();
     this.dims(); this._rollState(); this.renderSchedule(); this._banner('idle'); this._summaries();
+  }
+
+  /**
+   * 版数バッジと変更履歴。表記も中身も VERSION だけを見るので、
+   * 更新のたびに直す場所は VERSION.LOG の 1 か所で済む。
+   */
+  _buildVersion() {
+    $('btn-ver').textContent = VERSION.label;
+    document.title = `${document.title.replace(/\s+VER\..*$/, '')} ${VERSION.label}`;   // タブでも版が分かる
+    $('ver-log').innerHTML = VERSION.LOG.map((r, i) => `
+      <div class="rel${i === 0 ? ' is-cur' : ''}">
+        <div class="hd">
+          <span class="no">${VERSION.PREFIX}${r.v}</span>
+          ${i === 0 ? '<span class="cur">現在</span>' : ''}
+          <span class="ttl">${r.title}</span>
+          <span class="dt">${r.date}</span>
+        </div>
+        <ul>${r.items.map(q => `<li><span>${q.t}</span>${q.w ? `<span class="w">${q.w}</span>` : ''}</li>`).join('')}</ul>
+      </div>`).join('');
+  }
+  /** 変更履歴を開閉する。開いている間はキー操作を奪わない（dialog が受ける） */
+  toggleVersion(open = !$('dlg-ver').open) {
+    const d = $('dlg-ver');
+    if (open) { if (!d.open) d.showModal(); } else d.close();
   }
 
   /**
@@ -6404,14 +6572,22 @@ class UIManager {
     on('chk-steam',   'change', e => { this.bus.emit('CMD_SET_ENV', { steam: e.target.checked }); this._summaries(); });
     on('chk-supply-anim', 'change', e => { this.bus.emit('CMD_SET_SUPPLY_ANIM', e.target.checked); this._summaries(); });
 
+    on('btn-ver', 'click', () => this.toggleVersion(true));
+    on('btn-ver-close', 'click', () => this.toggleVersion(false));
+    // 背景（バックドロップ）を押したら閉じる。dialog 自身が Esc を受ける
+    $('dlg-ver').addEventListener('click', e => { if (e.target === $('dlg-ver')) this.toggleVersion(false); });
+
     addEventListener('keydown', e => {
       if (e.target.matches('input,select,textarea')) return;
       const k = e.key.toLowerCase();
+      // 履歴を開いている間は運転や視点のキーを効かせない（Esc は dialog 自身が受ける）
+      if ($('dlg-ver').open) { if (k === 'v') { e.preventDefault(); this.toggleVersion(false); } return; }
       if (k === ' ') { e.preventDefault(); this.toggleRun(); }
       else if (k === 'p') this.togglePause();
       else if (k === 'r') this.bus.emit('CMD_RESET');
       else if (k === 'l') this.setLabels(!this.labelsOn);
       else if (k === 'z') this.setZoneBadges(!this.zonesOn);
+      else if (k === 'v') this.toggleVersion();
       else if (k === 'm') this.setSidebar(document.body.classList.contains('sb-collapsed'));
       else if (k === 'c') this.setCutaway(this.cutaway === 'half' ? 'xray' : this.cutaway === 'xray' ? 'solid' : 'half');
       else if (k >= '1' && k <= String(CONFIG.VIEWS.length)) this.selectView(+k - 1);

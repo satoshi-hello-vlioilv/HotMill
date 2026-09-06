@@ -611,6 +611,28 @@ const run = async () => {
     ok('吊上げ高さで炉口・転倒機を越える', CFG.HOIST_CLEAR > 1500,
        `床上クリアランス ${CFG.HOIST_CLEAR} mm`);
 
+    // ---- 版数と変更履歴 ----
+    // «画面に出ている版» と «コードの版» がずれると、更新したのに直っていないのか
+    // 反映されていないのかが分からなくなる。表記も履歴の並びもここで縛る。
+    {
+      const V = window.__VER, semver = /^\d+\.\d+\.\d+$/;
+      const num = (v) => v.split('.').map(Number);
+      const cmp = (a, b) => { const x = num(a), y = num(b); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; };
+      ok('版数バッジの表記がコードの版と一致する',
+         document.getElementById('btn-ver')?.textContent === V.label, `バッジ ${document.getElementById('btn-ver')?.textContent} / VERSION.label ${V.label}`);
+      ok('現在の版は履歴の先頭', V.now === V.LOG[0] && semver.test(V.now.v), `${V.PREFIX}${V.now.v}（${V.now.date}）`);
+      ok('履歴が新しい順に並ぶ（版数が単調減少・日付が単調非増加）',
+         V.LOG.every((r, i) => i === 0 || (cmp(V.LOG[i - 1].v, r.v) > 0 && V.LOG[i - 1].date >= r.date)),
+         V.LOG.map(r => r.v).join(' > '));
+      ok('版数の重複が無い', new Set(V.LOG.map(r => r.v)).size === V.LOG.length, `${V.LOG.length} 版`);
+      ok('全ての版に日付・表題・変更点がある',
+         V.LOG.every(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.title && r.items?.length),
+         `変更点 ${V.LOG.reduce((a, r) => a + r.items.length, 0)} 件`);
+      const rels = document.querySelectorAll('#ver-log .rel');
+      ok('履歴パネルが全ての版を描く', rels.length === V.LOG.length && rels[0].classList.contains('is-cur'),
+         `${rels.length} 版 / 先頭に «現在» の印`);
+    }
+
     return { checks: out, failed: out.filter(x => !x.pass).length };
   });
 
