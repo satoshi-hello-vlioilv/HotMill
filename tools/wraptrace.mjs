@@ -80,7 +80,8 @@ const out = await page.evaluate(async () => {
     for (const w of FV.wrapRolls) {
       const rc0 = rollXY(w);
       const cx = rc0.x, cyr = rc0.y;                        // マンドレル芯を原点にした mm
-      const pw = window.__WRAP.swung(w.pivot, FV.cradle.rotation.z);
+      const o = FV.cradle.position;                        // キャリッジは平行移動だけ
+      const pw = { x: w.pivot.x + o.x / sc, y: w.pivot.y + o.y / sc };
       armErr.push(Math.abs(Math.hypot(cx - pw.x, cyr - pw.y) - window.__WRAP.armL(w.i)));
       // 巻いている最中はコイル外周より内側へ入らない
       // 描画側と同じ «その極角での実半径» を使う（板厚は噛み込み中ならギャップ）
@@ -140,6 +141,25 @@ const out = await page.evaluate(async () => {
      `最大の食い込み ${Math.max(...digIn).toFixed(2)} mm`);
   ok('ベルトがロールの外周に掛かる', Math.abs(Math.min(...beltErr)) < 1,
      `ロール面からベルトまで ${(Math.min(...beltErr) + WR.ROLL_D / 2 + WR.BELT_T / 2).toFixed(1)} mm（設計 ${WR.ROLL_D / 2 + WR.BELT_T / 2}）`);
+  // 押し込みの途中でマンドレルに当たらないか（C の口が押し込みの向きへ開いているか）
+  {
+    const WR2 = window.__WRAP, rM = C.MANDREL_D / 2;
+    let worst = 1e9, at = 0;
+    for (let k = 0; k <= 40; k++) {
+      const w = k / 40, off = WR2.offset(w);
+      for (let i = 0; i < WR.N; i++) {
+        const c = WR2.at(i, WR2.phiAt(i, WR2.rClosed, w));
+        const d = Math.hypot(c.x + off.x, c.y + off.y) - WR.ROLL_D / 2 - rM;
+        if (d < worst) { worst = d; at = w; }
+      }
+      for (const p of [...Array(WR.N).keys()].map(i => WR2.pivot(i)).concat([WR2.hitch])) {
+        const d = Math.hypot(p.x + off.x, p.y + off.y) - WR.FRAME_W / 2 - rM;
+        if (d < worst) { worst = d; at = w; }
+      }
+    }
+    ok('押し込みの途中でキャリッジがマンドレルに当たらない', worst >= -1,
+       `いちばん近づく隙間 ${worst.toFixed(0)} mm（押し込み度 ${at.toFixed(2)}）`);
+  }
   const bz = bb('ラッパーベルト');
   ok('ベルトの面長がロールの面長と一致', bz && Math.abs((bz.z[1] - bz.z[0]) - WR.FACE) < 1,
      `${mm(bz.z[1] - bz.z[0])} mm / ロール ${WR.FACE} mm`);

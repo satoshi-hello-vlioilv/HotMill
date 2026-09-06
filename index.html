@@ -76,6 +76,44 @@ canvas { display:block; }
 .brand .ver:hover  { background:rgba(255,255,255,.24); border-color:rgba(255,255,255,.5); color:#fff; }
 .brand .ver:focus-visible { outline:2px solid #fff; outline-offset:2px; }
 
+/* ---------- 圧延実績（ロギング）のダイアログ ---------- */
+/* 表は «数の並び» が主役なので、数字は等幅・右寄せにして桁を縦に揃える。
+   色は «計画との差» にだけ使い、装飾には使わない（色が意味を運ぶ約束を守る）。 */
+#dlg-log {
+  width:min(1180px,96vw); max-height:88vh; padding:0; border:none; border-radius:var(--r-l);
+  background:var(--s-1); color:var(--ink-1); box-shadow:var(--shadow-2); overflow:hidden;
+}
+#dlg-log::backdrop { background:rgba(18,25,29,.42); backdrop-filter:blur(2px); }
+#dlg-log header { display:flex; align-items:flex-start; gap:12px; padding:14px 18px;
+  color:#fff; background:linear-gradient(135deg,#1b262c 0%,#2c3d47 100%); }
+#dlg-log header .ttl { font-weight:800; font-size:14px; letter-spacing:.06em; }
+#dlg-log header .sub { font-size:10.5px; opacity:.72; margin-top:3px; line-height:1.6; }
+#btn-log-csv { margin-left:auto; flex:none; height:30px; padding:0 12px; border-radius:8px; font-size:11px; font-weight:700;
+  border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.10); color:#fff; cursor:pointer; }
+#btn-log-csv:hover { background:rgba(255,255,255,.24); }
+#btn-log-close { flex:none; width:30px; height:30px; border-radius:8px; font-size:13px;
+  border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; cursor:pointer; }
+#btn-log-close:hover { background:rgba(255,255,255,.2); }
+#dlg-log .body { padding:12px 18px 14px; overflow:auto; max-height:calc(88vh - 118px); }
+#dlg-log .chart { height:180px; margin-bottom:12px; border:1px solid var(--line-2); border-radius:var(--r-m);
+  background:var(--s-2); overflow:hidden; }
+#dlg-log .chart svg { display:block; width:100%; height:100%; }
+#dlg-log .tblwrap { overflow-x:auto; }
+#dlg-log table { border-collapse:collapse; width:100%; font-size:11.5px; font-variant-numeric:tabular-nums; }
+#dlg-log th, #dlg-log td { padding:5px 8px; border-bottom:1px solid var(--line-2); text-align:right; white-space:nowrap; }
+#dlg-log th { background:var(--s-2); color:var(--ink-2); font-weight:700; font-size:10.5px; position:sticky; top:0; }
+#dlg-log th i { display:block; font-style:normal; font-weight:600; font-size:9px; color:var(--ink-3); }
+#dlg-log td:first-child, #dlg-log th:first-child { text-align:center; font-weight:800; }
+#dlg-log td.dir { text-align:center; color:var(--ink-3); }
+#dlg-log tr.live td { background:var(--accent-soft); }
+#dlg-log td.over { color:var(--crit); font-weight:800; }
+#dlg-log td.plan { color:var(--ink-3); }
+#dlg-log .empty { padding:26px; text-align:center; color:var(--ink-3); font-size:12px; }
+#dlg-log footer { padding:9px 18px; background:var(--s-2); border-top:1px solid var(--line);
+  font-size:10.5px; color:var(--ink-3); display:flex; gap:16px; flex-wrap:wrap; }
+#dlg-log .lg { display:inline-flex; align-items:center; gap:5px; }
+#dlg-log .lg s { display:inline-block; width:14px; height:3px; border-radius:2px; text-decoration:none; }
+
 /* ---------- 版数と変更履歴のダイアログ ---------- */
 #dlg-ver {
   width:min(680px,92vw); max-height:82vh; padding:0; border:none; border-radius:var(--r-l);
@@ -286,7 +324,12 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
   background:rgba(24,33,39,.82); color:#fff; font-size:10.5px; font-weight:700; letter-spacing:.02em;
   padding:3px 8px; border-radius:20px; white-space:nowrap; box-shadow:var(--shadow-1); opacity:0;
   transition:opacity .2s; backdrop-filter:blur(4px); }
-.tag.on { opacity:1; }
+.tag.on { opacity:1; pointer-events:auto; cursor:pointer; }
+/* 押すとその設備へ視点が寄る。位置は毎フレーム transform で書き換えるので、
+   押せる合図には transform を使わず、枠と背景だけで示す。 */
+.tag.on:hover { background:rgba(28,92,171,.96); box-shadow:0 0 0 2px rgba(255,255,255,.75), var(--shadow-2); }
+.tag.zone.on:hover { background:#fff; border-color:var(--accent); color:var(--accent);
+  box-shadow:0 0 0 2px var(--accent-soft), 0 2px 6px rgba(24,33,39,.2); }
 /* テーブル区分の記号バッジ。設備ラベル（濃色の丸チップ）とは別系統だと一目で分かるよう、
    白地・枠線・等幅寄りの字面にして «図面の記号» であることを形で示す。 */
 .tag.zone { background:rgba(255,255,255,.94); color:var(--ink-1); border:1px solid var(--line);
@@ -502,7 +545,7 @@ body.sb-collapsed #btn-expand { display:block; }
           </div>
           <div class="derived" id="der-quality">標準：環境反射あり・影あり・解像度 1.5×まで</div>
         </div>
-        <div class="derived">視点は画面上部のツールバー（<kbd>1</kbd>–<kbd>8</kbd>）、設備ラベルは <kbd>L</kbd>、テーブル区分の記号は <kbd>Z</kbd> で切り替えます。左ドラッグ回転 / 右ドラッグ平行移動 / ホイール拡大縮小。</div>
+        <div class="derived">視点は画面上部のツールバー（<kbd>1</kbd>–<kbd>8</kbd>）、設備ラベルは <kbd>L</kbd>、テーブル区分の記号は <kbd>Z</kbd> で切り替えます。左ドラッグ回転 / 右ドラッグ平行移動 / ホイール拡大縮小。<b>3D 上の設備ラベルを押すと、その設備へ視点が寄ります</b>（向きは変えません）。</div>
       </div>
     </details>
 
@@ -538,7 +581,7 @@ body.sb-collapsed #btn-expand { display:block; }
     <div class="shortcuts">
       <b>ショートカット</b>
       <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
-      <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>8</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>V</kbd>版数と履歴</span>
+      <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>8</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>G</kbd>圧延実績</span><span><kbd>V</kbd>版数と履歴</span>
     </div>
   </div>
 </aside>
@@ -571,6 +614,8 @@ body.sb-collapsed #btn-expand { display:block; }
     <div class="tb-sep"></div>
     <button class="tb-btn" id="tb-labels" aria-pressed="true" title="設備ラベル（L）"><i class="fa-solid fa-tag"></i>ラベル</button>
     <button class="tb-btn" id="tb-zones" aria-pressed="false" title="テーブル区分の記号（Z）"><i class="fa-solid fa-list-ol"></i>テーブル記号</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="tb-log" title="圧延実績（ロギング）（G）"><i class="fa-solid fa-chart-line"></i>実績</button>
   </div>
   <div id="legend"><b>凡例</b><span id="legend-items"></span></div>
   <div id="toast"></div>
@@ -581,6 +626,28 @@ body.sb-collapsed #btn-expand { display:block; }
 </div>
 
 <div id="tags"></div>
+
+<!-- 圧延実績（ロギング）。«計器が指した値» だけを、パス表と時系列で見せる -->
+<dialog id="dlg-log">
+  <header>
+    <div>
+      <div class="ttl">圧延実績（ロギング）</div>
+      <div class="sub" id="log-lot">運転を開始すると記録が始まります。</div>
+    </div>
+    <button id="btn-log-csv" type="button" title="CSV をクリップボードへコピー">CSV コピー</button>
+    <button id="btn-log-close" type="button" title="閉じる（Esc）" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+  </header>
+  <div class="body">
+    <div class="chart" id="log-chart"></div>
+    <div class="tblwrap"><table id="log-table"><thead><tr>
+      <th>パス</th><th>向き</th><th>入厚<i>mm</i></th><th>出厚<i>mm</i></th><th>圧下率<i>%</i></th>
+      <th>最大荷重<i>t</i></th><th>平均荷重<i>t</i></th><th>計画<i>t</i></th>
+      <th>最大速度<i>mpm</i></th><th>平均速度<i>mpm</i></th><th>計画<i>mpm</i></th>
+      <th>最大動力<i>MW</i></th><th>入温<i>℃</i></th><th>出温<i>℃</i></th><th>板長<i>m</i></th><th>所要<i>s</i></th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+  <footer id="log-foot">パスが終わるたびに 1 行増えます。平均は «噛んでいる間» だけで取っています。</footer>
+</dialog>
 
 <!-- 版数と変更履歴。«今どの版か» と «その版で何が入ったか» を 1 画面で見せる -->
 <dialog id="dlg-ver">
@@ -633,6 +700,16 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.2.0', base: 'ebdb7dd', date: '2026-09-06', title: 'ラッパーを押し込み式へ、圧延実績のロギング、視点操作とワイヤ', items: [
+      { t: 'ベルトラッパーをリールの左上からシリンダーで押し込む C 型キャリッジへ', w: 'Wrapper / Parts.wrapperCarriage' },
+      { t: '圧延実績（ロギング）を実装。パスごとの荷重・速度・動力・温度と時系列', w: 'RollingLog / UIManager.renderLog' },
+      { t: '実績パネルに時系列グラフと CSV コピーを付けた（G キー）', w: 'UIManager._logChart' },
+      { t: '視点の制約をゆるめた（画面に平行な平行移動・仰角ほぼ全域・寄り引きの幅）', w: 'World3D.controls' },
+      { t: '3D 上の設備ラベルを押すとその設備へ視点が寄る（向きは変えない）', w: 'World3D.focusOn' },
+      { t: 'クレーンの巻上ワイヤがトロリに届いていなかったのを直し、2 本掛けにした', w: 'CONFIG.CRANE.ROPE' },
+      { t: 'ピットクレーンの吊具にシーブとクランプ（挟み込み式）を作り込んだ', w: 'Parts.craneBeam / craneClampArm' },
+      { t: 'ロギングの評価器を新設（16 項目）', w: 'tools/logtrace.mjs' },
+    ] },
     { v: '1.1.0', base: '247eea1', date: '2026-09-06', title: '入側クーラントを A-5 へ、ベルトラッパーを常設設備に', items: [
       { t: '入側の板面クーラントを A-5 テーブルの中央へ移した（出側はサイドガイドの上のまま）', w: 'TABLE.GUIDE.HEADER.STATIONS' },
       { t: 'クーラントの位置を «区分名» で書けるようにし、描画・熱計算・粒子が同じ 1 式を見る', w: 'Layout.coolStations' },
@@ -892,6 +969,8 @@ const CONFIG = {
     LIFT: 1700,                              // 横移動時のスラブ底面高さ（パスライン上）。転倒機の受け面 1,510 を越える
     TONG_DX: 1100,                           // トング 2 基のビーム中心からの X（1 基では長尺スラブが首を振る）
     BEAM_L: 3200,
+    // 巻上ワイヤ（吊りビームは X 方向なのでワイヤも X に並ぶ）
+    ROPE: { D: 56, FALLS: 2, SPREAD: 240, SHEAVE_D: 460, AXIS: 'x', TOP_DY: -0.34, BOT_DY: 340 },
     /* トング（板つかみ）—— 図面の «トング最大巾 2,680 / ロッド芯間 1,525 / 全高 3,355 /
      * 爪 560» に合わせた、共通の中心ピンに 2 本のアームを吊る挟み込み式。
      * アームの肘を吊りロッドで引き上げると、両アームが中心ピンまわりに逆向きに回り、
@@ -952,7 +1031,16 @@ const CONFIG = {
    * （RUN_X0/X1 は転倒軸 ±1 m の門型脚 2 対のみ）。
    */
   CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -1000, RUN_X1: 1000, COL_PITCH: 2000,
-             TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600 },
+             TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600,
+             /* 巻上ワイヤ。ドラムから «トロリ下面のシーブ» を経て吊りビーム上面の
+              * シーブへ降り、2 本掛け（FALLS）で戻る。ワイヤの上端＝トロリのシーブ芯、
+              * 下端＝ビームのシーブ芯にすると、両端がシーブに隠れて «繋がって» 見える
+              * （以前は上端をトロリの下面に置いていたため 280 mm 浮いていた）。 */
+             ROPE: { D: 64, FALLS: 2, SPREAD: 300, SHEAVE_D: 560, AXIS: 'z',
+                     TOP_DY: -0.34, BOT_DY: 340 },
+             /* 吊具のクランプ（立てたスラブの板厚面を挟む）。中心ピンに 2 本のアームを
+              * 吊り、爪が内側へ閉じる。開き量はアームの回転角から一意に決まる。 */
+             CLAMP: { PIVOT_H: 820, ARM_L: 1150, JAW_W: 300, JAW_H: 620, JAW_T: 150, OPEN: 1150 } },
 
   /* 装入シーケンス。[フェーズ, 進捗キー, 所要秒, 表示文] を並べるだけで工程が決まる。 */
   SEQUENCE: [
@@ -1011,44 +1099,50 @@ const CONFIG = {
       T_LIFT: 2.2, TRAVEL_Z: 6000, SPEED_Z: 1200,
     },
     /* ベルトラッパー —— リールで «巻き始める» ための装置。実機では常設で、使わない
-     * ときは退避位置へ振り上げる。マンドレルは板を掴む機構を持たない（拡縮するだけ）ので、
+     * ときは退避位置へ引き込む。マンドレルは板を掴む機構を持たない（拡縮するだけ）ので、
      * 先端はベルトでマンドレルへ押し付けて摩擦で連れ回す。
      *
-     * 機構は 2 段になっている。
-     *   ① 各ロールはキャリッジ上の «接線方向の支点» に付いた短い剛体アームに載り、
+     * 機構は 2 段。
+     *   ① C 型のキャリッジが、リールの «左上»（PUSH_A の向き）から
+     *      シリンダーで真っすぐ押し出され、リールを抱きかかえる位置まで入る。
+     *   ② その上で 3 本のロールが短い剛体アームでマンドレルへ当たり、
      *      コイルが太るぶんだけ外へ逃げる（1 周ごとの段にも追従する）。
-     *   ② キャリッジそのものが 1 つの軸（SWING）まわりに振れて、使わないときは
-     *      ロール・アーム・ベルトをまとめて上へ退避させる。
      *
-     * ②が要る理由: 可逆圧延機なので板はどのパスでもリールの下（パスライン）を通る。
-     * 巻き付けの位置は «板の入口の直後» ＝ マンドレルの下側なので、そこから半径方向へ
-     * 開くだけではロールがパスラインまで下がって板に当たる（実測 443 mm の食い込み）。
-     * 板の通り道（パスライン 900 + 最大板厚）を空けるには、まとめて振り上げるしかない。
+     * ①が «押し込み» である以上、マンドレルはキャリッジから見て PUSH_A の向きから
+     * 入ってくる。したがってキャリッジの部材は «その通り道（半径 305 + 部材厚）» を
+     * 塞げない。ロールを押し込みの向きと直角より外（|θ − PUSH_A| ≥ 90°）に置くと、
+     * C の口がちょうど押し込みの向きへ開き、マンドレルが口から入る形になる。
+     *
+     * 退避が要る理由: 可逆圧延機なので板はどのパスでもリールの下（パスライン）を通る。
+     * 巻き付けの位置は板の入口の直後＝マンドレルの下側なので、そこに居たままでは
+     * 板に当たる（実測 443 mm の食い込み）。押し込みを戻せばまとめて逃げられる。
      *
      *   ANGLES   «閉じたとき» のロール中心の極角 [deg]（真上が 90°）
-     *   ARM_T    支点をロール中心から接線方向へずらす量（符号は向き）。接線上に置くと
-     *            «閉じたときアームがマンドレルに接し、開くほど遠ざかる» 形になる
-     *   SWING    キャリッジの振り軸（マンドレル芯を原点とする）。板の通り道より上に置く
-     *   PARK_A   退避時のキャリッジの振り角 [deg]
-     *   FACE     ロールとベルトの面長。設備なのでコイル巾では変えない（板の中央側を押さえる）
-     *   FRAME_*  側板。駆動側は床へ脚を降ろし、操作側は軸で吊る
-     *            （操作側の床にはコイルカーが走るので何も立てられない）
+     *   ARM_T    支点をロール中心から接線方向へずらす量（符号は向き）
+     *   PUSH_A   押し込みの向き [deg]。マンドレルから見て «退避位置がある側»
+     *   STROKE   シリンダーの行程
+     *   OPEN_R   押し込み中のロール中心半径（マンドレルを避けて通す）
+     *   RAIL     案内とシリンダーの中心線を、押し込みの軸から直角にずらす量
+     *   FACE     ロールとベルトの面長。設備なのでコイル巾では変えない
      *   CLEAR_Y  板の通り道の上限（パスライン + 最大板厚 + 逃げ）。検査がこの線を使う
      *   ※各寸法は推定値。 */
     WRAPPER: {
-      N: 3, ANGLES: [212, 300, 25], ARM_T: [-700, 700, 700],
-      // 振り軸はリールのミルと反対側（そこだけ床も上空も空いている）。退避は反時計回り。
-      SWING: [-1900, 200], PARK_A: 55,
-      // キャリッジの腕の繋ぎ方 [元, 先]（-1 = 振り軸）。振り軸から順にマンドレルの
-      // 外側を回して繋ぐ（近い順に直結するとマンドレルを腕が横切る）
-      LINK: [[-1, 0], [0, 2], [2, 1]],
+      // ロールは «マンドレルが入ってくる向き（PUSH_A + 180）から 90° 以上離れた側» に置く。
+      // こうすると C の口がちょうど入口へ開き、マンドレルが口から入って抱かれる形になる。
+      // 巻き方向（下巻き・時計回り）で見ると、板の入口（≒318°）の «次» に当たる位置。
+      N: 3, ANGLES: [230, 175, 120], ARM_T: [-700, -700, -700],
+      PUSH_A: 145, STROKE: 1400, OPEN_R: 700,
+      // C 型キャリッジの繋ぎ [元, 先]（-1 = シリンダーの取付点）。極角の順に回してつなぐ
+      LINK: [[2, 1], [1, 0], [1, -1]],
+      HITCH: [1500, 145],                    // シリンダーの取付点（半径, 極角）＝押し込みの軸上
+      CYL_D: 300, ROD_D: 150, CYL_L: 1500,
       ROLL_D: 240, FACE: 1800, BELT_T: 18, BELT_LEAD: 70,
       T_MOVE: 0.9,
       TURNS_HOLD: 3,                         // 何巻き押さえてからベルトを開くか
       APPROACH: 1500,                        // 先端がこの距離まで来たらベルトを閉じ始める
       // Z は «コイルカー（±1,075）より外、テーブル架台（±1,325）より内» の帯へ収める
       ARM_Z: 950, FRAME_Z: 1150, FRAME_T: 100, FRAME_W: 200, PIVOT_D: 260,
-      LEG_Z: 1265, LEG_W: 240, LEG_T: 100, BRACE_DX: 550, CLEAR_Y: 1345,
+      LEG_Z: 1265, LEG_W: 260, LEG_T: 120, CLEAR_Y: 1345,
     },
     COIL_SEG: 72,                            // コイル形状の周方向分割数
     // コイル押え。サイドトリマー架構の上部梁から出したアームの先端に金属コロ（Φ200 ×
@@ -2212,6 +2306,113 @@ class MillController {
 }
 
 /**
+ * 圧延実績のロギング。«実際に起きたこと» だけを記録する（予測やスケジュールの写しではない）。
+ *
+ * 設計の考え方
+ *  ・記録するのは «計器が指した値» そのもの。荷重・速度・動力・温度・板厚を一定間隔で
+ *    サンプリングし、パスの切れ目で区切って集計する。予測値と混ぜない（実績と予測の
+ *    食い違いこそが見たいものなので、同じ表に並べても «どちらの数字か» が分かるようにする）。
+ *  ・パスの «最大» と «平均» を両方持つ。最大は設備の限界に対する余裕を、
+ *    平均は電力量や生産性を見るのに要る。平均は «噛んでいる間» だけで取る
+ *    （空走を混ぜると平均荷重が薄まって意味を失う）。
+ *  ・時系列は間引いて持つ（既定 10 Hz）。1 パス数十秒 × 9 パスで数千点に収まり、
+ *    そのままグラフに描ける。
+ */
+class RollingLog {
+  constructor() { this.reset(); }
+  reset() {
+    this.lot = null; this.passes = []; this.series = []; this._cur = null; this._t = 0; this._last = -1;
+  }
+  /** 圧延ロットの開始（素材と目標が確定した時点） */
+  beginLot(d, alloy) {
+    this.reset();
+    this.lot = { started: new Date(), alloy: alloy?.name || d.alloy, alloyKey: d.alloy,
+                 cast: d.cast, scalp: d.scalp, thick0: d.cast - 2 * d.scalp, width: d.width, length: d.length,
+                 tPit: d.tPit, target: d.target, mode: d.mode, passPlan: CONFIG.SCHEDULE.length,
+                 finished: null, t: 0 };
+  }
+  beginPass(i) {
+    if (!this.lot) return;
+    const sch = CONFIG.SCHEDULE[i] || {};
+    this._cur = { no: i + 1, dir: sch.dir, gap: sch.gap, planSpeed: sch.speed, planForce: sch.force,
+                  hIn: null, hOut: null, tIn: null, tOut: null,
+                  fMax: 0, fSum: 0, fN: 0, vMax: 0, vSum: 0, vN: 0, pMax: 0, torqueMax: 0,
+                  t0: this.lot.t, t1: null, len: null, biteN: 0 };
+    this.passes.push(this._cur);
+  }
+  endPass(P) {
+    const c = this._cur; if (!c) return;
+    c.t1 = this.lot.t; c.hOut = P.slab.thickness; c.tOut = P.slab.temperature; c.len = P.slab.length;
+    this._cur = null;
+  }
+  endLot(P) {
+    if (!this.lot) return;
+    if (this._cur) this.endPass(P);
+    this.lot.finished = new Date();
+    this.lot.outThick = P.slab.thickness; this.lot.outLen = P.slab.length;
+    this.lot.outTemp = P.slab.temperature;
+  }
+  /** 毎ステップ呼ばれる。SAMPLE_HZ に間引いて時系列と集計を進める */
+  sample(P, dt) {
+    if (!this.lot) return;
+    this.lot.t += dt;
+    const m = P.mill, s = P.slab, i = m.passIndex;
+    if (i !== this._last) {                       // パスの切れ目
+      if (this._last >= 0) this.endPass(P);
+      if (i >= 0) this.beginPass(i);
+      else if (this._last >= 0) this.endLot(P);
+      this._last = i;
+    }
+    const c = this._cur;
+    if (c) {
+      if (c.hIn === null && s.inBite) { c.hIn = s.thickness; c.tIn = s.temperature; }
+      const f = s.rollForce || 0, v = Math.abs(m.currentSpeed), pw = (s.rollPower || 0) / 1000;
+      if (f > c.fMax) c.fMax = f;
+      if (v > c.vMax) c.vMax = v;
+      if (pw > c.pMax) c.pMax = pw;
+      if ((s.rollTorque || 0) > c.torqueMax) c.torqueMax = s.rollTorque;
+      if (s.inBite) { c.fSum += f; c.fN++; c.vSum += v; c.vN++; c.biteN++; }
+    }
+    this._t += dt;
+    if (this._t < 1 / RollingLog.SAMPLE_HZ) return;
+    this._t = 0;
+    this.series.push({ t: +this.lot.t.toFixed(2), pass: i + 1,
+                       f: +(s.rollForce || 0).toFixed(0), v: +Math.abs(m.currentSpeed).toFixed(1),
+                       p: +((s.rollPower || 0) / 1000).toFixed(2), h: +s.thickness.toFixed(2),
+                       T: +s.temperature.toFixed(0), x: Math.round(s.x) });
+  }
+  /** 表に出す 1 パスぶんの実績（平均は «噛んでいる間» だけ） */
+  row(c) {
+    return { no: c.no, dir: c.dir > 0 ? '→' : '←',
+             hIn: c.hIn, hOut: c.hOut, red: c.hIn && c.hOut ? (1 - c.hOut / c.hIn) * 100 : null,
+             fMax: c.fMax, fAvg: c.fN ? c.fSum / c.fN : 0,
+             vMax: c.vMax, vAvg: c.vN ? c.vSum / c.vN : 0,
+             pMax: c.pMax, tIn: c.tIn, tOut: c.tOut, len: c.len,
+             sec: c.t1 === null ? null : c.t1 - c.t0, planForce: c.planForce, planSpeed: c.planSpeed };
+  }
+  get rows() { return this.passes.map(c => this.row(c)); }
+  /** 表計算へ貼れる CSV（実績のみ。予測値は «計画» 列として並記する） */
+  csv() {
+    const L = this.lot; if (!L) return '';
+    const head = ['パス', '方向', '入厚[mm]', '出厚[mm]', '圧下率[%]', '最大荷重[t]', '平均荷重[t]',
+                  '計画荷重[t]', '最大速度[mpm]', '平均速度[mpm]', '計画速度[mpm]', '最大動力[MW]',
+                  '入温[℃]', '出温[℃]', '板長[m]', '所要[s]'];
+    const f = (v, n = 1) => v === null || v === undefined ? '' : (+v).toFixed(n);
+    const body = this.rows.map(r => [r.no, r.dir, f(r.hIn, 1), f(r.hOut, 1), f(r.red, 1), f(r.fMax, 0),
+      f(r.fAvg, 0), f(r.planForce, 0), f(r.vMax, 1), f(r.vAvg, 1), f(r.planSpeed, 0), f(r.pMax, 2),
+      f(r.tIn, 0), f(r.tOut, 0), f(r.len / 1000, 2), f(r.sec, 1)].join(','));
+    const meta = [`# ロット,${L.started.toLocaleString('ja-JP')}`,
+                  `# 材質,${L.alloyKey}`,
+                  `# 素材,${f(L.thick0, 0)} x ${L.width} x ${L.length} mm（呼び厚 ${L.cast} − 面削 2x${L.scalp}）`,
+                  `# 炉出し温度,${L.tPit} ℃`,
+                  `# 目標板厚,${L.target} mm`,
+                  `# 仕上げ,${L.mode === 'COIL' ? 'コイル巻取' : '板材'}`];
+    return meta.concat([head.join(',')], body).join('\n');
+  }
+}
+RollingLog.SAMPLE_HZ = 10;
+
+/**
  * コイルカーの V 受けの幾何。«形を作る側（Parts）» と «コイルを載せる側（CoilerView）» が
  * 同じ 1 式を見るための小さなヘルパ。V の谷はデッキ上面の中心（x = 0）で、板はそこから
  * 外側へ角度 A で登る。コイルは 2 面（径が大きければ 2 つの外縁）で受ける。
@@ -2244,17 +2445,24 @@ const Wrapper = {
   get cfg() { return CONFIG.COILER.WRAPPER; },
   /** 素のマンドレルに当てたときのロール中心半径（＝閉じた位置） */
   get rClosed() { return CONFIG.COILER.MANDREL_D / 2 + this.cfg.ROLL_D / 2; },
-  /** キャリッジの振り軸（マンドレル芯が原点） */
-  get swing() { const [x, y] = this.cfg.SWING; return { x, y }; },
-  /** 閉じたときのロール中心（キャリッジ座標＝振り角 0 のときマンドレル座標と一致） */
-  closed(i) {
-    const t = this.cfg.ANGLES[i] * Math.PI / 180, r = this.rClosed;
-    return { x: r * Math.cos(t), y: r * Math.sin(t) };
-  },
+  _pol(r, deg) { const t = deg * Math.PI / 180; return { x: r * Math.cos(t), y: r * Math.sin(t) }; },
+  /** 押し込みの単位ベクトル（マンドレル → 退避位置の向き） */
+  get u() { return this._pol(1, this.cfg.PUSH_A); },
+  /** 押し込み量に応じたキャリッジの平行移動。wrap 0（退避）→ STROKE、1（押し切り）→ 0 */
+  offset(wrap) { const u = this.u, d = this.cfg.STROKE * (1 - wrap); return { x: u.x * d, y: u.y * d }; },
+  /** 閉じたときのロール中心（キャリッジ座標＝押し切ったときマンドレル座標と一致） */
+  closed(i) { return this._pol(this.rClosed, this.cfg.ANGLES[i]); },
   /** アームの支点。ロール中心から «接線方向» へ ARM_T ずらした点 */
   pivot(i) {
     const t = this.cfg.ANGLES[i] * Math.PI / 180, c = this.closed(i), d = this.cfg.ARM_T[i];
     return { x: c.x - d * Math.sin(t), y: c.y + d * Math.cos(t) };
+  },
+  /** シリンダーの取付点（キャリッジ座標） */
+  get hitch() { const [r, a] = this.cfg.HITCH; return this._pol(r, a); },
+  /** シリンダー胴の後端（マンドレル座標・動かない）。取付点から退避端 + 胴長だけ押し込みの逆へ */
+  get cylBase() {
+    const u = this.u, h = this.hitch, d = this.cfg.STROKE + this.cfg.CYL_L;
+    return { x: h.x + u.x * d, y: h.y + u.y * d };
   },
   /** アーム長（＝ |ARM_T|。支点は接線上なので閉じたときアームはマンドレルに接する） */
   armL(i) { return Math.abs(this.cfg.ARM_T[i]); },
@@ -2275,12 +2483,10 @@ const Wrapper = {
   },
   /** アームの向きからロール中心（キャリッジ座標） */
   at(i, phi) { const p = this.pivot(i), L = this.armL(i); return { x: p.x + L * Math.cos(phi), y: p.y + L * Math.sin(phi) }; },
-  /** 振り角 [rad]。wrap 0（退避）→ PARK_A、1（閉）→ 0 */
-  beta(wrap) { return this.cfg.PARK_A * Math.PI / 180 * (1 - wrap); },
-  /** キャリッジ座標の点を、振り角 b でマンドレル座標へ写す */
-  swung(pt, b) {
-    const s = this.swing, dx = pt.x - s.x, dy = pt.y - s.y, c = Math.cos(b), n = Math.sin(b);
-    return { x: s.x + dx * c - dy * n, y: s.y + dx * n + dy * c };
+  /** 押し込み量 wrap のときのアームの向き（退避中は OPEN_R まで開いてマンドレルを避ける） */
+  phiAt(i, r, wrap) {
+    const a = this.phiFor(i, this.cfg.OPEN_R), b = this.phiFor(i, r);
+    return a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * wrap;
   },
 };
 
@@ -3015,6 +3221,7 @@ class PhysicsEngine {
     this.millCtrl   = new MillController(bus, this.mill, this.slab);
     this.supplyCtrl = new SupplyController(bus, this.supply);
     this.finishCtrl = new FinishController(bus, this.finish, this.slab, this.mill);
+    this.log = new RollingLog();          // 圧延実績（計器が指した値だけを残す）
     this.paused = false; this.elapsed = 0;
     this.warn = null;
     this._acc = 0;
@@ -3031,6 +3238,15 @@ class PhysicsEngine {
       this.mill.brDia = Num.lerp(M.BR_D, M.BR_D_MIN, t);
     });
     bus.on('CMD_START_SUPPLY', () => { if (this.supply.enabled) this.slab.onLine = false; });
+    // 圧延実績のロットはここで始まる（素材と目標が確定した時点＝運転開始）
+    bus.on('CMD_START_AUTO', () => {
+      const sl = this.slab;
+      this.log.beginLot({ alloy: sl.alloyKey, cast: sl.cast, scalp: sl.scalp,
+                          width: sl.width, length: sl.initialLength,
+                          tPit: Math.round(sl.initialTemp), target: CONFIG.SLAB.TARGET_TH,
+                          mode: this.finish.mode }, CONFIG.ALLOYS[sl.alloyKey]);
+      this.bus.emit('STATE_LOG');
+    });
     this.reset();
   }
 
@@ -3089,6 +3305,7 @@ class PhysicsEngine {
     if (this.slab.onLine) { this._dynamics(dt); this._guides(dt); this._thermal(dt); }
     this._rollKinematics(dt);
     this._diagnose();
+    this.log.sample(this, dt);            // 記録は «計算し終えた状態» に対して取る
   }
 
   _actuators(dt) {
@@ -4209,46 +4426,62 @@ const Parts = {
    * 振り軸から 3 つのアーム支点へ腕を伸ばした «熊手» で、駆動側・操作側に 1 枚ずつ。
    */
   wrapperCarriage() {
-    const W = CONFIG.COILER.WRAPPER, parts = [], S = Wrapper.swing;
-    const node = (k) => k < 0 ? S : Wrapper.pivot(k);
+    const W = CONFIG.COILER.WRAPPER, parts = [];
+    const node = (k) => k < 0 ? Wrapper.hitch : Wrapper.pivot(k);
     for (const sz of [-1, 1]) {
       for (const [f, t] of W.LINK) {
         const a = node(f), b = node(t), dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
         parts.push(G.at(G.box(L + W.FRAME_W, W.FRAME_W, W.FRAME_T),
-                        (a.x + b.x) / 2 - S.x, (a.y + b.y) / 2 - S.y, sz * W.FRAME_Z, 0, 0, Math.atan2(dy, dx)));
+                        (a.x + b.x) / 2, (a.y + b.y) / 2, sz * W.FRAME_Z, 0, 0, Math.atan2(dy, dx)));
       }
       for (let i = 0; i < W.N; i++) {
         const p = Wrapper.pivot(i);
-        parts.push(G.at(G.cyl(W.PIVOT_D + 140, W.FRAME_T, 'z', 14), p.x - S.x, p.y - S.y, sz * W.FRAME_Z));
+        parts.push(G.at(G.cyl(W.PIVOT_D + 140, W.FRAME_T, 'z', 14), p.x, p.y, sz * W.FRAME_Z));
       }
-      parts.push(G.at(G.cyl(400, W.FRAME_T, 'z', 16), 0, 0, sz * W.FRAME_Z));           // 振り軸のボス
+      const h = Wrapper.hitch;                                                    // シリンダーの取付ボス
+      parts.push(G.at(G.cyl(340, W.FRAME_T, 'z', 14), h.x, h.y, sz * W.FRAME_Z));
     }
-    for (let i = 0; i < W.N; i++) {                                                     // アームの支点軸
+    for (let i = 0; i < W.N; i++) {                                               // アームの支点軸
       const p = Wrapper.pivot(i);
-      parts.push(G.at(G.cyl(W.PIVOT_D, 2 * W.FRAME_Z + W.FRAME_T, 'z', 14), p.x - S.x, p.y - S.y, 0));
+      parts.push(G.at(G.cyl(W.PIVOT_D, 2 * W.FRAME_Z + W.FRAME_T, 'z', 14), p.x, p.y, 0));
     }
     return G.merge(parts);
   },
   /**
-   * ラッパーの架台（動かない部分）。振り軸と、それを受ける駆動側の柱。原点＝マンドレル芯。
-   * 操作側の床はコイルカーの通り道なので、柱は駆動側だけに降ろす。
-   * Z はコイルカーとテーブル架台の間の帯に収める（LEG_Z）。
+   * ラッパーの架台（動かない部分）。押し込みの軸に沿った案内梁と、それを受ける柱。
+   * 原点＝マンドレル芯。案内はマンドレルの通り道を避けるため、押し込みの軸から
+   * 直角に RAIL だけずらした線に置く。操作側の床はコイルカーの通り道なので柱は駆動側だけ。
    */
   wrapperFrame() {
-    const W = CONFIG.COILER.WRAPPER, S = Wrapper.swing, parts = [];
+    const W = CONFIG.COILER.WRAPPER, parts = [];
     const cy = CONFIG.MILL.PASS_LINE + CONFIG.COILER.Y_ABOVE;
-    parts.push(G.at(G.cyl(W.PIVOT_D + 60, 2 * (W.LEG_Z + W.LEG_T / 2), 'z', 16), S.x, S.y, 0));   // 振り軸
+    const b = Wrapper.cylBase, ang = Math.atan2(Wrapper.u.y, Wrapper.u.x);
+    // シリンダーの受けは «胴の後ろ» に置く（胴を抱くと部材どうしが重なる）
+    const bk = { x: b.x + 380 * Wrapper.u.x, y: b.y + 380 * Wrapper.u.y };
     for (const sz of [-1, 1])
-      parts.push(G.at(G.cyl(420, W.LEG_T, 'z', 18), S.x, S.y, sz * W.LEG_Z));            // 軸受
-    const h = cy + S.y;                                                                  // 駆動側の柱
-    parts.push(G.at(G.box(W.LEG_W, h, W.LEG_T), S.x, S.y - h / 2, -W.LEG_Z));
-    parts.push(G.at(G.box(W.LEG_W + 300, 240, W.LEG_T), S.x, -cy + 120, -W.LEG_Z));
-    // 柱 1 本では倒れるので、ミル側へ振れ止めを 1 本。足元はテーブル架台とトリマーの間へ置く
-    const bx = S.x + W.BRACE_DX, by = -cy + 240, dx = bx - S.x, dy = by - S.y, L = Math.hypot(dx, dy);
-    parts.push(G.at(G.box(L, 200, W.LEG_T), S.x + dx / 2, S.y + dy / 2, -W.LEG_Z, 0, 0, Math.atan2(dy, dx)));
-    parts.push(G.at(G.box(W.LEG_W + 300, 240, W.LEG_T), bx, -cy + 120, -W.LEG_Z));
+      parts.push(G.at(G.box(700, 620, W.LEG_T + 120), bk.x, bk.y, sz * W.LEG_Z, 0, 0, ang));
+    parts.push(G.at(G.box(360, 240, 2 * W.LEG_Z), bk.x, bk.y, 0, 0, 0, ang));
+    const h = cy + bk.y;                                            // 駆動側の柱（床まで）
+    parts.push(G.at(G.box(W.LEG_W, h, W.LEG_T), bk.x, bk.y - h / 2, -W.LEG_Z));
+    parts.push(G.at(G.box(W.LEG_W + 320, 260, W.LEG_T), bk.x, -cy + 130, -W.LEG_Z));
+    // 柱 1 本では倒れるので筋交いを 1 本。シリンダーの下を通すため、柱の途中から出す
+    const ay = -cy + 2600, bx = bk.x + 2200, by = -cy + 260;
+    const dx = bx - bk.x, dy = by - ay, L = Math.hypot(dx, dy);
+    parts.push(G.at(G.box(L, 220, W.LEG_T), bk.x + dx / 2, (ay + by) / 2, -W.LEG_Z, 0, 0, Math.atan2(dy, dx)));
+    parts.push(G.at(G.box(W.LEG_W + 320, 260, W.LEG_T), bx, -cy + 130, -W.LEG_Z));
     return G.merge(parts);
   },
+  /** 押し込みシリンダー（胴）。原点＝胴の後端、+X が押し出す向き。 */
+  wrapperCyl() {
+    const W = CONFIG.COILER.WRAPPER;
+    return G.merge([
+      G.at(G.cyl(W.CYL_D, W.CYL_L, 'x', 16), W.CYL_L / 2, 0, 0),
+      G.at(G.cyl(W.CYL_D + 90, 90, 'x', 16), 60, 0, 0),
+      G.at(G.cyl(W.CYL_D + 90, 90, 'x', 16), W.CYL_L - 60, 0, 0),
+    ]);
+  },
+  /** 押し込みシリンダーのロッド。単位長 1,000 mm（+X）で作り、View が実長へ伸ばす。 */
+  wrapperRod() { return G.at(G.cyl(CONFIG.COILER.WRAPPER.ROD_D, 1000, 'x', 12), 500, 0, 0); },
 
   /* --- コイルカー（リール下でコイルを受けて軸方向へ搬出する台車）------------- */
   /** 原点＝デッキ上面の中心。台車は Z 方向へ走り、Y 方向へ昇降する。 */
@@ -4479,7 +4712,7 @@ const Parts = {
    * を組む。寸法はすべて T.L / T.W / T.H から比で決めるので、ピットクレーン（大）と
    * トランスファークレーン（小）で同じ生成器を使い回せる。
    */
-  craneTrolley(T = CONFIG.CRANE.TROLLEY) {
+  craneTrolley(T = CONFIG.CRANE.TROLLEY, rope = null) {
     const L = T.L, W = T.W, H = T.H, parts = [];
     const wx = L / 2 - L * 0.09, wz = W / 2 - W * 0.16;             // 走行輪の X / Z
     const wd = H * 0.52, top = H / 2 + 100;                          // 走行輪径 / 桁下面
@@ -4514,18 +4747,50 @@ const Parts = {
     // --- 制御盤（両側面）---
     for (const sx of [-1, 1])
       parts.push(G.at(G.box(L * 0.10, H * 0.52, W * 0.34), sx * (L / 2 + L * 0.04), -H * 0.04, W * 0.02));
+    // --- ワイヤを降ろすシーブ（2 組）。ドラムからここへ導かれ、ここから吊具へ降りる ---
+    // 位置は «吊具のシーブと同じ» にする。ずれていると «ワイヤが宙で折れる» 絵になる。
+    if (rope) {
+      const dy = H * rope.TOP_DY;
+      for (const sd of [-1, 1]) {
+        const c = rope.AXIS === 'z' ? { x: 0, z: sd * rope.SPAN } : { x: sd * rope.SPAN, z: 0 };
+        parts.push(G.at(G.box(rope.SHEAVE_D * 0.55, rope.SHEAVE_D * 0.85, rope.SHEAVE_D * 0.55), c.x, dy + 40, c.z));
+        for (const sf of [-1, 1]) {                                   // 2 本掛けのシーブ
+          const o = rope.AXIS === 'z' ? { x: sf * rope.SPREAD / 2, z: 0 } : { x: 0, z: sf * rope.SPREAD / 2 };
+          parts.push(G.at(G.cyl(rope.SHEAVE_D, 90, rope.AXIS === 'z' ? 'x' : 'z', 16), c.x + o.x, dy, c.z + o.z));
+        }
+      }
+    }
     return G.merge(parts);
   },
-  /** 装入クレーンの吊りビーム（立てたスラブを掴む）。トランスファークレーンは別形状 transferBeam() を使う。 */
+  /**
+   * 装入クレーンの吊りビーム（立てたスラブを掴む）。原点＝ビーム中心。
+   * 上面に巻上ワイヤのシーブブロック、下面にクランプの吊り金具と中心ピンを持つ。
+   * クランプのアーム・爪は別メッシュ（開閉するため）。
+   */
   craneBeam() {
-    const C = CONFIG.CRANE;
+    const C = CONFIG.CRANE, R = C.ROPE, K = C.CLAMP, parts = [G.at(G.box(760, 460, C.BEAM_L), 0, 0, 0)];
+    for (const sd of [-1, 1]) {
+      const z = sd * C.BEAM_L * 0.34;
+      parts.push(G.at(G.box(520, 360, R.SHEAVE_D * 0.55), 0, R.BOT_DY, z));            // シーブブロック
+      for (const sf of [-1, 1])
+        parts.push(G.at(G.cyl(R.SHEAVE_D * 0.8, 90, 'x', 16), sf * R.SPREAD / 2, R.BOT_DY, z));
+      parts.push(G.at(G.box(360, K.PIVOT_H, 420), 0, -230 - K.PIVOT_H / 2, z));        // クランプの吊り金具
+      parts.push(G.at(G.cyl(220, 620, 'z', 12), 0, -230 - K.PIVOT_H, z));              // 中心ピン
+    }
+    return G.merge(parts);
+  },
+  /** クランプのアーム（片側）。中心ピンが原点、−Y へ ARM_L 伸びて先端に爪を持つ。 */
+  craneClampArm() {
+    const K = CONFIG.CRANE.CLAMP;
     return G.merge([
-      G.at(G.box(760, 460, C.BEAM_L), 0, 0, 0),
-      G.at(G.box(320, 820, 380), 0, -640, -C.BEAM_L * 0.34),
-      G.at(G.box(320, 820, 380), 0, -640,  C.BEAM_L * 0.34),
+      G.at(G.box(200, K.ARM_L, 300), 0, -K.ARM_L / 2, 0),
+      G.cyl(300, 320, 'z', 12),                                                        // 中心ピンのボス
+      G.at(G.box(K.JAW_T + 120, K.JAW_H, K.JAW_W + 120), 0, -K.ARM_L - K.JAW_H / 2 + 120, 0),   // 爪台
+      G.at(G.box(K.JAW_T, K.JAW_H * 0.7, K.JAW_W), 0, -K.ARM_L - K.JAW_H / 2 + 120, 0),         // 爪
     ]);
   },
-  craneRope() { return G.cyl(90, 1000, 'y', 8); },
+  /** 巻上ワイヤ 1 本（単位長 1,000 mm）。View が実長へ伸ばす。 */
+  craneRope(d = CONFIG.CRANE.ROPE.D) { return G.cyl(d, 1000, 'y', 8); },
 
   /*
    * --- 受取テーブル（トランスファークレーンの受取先）------------------------
@@ -5355,18 +5620,34 @@ class FinishView {
     this.holdRoll.castShadow = true; this.coiler.add(this.holdRoll);
     this.holdCyl = new THREE.Mesh(Parts.holdDownCyl(), MAT.hydraulic); this.holdCyl.name = '押えシリンダ';
     this.holdCyl.castShadow = true; this.coiler.add(this.holdCyl);
-    // --- ベルトラッパー: 常設。キャリッジが振り軸まわりに動き、その上でロールが揺動する ---
+    // --- ベルトラッパー: 常設。C 型キャリッジを左上からシリンダーで押し込んで抱かせる ---
     // マンドレルは板を掴まないので、巻き始めはこのベルトが先端をマンドレルへ押し付ける。
-    // 使わないときはキャリッジごと上へ退避するだけで、設備そのものは常に見えている。
+    // 使わないときは押し込みを戻すだけで、設備そのものは常に見えている。
     // 座標はすべて «マンドレル芯を原点» にしたいので、専用のグループにまとめる。
-    const WR = C.WRAPPER, SW = Wrapper.swing;
+    const WR = C.WRAPPER;
     this.wrap = new THREE.Group(); this.wrap.name = 'ベルトラッパー';
     this.wrap.position.y = u(this.mandrelY); this.coiler.add(this.wrap);
     const wf = new THREE.Mesh(Parts.wrapperFrame(), MAT.tableFrame);
     wf.name = 'ラッパー架台'; wf.castShadow = wf.receiveShadow = true; this.wrap.add(wf);
-    // キャリッジ（振り軸が原点）。この中の座標は «振り角 0 のときマンドレル座標» と一致する
-    this.cradle = new THREE.Group(); this.cradle.name = 'ラッパーキャリッジ';
-    this.cradle.position.set(u(SW.x), u(SW.y), 0); this.wrap.add(this.cradle);
+    // 押し込みシリンダー（胴は架台に固定、ロッドは伸縮する）。案内梁と同じ線の上に置く
+    {
+      const uu = Wrapper.u;
+      this._cylBase = Wrapper.cylBase;
+      this._cylDir = Math.atan2(-uu.y, -uu.x);                    // 胴は押し出す向き（−u）を向く
+      const cg2 = Parts.wrapperCyl(), rg = Parts.wrapperRod();
+      this.wrapCyls = []; this.wrapRods = [];
+      for (const sz of [-1, 1]) {
+        const m = new THREE.Mesh(cg2, MAT.hydraulic); m.name = '押し込みシリンダー';
+        m.position.set(u(this._cylBase.x), u(this._cylBase.y), u(sz * WR.LEG_Z));
+        m.rotation.z = this._cylDir; m.castShadow = true; this.wrap.add(m); this.wrapCyls.push(m);
+        const r = new THREE.Mesh(rg, MAT.rod); r.name = '押し込みロッド';
+        r.position.set(u(this._cylBase.x - uu.x * WR.CYL_L), u(this._cylBase.y - uu.y * WR.CYL_L), u(sz * WR.LEG_Z));
+        r.rotation.z = this._cylDir; r.castShadow = true;
+        this.wrap.add(r); this.wrapRods.push(r);
+      }
+    }
+    // キャリッジ（押し切ったときマンドレル座標と一致する）
+    this.cradle = new THREE.Group(); this.cradle.name = 'ラッパーキャリッジ'; this.wrap.add(this.cradle);
     const cg = new THREE.Mesh(Parts.wrapperCarriage(), MAT.tableFrame);
     cg.name = 'ラッパーキャリッジ'; cg.castShadow = true; this.cradle.add(cg);
     const rollGeo = Parts.wrapperRoll(), armGeo = Parts.wrapperArm();
@@ -5376,7 +5657,7 @@ class FinishView {
       roll.castShadow = true; this.cradle.add(roll);
       const arms = [-1, 1].map(sz => {
         const m = new THREE.Mesh(armGeo, MAT.hydraulic); m.name = 'ラッパーアーム';
-        m.position.set(u(pivot.x - SW.x), u(pivot.y - SW.y), u(sz * WR.ARM_Z));
+        m.position.set(u(pivot.x), u(pivot.y), u(sz * WR.ARM_Z));
         m.scale.x = Wrapper.armL(i) / 1000;          // 素体は単位長。支点ごとの実長へ伸ばす
         m.castShadow = true; this.cradle.add(m); return m;
       });
@@ -5573,25 +5854,26 @@ class FinishView {
       }
     }
 
-    // --- ベルトラッパー: キャリッジを振り、その上でロールがコイル外周に当たる ---
+    // --- ベルトラッパー: キャリッジを押し込み、その上でロールがコイル外周に当たる ---
     {
-      const WR = C.WRAPPER, SW = Wrapper.swing, halfW = WR.FACE / 2, centers = [];
-      this.cradle.rotation.z = Wrapper.beta(fin.wrap);        // 退避（PARK_A）⇄ 閉（0）
+      const WR = C.WRAPPER, halfW = WR.FACE / 2, centers = [];
+      const off = Wrapper.offset(fin.wrap);                  // 退避（STROKE）⇄ 押し切り（0）
+      this.cradle.position.set(u(off.x), u(off.y), 0);
       for (const wr of this.wrapRolls) {
         // コイルは 1 周ごとに段が付くので、ロールごとに «その極角での実半径» に当てる
         // （押えコロと同じ扱い。平均半径で当てると 1 板厚ぶん浮く）
         const rCoil = wound ? Rolling.coilRadiusAt(wr.th, h, fin.turns, fin.entry, fin.windSign) : r0;
-        // アームがコイルを追うのは «押し付けている間» だけ。退避中は畳んだ姿勢へ戻す
-        // （伸ばしたまま振り上げると、振り角によっては芯へ近づいてコイルに掛かる）
-        const p1 = Wrapper.phiFor(wr.i, rCoil + WR.ROLL_D / 2), p0 = Wrapper.phiClosed(wr.i);
-        const c = Wrapper.at(wr.i, p0 + Math.atan2(Math.sin(p1 - p0), Math.cos(p1 - p0)) * fin.wrap);
-        centers.push({ x: c.x - SW.x, y: c.y - SW.y });       // キャリッジ座標へ
-        wr.roll.position.set(u(c.x - SW.x), u(c.y - SW.y), 0);
+        const c = Wrapper.at(wr.i, Wrapper.phiAt(wr.i, rCoil + WR.ROLL_D / 2, fin.wrap));
+        centers.push(c);
+        wr.roll.position.set(u(c.x), u(c.y), 0);
         wr.roll.rotation.z = -fin.beltAngle * (2 * rCoil / WR.ROLL_D);
         for (const m of wr.arms) m.rotation.z = Math.atan2(c.y - wr.pivot.y, c.x - wr.pivot.x);
       }
-      // ベルトの «外向き» はマンドレル芯から見て外側。キャリッジ座標では芯は −SW にある
-      this.beltGeo.update(centers, WR.ROLL_D / 2 + WR.BELT_T / 2, halfW, { x: -SW.x, y: -SW.y });
+      this.beltGeo.update(centers, WR.ROLL_D / 2 + WR.BELT_T / 2, halfW);
+      // ロッドは «シリンダーの前端 → キャリッジの取付点» を埋める（押し込み量そのもの）
+      const uu = Wrapper.u, fx = this._cylBase.x - uu.x * WR.CYL_L, fy = this._cylBase.y - uu.y * WR.CYL_L;
+      const hx = Wrapper.hitch.x + off.x, hy = Wrapper.hitch.y + off.y;
+      for (const r of this.wrapRods) r.scale.x = Math.max(Math.hypot(hx - fx, hy - fy), 20) / 1000;
     }
 
     // --- コイルカー: 上昇端は «コイルが V 受けに載る高さ»（マンドレル芯 − V での芯高さ）。
@@ -5705,12 +5987,26 @@ class SupplyView {
     this.girder = near(new THREE.Mesh(Parts.craneGirder(CR), MAT.tableFrame), MAT.tableFrame);
     this.girder.name = '装入クレーン桁'; this.girder.castShadow = true;
     this.girder.position.set(u(S.TILTER_X), u(this.girderY), u(zc)); this.group.add(this.girder);
-    this.trolley = new THREE.Mesh(Parts.craneTrolley(CR.TROLLEY), MAT.hydraulic);
+    const RP = { ...CR.ROPE, SPAN: CR.BEAM_L * 0.34 };
+    this.trolley = new THREE.Mesh(Parts.craneTrolley(CR.TROLLEY, RP), MAT.hydraulic);
     this.trolley.name = 'トロリ'; this.trolley.castShadow = true; this.group.add(this.trolley);
     this.hookBeam = new THREE.Mesh(Parts.craneBeam(), MAT.hydraulic);
     this.hookBeam.name = '吊りビーム'; this.hookBeam.castShadow = true; this.group.add(this.hookBeam);
-    this.ropes = [-1, 1].map(() => { const m = new THREE.Mesh(Parts.craneRope(), MAT.rod);
-      m.name = 'ワイヤ'; this.group.add(m); return m; });
+    // ワイヤは «2 組 × 2 本掛け» の 4 本。上端＝トロリのシーブ芯、下端＝吊具のシーブ芯
+    this._ropeCfg = RP;
+    const ropeGeo = Parts.craneRope(RP.D);
+    this.ropes = [];
+    for (const sd of [-1, 1]) for (const sf of [-1, 1]) {
+      const m = new THREE.Mesh(ropeGeo, MAT.rod); m.name = 'ワイヤ';
+      m.userData.rope = { sd, sf }; this.group.add(m); this.ropes.push(m);
+    }
+    // クランプ（立てたスラブの板厚面を挟む）。中心ピンまわりに 2 本のアームが逆向きに回る
+    const clampGeo = Parts.craneClampArm();
+    this.clampArms = [];
+    for (const sd of [-1, 1]) for (const sx of [-1, 1]) {
+      const m = new THREE.Mesh(clampGeo, MAT.hydraulic); m.name = 'クランプアーム';
+      m.castShadow = true; m.userData.clamp = { sd, sx }; this.group.add(m); this.clampArms.push(m);
+    }
     this._crane = { z: CONFIG.FURNACE.Z, beamY: null };   // 装入クレーンの現在位置（急に戻さず速度制限で戻す）
 
     // --- トランスファークレーン：ピットクレーンとは完全に別の、低い最小限フレーム ---
@@ -5727,11 +6023,17 @@ class SupplyView {
     this.girderT = near(new THREE.Mesh(Parts.craneGirder(FT), MAT.tableFrame), MAT.tableFrame);
     this.girderT.name = 'トランスファークレーン桁'; this.girderT.castShadow = true;
     this.girderT.position.set(u(S.TILTER_X), u(this.girderYT), u(zcT)); this.group.add(this.girderT);
-    this.trolleyT = new THREE.Mesh(Parts.craneTrolley(FT.TROLLEY), MAT.hydraulic);
+    this._ropeCfgT = { ...TR.ROPE, SPAN: TR.BEAM_L * 0.34 };
+    this.trolleyT = new THREE.Mesh(Parts.craneTrolley(FT.TROLLEY, this._ropeCfgT), MAT.hydraulic);
     this.trolleyT.name = 'トランスファートロリ'; this.trolleyT.castShadow = true; this.group.add(this.trolleyT);
     this.beamT = new THREE.Mesh(Parts.transferBeam(), MAT.hydraulic);
     this.beamT.name = '吊りビーム（トング）'; this.beamT.castShadow = true; this.group.add(this.beamT);
-    this.ropesT = [-1, 1].map(() => { const m = new THREE.Mesh(Parts.craneRope(), MAT.rod); m.name = 'ワイヤ'; this.group.add(m); return m; });
+    const ropeGeoT = Parts.craneRope(TR.ROPE.D);
+    this.ropesT = [];
+    for (const sd of [-1, 1]) for (const sf of [-1, 1]) {
+      const m = new THREE.Mesh(ropeGeoT, MAT.rod); m.name = 'ワイヤ';
+      m.userData.rope = { sd, sf }; this.group.add(m); this.ropesT.push(m);
+    }
     // トング 2 基（吊りビームの両端）。1 基では長尺スラブが前後に首を振るため 2 点吊りにする。
     // 各基は「マスト＋シリンダ受け梁」＋「±Z のアーム 2 本とそのシリンダロッド」。
     // −Z 側は親グループを Y 180° 回した鏡像なので、アームの回転は両側とも同じ符号で書ける。
@@ -5901,11 +6203,30 @@ class SupplyView {
     else { c.beamY = Num.rateTo(c.beamY, beamHome, 1800, dt); c.z = Num.rateTo(c.z, CONFIG.FURNACE.Z, 2200, dt); }
     this.trolley.position.set(u(S.TILTER_X), u(this.trolleyY), u(c.z));
     this.hookBeam.position.set(u(S.TILTER_X), u(c.beamY), u(c.z));
-    const ropeLen = Math.max(this.trolleyY - CR.TROLLEY.H / 2 - c.beamY - 230, 10);
-    this.ropes.forEach((m, i) => {
-      m.position.set(u(S.TILTER_X), u(c.beamY + 230 + ropeLen / 2), u(c.z + (i ? 1 : -1) * CR.BEAM_L * 0.34));
-      m.scale.y = ropeLen / 1000;
-    });
+    // ワイヤ: 上端＝トロリのシーブ芯、下端＝吊具のシーブ芯。両端がシーブに隠れるので
+    // «途中で切れて見える» ことがない（以前は上端をトロリ下面に置いて 280 mm 浮いていた）
+    {
+      const R = this._ropeCfg;
+      const yTop = this.trolleyY + CR.TROLLEY.H * R.TOP_DY, yBot = c.beamY + R.BOT_DY;
+      const len = Math.max(yTop - yBot, 10);
+      for (const m of this.ropes) {
+        const { sd, sf } = m.userData.rope;
+        m.position.set(u(S.TILTER_X + sf * R.SPREAD / 2), u((yTop + yBot) / 2), u(c.z + sd * R.SPAN));
+        m.scale.y = len / 1000;
+      }
+    }
+    // クランプ: 吊っている間はスラブの板厚面を挟み、放したら開く
+    {
+      const K = CR.CLAMP, open = hung ? 0 : 1;
+      const halfIn = Num.lerp(th / 2, K.OPEN / 2, open) + K.JAW_T / 2;   // 爪の中心 X
+      const a = Math.asin(Num.clamp(halfIn / K.ARM_L, -1, 1));
+      const pinY = c.beamY - 230 - K.PIVOT_H;
+      for (const m of this.clampArms) {
+        const { sd, sx } = m.userData.clamp;
+        m.position.set(u(S.TILTER_X), u(pinY), u(c.z + sd * CR.BEAM_L * 0.34));
+        m.rotation.z = -sx * a;                    // 中心ピンまわりに逆向きへ開く
+      }
+    }
 
     // --- トランスファークレーン（専用の低いフレーム。trolleyYT はピットクレーンの
     //     trolleyY とは別の、自分のフレーム高さ FT.GIRDER_Y から決まる値） ---
@@ -5933,11 +6254,16 @@ class SupplyView {
     this.girderT.position.x = u(t.x);
     this.trolleyT.position.set(u(t.x), u(this.trolleyYT), u(t.z));
     this.beamT.position.set(u(t.x), u(mastTop + 210), u(t.z));
-    const ropeT = Math.max(this.trolleyYT - FT.TROLLEY.H / 2 - (mastTop + 680), 10);
-    this.ropesT.forEach((m, i) => {
-      m.position.set(u(t.x + (i ? 1 : -1) * TR.BEAM_L * 0.34), u(mastTop + 680 + ropeT / 2), u(t.z));
-      m.scale.y = ropeT / 1000;
-    });
+    {
+      const R = this._ropeCfgT;
+      const yTop = this.trolleyYT + FT.TROLLEY.H * R.TOP_DY, yBot = mastTop + 210 + R.BOT_DY;
+      const len = Math.max(yTop - yBot, 10);
+      for (const m of this.ropesT) {
+        const { sd, sf } = m.userData.rope;
+        m.position.set(u(t.x + sd * R.SPAN), u((yTop + yBot) / 2), u(t.z + sf * R.SPREAD / 2));
+        m.scale.y = len / 1000;
+      }
+    }
 
     if (!active) return;
     this.slab.scale.set(u(L), u(th), u(w));
@@ -6201,8 +6527,12 @@ class LabelView {
       ['装入クレーン',                    S.TILTER_X, CONFIG.CRANE.GIRDER_Y + 1500, CONFIG.FURNACE.Z, 90000],
     ].map(([t, x, y, z, maxD]) => {
       const el = document.createElement('div'); el.className = 'tag'; el.textContent = t;
+      el.title = `${t} へ視点を移す`;
       host.appendChild(el);
-      return { el, v: new THREE.Vector3(u(x), u(y), u(z)), maxD: u(maxD), grp: 'equip' };
+      // «寄る距離» は見え始める距離（maxD）から決める。設備の大小に自然に追従する
+      const it = { el, v: new THREE.Vector3(u(x), u(y), u(z)), maxD: u(maxD), grp: 'equip', camD: u(maxD) * 0.34 };
+      el.addEventListener('click', () => this.onPick && this.onPick(it));
+      return it;
     });
     // テーブル区分の記号バッジ。位置は «実際に並んだローラの範囲の中央» に置く（区分の
     // 呼び範囲ではなく実物の範囲に合わせるので、配置がずれていればバッジもずれて見える）。
@@ -6211,9 +6541,12 @@ class LabelView {
       const xs = Layout.section(sec).xs, x0 = Math.min(...xs), x1 = Math.max(...xs);
       const el = document.createElement('div'); el.className = 'tag zone';
       el.innerHTML = `<b>${sec.name}</b><i>${sec.n} 本 ・ ${sec.pitch}</i>`;
+      el.title = `${sec.name} テーブルへ視点を移す`;
       host.appendChild(el);
-      return { el, v: new THREE.Vector3(u((x0 + x1) / 2), u(CONFIG.MILL.PASS_LINE + 1600), 0),
-               maxD: u(150000), grp: 'zone' };
+      const it = { el, v: new THREE.Vector3(u((x0 + x1) / 2), u(CONFIG.MILL.PASS_LINE + 1600), 0),
+                   maxD: u(150000), grp: 'zone', camD: u(Math.max(x1 - x0, 6000) * 1.5) };
+      el.addEventListener('click', () => this.onPick && this.onPick(it));
+      return it;
     });
     this.zonesEnabled = false;
     this._p = new THREE.Vector3();
@@ -6269,14 +6602,22 @@ class World3D {
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true; this.controls.dampingFactor = 0.07;
-    this.controls.maxPolarAngle = Math.PI * 0.495;
-    this.controls.minDistance = u(2500); this.controls.maxDistance = u(160000);
-    this.controls.screenSpacePanning = false;
+    // 見たいところへ素直に寄れるよう、制約は «破綻する手前» までゆるめる。
+    //  ・仰角は真上・真下の直前まで（真上/真下ちょうどは方位が定まらず画面が回る）
+    //  ・平行移動は «画面に平行»（screenSpacePanning）。床に平行だと、見下ろすほど
+    //    右ドラッグが効かなくなり «動かせない» と感じる（右クリック平行移動の制約の正体）
+    //  ・寄り引きの範囲もロールの間から工場全景までを通せる幅にする
+    this.controls.minPolarAngle = 0.02 * Math.PI;
+    this.controls.maxPolarAngle = 0.98 * Math.PI;
+    this.controls.minDistance = u(600); this.controls.maxDistance = u(320000);
+    this.controls.screenSpacePanning = true;
+    this.controls.panSpeed = 1.1; this.controls.zoomSpeed = 1.15;
 
     this._lights();
     this._world();
 
     this.labels = new LabelView(this.camera, document.getElementById('tags'));
+    this.labels.onPick = (it) => this.focusOn(it.v, it.camD);
     this.cutScope = Object.fromEntries(CONFIG.CUTAWAY.map(g => [g.id, g.on]));
     this.cutaway = 'half'; this.setCutaway('half');
     this._dpr = 1.5; this.setQuality('std');
@@ -6363,6 +6704,19 @@ class World3D {
   setLabels(on) { this.labels.setEnabled(on); }
   setZoneBadges(on) { this.labels.setZones(on); }
 
+  /**
+   * 3D 上のラベルを押したときの «その設備へ寄る»。
+   * 今の見ている向きは変えず、距離だけ詰める。向きまで変えると «どこを向いているか»
+   * が分からなくなるので、空間の把握を壊さないためにここは動かさない。
+   */
+  focusOn(target, dist) {
+    const dir = this.camera.position.clone().sub(this.controls.target);
+    if (dir.lengthSq() < 1e-9) dir.set(1, 0.6, 1);
+    dir.normalize().multiplyScalar(Num.clamp(dist, this.controls.minDistance * 1.2, this.controls.maxDistance * 0.9));
+    this._tw = { p0: this.camera.position.clone(), t0: this.controls.target.clone(),
+                 p1: target.clone().add(dir), t1: target.clone(), t: 0, d: 0.9 };
+  }
+
   /** カメラプリセットへの滑らかな遷移（唐突なジャンプは空間認知を壊す） */
   applyView(v, instant = false) {
     const pos = Sim.v3(v.pos), tgt = Sim.v3(v.tgt);
@@ -6434,6 +6788,74 @@ class UIManager {
     this._buildVersion();
     this._bind(); this._listen();
     this.dims(); this._rollState(); this.renderSchedule(); this._banner('idle'); this._summaries();
+  }
+
+  /**
+   * 圧延実績（ロギング）パネル。中身は PhysicsEngine.log（実測値）だけを見る。
+   * 予測（スケジュール）は «計画» 列として並記し、実績と計画がひと目で比べられるようにする。
+   */
+  renderLog() {
+    const L = this.log; if (!L) return;
+    const lot = L.lot, tb = $('log-table').querySelector('tbody');
+    const f = (v, n = 1) => (v === null || v === undefined || Number.isNaN(v)) ? '–' : (+v).toFixed(n);
+    $('log-lot').textContent = lot
+      ? `${lot.alloyKey} ／ ${f(lot.thick0, 0)} × ${lot.width} × ${lot.length} mm ／ 炉出し ${lot.tPit} ℃ ／ `
+        + `目標 ${lot.target} mm（${lot.mode === 'COIL' ? 'コイル巻取' : '板材'}） ／ 開始 ${lot.started.toLocaleTimeString('ja-JP')}`
+      : '運転を開始すると記録が始まります。';
+    const rows = L.rows;
+    tb.innerHTML = rows.length ? rows.map((r, i) => {
+      const live = r.sec === null;
+      const over = r.fMax > CONFIG.MILL.RATED_FORCE_T;
+      return `<tr class="${live ? 'live' : ''}">
+        <td>${r.no}${live ? ' ●' : ''}</td><td class="dir">${r.dir}</td>
+        <td>${f(r.hIn)}</td><td>${f(r.hOut)}</td><td>${f(r.red)}</td>
+        <td class="${over ? 'over' : ''}">${f(r.fMax, 0)}</td><td>${f(r.fAvg, 0)}</td><td class="plan">${f(r.planForce, 0)}</td>
+        <td>${f(r.vMax)}</td><td>${f(r.vAvg)}</td><td class="plan">${f(r.planSpeed, 0)}</td>
+        <td>${f(r.pMax, 2)}</td><td>${f(r.tIn, 0)}</td><td>${f(r.tOut, 0)}</td>
+        <td>${f(r.len / 1000, 2)}</td><td>${f(r.sec)}</td></tr>`;
+    }).join('') : '<tr><td colspan="16" class="empty">まだ記録がありません。「圧延サイクル開始」で記録が始まります。</td></tr>';
+    this._logChart(L);
+    const done = rows.filter(r => r.sec !== null).length;
+    const fMax = Math.max(0, ...rows.map(r => r.fMax)), pMax = Math.max(0, ...rows.map(r => r.pMax));
+    $('log-foot').innerHTML = lot
+      ? `<span>${done} / ${lot.passPlan} パス完了</span>`
+        + `<span>最大荷重 <b>${f(fMax, 0)}</b> t（定格 ${CONFIG.MILL.RATED_FORCE_T.toLocaleString()} t）</span>`
+        + `<span>最大動力 <b>${f(pMax, 2)}</b> MW</span>`
+        + `<span>経過 <b>${f(lot.t, 0)}</b> s</span>`
+        + `<span class="lg"><s style="background:var(--accent)"></s>荷重</span>`
+        + `<span class="lg"><s style="background:var(--hot)"></s>速度</span>`
+      : 'パスが終わるたびに 1 行増えます。平均は «噛んでいる間» だけで取っています。';
+  }
+  /** 時系列（荷重・速度）の簡易チャート。SVG を直接組む（外部ライブラリを増やさない） */
+  _logChart(L) {
+    const host = $('log-chart'), w = 1100, h = 180, pad = { l: 46, r: 46, t: 12, b: 20 };
+    const S = L.series;
+    if (!S.length) { host.innerHTML = '<div class="empty">時系列はまだありません</div>'; return; }
+    const tMax = Math.max(1, S[S.length - 1].t);
+    const fMax = Math.max(100, ...S.map(p => p.f)), vMax = Math.max(10, ...S.map(p => p.v));
+    const X = t => pad.l + (w - pad.l - pad.r) * (t / tMax);
+    const Yf = v => h - pad.b - (h - pad.t - pad.b) * (v / fMax);
+    const Yv = v => h - pad.b - (h - pad.t - pad.b) * (v / vMax);
+    const path = (yf) => S.map((p, i) => `${i ? 'L' : 'M'}${X(p.t).toFixed(1)},${yf(p).toFixed(1)}`).join('');
+    // パスの切れ目（記録された «パス番号» が変わった点）に薄い縦線を引く
+    const marks = [];
+    for (let i = 1; i < S.length; i++) if (S[i].pass !== S[i - 1].pass && S[i].pass > 0) marks.push(S[i]);
+    host.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      ${marks.map(m => `<line x1="${X(m.t).toFixed(1)}" y1="${pad.t}" x2="${X(m.t).toFixed(1)}" y2="${h - pad.b}"
+          stroke="var(--line)" stroke-width="1"/>
+        <text x="${(X(m.t) + 3).toFixed(1)}" y="${pad.t + 10}" font-size="9" fill="var(--ink-3)">P${m.pass}</text>`).join('')}
+      <line x1="${pad.l}" y1="${h - pad.b}" x2="${w - pad.r}" y2="${h - pad.b}" stroke="var(--line)"/>
+      <path d="${path(p => Yv(p.v))}" fill="none" stroke="var(--hot)" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="${path(p => Yf(p.f))}" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linejoin="round"/>
+      <text x="4" y="${pad.t + 9}" font-size="9.5" fill="var(--accent)">${Math.round(fMax)} t</text>
+      <text x="4" y="${h - pad.b - 2}" font-size="9.5" fill="var(--ink-3)">0</text>
+      <text x="${w - pad.r + 4}" y="${pad.t + 9}" font-size="9.5" fill="var(--hot)">${Math.round(vMax)} mpm</text>
+      <text x="${w - pad.r + 4}" y="${h - pad.b - 2}" font-size="9.5" fill="var(--ink-3)">${Math.round(tMax)} s</text>
+    </svg>`;
+  }
+  toggleLog(open = !$('dlg-log').open) {
+    const d = $('dlg-log');
+    if (open) { this.renderLog(); if (!d.open) d.showModal(); } else d.close();
   }
 
   /**
@@ -6780,6 +7202,15 @@ class UIManager {
     on('chk-steam',   'change', e => { this.bus.emit('CMD_SET_ENV', { steam: e.target.checked }); this._summaries(); });
     on('chk-supply-anim', 'change', e => { this.bus.emit('CMD_SET_SUPPLY_ANIM', e.target.checked); this._summaries(); });
 
+    on('tb-log', 'click', () => this.toggleLog(true));
+    on('btn-log-close', 'click', () => this.toggleLog(false));
+    on('btn-log-csv', 'click', async () => {
+      const b = $('btn-log-csv'), t = this.log?.csv() || '';
+      try { await navigator.clipboard.writeText(t); b.textContent = 'コピーしました'; }
+      catch { b.textContent = 'コピーできません'; }
+      setTimeout(() => { b.textContent = 'CSV コピー'; }, 1600);
+    });
+    $('dlg-log').addEventListener('click', e => { if (e.target === $('dlg-log')) this.toggleLog(false); });
     on('btn-ver', 'click', () => this.toggleVersion(true));
     on('btn-ver-close', 'click', () => this.toggleVersion(false));
     // 背景（バックドロップ）を押したら閉じる。dialog 自身が Esc を受ける
@@ -6790,6 +7221,8 @@ class UIManager {
       const k = e.key.toLowerCase();
       // 履歴を開いている間は運転や視点のキーを効かせない（Esc は dialog 自身が受ける）
       if ($('dlg-ver').open) { if (k === 'v') { e.preventDefault(); this.toggleVersion(false); } return; }
+      if ($('dlg-log').open) { if (k === 'g') { e.preventDefault(); this.toggleLog(false); } return; }
+      if (k === 'g') { this.toggleLog(); return; }
       if (k === ' ') { e.preventDefault(); this.toggleRun(); }
       else if (k === 'p') this.togglePause();
       else if (k === 'r') this.bus.emit('CMD_RESET');
@@ -6819,8 +7252,17 @@ class UIManager {
   }
 
   _listen() {
-    this.bus.on('STATE_UPDATE', p => this.onState(p));
-    this.bus.on('STATE_PASS', i => { this.passIndex = i; this.renderSchedule(); this._summaries(); });
+    this.bus.on('STATE_UPDATE', p => {
+      this.log = p.log;                       // 実績パネルは «物理が持っている記録» をそのまま見る
+      this.onState(p);
+      // 開いている間だけ、パスが増えたときに描き直す（毎フレーム作り直さない）
+      if ($('dlg-log').open) {
+        const n = p.log.passes.length, t = Math.floor(p.log.lot ? p.log.lot.t : 0);
+        if (n !== this._logN || t !== this._logT) { this._logN = n; this._logT = t; this.renderLog(); }
+      }
+    });
+    this.bus.on('STATE_PASS', i => { this.passIndex = i; this.renderSchedule(); this._summaries();
+      if ($('dlg-log').open) this.renderLog(); });
     this.bus.on('STATE_RESET', () => { this.busy = false; this.paused = false; this.passIndex = -1;
       this.peak = {}; this.renderSchedule(); this._startBtn(); this._banner('idle'); this._applyVisibility(); this._summaries(); });
     this.bus.on('STATE_FINISHED', () => { this.busy = false; this._startBtn(); this._banner('done'); this._applyVisibility(); });

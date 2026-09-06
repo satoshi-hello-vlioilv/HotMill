@@ -34,9 +34,9 @@ const out = await page.evaluate((EPS) => {
     add(F[k]);
   for (const side of (F.pilerSides ?? [])) add(side.grp);
   for (const w of (F.wrapRolls ?? [])) { add(w.roll); add(w.arms); }   // ベルトラッパー（揺動する）
-  add(F.cradle);                                                       // ラッパーキャリッジ（振れる）
+  add(F.cradle); add(F.wrapRods); add(F.wrapCyls);                     // ラッパーのキャリッジ・ロッド・シリンダー（動く）
   const S = W.supplyView;
-  for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT'])
+  for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'clampArms', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT'])
     add(S[k]);
   for (const t of S.tongs) add(t.g);                       // トングはマスト・アーム・ロッドの入れ子
   add(S.bedRolls.inst.mesh); add(S.runoutRolls.inst.mesh); // 転倒機ベッド／受取テーブルのローラ（回る）
