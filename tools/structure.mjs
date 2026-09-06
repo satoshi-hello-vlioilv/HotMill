@@ -27,10 +27,12 @@ const out = await page.evaluate((EPS) => {
   for (const st of W.guideView.stations) for (const g of st.sides) add(g);
   const F = W.finishView;
   for (const k of ['knives', 'lowerRolls', 'upperRoll', 'mandrel', 'coil', 'bridge', 'cropRam', 'cropBed', 'cropPiece', 'cropKnife',
+                   'car', 'belt',
                    'holdRoll', 'holdArm', 'holdCyl', 'knifeShafts', 'cropHold', 'cropPusher', 'segments', 'strip', 'plate',
                    'convRolls', 'pieceHost', 's30Ram', 's30Hold', 'pilerLift', 'pilerCol'])
     add(F[k]);
   for (const side of (F.pilerSides ?? [])) add(side.grp);
+  for (const w of (F.wrapRolls ?? [])) { add(w.roll); add(w.arms); }   // ベルトラッパー（揺動する）
   const S = W.supplyView;
   for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT'])
     add(S[k]);

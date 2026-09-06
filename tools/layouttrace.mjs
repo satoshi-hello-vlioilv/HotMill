@@ -202,8 +202,20 @@ const out = await page.evaluate(() => {
     ok('先端と後端の両方をクロップする（そのまま板を送って後端も切る）',
        P.finish.cropEndsDone[1] && P.finish.cropEndsDone[-1] && P.finish.cropCutsAll >= 2,
        `先端 ${P.finish.cropEndsDone[-K.FLIP > 0 ? 1 : -1] ? '済' : '未'} / 後端 ${P.finish.cropEndsDone[K.FLIP > 0 ? 1 : -1] ? '済' : '未'} / 総カット ${P.finish.cropCutsAll}`);
-    ok('端材はすべて可視のままパレットの上に載る', pieces.length > 0 && onPallet.length === pieces.length && onPallet.length === P.finish.cropCutsAll,
-       `可視 ${pieces.length} / パレット上 ${onPallet.length} / カット数 ${P.finish.cropCutsAll}${PAL ? '' : '（パレット未定義）'}`);
+    // 後端の端材は下台と一緒に降りてシュート経由で端材箱へ落ちる（出側のプッシャは
+    // そのとき板がエプロンを覆っているので使えない）。先端の端材はコンベア → パレット。
+    const TB = K.CROP_SHEAR.TAIL.BOX;
+    const inBox = pieces.filter(m => { const b = new T.Box3().setFromObject(m);
+      return b.min.y / sc >= TB.H - 5 && Math.abs(b.getCenter(new T.Vector3()).z / sc) < TB.W / 2; });
+    R.scrap.inBox = inBox.length;
+    ok('後端の端材が下台と一緒に降りて端材箱に納まる',
+       P.finish.tailRest > 0 && inBox.length === P.finish.tailRest,
+       `端材箱 ${inBox.length} 個（後端カット ${P.finish.tailRest}）／ 総カット ${P.finish.cropCutsAll}`);
+    // 端材はどれも装置の中に隠れず、先端はパレット、後端は端材箱で «見えたまま» 静止する
+    ok('端材はすべて可視のまま（先端はパレット、後端は端材箱）に納まる',
+       pieces.length > 0 && onPallet.length + inBox.length === pieces.length
+       && onPallet.length === P.finish.cropCutsAll - P.finish.tailRest,
+       `可視 ${pieces.length} / パレット ${onPallet.length} + 端材箱 ${inBox.length}${PAL ? '' : '（パレット未定義）'}`);
   }
 
   R.failed = R.checks.filter(c => !c.pass).length;

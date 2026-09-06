@@ -619,8 +619,9 @@ const CONFIG = {
       { name: 'A-3', side: -1, x0:  84300, x1:  97800, n: 18, pitch: 750 },
       { name: 'A-2', side: -1, x0:  97800, x1: 109800, n: 16, pitch: 750 },
       { name: 'A-1', side: -1, x0: 109800, x1: 121800, n: 15, pitch: 750 },
+      // 出側テーブルはリールの手前で終わる。リールの真下にローラを置くと、巻き終えた
+      // コイルを下から受けるコイルカーが入る余地が無くなる（実機もリール下は空けてある）。
       { name: 'F',   side:  1, x0:   2500, x1:   5300, n:  8, pitch: '460 370×5 460' },
-      { name: 'ﾃﾞﾌﾟﾚｯｼﾝｸﾞ', side: 1, x0: 7500, x1:   8900, n:  2, pitch: 650 },   // リール下の 2 本
       { name: 'G-1', side:  1, x0:   9000, x1:  14900, n: 10, pitch: 650 },
       { name: 'G-2', side:  1, x0:  14900, x1:  22300, n: 10, pitch: 750 },
       { name: 'G-3', side:  1, x0:  22300, x1:  29800, n: 10, pitch: 750 },
@@ -809,6 +810,17 @@ const CONFIG = {
     // SEG_STROKE だけ拡縮する（拡張時 Φ610 = コイル内径、縮小時はコイルを抜ける）。
     SEG_STROKE: 30, SEG_GAP: 26, SEG_WALL: 95, T_EXPAND: 0.8,
     APPROACH: 3000,                          // 先端がデフレクタの手前この距離に来たらマンドレルを拡張する
+    /* コイルカー —— リールの真下で待機し、巻取が終わったコイルを受けて搬出する。
+     * 受け台（V 字クレードル）を持つ台車が上昇してコイル外周に当たり、マンドレルを
+     * 縮小してからコイルを軸方向（操作側 +Z）へ運び出す。操作側はアウトボードベアリング
+     * の «柱 2 本だけの開放構造»（コイル抜き取り側）なので、その柱間（内法 760 mm）を
+     * 通れる幅に台車を作る。上昇端は «コイル外周がデッキに載る高さ»＝マンドレル芯 −
+     * コイル半径 で決まる従属値にし、コイル径が変わっても浮かない／めり込まない。 */
+    CAR: {
+      L: 700, W: 2400, DECK_Y: 220, CRADLE_A: 30, WHEEL_D: 360,
+      REST_Y: 880,                           // 待機時のデッキ上面（車輪下端がレール天端 120 に載る）
+      T_LIFT: 2.2, TRAVEL_Z: 6000, SPEED_Z: 1200,
+    },
     /* ベルトラッパー —— リールで «巻き始める» ための装置。
      * マンドレルは板を掴む機構を持たない（拡縮するだけ）ので、先端はベルトで
      * マンドレルへ押し付けて摩擦で連れ回す。3 本のラッパーロールが揺動アームに載り、
@@ -873,9 +885,21 @@ const CONFIG = {
     // 架構: 柱は剪断面の上流側（COL_X）、Z は ±COL_Z。プッシャがエプロン上を通れるよう
     // 柱はエプロンの X 範囲の外に置く。クロスヘッドは柱の上に架かり、上刃ホルダを吊る。
     FRAME: { COL_X: -250, COL_W: 600, COL_D: 760, COL_Z: 2400 },
-    // 端材の払い出し: 駆動側(−Z)のプッシャ（クロスヘッド下のレールを走る台車）が端材を
+    // 先端の端材の払い出し: 駆動側(−Z)のプッシャ（クロスヘッド下のレールを走る台車）が端材を
     // 操作側(+Z)へ押し、エプロン端 Z_DROP からコンベアへ落とす。
     EJECT: { Z_HOME: -1750, Z_DROP: 2200, RAIL_Y: 330 },
+    /* 後端の端材の払い出し。
+     * 端材は «刃を挟んで切る端の側» に落ちるので、先端カットでは出側のエプロン、
+     * 後端カットでは «ミル側» —— つまり下刃を載せた昇降下台の上に載る。しかもそのとき
+     * 板は出側のエプロンを覆っているので、出側のプッシャは使えない（板とぶつかる）。
+     * そこで後端の端材は «下台と一緒に降ろし»、下台脇のシュートで操作側へ滑らせて
+     * 床上の端材箱へ落とす。DROP は下台がパスラインより下へ降りる量。 */
+    // 下台まわりは «出側にエプロン・ミル側にテーブル架台（Z=±1,545）・両側にシャー柱
+    // （Z=±2,400）» と混んでいて、端材を横へ長く滑らせる余地が無い。そこで箱は下台の
+    // «真下»（架台どうしの間、|Z| < 1,545 の帯）に置き、短いシュートで落とす。
+    TAIL: { DROP: 450, T_DROP: 1.6, SLIDE: 900, CHUTE_Z1: 1050,
+            // 箱の巾は下台の昇降シリンダ（Z=±1,350、Φ360 → 内側 1,170）の内側に収める
+            BOX: { L: 900, W: 2200, H: 180 } },
     // 端材コンベア（ローラ式）: エプロン端の下から操作側へ運び、末端でパレットへ落とす
     CONVEYOR: { Z0: 2100, Z1: 6400, TOP: 650, ROLL_D: 160, PITCH: 250, SPEED: 700 },
     // 端材パレット（床上の受け箱）。コンベア末端から落ちた端材が積み重なる
@@ -1758,7 +1782,9 @@ class FinishState {
     this.trimmedWidth = 0;
     // 75 mm クロップシャーによる端部切断（上刃固定・下台上昇式、複数カット）
     this.cropStage = 'IDLE'; this.cropDone = false;
-    this.cropSide = 1;                              // 端材が落ちた側（+1: 出側エプロン / −1: ミル側）
+    this.cropSide = 1;                              // 端材が落ちた側（+1: 出側エプロン / −1: ミル側の下台）
+    this.bedDrop = 0;                               // 下台がパスラインより下へ降りている割合（後端の払い出し）
+    this.tailRest = 0; this.tailPileTh = 0;         // 端材箱に積まれた後端端材
     this.cropEnd = 0;                               // いま切っている端（+1: xMax 側 / −1: xMin 側）
     this.cropEndsDone = { 1: false, '-1': false };  // 端ごとの完了
     this.cropBlade = 0;        // 下台の昇降 0:待機（上面＝パスライン） → 1:上死点
@@ -1784,6 +1810,9 @@ class FinishState {
     // 巻き層の状態。turns は板の周速から積分した巻き数（マンドレル 1 回転＝1 巻）。
     this.turns = 0; this.layers = 0; this.frac = 0; this.layR = CONFIG.COILER.MANDREL_D / 2;
     this.entry = 0;            // 板の入口の極角（world, rad）
+    // コイルカー。carStage: IDLE → LIFT（受けに当てて持ち上げ）→ STRIP（マンドレル縮小）
+    //            → CARRY（軸方向へ搬出）→ SET（降ろす）→ REST
+    this.carStage = 'IDLE'; this.carLift = 0; this.carZ = 0; this.coilOff = false;
     this.expand = 0;           // マンドレルセグメント 0:縮小 → 1:拡張
     this.tailPast = 0;         // 尾端が板の入口 A を過ぎてから進んだ距離 [mm]
     // ベルトラッパー。wrap 0:開 → 1:閉。wrapDone はコイルが自立して開いたあと
@@ -2082,9 +2111,29 @@ class FinishController {
         break;
       }
 
+      // 下台が戻ったら、端材の落ちた側で払い出し方を分ける。
+      //   先端（出側エプロン）→ プッシャで操作側へ押し出す（EJECT）
+      //   後端（ミル側の下台の上）→ 下台ごと降ろしてシュートへ落とす（BEDDOWN）
       case 'RETURN':
         s.cropBlade = Math.max(0, s.cropBlade - dt / S.T_RETURN);
-        if (s.cropBlade <= 0) s.cropStage = 'EJECT';
+        if (s.cropBlade <= 0) s.cropStage = s.cropSide > 0 ? 'EJECT' : 'BEDDOWN';
+        break;
+
+      // 後端の端材を下台に載せたまま降ろす。降り切ったら端材はシュートへ滑り出す。
+      case 'BEDDOWN': {
+        s.bedDrop = Math.min(1, s.bedDrop + dt / S.TAIL.T_DROP);
+        if (s.bedDrop >= 1) {
+          const sc = s.scraps[s.scraps.length - 1];
+          if (sc && sc.stage === 'ONBED') { sc.stage = 'SLIDE'; sc.vy = 0; }
+          s.cropStage = 'BEDUP';
+          this.bus.emit('SYS_MESSAGE', {
+            text: `75 mm シャー: 後端の端材 ${s.cropLen.toFixed(0)} mm を下台とともに降ろし、シュートへ払い出しました`, kind: 'info' });
+        }
+        break;
+      }
+      case 'BEDUP':
+        s.bedDrop = Math.max(0, s.bedDrop - dt / S.TAIL.T_DROP);
+        if (s.bedDrop <= 0) this._cropCutDone();
         break;
 
       // 端材をエプロン上で操作側へ押し出し、エプロン端からコンベアへ落とす。
@@ -2106,28 +2155,52 @@ class FinishController {
 
       // プッシャが待機位置へ戻るまで板を動かさない（戻る途中のプッシャが板の通り道を横切る）
       case 'RETRACT':
-        if (s.cropPush <= 0) {
-          s.cropIndex++;
-          if (s.cropIndex < s.cropCuts) s.cropStage = 'ALIGN';       // 次のカットへ（板を送って再度切る）
-          else {
-            const name = this._cropEndName(s.cropEnd);
-            s.cropEndsDone[s.cropEnd] = true;
-            // 先端を切り終えたら «そのまま板を送って» 後端が刃に来るのを待つ。IDLE に戻すと
-            // wantCrop() が後端についても同じ判定をするので、工程は 1 本の流れのまま。
-            const next = this._nextCropEnd();
-            s.cropStage = next === 0 ? 'DONE' : 'IDLE';
-            if (next === 0) s.cropDone = true;
-            this.bus.emit('SYS_MESSAGE', {
-              text: `75 mm シャー: ${name}切断完了（${s.cropCuts} カット・計 ${s.cropTotal} mm）`
-                  + (next === 0 ? '' : `。このまま板を送り、${this._cropEndName(next)}も同じ手順で切ります`), kind: 'info' });
-          }
-        }
+        if (s.cropPush <= 0) this._cropCutDone();
         break;
     }
     // プッシャの戻り（押し出し中以外は待機位置へ）
     if (s.cropStage !== 'EJECT' && s.cropPush > 0) {
       s.cropPush = Math.max(0, s.cropPush - dt / S.T_EJECT);
       s.cropFace = Num.lerp(E.Z_HOME, E.Z_DROP - sl.width / 2, s.cropPush);
+    }
+  }
+
+  /**
+   * コイルカー。巻取が終わったコイルをリールから受け取って搬出する。
+   *   LIFT  受け台を上げてコイル外周に当て、マンドレルから浮かせる
+   *   STRIP マンドレルのセグメントを縮小し、コイル内径から抜く
+   *   CARRY 軸方向（操作側 +Z、アウトボードベアリングの柱間）へ走って抜き取る
+   *   SET   受け台を下ろしてコイルを置く
+   * コイルは «マンドレルに載っている» 間はリール座標で描き、カーが受けてからは
+   * カーと一緒に動く。どちらで描くかは coilOff が持つ。
+   */
+  _coilCar(dt) {
+    const s = this.s, R = CONFIG.COILER.CAR;
+    switch (s.carStage) {
+      case 'LIFT':                                    // 受け台がコイル外周に当たるまで上げる
+        s.carLift = Math.min(1, s.carLift + dt / R.T_LIFT);
+        if (s.carLift >= 1) {
+          s.carStage = 'STRIP'; s.coilOff = true;
+          this.bus.emit('SYS_MESSAGE', { text: 'コイルカー: コイルを受けました。マンドレルを縮小します', kind: 'info' });
+        }
+        break;
+      case 'STRIP':                                   // マンドレル縮小（expand は update 側が 0 へ落とす）
+        if (s.expand <= 0.02) {
+          s.carStage = 'CARRY';
+          this.bus.emit('SYS_MESSAGE', { text: 'コイルカー: マンドレルから抜き、コイルヤードへ搬出します', kind: 'info' });
+        }
+        break;
+      case 'CARRY':                                   // 軸方向（操作側）へ走る
+        s.carZ = Math.min(R.TRAVEL_Z, s.carZ + R.SPEED_Z * dt);
+        if (s.carZ >= R.TRAVEL_Z) s.carStage = 'SET';
+        break;
+      case 'SET':                                     // 受け台を下ろして置く
+        s.carLift = Math.max(0, s.carLift - dt / R.T_LIFT);
+        if (s.carLift <= 0) {
+          s.carStage = 'REST';
+          this.bus.emit('SYS_MESSAGE', { text: `コイル払い出し完了（Φ${s.od.toFixed(0)} × ${(s._mass / 1000).toFixed(1)} t）`, kind: 'info' });
+        }
+        break;
     }
   }
 
@@ -2146,6 +2219,18 @@ class FinishController {
           sc.vy -= g * dt; sc.y = Math.max(0, sc.y + sc.vy * dt); if (sc.y === 0) { sc.vy = 0; sc.stage = 'APRON'; }
           break;
         case 'APRON': case 'PUSH': break;                 // 位置は _crop の EJECT が決める
+        case 'ONBED':                                     // 後端の端材は下台の上に載って一緒に降りる
+          sc.y = this.bedLift() - s.bedDrop * S.TAIL.DROP;
+          break;
+        case 'SLIDE': {                                   // 下台から操作側へ少し滑り、真下の受け箱へ落ちる
+          const T = S.TAIL, land = T.BOX.H + s.tailPileTh - P;
+          sc.z += T.SLIDE * dt;
+          const t = Num.clamp(sc.z / T.CHUTE_Z1, 0, 1);
+          sc.y = Num.lerp(-T.DROP, land, t); sc.rot = Num.clamp(-0.25 * t, -0.25, 0);
+          if (t >= 1) { sc.y = land; sc.rot = 0; sc.z = T.CHUTE_Z1; sc.stage = 'REST';
+                        s.scrapRest++; s.tailRest++; s.tailPileTh += sc.th; }
+          break;
+        }
         case 'FALL': {                                    // エプロン端からコンベアへ。前へ滑りながら落ちる
           sc.vy -= g * dt; sc.y += sc.vy * dt; sc.z += 900 * dt; sc.rot = Num.clamp(sc.rot - 1.4 * dt, -0.45, 0);
           if (sc.y <= convTop) { sc.y = convTop; sc.vy = 0; sc.rot = 0; sc.z = Math.max(sc.z, CV.Z0 + sc.w / 2 + 50); sc.stage = 'CONVEY'; }
@@ -2168,6 +2253,23 @@ class FinishController {
   }
 
   /** 切り離し。板の先端を «刃の位置» に更新し、刃より先にあった材料を端材にする。 */
+  /** 1 カットの払い出しが終わったあとの進行。次のカットへ、端を替えて、あるいは完了へ。 */
+  _cropCutDone() {
+    const s = this.s;
+    s.cropIndex++;
+    if (s.cropIndex < s.cropCuts) { s.cropStage = 'ALIGN'; return; }   // 次のカットへ（板を送って再度切る）
+    const name = this._cropEndName(s.cropEnd);
+    s.cropEndsDone[s.cropEnd] = true;
+    // 先端を切り終えたら «そのまま板を送って» 後端が刃に来るのを待つ。IDLE に戻すと
+    // wantCrop() が後端についても同じ判定をするので、工程は 1 本の流れのまま。
+    const next = this._nextCropEnd();
+    s.cropStage = next === 0 ? 'DONE' : 'IDLE';
+    if (next === 0) s.cropDone = true;
+    this.bus.emit('SYS_MESSAGE', {
+      text: `75 mm シャー: ${name}切断完了（${s.cropCuts} カット・計 ${s.cropTotal} mm）`
+          + (next === 0 ? '' : `。このまま板を送り、${this._cropEndName(next)}も同じ手順で切ります`), kind: 'info' });
+  }
+
   /**
    * 端 end（+1: xMax 側 / −1: xMin 側）を刃の位置で切り離す。先端・後端で共通。
    * 端材は必ず «刃と端の間» の部分で、切断位置は必ず刃の位置 S.X。
@@ -2179,7 +2281,8 @@ class FinishController {
     s.cropTh = this._cropThickness(end);
     // 端材は切断時の形（舌・ワニ口、前回の切断面）をそのまま持つ。形状は板と同じ 1 式から取る
     const piece = this._piece(sl.shape(), end, S.X, tip, s.cropTh);
-    piece.stage = 'BED'; piece.y = this.bedLift(); piece.z = 0; piece.rot = 0;
+    // 先端の端材は支えを失ってエプロンへ落ち着く。後端の端材は下台の上に載ったまま。
+    piece.stage = s.cropSide > 0 ? 'BED' : 'ONBED'; piece.y = this.bedLift(); piece.z = 0; piece.rot = 0;
     s.scraps.push(piece);
     // 刃が張り出しの途中なら端はそこで平らに打ち切られ（残りの張り出しは次のカットへ）、
     // 健全部まで切り込んだら論理端を刃の位置にして張り出しは無くなる。
@@ -2213,6 +2316,9 @@ class FinishController {
     const s = this.s, sl = this.slab, m = this.mill, F = CONFIG.FLIP;
     const SH = CONFIG.TRIMMER, CO = CONFIG.COILER;
 
+    // コイルカーは «巻き終えたコイル» を扱うので、板がラインから外れていても進める
+    // （板の状態で早期 return する前に呼ぶ）
+    if (s.mode === 'COIL') this._coilCar(dt);
     if (!sl.onLine) return;
     this._crop(dt);
     this._scraps(dt);
@@ -2241,7 +2347,10 @@ class FinishController {
     const A = s.entryPoint(this._headThickness()), headPast = F * (this._head() - A.x);
     // マンドレルは «巻き終えてコイルを抜くまで» 拡張したまま。全パス完了で passIndex が
     // −1 になると finalPass は偽になるので、それだけを条件にすると巻取の途中で縮んでしまう。
-    const wantExpand = s.mode === 'COIL' && !s.done
+    // マンドレルは «巻き終えてコイルカーが受けるまで» 拡張したまま。全パス完了で passIndex が
+    // −1 になると finalPass は偽になるので、それだけを条件にすると巻取の途中で縮んでしまう。
+    const holding = s.carStage === 'IDLE' || s.carStage === 'LIFT';
+    const wantExpand = s.mode === 'COIL' && (!s.done || holding)
                     && (s.gripped || s.winding || (finalPass && headPast > -CO.APPROACH));
     s.expand = Num.rateTo(s.expand, wantExpand ? 1 : 0, 1 / CO.T_EXPAND, dt);
 
@@ -2301,7 +2410,7 @@ class FinishController {
       if (F * (A.x - tail) > 0) { sl.xMin += F * v * dt; sl.xMax += F * v * dt; }
       else if (s.tailPast < bridgeLen) { s.tailPast += v * dt; sl.xMin += F * v * dt; sl.xMax += F * v * dt; }
       else if (!s.done) {
-        s.winding = false; s.done = true;
+        s.winding = false; s.done = true; s.carStage = 'LIFT';
         this.bus.emit('SYS_MESSAGE', {
           text: `巻取完了: 板厚 ${sl.thickness.toFixed(1)} mm × 幅 ${s.finishedWidth(sl.width)} mm ／ 外径 Φ${s.od.toFixed(0)} ／ ${(s._mass / 1000).toFixed(1)} t ／ ${s.turns.toFixed(0)} 巻`,
           kind: 'info' });
@@ -3235,6 +3344,14 @@ const Parts = {
       add(0, G.at(G.box(PA.W, PA.H, PA.L), ax, PA.H / 2, PA.Z));                                       // パレット（受け箱の底）
       for (const sx of [-1, 1]) add(0, G.at(G.box(60, PA.H + 260, PA.L), ax + sx * (PA.W / 2 - 30), (PA.H + 260) / 2, PA.Z));   // 側板
       add(0, G.at(G.box(PA.W, PA.H + 260, 60), ax, (PA.H + 260) / 2, PA.Z + PA.L / 2 - 30));           // 奥の側板
+      // --- 後端の端材の受け箱（下台の真下。テーブル架台の間の帯に収める）---
+      // 後端の端材は下台と一緒に P − TAIL.DROP まで降り、操作側へ少し滑って箱へ落ちる。
+      const TL = S.TAIL, TB = TL.BOX;
+      add(0, G.at(G.box(TB.L, TB.H, TB.W), bedX, TB.H / 2, 0));                                        // 受け箱の底
+      for (const sx of [-1, 1])                                                                        // 側板（X 方向）
+        add(0, G.at(G.box(60, TB.H + 260, TB.W), bedX + sx * (TB.L / 2 - 30), (TB.H + 260) / 2, 0));
+      for (const sz of [-1, 1])                                                                        // 側板（Z 方向）
+        add(0, G.at(G.box(TB.L, TB.H + 260, 60), bedX, (TB.H + 260) / 2, sz * (TB.W / 2 - 30)));
     });
   },
   /** 固定上刃。刃物色で描き、断面表示でも透過しない（切断そのものが見えるべき部材）。 */
@@ -3438,7 +3555,8 @@ const Parts = {
       add(-1, G.at(G.cyl(900, 1600, 'z', 20), 0, cy, -(zd + 2350)));                          // 巻取電動機
       add(-1, G.at(G.cyl(400, 400, 'z', 12), 0, cy, -(zd + 1350)));                           // カップリング
       // --- 操作側(+Z): アウトボードベアリング（コイル抜き取り側。柱2本の開放構造）---
-      add(1, G.at(G.box(1600, 240, 620), 0, 120, zo));
+      // 床ベースは «コイルカーが通る» ぶん中央を開ける（柱の下だけ残す）
+      for (const sx of [-1, 1]) add(1, G.at(G.box(480, 240, 620), sx * 560, 120, zo));
       for (const sx of [-1, 1])
         add(1, G.at(G.box(280, cy - 250 - 240, 320), sx * 520, (cy - 250 + 240) / 2, zo));
       add(1, G.at(G.cyl(760, 520, 'z', 16), 0, cy, zo));
@@ -3524,6 +3642,30 @@ const Parts = {
     const g = new THREE.CylinderGeometry(1, 1, 1, 96, 1, true, a0 + Math.PI / 2, a1 - a0);
     g.rotateX(Math.PI / 2);                                      // 軸を Z へ（マンドレルと同じ）
     return g;
+  },
+
+  /* --- コイルカー（リール下でコイルを受けて軸方向へ搬出する台車）------------- */
+  /** 原点＝デッキ上面の中心。台車は Z 方向へ走り、Y 方向へ昇降する。 */
+  coilCar() {
+    const R = CONFIG.COILER.CAR, a = R.CRADLE_A * Math.PI / 180, parts = [];
+    parts.push(G.at(G.box(R.L, R.DECK_Y, R.W), 0, -R.DECK_Y / 2, 0));                    // デッキ
+    // V 字クレードル。コイルは Z 軸まわりなので、受けは X 方向に開いた 2 枚の傾斜板
+    for (const sx of [-1, 1])
+      parts.push(G.at(G.box(320, 90, R.W - 200), sx * (R.L / 2 - 60), Math.sin(a) * 160, 0, 0, 0, -sx * a));
+    parts.push(G.at(G.box(R.L, 180, R.W), 0, -R.DECK_Y - 90, 0));                        // 台枠
+    for (const sx of [-1, 1]) for (const sz of [-1, 1])                                   // 車輪（Z 方向へ転がる）
+      parts.push(G.at(G.cyl(R.WHEEL_D, 160, 'x', 12), sx * (R.L / 2 - 130),
+                      -R.DECK_Y - 180 - R.WHEEL_D / 2, sz * (R.W / 2 - 300)));
+    return G.merge(parts);
+  },
+  /** コイルカーの走行レール（Z 方向）。床上に敷く。原点＝リール中心・床。 */
+  coilCarRail() {
+    const R = CONFIG.COILER.CAR, z0 = -1300, z1 = R.TRAVEL_Z + 1300, parts = [];
+    for (const sx of [-1, 1]) {
+      parts.push(G.at(G.box(320, 60, z1 - z0), sx * (R.L / 2 - 130), 30, (z0 + z1) / 2));    // 基礎（床上）
+      parts.push(G.at(G.box(200, 60, z1 - z0), sx * (R.L / 2 - 130), 90, (z0 + z1) / 2));    // レール（天端 120）
+    }
+    return G.merge(parts);
   },
 
   /* --- 装入設備: 転倒装置 / 縦送りテーブル / 横送りローラ ------------------ */
@@ -3717,13 +3859,52 @@ const Parts = {
     }
     return G.merge(parts);
   },
-  /** ホイストトロリ。桁の下フランジを走る吊下げ式（原点＝トロリ中心、上面が桁下面） */
+  /**
+   * ホイストトロリ（クラブトロリ）。桁の下フランジを走る吊下げ式で、原点＝トロリ中心・
+   * 上面が桁下面。走行方向は桁に沿った Z、フレームの長手は X。平面図どおりに
+   *   ・四隅の走行輪（軸は X）と、それを繋ぐ端桁・側桁、その間の筋交い
+   *   ・巻上装置（電動機 → ブレーキ／カップリング → 減速機 → ロープドラム を X 方向に一列）
+   *   ・走行駆動（中央の電動機から左右へ長い駆動軸を伸ばし、両端の走行輪を回す）
+   *   ・両側面の制御盤
+   * を組む。寸法はすべて T.L / T.W / T.H から比で決めるので、ピットクレーン（大）と
+   * トランスファークレーン（小）で同じ生成器を使い回せる。
+   */
   craneTrolley(T = CONFIG.CRANE.TROLLEY) {
-    return G.merge([
-      G.at(G.box(T.L, T.H, T.W), 0, 0, 0),
-      G.at(G.cyl(760, T.W * 0.55, 'z', 14), -T.L * 0.18, T.H * 0.08, 0),
-      G.at(G.box(T.L * 0.8, 200, 1700), 0, T.H / 2 + 100, 0),       // 走行輪フレーム（桁の下フランジを抱く）
-    ]);
+    const L = T.L, W = T.W, H = T.H, parts = [];
+    const wx = L / 2 - L * 0.09, wz = W / 2 - W * 0.16;             // 走行輪の X / Z
+    const wd = H * 0.52, top = H / 2 + 100;                          // 走行輪径 / 桁下面
+    // --- 枠組み: 端桁（X 方向）2 本 + 側桁（Z 方向）2 本 + 筋交い ---
+    for (const sz of [-1, 1]) parts.push(G.at(G.box(L, H * 0.55, W * 0.14), 0, 0, sz * (W / 2 - W * 0.07)));
+    for (const sx of [-1, 1]) parts.push(G.at(G.box(L * 0.12, H * 0.45, W), sx * (L / 2 - L * 0.06), -H * 0.06, 0));
+    for (const sd of [-1, 1]) {                                      // 筋交い（平面内の × 材）
+      const len = Math.hypot(L * 0.78, W * 0.62);
+      parts.push(G.at(G.box(L * 0.07, H * 0.22, len), 0, -H * 0.16, 0, 0, sd * Math.atan2(L * 0.78, W * 0.62), 0));
+    }
+    // --- 走行輪（軸は X）と、桁の下フランジを抱く走行輪フレーム ---
+    parts.push(G.at(G.box(L * 0.86, 200, W * 0.9), 0, top, 0));
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      parts.push(G.at(G.cyl(wd, L * 0.09, 'x', 14), sx * wx, top - 60, sz * wz));
+      parts.push(G.at(G.box(L * 0.14, H * 0.34, W * 0.16), sx * wx, top - H * 0.28, sz * wz));   // 軸受箱
+    }
+    // --- 巻上装置: 電動機 → ブレーキ／カップリング → 減速機 → ロープドラム（X 方向に一列）---
+    const hz = -W * 0.26, hy = H * 0.06;
+    parts.push(G.at(G.cyl(H * 0.5, L * 0.26, 'x', 16), -L * 0.30, hy, hz));                     // 巻上電動機
+    parts.push(G.at(G.cyl(H * 0.34, L * 0.09, 'x', 12), -L * 0.11, hy, hz));                    // ブレーキ
+    parts.push(G.at(G.cyl(H * 0.16, L * 0.08, 'x', 10), -L * 0.03, hy, hz));                    // カップリング
+    parts.push(G.at(G.box(L * 0.22, H * 0.62, W * 0.30), L * 0.10, hy, hz));                    // 減速機
+    parts.push(G.at(G.cyl(H * 0.58, L * 0.30, 'x', 16), L * 0.36, hy, hz));                     // ロープドラム
+    parts.push(G.at(G.cyl(H * 0.18, L * 0.10, 'x', 10), L * 0.54, hy, hz));                     // ドラム軸受
+    // --- 走行駆動: 中央の電動機から左右へ駆動軸を伸ばし、両端の走行輪へ ---
+    const tz = W * 0.30;
+    parts.push(G.at(G.cyl(H * 0.40, L * 0.20, 'x', 14), 0, -H * 0.05, tz));                     // 走行電動機
+    for (const sx of [-1, 1]) {
+      parts.push(G.at(G.cyl(H * 0.10, L * 0.30, 'x', 8), sx * L * 0.28, -H * 0.05, tz));        // 駆動軸
+      parts.push(G.at(G.box(L * 0.06, H * 0.24, W * 0.12), sx * L * 0.40, -H * 0.05, tz));      // 軸受台
+    }
+    // --- 制御盤（両側面）---
+    for (const sx of [-1, 1])
+      parts.push(G.at(G.box(L * 0.10, H * 0.52, W * 0.34), sx * (L / 2 + L * 0.04), -H * 0.04, W * 0.02));
+    return G.merge(parts);
   },
   /** 装入クレーンの吊りビーム（立てたスラブを掴む）。トランスファークレーンは別形状 transferBeam() を使う。 */
   craneBeam() {
@@ -4462,6 +4643,14 @@ class FinishView {
     this.belt.name = 'ラッパーベルト'; this.belt.position.y = u(this.mandrelY);
     this.belt.castShadow = true; this.belt.frustumCulled = false; this.coiler.add(this.belt);
 
+    // --- コイルカー: リールの真下で待機し、巻き終わったコイルを受けて操作側へ抜き取る ---
+    const CR = C.CAR;
+    const rail = new THREE.Mesh(Parts.coilCarRail(), MAT.base); rail.name = 'コイルカーレール';
+    rail.position.set(u(C.X), 0, 0); rail.receiveShadow = true; scene.add(rail);
+    this.car = new THREE.Mesh(Parts.coilCar(), MAT.tableFrame); this.car.name = 'コイルカー';
+    this.car.castShadow = this.car.receiveShadow = true; scene.add(this.car);
+    this.carRestY = CR.REST_Y;                          // 待機時のデッキ上面（床上）
+
     // 3ロール出側からコイルへの渡り板（板の入口 A からコイル外周の接点へ、接線方向に張る）
     this.bridge = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
     this.bridge.name = '渡り板'; this.bridge.visible = false; this.bridge.castShadow = true; scene.add(this.bridge);
@@ -4664,9 +4853,21 @@ class FinishView {
       }
     }
 
+    // --- コイルカー: 上昇端は «コイル外周がデッキに載る高さ»（マンドレル芯 − コイル半径）。
+    //     固定ストロークにするとコイル径が変わったときに浮く／めり込む ---
+    {
+      const top = this.mandrelY - Math.max(fin.od, C.MANDREL_D) / 2;
+      const deckY = Num.lerp(this.carRestY, top, fin.carLift);
+      this.car.position.set(u(C.X), u(deckY), u(fin.carZ));
+      // コイルはマンドレルに載っている間はリール座標、カーが受けてからはカーと一緒に動く
+      if (fin.coilOff) this.coil.position.set(0, u(deckY + fin.od / 2), u(fin.carZ));
+      else this.coil.position.set(0, u(this.mandrelY), 0);
+    }
+
     // 75 mm シャー。下台の持ち上げ量は物理側と同じ式（FinishController.bedLift）を使う。
     const CS = CONFIG.CROP_SHEAR, CV = CS.CONVEYOR;
-    this.cropBed.position.y = u(P + fin.cropBlade * (CS.UPPER_CLR + CS.OVERTRAVEL));
+    // 下台は «切断で上へ» と «後端の端材を払い出すため下へ» の 2 方向に動く
+    this.cropBed.position.y = u(P + fin.cropBlade * (CS.UPPER_CLR + CS.OVERTRAVEL) - fin.bedDrop * CS.TAIL.DROP);
     this.cropPusher.position.z = u(fin.cropFace);
     // 端材コンベアのローラ（+X 回転で上面が +Z へ動く）
     if (fin.conveyorAngle !== this._convA) {

@@ -6,7 +6,8 @@
 //  5. マンドレルセグメントが拡張時に Φ610、縮小時にそれより小さいか
 //  6. ベルトラッパー: 先端が来る前に閉じ切るか、ロールがコイル外周に接するか、
 //     所定の巻き数で開くか（マンドレルは板を掴まないので、ここが «巻き始め» を成立させる）
-//  （コイルカーはリールの真下に出側テーブルが通っていて成立しないため未実装）
+//  7. コイルカー: 受け取り → マンドレル縮小 → 搬出 → 降ろす、の順に進むか。
+//     受け取り時にデッキ上面がコイル下端と一致するか（浮き／めり込みが無いか）
 import { openApp, installHelpers } from './harness.mjs';
 const { browser, page } = await openApp({ viewport: { width: 900, height: 520 }, quiet: true });
 await installHelpers(page);
@@ -20,6 +21,7 @@ const out = await page.evaluate(() => {
   // --- ベルトラッパー / コイルカーの記録 ---
   const WR = C.WRAPPER;
   let wrapAtGrip = null, wrapAfterHold = null, gapClosed = [], beltErr = [];
+  let carOrder = [], deckErr = null, coilZ = null;
   const rollGaps = () => {                   // 閉じたときのロール面とコイル外周の隙間 [mm]
     const cy = K.MILL.PASS_LINE + C.Y_ABOVE, f = P.finish, s = P.slab;
     const h = s.inBite ? P.mill.gap : s.thickness;
@@ -78,9 +80,18 @@ const out = await page.evaluate(() => {
       }
       if (wrapAfterHold === null && f.turns > WR.TURNS_HOLD + 1) wrapAfterHold = f.wrap;
     }
-    return f.done;
+    // 工程の記録は «毎ステップ»。n%60 に間引くと、REST になった瞬間にループを抜けるので
+    // 最後の工程を取りこぼす（検査が «SET で止まった» ように見えてしまう）。
+    if (carOrder[carOrder.length - 1] !== f.carStage) carOrder.push(f.carStage);
+    if (f.carStage === 'STRIP' && deckErr === null) {            // 受け取り切った瞬間
+      W.render(P, 0.1);
+      deckErr = FV.car.position.y / sc - (FV.coil.position.y / sc - f.od / 2);
+    }
+    return f.carStage === 'REST';
   }, 120 * 2500, 0);
   const f = P.finish;
+  W.render(P, 0.1);
+  coilZ = FV.coil.position.z / sc;                               // 搬出し終えた位置は «ループを抜けたあと» に読む
   const last = samples[samples.length - 1];
   const odErr = samples.map(s => Math.abs(s.odArea - s.odLayers) / s.odArea);
   ok('巻き数の積分と巻き長さが整合（外径差 3 % 以内）', Math.max(...odErr) < 0.03, `最大差 ${(Math.max(...odErr) * 100).toFixed(1)} %（最終 Φ${last.odArea} vs 段数から Φ${last.odLayers}）`);
@@ -104,6 +115,15 @@ const out = await page.evaluate(() => {
      `${C.WRAPPER.TURNS_HOLD}+1 巻き時点の閉じ度 ${wrapAfterHold === null ? '—' : wrapAfterHold.toFixed(3)}`);
   ok('巻取中はマンドレルが拡張したまま（途中で縮んでコイルを落とさない）',
      samples.length > 0 && expandedR * 2 >= C.MANDREL_D - 2, `巻取中の外接径 Φ${(expandedR * 2).toFixed(0)}`);
+  // --- コイルカー ---
+  ok('コイルカーが 受け取り → マンドレル縮小 → 搬出 → 降ろす の順に進む',
+     ['IDLE', 'LIFT', 'STRIP', 'CARRY', 'SET', 'REST'].every((v, i) => carOrder[i] === v), carOrder.join(' → '));
+  ok('マンドレルはカーが受けてから縮小する（コイルを落とさない）',
+     carOrder.indexOf('LIFT') > 0 && carOrder.indexOf('LIFT') < carOrder.indexOf('STRIP'), carOrder.join(' → '));
+  ok('受け取り時にデッキ上面がコイル下端に一致する（浮き／めり込みが無い）',
+     deckErr !== null && Math.abs(deckErr) < 3, `差 ${deckErr === null ? '—' : deckErr.toFixed(1)} mm`);
+  ok('搬出後のコイルがマンドレルの外（操作側）にある',
+     coilZ !== null && coilZ >= C.CAR.TRAVEL_Z - 5, `コイル Z ${coilZ === null ? '—' : coilZ.toFixed(0)} mm（搬出 ${C.CAR.TRAVEL_Z}）`);
   return { checks, n: samples.length, first: samples[0], last, turns: +f.turns.toFixed(1) };
 });
 console.log(JSON.stringify({ first: out.first, last: out.last, turns: out.turns }, null, 1));
