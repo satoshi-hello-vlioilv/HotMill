@@ -34,6 +34,7 @@ const out = await page.evaluate((EPS) => {
     add(F[k]);
   for (const side of (F.pilerSides ?? [])) add(side.grp);
   for (const w of (F.wrapRolls ?? [])) { add(w.roll); add(w.arms); }   // ベルトラッパー（揺動する）
+  add(F.cradle);                                                       // ラッパーキャリッジ（振れる）
   const S = W.supplyView;
   for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT'])
     add(S[k]);

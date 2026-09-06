@@ -637,10 +637,11 @@ const VERSION = {
       { t: '入側の板面クーラントを A-5 テーブルの中央へ移した（出側はサイドガイドの上のまま）', w: 'TABLE.GUIDE.HEADER.STATIONS' },
       { t: 'クーラントの位置を «区分名» で書けるようにし、描画・熱計算・粒子が同じ 1 式を見る', w: 'Layout.coolStations' },
       { t: 'ベルトラッパーを常設設備に。巻付け中だけ現れて消える描き方をやめた', w: 'CoilerView / Wrapper' },
-      { t: 'アームを長さの変わらない剛体にし、揺動角を余弦定理で解くようにした', w: 'Wrapper.alpha / rollTh' },
-      { t: '支点を受ける架構を作った（駆動側の脚だけで立ち、コイルの通り道を塞がない）', w: 'Parts.wrapperFrame' },
+      { t: 'ロールは接線方向の支点に付いた剛体アームでコイルの太りに追従する', w: 'Wrapper.phiFor' },
+      { t: 'キャリッジごと 55° 振り上げて退避し、板の通り道（パスライン + 板厚）を空ける', w: 'Wrapper.beta' },
+      { t: '振り軸を受ける架台を作った（駆動側の柱だけで立ち、コイルカーの走行域を塞がない）', w: 'Parts.wrapperFrame' },
       { t: 'ベルトを 3 本のロールに掛かる帯（円弧 + 共通外接線）として毎フレーム作る', w: 'WrapperBelt' },
-      { t: 'ベルトラッパーの評価器を新設（11 項目）', w: 'tools/wraptrace.mjs' },
+      { t: 'ベルトラッパーの評価器を新設（12 項目）', w: 'tools/wraptrace.mjs' },
     ] },
     { v: '1.0.0', base: '33b11db', date: '2026-09-06', title: '版数と変更履歴の表示を導入', items: [
       { t: '版数バッジをサイドバーの製品名の横に置き、押すと変更履歴が開く', w: 'VERSION / UIManager._version' },
@@ -1005,33 +1006,49 @@ const CONFIG = {
     CAR: {
       // 受けは «V 字»（X 方向に開いた 2 枚の傾斜板）。コイルの軸は Z なので、
       // 転がる向き（X）を V で止める。谷はデッキ上面の中心、板はそこから外へ登る。
-      L: 700, W: 2200, DECK_Y: 220, CRADLE_A: 30, CRADLE_T: 90, CRADLE_MARGIN: 20, WHEEL_D: 360,
+      L: 700, W: 2150, DECK_Y: 220, CRADLE_A: 30, CRADLE_T: 90, CRADLE_MARGIN: 20, WHEEL_D: 360,
       REST_Y: 880,                           // 待機時のデッキ上面（車輪下端がレール天端 120 に載る）
       T_LIFT: 2.2, TRAVEL_Z: 6000, SPEED_Z: 1200,
     },
     /* ベルトラッパー —— リールで «巻き始める» ための装置。実機では常設で、使わない
-     * ときは待機（開）位置へ退く。マンドレルは板を掴む機構を持たない（拡縮するだけ）ので、
-     * 先端はベルトでマンドレルへ押し付けて摩擦で連れ回す。3 本のラッパーロールが
-     * 揺動アームに載り、その外側にベルトが掛かる。数巻きしてコイルが自分で形を保てる
-     * ようになったらアームが開き、ベルトは離れる。
+     * ときは退避位置へ振り上げる。マンドレルは板を掴む機構を持たない（拡縮するだけ）ので、
+     * 先端はベルトでマンドレルへ押し付けて摩擦で連れ回す。
+     *
+     * 機構は 2 段になっている。
+     *   ① 各ロールはキャリッジ上の «接線方向の支点» に付いた短い剛体アームに載り、
+     *      コイルが太るぶんだけ外へ逃げる（1 周ごとの段にも追従する）。
+     *   ② キャリッジそのものが 1 つの軸（SWING）まわりに振れて、使わないときは
+     *      ロール・アーム・ベルトをまとめて上へ退避させる。
+     *
+     * ②が要る理由: 可逆圧延機なので板はどのパスでもリールの下（パスライン）を通る。
+     * 巻き付けの位置は «板の入口の直後» ＝ マンドレルの下側なので、そこから半径方向へ
+     * 開くだけではロールがパスラインまで下がって板に当たる（実測 443 mm の食い込み）。
+     * 板の通り道（パスライン 900 + 最大板厚）を空けるには、まとめて振り上げるしかない。
+     *
      *   ANGLES   «閉じたとき» のロール中心の極角 [deg]（真上が 90°）
-     *   PIVOT_R / ARM_L  支点の半径とアーム長。アームは長さの変わらない剛体で、
-     *                    揺動角だけで半径が決まる（三角形 支点-芯-ロール を解く）
-     *   PARK_R   待機（開）時のロール中心半径。最大コイル（Φ1,900）＋ロール半径より外
-     *   FACE     ロールとベルトの面長。設備なのでコイル巾では変えない（最大巾 2,100 + 逃げ）
-     *   FRAME_*  支点を受ける円弧板。駆動側は床へ脚を降ろし、操作側は繋ぎ材で吊る
+     *   ARM_T    支点をロール中心から接線方向へずらす量（符号は向き）。接線上に置くと
+     *            «閉じたときアームがマンドレルに接し、開くほど遠ざかる» 形になる
+     *   SWING    キャリッジの振り軸（マンドレル芯を原点とする）。板の通り道より上に置く
+     *   PARK_A   退避時のキャリッジの振り角 [deg]
+     *   FACE     ロールとベルトの面長。設備なのでコイル巾では変えない（板の中央側を押さえる）
+     *   FRAME_*  側板。駆動側は床へ脚を降ろし、操作側は軸で吊る
      *            （操作側の床にはコイルカーが走るので何も立てられない）
+     *   CLEAR_Y  板の通り道の上限（パスライン + 最大板厚 + 逃げ）。検査がこの線を使う
      *   ※各寸法は推定値。 */
     WRAPPER: {
-      N: 3, ANGLES: [212, 300, 25], ROLL_D: 240, FACE: 1800,
-      PIVOT_R: 1400, ARM_L: 1000, PARK_R: 1250, BELT_T: 18, BELT_LEAD: 70,
+      N: 3, ANGLES: [212, 300, 25], ARM_T: [-700, 700, 700],
+      // 振り軸はリールのミルと反対側（そこだけ床も上空も空いている）。退避は反時計回り。
+      SWING: [-1900, 200], PARK_A: 55,
+      // キャリッジの腕の繋ぎ方 [元, 先]（-1 = 振り軸）。振り軸から順にマンドレルの
+      // 外側を回して繋ぐ（近い順に直結するとマンドレルを腕が横切る）
+      LINK: [[-1, 0], [0, 2], [2, 1]],
+      ROLL_D: 240, FACE: 1800, BELT_T: 18, BELT_LEAD: 70,
       T_MOVE: 0.9,
       TURNS_HOLD: 3,                         // 何巻き押さえてからベルトを開くか
       APPROACH: 1500,                        // 先端がこの距離まで来たらベルトを閉じ始める
-      // 架構: 支点をつないだ側板を駆動側・操作側に 1 枚ずつ置き、支点軸そのもので
-      // 繋いで «かご» にする。床へ降ろす脚は駆動側だけ（操作側の床はコイルカーの通り道）。
-      // Z は «コイルカー（±1,100）より外、テーブル架台（±1,325）より内» の帯に収める。
-      ARM_Z: 1000, FRAME_Z: 1200, FRAME_T: 160, FRAME_W: 200, PIVOT_D: 300, LEG_W: 240, LEG_T: 160,
+      // Z は «コイルカー（±1,075）より外、テーブル架台（±1,325）より内» の帯へ収める
+      ARM_Z: 950, FRAME_Z: 1150, FRAME_T: 100, FRAME_W: 200, PIVOT_D: 260,
+      LEG_Z: 1265, LEG_W: 240, LEG_T: 100, BRACE_DX: 550, CLEAR_Y: 1345,
     },
     COIL_SEG: 72,                            // コイル形状の周方向分割数
     // コイル押え。サイドトリマー架構の上部梁から出したアームの先端に金属コロ（Φ200 ×
@@ -2217,28 +2234,54 @@ const Cradle = {
  * ベルトラッパーの幾何。«形を作る側»（Parts）と «動かす側»（CoilerView）と
  * «検査する側»（tools/wraptrace.mjs）が同じ 1 式を見るための小さなヘルパ。
  *
- * アームは長さの変わらない剛体で、支点 P（マンドレル芯 O から半径 PIVOT_R）まわりに
- * 揺れる。ロール中心 C を半径 r に置きたいとき、三角形 O-P-C の O の角 α は余弦定理で
- * 決まり（|OP| = PIVOT_R, |OC| = r, |PC| = ARM_L）、C の極角は «支点の極角 − α» になる。
- * 閉じたときロールが ANGLES[i] に来るよう、支点の極角は ANGLES[i] + α(閉) と置く。
+ * アームは «長さの変わらない剛体» で、支点 P のまわりに揺れる。設計は 2 つの姿勢
+ * （閉じた位置と待機位置）で決め、支点はその 2 点から等距離な線（垂直二等分線）の上に
+ * 置く。こうすると «どちらの姿勢でもアーム長が同じ» ことが構造的に保証される。
+ * 途中の姿勢は揺動角で表す。半径で表すと、円の上では同じ半径が 2 回現れるため
+ * «別の枝» へ乗って板の通り道まで回り込んでしまう。
  */
 const Wrapper = {
   get cfg() { return CONFIG.COILER.WRAPPER; },
-  /** 素のマンドレルに当てたとき（＝いちばん内側）のロール中心半径 */
+  /** 素のマンドレルに当てたときのロール中心半径（＝閉じた位置） */
   get rClosed() { return CONFIG.COILER.MANDREL_D / 2 + this.cfg.ROLL_D / 2; },
-  /** ロール中心を半径 r に置くときの、支点から見た開き角 [rad] */
-  alpha(r) {
-    const { PIVOT_R: R, ARM_L: L } = this.cfg;
-    return Math.acos(Num.clamp((R * R + r * r - L * L) / (2 * R * r), -1, 1));
+  /** キャリッジの振り軸（マンドレル芯が原点） */
+  get swing() { const [x, y] = this.cfg.SWING; return { x, y }; },
+  /** 閉じたときのロール中心（キャリッジ座標＝振り角 0 のときマンドレル座標と一致） */
+  closed(i) {
+    const t = this.cfg.ANGLES[i] * Math.PI / 180, r = this.rClosed;
+    return { x: r * Math.cos(t), y: r * Math.sin(t) };
   },
-  /** 支点の極角 [rad] */
-  pivotTh(i) { return this.cfg.ANGLES[i] * Math.PI / 180 + this.alpha(this.rClosed); },
-  /** 支点の位置（マンドレル芯を原点とする） */
-  pivot(i) { const t = this.pivotTh(i), R = this.cfg.PIVOT_R; return { x: R * Math.cos(t), y: R * Math.sin(t) }; },
-  /** ロール中心の極角 [rad]（半径 r のとき） */
-  rollTh(i, r) { return this.pivotTh(i) - this.alpha(r); },
-  /** ロール中心の位置（マンドレル芯を原点とする） */
-  roll(i, r) { const t = this.rollTh(i, r); return { x: r * Math.cos(t), y: r * Math.sin(t) }; },
+  /** アームの支点。ロール中心から «接線方向» へ ARM_T ずらした点 */
+  pivot(i) {
+    const t = this.cfg.ANGLES[i] * Math.PI / 180, c = this.closed(i), d = this.cfg.ARM_T[i];
+    return { x: c.x - d * Math.sin(t), y: c.y + d * Math.cos(t) };
+  },
+  /** アーム長（＝ |ARM_T|。支点は接線上なので閉じたときアームはマンドレルに接する） */
+  armL(i) { return Math.abs(this.cfg.ARM_T[i]); },
+  /** アームの向き [rad]（支点 → ロール中心） */
+  phiOf(i, pt) { const p = this.pivot(i); return Math.atan2(pt.y - p.y, pt.x - p.x); },
+  phiClosed(i) { return this.phiOf(i, this.closed(i)); },
+  /**
+   * ロール中心をマンドレル芯から半径 r に置くアームの向き。
+   * |C|² = |P|² + L² + 2L(P·u) から cos(φ − θP) が決まり、解は 2 つ。
+   * 閉じた向きと同じ枝を選ぶので、r が増えるほどアームは芯から遠ざかる（食い込まない）。
+   */
+  phiFor(i, r) {
+    const p = this.pivot(i), L = this.armL(i);
+    const R = Math.hypot(p.x, p.y), tp = Math.atan2(p.y, p.x);
+    const a = Math.acos(Num.clamp((r * r - R * R - L * L) / (2 * L * R), -1, 1));
+    const ref = this.phiClosed(i), d = (x) => Math.abs(Math.atan2(Math.sin(x - ref), Math.cos(x - ref)));
+    return d(tp + a) <= d(tp - a) ? tp + a : tp - a;
+  },
+  /** アームの向きからロール中心（キャリッジ座標） */
+  at(i, phi) { const p = this.pivot(i), L = this.armL(i); return { x: p.x + L * Math.cos(phi), y: p.y + L * Math.sin(phi) }; },
+  /** 振り角 [rad]。wrap 0（退避）→ PARK_A、1（閉）→ 0 */
+  beta(wrap) { return this.cfg.PARK_A * Math.PI / 180 * (1 - wrap); },
+  /** キャリッジ座標の点を、振り角 b でマンドレル座標へ写す */
+  swung(pt, b) {
+    const s = this.swing, dx = pt.x - s.x, dy = pt.y - s.y, c = Math.cos(b), n = Math.sin(b);
+    return { x: s.x + dx * c - dy * n, y: s.y + dx * n + dy * c };
+  },
 };
 
 /**
@@ -4146,9 +4189,9 @@ const Parts = {
       ...[-1, 1].map(sz => G.at(G.cyl(W.ROLL_D * 0.45, zj - W.FACE / 2, 'z', 10), 0, 0, sz * (zj + W.FACE / 2) / 2)),
     ]);
   },
-  /** ラッパーアーム（片側）。支点が原点、+X 方向へ ARM_L（剛体なので伸び縮みしない）。 */
+  /** ラッパーアーム（片側）。支点が原点、+X 方向へ単位長 1,000 mm。View が実長へ伸ばす。 */
   wrapperArm() {
-    const W = CONFIG.COILER.WRAPPER, L = W.ARM_L;
+    const W = CONFIG.COILER.WRAPPER, L = 1000;
     return G.merge([
       G.at(G.box(L, 200, 150), L / 2, 0, 0),
       G.cyl(W.PIVOT_D + 60, 170, 'z', 12),                   // 支点ボス
@@ -4161,26 +4204,49 @@ const Parts = {
    * （操作側の床はコイルカーの通り道なので何も立てられない）。
    * 原点＝マンドレル芯。側板は支点を通るので、支点は必ず板の上に載る。
    */
-  wrapperFrame() {
-    const W = CONFIG.COILER.WRAPPER, N = W.N, parts = [];
-    const cy = CONFIG.MILL.PASS_LINE + CONFIG.COILER.Y_ABOVE;      // 芯の床上高さ（脚の長さに使う）
-    const P = [...Array(N).keys()].map(i => Wrapper.pivot(i));
+  /**
+   * ラッパーのキャリッジ（振り軸まわりに動く側板）。原点＝振り軸。
+   * 振り軸から 3 つのアーム支点へ腕を伸ばした «熊手» で、駆動側・操作側に 1 枚ずつ。
+   */
+  wrapperCarriage() {
+    const W = CONFIG.COILER.WRAPPER, parts = [], S = Wrapper.swing;
+    const node = (k) => k < 0 ? S : Wrapper.pivot(k);
     for (const sz of [-1, 1]) {
-      for (let i = 0; i < N - 1; i++) {                             // 支点どうしをつなぐ側板
-        const dx = P[i + 1].x - P[i].x, dy = P[i + 1].y - P[i].y, L = Math.hypot(dx, dy);
+      for (const [f, t] of W.LINK) {
+        const a = node(f), b = node(t), dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
         parts.push(G.at(G.box(L + W.FRAME_W, W.FRAME_W, W.FRAME_T),
-                        (P[i].x + P[i + 1].x) / 2, (P[i].y + P[i + 1].y) / 2, sz * W.FRAME_Z,
-                        0, 0, Math.atan2(dy, dx)));
+                        (a.x + b.x) / 2 - S.x, (a.y + b.y) / 2 - S.y, sz * W.FRAME_Z, 0, 0, Math.atan2(dy, dx)));
       }
-      for (const p of P) parts.push(G.at(G.cyl(W.PIVOT_D + 180, W.FRAME_T, 'z', 14), p.x, p.y, sz * W.FRAME_Z));
+      for (let i = 0; i < W.N; i++) {
+        const p = Wrapper.pivot(i);
+        parts.push(G.at(G.cyl(W.PIVOT_D + 140, W.FRAME_T, 'z', 14), p.x - S.x, p.y - S.y, sz * W.FRAME_Z));
+      }
+      parts.push(G.at(G.cyl(400, W.FRAME_T, 'z', 16), 0, 0, sz * W.FRAME_Z));           // 振り軸のボス
     }
-    for (const p of P)                                             // 支点軸（駆動側と操作側を繋ぐ）
-      parts.push(G.at(G.cyl(W.PIVOT_D, 2 * W.FRAME_Z + W.FRAME_T, 'z', 14), p.x, p.y, 0));
-    for (const p of [P[0], P[N - 1 - 1]]) {                        // 駆動側の脚（下側の 2 支点から床へ）
-      const h = cy + p.y;
-      parts.push(G.at(G.box(W.LEG_W, h, W.LEG_T), p.x, p.y - h / 2, -W.FRAME_Z));
-      parts.push(G.at(G.box(W.LEG_W + 260, 240, W.LEG_T), p.x, -cy + 120, -W.FRAME_Z));   // 据付ベース（Z はコイルカーとテーブル架台の間に収める）
+    for (let i = 0; i < W.N; i++) {                                                     // アームの支点軸
+      const p = Wrapper.pivot(i);
+      parts.push(G.at(G.cyl(W.PIVOT_D, 2 * W.FRAME_Z + W.FRAME_T, 'z', 14), p.x - S.x, p.y - S.y, 0));
     }
+    return G.merge(parts);
+  },
+  /**
+   * ラッパーの架台（動かない部分）。振り軸と、それを受ける駆動側の柱。原点＝マンドレル芯。
+   * 操作側の床はコイルカーの通り道なので、柱は駆動側だけに降ろす。
+   * Z はコイルカーとテーブル架台の間の帯に収める（LEG_Z）。
+   */
+  wrapperFrame() {
+    const W = CONFIG.COILER.WRAPPER, S = Wrapper.swing, parts = [];
+    const cy = CONFIG.MILL.PASS_LINE + CONFIG.COILER.Y_ABOVE;
+    parts.push(G.at(G.cyl(W.PIVOT_D + 60, 2 * (W.LEG_Z + W.LEG_T / 2), 'z', 16), S.x, S.y, 0));   // 振り軸
+    for (const sz of [-1, 1])
+      parts.push(G.at(G.cyl(420, W.LEG_T, 'z', 18), S.x, S.y, sz * W.LEG_Z));            // 軸受
+    const h = cy + S.y;                                                                  // 駆動側の柱
+    parts.push(G.at(G.box(W.LEG_W, h, W.LEG_T), S.x, S.y - h / 2, -W.LEG_Z));
+    parts.push(G.at(G.box(W.LEG_W + 300, 240, W.LEG_T), S.x, -cy + 120, -W.LEG_Z));
+    // 柱 1 本では倒れるので、ミル側へ振れ止めを 1 本。足元はテーブル架台とトリマーの間へ置く
+    const bx = S.x + W.BRACE_DX, by = -cy + 240, dx = bx - S.x, dy = by - S.y, L = Math.hypot(dx, dy);
+    parts.push(G.at(G.box(L, 200, W.LEG_T), S.x + dx / 2, S.y + dy / 2, -W.LEG_Z, 0, 0, Math.atan2(dy, dx)));
+    parts.push(G.at(G.box(W.LEG_W + 300, 240, W.LEG_T), bx, -cy + 120, -W.LEG_Z));
     return G.merge(parts);
   },
 
@@ -4595,15 +4661,18 @@ class WrapperBelt {
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setIndex(idx);
   }
-  /** c: ロール中心 [{x,y}] ×3（マンドレル芯基準・mm）／ r: ベルト中心までの半径／ halfW: 面長の半分 */
-  update(c, r, halfW) {
+  /**
+   * c: ロール中心 [{x,y}] ×3 ／ r: ベルト中心までの半径 ／ halfW: 面長の半分
+   * o: マンドレル芯の位置（«外向き» を決めるのに使う。既定は原点）
+   */
+  update(c, r, halfW, o = { x: 0, y: 0 }) {
     const lead = CONFIG.COILER.WRAPPER.BELT_LEAD * Math.PI / 180;
     // 各区間の «外向き» 法線（マンドレル芯から遠ざかる側）
     const nrm = [];
     for (let i = 0; i < c.length - 1; i++) {
       const dx = c[i + 1].x - c[i].x, dy = c[i + 1].y - c[i].y, L = Math.hypot(dx, dy) || 1;
       let nx = dy / L, ny = -dx / L;
-      if (nx * c[i].x + ny * c[i].y < 0) { nx = -nx; ny = -ny; }
+      if (nx * (c[i].x - o.x) + ny * (c[i].y - o.y) < 0) { nx = -nx; ny = -ny; }
       nrm.push(Math.atan2(ny, nx));
     }
     const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -5286,24 +5355,30 @@ class FinishView {
     this.holdRoll.castShadow = true; this.coiler.add(this.holdRoll);
     this.holdCyl = new THREE.Mesh(Parts.holdDownCyl(), MAT.hydraulic); this.holdCyl.name = '押えシリンダ';
     this.holdCyl.castShadow = true; this.coiler.add(this.holdCyl);
-    // --- ベルトラッパー: 常設。3 本のロールが剛体の揺動アームに載り、外側にベルトが掛かる ---
+    // --- ベルトラッパー: 常設。キャリッジが振り軸まわりに動き、その上でロールが揺動する ---
     // マンドレルは板を掴まないので、巻き始めはこのベルトが先端をマンドレルへ押し付ける。
-    // 使わないときは待機（開）位置へ退くだけで、設備そのものは常に見えている。
+    // 使わないときはキャリッジごと上へ退避するだけで、設備そのものは常に見えている。
     // 座標はすべて «マンドレル芯を原点» にしたいので、専用のグループにまとめる。
-    const WR = C.WRAPPER;
+    const WR = C.WRAPPER, SW = Wrapper.swing;
     this.wrap = new THREE.Group(); this.wrap.name = 'ベルトラッパー';
     this.wrap.position.y = u(this.mandrelY); this.coiler.add(this.wrap);
     const wf = new THREE.Mesh(Parts.wrapperFrame(), MAT.tableFrame);
-    wf.name = 'ラッパー架構'; wf.castShadow = wf.receiveShadow = true; this.wrap.add(wf);
+    wf.name = 'ラッパー架台'; wf.castShadow = wf.receiveShadow = true; this.wrap.add(wf);
+    // キャリッジ（振り軸が原点）。この中の座標は «振り角 0 のときマンドレル座標» と一致する
+    this.cradle = new THREE.Group(); this.cradle.name = 'ラッパーキャリッジ';
+    this.cradle.position.set(u(SW.x), u(SW.y), 0); this.wrap.add(this.cradle);
+    const cg = new THREE.Mesh(Parts.wrapperCarriage(), MAT.tableFrame);
+    cg.name = 'ラッパーキャリッジ'; cg.castShadow = true; this.cradle.add(cg);
     const rollGeo = Parts.wrapperRoll(), armGeo = Parts.wrapperArm();
     this.wrapRolls = WR.ANGLES.map((deg, i) => {
       const pivot = Wrapper.pivot(i);
       const roll = new THREE.Mesh(rollGeo, MAT.rollFace); roll.name = 'ラッパーロール';
-      roll.castShadow = true; this.wrap.add(roll);
+      roll.castShadow = true; this.cradle.add(roll);
       const arms = [-1, 1].map(sz => {
         const m = new THREE.Mesh(armGeo, MAT.hydraulic); m.name = 'ラッパーアーム';
-        m.position.set(u(pivot.x), u(pivot.y), u(sz * WR.ARM_Z));
-        m.castShadow = true; this.wrap.add(m); return m;
+        m.position.set(u(pivot.x - SW.x), u(pivot.y - SW.y), u(sz * WR.ARM_Z));
+        m.scale.x = Wrapper.armL(i) / 1000;          // 素体は単位長。支点ごとの実長へ伸ばす
+        m.castShadow = true; this.cradle.add(m); return m;
       });
       return { th: deg * Math.PI / 180, i, pivot, roll, arms };
     });
@@ -5311,7 +5386,7 @@ class FinishView {
     this.belt = new THREE.Mesh(this.beltGeo.geo, (() => {
       const m = MAT.rod.clone(); m.side = THREE.DoubleSide; return m; })());
     this.belt.name = 'ラッパーベルト'; this.belt.castShadow = true;
-    this.belt.frustumCulled = false; this.wrap.add(this.belt);
+    this.belt.frustumCulled = false; this.cradle.add(this.belt);
 
     // --- コイルカー: リールの真下で待機し、巻き終わったコイルを受けて操作側へ抜き取る ---
     const CR = C.CAR;
@@ -5498,25 +5573,25 @@ class FinishView {
       }
     }
 
-    // --- ベルトラッパー: 常設。ロールはアームの揺動で «待機半径 ⇄ コイル外周» を出入りする ---
-    // アームは剛体なので、半径 r を決めれば揺動角は Wrapper が一意に解く（伸び縮みしない）。
+    // --- ベルトラッパー: キャリッジを振り、その上でロールがコイル外周に当たる ---
     {
-      const WR = C.WRAPPER, halfW = WR.FACE / 2;
-      const centers = [];
+      const WR = C.WRAPPER, SW = Wrapper.swing, halfW = WR.FACE / 2, centers = [];
+      this.cradle.rotation.z = Wrapper.beta(fin.wrap);        // 退避（PARK_A）⇄ 閉（0）
       for (const wr of this.wrapRolls) {
         // コイルは 1 周ごとに段が付くので、ロールごとに «その極角での実半径» に当てる
         // （押えコロと同じ扱い。平均半径で当てると 1 板厚ぶん浮く）
         const rCoil = wound ? Rolling.coilRadiusAt(wr.th, h, fin.turns, fin.entry, fin.windSign) : r0;
-        const rTouch = rCoil + WR.ROLL_D / 2;
-        // 待機（開）位置 → 接触位置。コイルより内側へは入れない（食い込ませない）
-        const r = Math.max(rTouch, Num.lerp(WR.PARK_R, rTouch, fin.wrap));
-        const c = Wrapper.roll(wr.i, r);
-        centers.push(c);
-        wr.roll.position.set(u(c.x), u(c.y), 0);
+        // アームがコイルを追うのは «押し付けている間» だけ。退避中は畳んだ姿勢へ戻す
+        // （伸ばしたまま振り上げると、振り角によっては芯へ近づいてコイルに掛かる）
+        const p1 = Wrapper.phiFor(wr.i, rCoil + WR.ROLL_D / 2), p0 = Wrapper.phiClosed(wr.i);
+        const c = Wrapper.at(wr.i, p0 + Math.atan2(Math.sin(p1 - p0), Math.cos(p1 - p0)) * fin.wrap);
+        centers.push({ x: c.x - SW.x, y: c.y - SW.y });       // キャリッジ座標へ
+        wr.roll.position.set(u(c.x - SW.x), u(c.y - SW.y), 0);
         wr.roll.rotation.z = -fin.beltAngle * (2 * rCoil / WR.ROLL_D);
         for (const m of wr.arms) m.rotation.z = Math.atan2(c.y - wr.pivot.y, c.x - wr.pivot.x);
       }
-      this.beltGeo.update(centers, WR.ROLL_D / 2 + WR.BELT_T / 2, halfW);
+      // ベルトの «外向き» はマンドレル芯から見て外側。キャリッジ座標では芯は −SW にある
+      this.beltGeo.update(centers, WR.ROLL_D / 2 + WR.BELT_T / 2, halfW, { x: -SW.x, y: -SW.y });
     }
 
     // --- コイルカー: 上昇端は «コイルが V 受けに載る高さ»（マンドレル芯 − V での芯高さ）。

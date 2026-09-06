@@ -27,20 +27,23 @@ const out = await page.evaluate(async () => {
     return { x: [b.min.x / sc, b.max.x / sc], y: [b.min.y / sc, b.max.y / sc], z: [b.min.z / sc, b.max.z / sc] };
   };
   W.render(P, 1 / 60);
-  const fr = bb('ラッパー架構');
-  ok('ラッパー架構がある', !!fr, fr ? `x ${mm(fr.x[0])}〜${mm(fr.x[1])} / y ${mm(fr.y[0])}〜${mm(fr.y[1])} / z ${mm(fr.z[0])}〜${mm(fr.z[1])}` : '—');
+  const fr = bb('ラッパー架台');
+  ok('ラッパー架台がある', !!fr, fr ? `x ${mm(fr.x[0])}〜${mm(fr.x[1])} / y ${mm(fr.y[0])}〜${mm(fr.y[1])} / z ${mm(fr.z[0])}〜${mm(fr.z[1])}` : '—');
 
   // 架構の三角形を全部取り、«マンドレル軸からの距離» と Z で通り道を侵していないか見る
   const tri = [];
   {
-    let f = null; W.scene.traverse(o => { if (o.name === 'ラッパー架構' && !f) f = o; });
-    f.updateWorldMatrix(true, false);
-    const pos = f.geometry.attributes.position, idx = f.geometry.index, v = new T.Vector3();
-    const n = idx ? idx.count : pos.count;
-    for (let i = 0; i < n; i++) {
-      const j = idx ? idx.getX(i) : i;
-      v.fromBufferAttribute(pos, j).applyMatrix4(f.matrixWorld);
-      tri.push([v.x / sc - C.X, v.y / sc, v.z / sc]);       // リール中心を原点にした mm
+    for (const nm of ['ラッパー架台', 'ラッパーキャリッジ']) {
+      let f = null; W.scene.traverse(o => { if (o.isMesh && o.name === nm && !f) f = o; });
+      if (!f) continue;
+      f.updateWorldMatrix(true, false);
+      const pos = f.geometry.attributes.position, idx = f.geometry.index, v = new T.Vector3();
+      const n = idx ? idx.count : pos.count;
+      for (let i = 0; i < n; i++) {
+        const j = idx ? idx.getX(i) : i;
+        v.fromBufferAttribute(pos, j).applyMatrix4(f.matrixWorld);
+        tri.push([v.x / sc - C.X, v.y / sc, v.z / sc]);     // リール中心を原点にした mm
+      }
     }
   }
   // コイルの通り道: 半径 OD_MAX/2 の円筒（軸 = Z、芯 = マンドレル芯）。搬出は Z 方向なので全長で見る
@@ -50,13 +53,13 @@ const out = await page.evaluate(async () => {
     const r = Math.hypot(x, y - cy);
     if (r < rCoil) { inCoil++; worstCoil = Math.max(worstCoil, rCoil - r); }
   }
-  ok('架構がコイルの通り道（Φ' + C.OD_MAX + '）に入らない', inCoil === 0,
+  ok('架台とキャリッジがコイルの通り道（Φ' + C.OD_MAX + '）に入らない', inCoil === 0,
      inCoil === 0 ? `最小の逃げ ${mm(Math.min(...tri.map(([x, y]) => Math.hypot(x, y - cy))) - rCoil)} mm` : `${inCoil} 点 / 最大 ${mm(worstCoil)} mm`);
   // コイルカーの走行域: |z| ≤ W/2、床から待機デッキ上面まで
   const carZ = C.CAR.W / 2;
   let inCar = 0;
   for (const [, y, z] of tri) if (Math.abs(z) < carZ && y < C.CAR.REST_Y) inCar++;
-  ok('架構がコイルカーの走行域（|z| < ' + carZ + '）に立っていない', inCar === 0, `${inCar} 点`);
+  ok('架台がコイルカーの走行域（|z| < ' + carZ + '）に立っていない', inCar === 0, `${inCar} 点`);
   // 床に着く脚は駆動側だけ（操作側の床に何も立っていない）
   const legOS = tri.filter(([, y, z]) => y < 200 && z > 0).length;
   const legDS = tri.filter(([, y, z]) => y < 200 && z < 0).length;
@@ -64,15 +67,21 @@ const out = await page.evaluate(async () => {
 
   // --- 可動部（アーム・ロール・ベルト）--------------------------------------
   const armErr = [], visMiss = [], beltErr = [], digIn = [];
-  const rollR = () => FV.wrapRolls.map(w => Math.hypot(w.roll.position.x / sc, w.roll.position.y / sc));
-  let closedR = null;
+  const wv0 = new T.Vector3();
+  const rollR = () => FV.wrapRolls.map(w => { w.roll.getWorldPosition(wv0);
+    return Math.hypot(wv0.x / sc - C.X, wv0.y / sc - cy); });
+  let closedR = null, parkR = null, lowPark = null;
   const sample = (tag) => {
     W.render(P, 1 / 120);            // __ff は物理だけを進めるので、実測の前に必ず 1 フレーム描く
     const fin = P.finish;
     if (!(FV.belt.visible && FV.wrapRolls.every(w => w.roll.visible && w.arms.every(m => m.visible)))) visMiss.push(tag);
+    const wv = new T.Vector3();
+    const rollXY = (w) => { w.roll.getWorldPosition(wv); return { x: wv.x / sc - C.X, y: wv.y / sc - cy }; };
     for (const w of FV.wrapRolls) {
-      const cx = w.roll.position.x / sc, cyr = w.roll.position.y / sc;    // グループ原点＝マンドレル芯
-      armErr.push(Math.abs(Math.hypot(cx - w.pivot.x, cyr - w.pivot.y) - WR.ARM_L));
+      const rc0 = rollXY(w);
+      const cx = rc0.x, cyr = rc0.y;                        // マンドレル芯を原点にした mm
+      const pw = window.__WRAP.swung(w.pivot, FV.cradle.rotation.z);
+      armErr.push(Math.abs(Math.hypot(cx - pw.x, cyr - pw.y) - window.__WRAP.armL(w.i)));
       // 巻いている最中はコイル外周より内側へ入らない
       // 描画側と同じ «その極角での実半径» を使う（板厚は噛み込み中ならギャップ）
       const wound = (fin.gripped || fin.threading) && fin.turns > 0.002;
@@ -83,15 +92,23 @@ const out = await page.evaluate(async () => {
     // ベルトはロールの外周に接する（各頂点は必ずどれかのロールから ROLL_D/2 + BELT_T/2 以上）
     const bp = FV.belt.geometry.attributes.position, v = new T.Vector3();
     const rb = WR.ROLL_D / 2 + WR.BELT_T / 2;
+    const rc = FV.wrapRolls.map(w => ({ x: w.roll.position.x / sc, y: w.roll.position.y / sc }));
     let near = 1e9;
     for (let i = 0; i < bp.count; i++) {
       v.fromBufferAttribute(bp, i);
-      const x = v.x / sc, y = v.y / sc;
-      near = Math.min(near, Math.min(...FV.wrapRolls.map(w =>
-        Math.hypot(x - w.roll.position.x / sc, y - w.roll.position.y / sc))));
+      const x = v.x / sc, y = v.y / sc;                     // ベルトもロールもキャリッジ座標
+      near = Math.min(near, Math.min(...rc.map(q => Math.hypot(x - q.x, y - q.y))));
     }
     beltErr.push(near - rb);
     if (closedR === null && fin.wrap >= 0.999) closedR = rollR();   // «閉じ切った» 最初の 1 点
+    if (fin.wrap <= 0.001) {                                        // 退避し切っているとき
+      parkR = rollR();
+      let lo = 1e9;
+      for (const o of [FV.belt, ...FV.wrapRolls.map(w => w.roll), ...FV.wrapRolls.flatMap(w => w.arms)]) {
+        const b = new T.Box3().setFromObject(o); lo = Math.min(lo, b.min.y / sc);
+      }
+      lowPark = lowPark === null ? lo : Math.min(lowPark, lo);
+    }
     R.log.push(`${tag}\twrap ${(fin.wrap ?? 0).toFixed(2)}\tturns ${(fin.turns ?? 0).toFixed(1)}\tr ${rollR().map(mm).join('/')}`);
   };
 
@@ -110,9 +127,11 @@ const out = await page.evaluate(async () => {
   ok('ラッパーが全工程で見えている（設備として常設）', visMiss.length === 0,
      visMiss.length ? `見えない工程: ${visMiss.join(',')}` : `${R.log.length} 点で確認`);
   ok('アームの長さが変わらない（剛体の揺動アーム）', Math.max(...armErr) < 1,
-     `最大の誤差 ${Math.max(...armErr).toFixed(2)} mm / 設計 ${WR.ARM_L} mm`);
-  ok('待機（開）位置は最大コイルの外', WR.PARK_R - WR.ROLL_D / 2 >= C.OD_MAX / 2,
-     `ロール面 ${mm(WR.PARK_R - WR.ROLL_D / 2)} mm ≥ コイル半径 ${C.OD_MAX / 2} mm`);
+     `最大の誤差 ${Math.max(...armErr).toFixed(2)} mm / 設計 ${WR.ARM_T.map(Math.abs).join('/')} mm`);
+  ok('退避位置は最大コイルの外', parkR !== null && Math.min(...parkR) - WR.ROLL_D / 2 >= C.OD_MAX / 2,
+     parkR ? `いちばん内側のロール面 ${mm(Math.min(...parkR) - WR.ROLL_D / 2)} mm ≥ コイル半径 ${C.OD_MAX / 2} mm` : '—');
+  ok('退避時にラッパーが板の通り道（パスライン + 板厚）へ入らない', lowPark !== null && lowPark >= WR.CLEAR_Y,
+     lowPark === null ? '—' : `いちばん低い点 ${mm(lowPark)} mm ≥ ${WR.CLEAR_Y} mm`);
   const rClosed = C.MANDREL_D / 2 + WR.ROLL_D / 2;
   ok('閉じるとロール面がマンドレル外周に接する',
      closedR && Math.max(...closedR.map(r => Math.abs(r - rClosed))) < 1,
