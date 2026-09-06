@@ -700,6 +700,11 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.3.0', base: 'e222a85', date: '2026-09-06', title: '既定ロットを A5052・呼び厚 560 mm へ', items: [
+      { t: '既定の材質を A5052、呼び厚（鋳造厚）を 560 mm にした', w: 'MATERIAL.ALLOY / SLAB.CAST_DEFAULT' },
+      { t: '«既定は選択肢の先頭» という暗黙の決めをやめ、CAST_DEFAULT を明示した', w: 'SLAB.CAST_DEFAULT' },
+      { t: '既定の板長を 2,400 mm に。536 mm × 4,200 mm では 20 mm を切ると出側テーブルに載らず、8 mm コイルが成立しない（実測 28.7→8.2 mm・64,586 t）', w: 'SLAB.LEN_DEFAULT' },
+    ] },
     { v: '1.2.0', base: 'ebdb7dd', date: '2026-09-06', title: 'ラッパーを押し込み式へ、圧延実績のロギング、視点操作とワイヤ', items: [
       { t: 'ベルトラッパーをリールの左上からシリンダーで押し込む C 型キャリッジへ', w: 'Wrapper / Parts.wrapperCarriage' },
       { t: '圧延実績（ロギング）を実装。パスごとの荷重・速度・動力・温度と時系列', w: 'RollingLog / UIManager.renderLog' },
@@ -1278,8 +1283,15 @@ const CONFIG = {
    * 通常は両面を片面あたり 8〜15 mm 面削するため、圧延前の実厚は
    * 呼び厚 − 2×面削量 となり、上下面は鏡面状に仕上がっている。 */
   SLAB: {
-    CAST_TH: [406, 508, 560], SCALP_MIN: 8, SCALP_MAX: 15, SCALP_DEFAULT: 12,
-    LEN_MIN: 2000, LEN_MAX: 4200, LEN_DEFAULT: 4200,
+    // 呼び厚（鋳造厚）の選択肢と既定。«既定は先頭» と暗黙に決めず、明示して 1 か所で持つ
+    CAST_TH: [406, 508, 560], CAST_DEFAULT: 560, SCALP_MIN: 8, SCALP_MAX: 15, SCALP_DEFAULT: 12,
+    /* 既定ロットは «A5052 / 呼び厚 560» で、目標 8 mm のコイルまで通す。
+     * 板長の既定を 2,400 mm にしてあるのは、この線の «テーブル長» からの従属値。
+     * 板は圧延で L0·h0/h まで伸び、巻取パス以外は入側／出側テーブルに載り切る必要がある。
+     * 536 mm × 4,200 mm では 20 mm を切ると出側テーブル（80.1 m）に載らなくなり、
+     * 残りを 1 パスで巻き取ることになって成立しない（実測 28.7 → 8.2 mm、荷重 64,586 t）。
+     * 2,400 mm なら 11 パスで 8 mm まで通り、最大荷重 3,801 t（常用最大 3,920 t）に収まる。 */
+    LEN_MIN: 2000, LEN_MAX: 4200, LEN_DEFAULT: 2400,
     WID_MIN: 900,  WID_MAX: 2200, WID_DEFAULT: 1500,
     TEMP_MIN: 400, TEMP_MAX: 540, TEMP_DEFAULT: 500,
     // 仕上げ形態は目標板厚から決まる: 10 mm 以下はコイルに巻き取り、10 mm 超は板材として
@@ -1322,7 +1334,7 @@ const CONFIG = {
   },
 
   MATERIAL: {
-    ALLOY: 'A3003',                                    // 選択中の材質（ALLOYS のキー）。既定は汎用の 3003
+    ALLOY: 'A5052',                                    // 選択中の材質（ALLOYS のキー）
     TREF: 450,                                         // 変形抵抗モデルの基準温度
     // 可逆圧延で材料温度を決める主因はロール抜熱。接触熱伝達率は熱間圧延の実測域
     // （20〜100 kW/m²K）の上側を採る。
@@ -1995,7 +2007,7 @@ const Rolling = {
 class SlabState {
   constructor() {
     const S = CONFIG.SLAB;
-    this.reset({ cast: S.CAST_TH[0], scalp: S.SCALP_DEFAULT, width: S.WID_DEFAULT,
+    this.reset({ cast: S.CAST_DEFAULT, scalp: S.SCALP_DEFAULT, width: S.WID_DEFAULT,
                  length: S.LEN_DEFAULT, temp: S.TEMP_DEFAULT, alloy: CONFIG.MATERIAL.ALLOY });
   }
   /** 圧延前の実厚 = 呼び厚(鋳造厚) − 2 × 片面面削量 */
@@ -6997,13 +7009,13 @@ class UIManager {
   }
   _buildCast() {
     const host = $('seg-cast');
+    this.cast = CONFIG.SLAB.CAST_DEFAULT;
     this.castBtns = CONFIG.SLAB.CAST_TH.map((v, i) => {
       const b = document.createElement('button');
-      b.textContent = v + ' mm'; b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+      b.textContent = v + ' mm'; b.setAttribute('aria-pressed', v === this.cast ? 'true' : 'false');
       b.onclick = () => { this.cast = v; this.castBtns.forEach((x, k) => x.setAttribute('aria-pressed', k === i)); this._slabChanged(); };
       host.appendChild(b); return b;
     });
-    this.cast = CONFIG.SLAB.CAST_TH[0];
   }
   /** 材質セレクタ。選ぶと炉出し温度の範囲もその合金の熱間域に合わせる（範囲外の温度を選ばせない）。 */
   _buildAlloys() {
