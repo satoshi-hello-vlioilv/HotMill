@@ -894,12 +894,15 @@ const CONFIG = {
      * 板は出側のエプロンを覆っているので、出側のプッシャは使えない（板とぶつかる）。
      * そこで後端の端材は «下台と一緒に降ろし»、下台脇のシュートで操作側へ滑らせて
      * 床上の端材箱へ落とす。DROP は下台がパスラインより下へ降りる量。 */
-    // 下台まわりは «出側にエプロン・ミル側にテーブル架台（Z=±1,545）・両側にシャー柱
-    // （Z=±2,400）» と混んでいて、端材を横へ長く滑らせる余地が無い。そこで箱は下台の
-    // «真下»（架台どうしの間、|Z| < 1,545 の帯）に置き、短いシュートで落とす。
-    TAIL: { DROP: 450, T_DROP: 1.6, SLIDE: 900, CHUTE_Z1: 1050,
-            // 箱の巾は下台の昇降シリンダ（Z=±1,350、Φ360 → 内側 1,170）の内側に収める
-            BOX: { L: 900, W: 2200, H: 180 } },
+    /* 後端の端材は下台の上に載ったまま、下台と一緒にパスラインより下へ降りる。
+     * DROP は下台の下降量で、下台の最下端（昇降ロッドの下端）が床を割らない範囲。
+     *
+     * ここから «横のシュートへ落とす» には空きが無いことを実測で確認している:
+     *   下台 X −30,718〜−29,883 / Z ±1,570、テーブル架台 Z=±1,545、シャー柱 Z=±2,400、
+     *   出側はエプロンとその脚。板巾 1,500 の端材を下台の外へ出すと、必ずどれかに当たる。
+     * そのため現状は «降ろした下台の上で静止» までを再現している（作業者が取り出す前提）。
+     * 横のシュート・受け箱を入れるには、シャー柱か下台の寸法を見直す必要がある。 */
+    TAIL: { DROP: 240, T_DROP: 1.6 },
     // 端材コンベア（ローラ式）: エプロン端の下から操作側へ運び、末端でパレットへ落とす
     CONVEYOR: { Z0: 2100, Z1: 6400, TOP: 650, ROLL_D: 160, PITCH: 250, SPEED: 700 },
     // 端材パレット（床上の受け箱）。コンベア末端から落ちた端材が積み重なる
@@ -1784,7 +1787,7 @@ class FinishState {
     this.cropStage = 'IDLE'; this.cropDone = false;
     this.cropSide = 1;                              // 端材が落ちた側（+1: 出側エプロン / −1: ミル側の下台）
     this.bedDrop = 0;                               // 下台がパスラインより下へ降りている割合（後端の払い出し）
-    this.tailRest = 0; this.tailPileTh = 0;         // 端材箱に積まれた後端端材
+    this.tailRest = 0;                              // 下台上で静止している後端端材の数
     this.cropEnd = 0;                               // いま切っている端（+1: xMax 側 / −1: xMin 側）
     this.cropEndsDone = { 1: false, '-1': false };  // 端ごとの完了
     this.cropBlade = 0;        // 下台の昇降 0:待機（上面＝パスライン） → 1:上死点
@@ -2063,7 +2066,13 @@ class FinishController {
     s.cropSide = end === Num.sign0(CONFIG.FLIP) ? 1 : -1;
     // 切り落とす量はその端の欠陥長（ワニ口・ラウンド）から計画する。1 カット 300〜500 mm
     const plan = Rolling.cropPlan(sl.overhangAt(end));
-    s.cropCuts = plan.n; s.cropEach = plan.each; s.cropTotal = plan.total; s.cropNeed = plan.need; s.cropIndex = 0;
+    // 後端は 1 カットに限る。端材は下台の上に載ったまま降りて静止するので、2 個目を切ろうと
+    // すると «下台を上げる ＝ 1 個目が宙に浮く» ことになる（横へ出す空きが無い。CONFIG.TAIL 参照）。
+    const one = s.cropSide < 0;
+    s.cropCuts = one ? 1 : plan.n;
+    s.cropEach = one ? Math.min(CONFIG.CROP_SHEAR.CUT_MAX, plan.total) : plan.each;
+    s.cropTotal = one ? s.cropEach : plan.total;
+    s.cropNeed = plan.need; s.cropIndex = 0;
     s.cropStage = 'STOP';
     this.bus.emit('SYS_MESSAGE', {
       text: `75 mm シャー: ${this._cropEndName(end)}の欠陥 ${plan.need.toFixed(0)} mm を ${plan.n} カット × ${plan.each} mm で切り落とします`
@@ -2127,16 +2136,17 @@ class FinishController {
         s.bedDrop = Math.min(1, s.bedDrop + dt / S.TAIL.T_DROP);
         if (s.bedDrop >= 1) {
           const sc = s.scraps[s.scraps.length - 1];
-          if (sc && sc.stage === 'ONBED') { sc.stage = 'SLIDE'; sc.vy = 0; }
+          if (sc && sc.stage === 'ONBED') { sc.stage = 'ONBED_REST'; sc.vy = 0; s.scrapRest++; s.tailRest++; }
           s.cropStage = 'BEDUP';
           this.bus.emit('SYS_MESSAGE', {
-            text: `75 mm シャー: 後端の端材 ${s.cropLen.toFixed(0)} mm を下台とともに降ろし、シュートへ払い出しました`, kind: 'info' });
+            text: `75 mm シャー: 後端の端材 ${s.cropLen.toFixed(0)} mm を下台とともにパスライン下へ降ろしました`, kind: 'info' });
         }
         break;
       }
+      // 端材が載っている間は下台を上げない。次のカットがあるときだけ戻す。
+      // 後端は 1 カットなので、端材を載せたまま下台は降りたままにする（上げると端材が浮く）
       case 'BEDUP':
-        s.bedDrop = Math.max(0, s.bedDrop - dt / S.TAIL.T_DROP);
-        if (s.bedDrop <= 0) this._cropCutDone();
+        this._cropCutDone();
         break;
 
       // 端材をエプロン上で操作側へ押し出し、エプロン端からコンベアへ落とす。
@@ -2232,15 +2242,8 @@ class FinishController {
         case 'ONBED':                                     // 後端の端材は下台の上に載って一緒に降りる
           sc.y = this.bedLift() - s.bedDrop * S.TAIL.DROP;
           break;
-        case 'SLIDE': {                                   // 下台から操作側へ少し滑り、真下の受け箱へ落ちる
-          const T = S.TAIL, land = T.BOX.H + s.tailPileTh - P;
-          sc.z += T.SLIDE * dt;
-          const t = Num.clamp(sc.z / T.CHUTE_Z1, 0, 1);
-          sc.y = Num.lerp(-T.DROP, land, t); sc.rot = Num.clamp(-0.25 * t, -0.25, 0);
-          if (t >= 1) { sc.y = land; sc.rot = 0; sc.z = T.CHUTE_Z1; sc.stage = 'REST';
-                        s.scrapRest++; s.tailRest++; s.tailPileTh += sc.th; }
-          break;
-        }
+        // 後端の端材は降ろした下台の上でそのまま静止する（横へ出す空きが無い。CONFIG.TAIL 参照）
+        case 'ONBED_REST': sc.y = -S.TAIL.DROP; break;
         case 'FALL': {                                    // エプロン端からコンベアへ。前へ滑りながら落ちる
           sc.vy -= g * dt; sc.y += sc.vy * dt; sc.z += 900 * dt; sc.rot = Num.clamp(sc.rot - 1.4 * dt, -0.45, 0);
           if (sc.y <= convTop) { sc.y = convTop; sc.vy = 0; sc.rot = 0; sc.z = Math.max(sc.z, CV.Z0 + sc.w / 2 + 50); sc.stage = 'CONVEY'; }
@@ -3354,14 +3357,6 @@ const Parts = {
       add(0, G.at(G.box(PA.W, PA.H, PA.L), ax, PA.H / 2, PA.Z));                                       // パレット（受け箱の底）
       for (const sx of [-1, 1]) add(0, G.at(G.box(60, PA.H + 260, PA.L), ax + sx * (PA.W / 2 - 30), (PA.H + 260) / 2, PA.Z));   // 側板
       add(0, G.at(G.box(PA.W, PA.H + 260, 60), ax, (PA.H + 260) / 2, PA.Z + PA.L / 2 - 30));           // 奥の側板
-      // --- 後端の端材の受け箱（下台の真下。テーブル架台の間の帯に収める）---
-      // 後端の端材は下台と一緒に P − TAIL.DROP まで降り、操作側へ少し滑って箱へ落ちる。
-      const TL = S.TAIL, TB = TL.BOX;
-      add(0, G.at(G.box(TB.L, TB.H, TB.W), bedX, TB.H / 2, 0));                                        // 受け箱の底
-      for (const sx of [-1, 1])                                                                        // 側板（X 方向）
-        add(0, G.at(G.box(60, TB.H + 260, TB.W), bedX + sx * (TB.L / 2 - 30), (TB.H + 260) / 2, 0));
-      for (const sz of [-1, 1])                                                                        // 側板（Z 方向）
-        add(0, G.at(G.box(TB.L, TB.H + 260, 60), bedX, (TB.H + 260) / 2, sz * (TB.W / 2 - 30)));
     });
   },
   /** 固定上刃。刃物色で描き、断面表示でも透過しない（切断そのものが見えるべき部材）。 */
@@ -3387,8 +3382,10 @@ const Parts = {
       G.at(G.box(240, 300, 120), bx - S.BED_L / 2 + 120, -250, -(BL + 400) / 2 - 60),
       G.at(G.box(240, 300, 120), bx + S.BED_L / 2 - 120, -250,  (BL + 400) / 2 + 60),
       G.at(G.box(240, 300, 120), bx + S.BED_L / 2 - 120, -250, -(BL + 400) / 2 - 60),
-      G.at(G.cyl(200, 520, 'y', 12), bx, -400 - 260,  (BL / 2 + 100)),        // 昇降シリンダのロッド
-      G.at(G.cyl(200, 520, 'y', 12), bx, -400 - 260, -(BL / 2 + 100)),
+      // 昇降シリンダのロッド。下台は «切断で上へ» だけでなく «後端の端材を払い出すため下へ»
+      // も動くので、下降しても床を突き抜けない長さにする（下端は待機時にパスライン −620）。
+      G.at(G.cyl(200, 220, 'y', 12), bx, -510,  (BL / 2 + 100)),
+      G.at(G.cyl(200, 220, 'y', 12), bx, -510, -(BL / 2 + 100)),
     ]);
   },
   /** 下台の下刃（刃物色）。原点＝刃先。レーキ角を付け、剪断を端から順に進める。 */
@@ -6158,7 +6155,7 @@ class UIManager {
                  BEDDOWN: '後端の端材を下台ごと降ろす', BEDUP: '下台がパスラインへ戻る' }[f.cropStage] ?? '';
         // 端材の行き先は端で違う（先端＝出側エプロン → コンベア → パレット、後端＝下台の真下の受け箱）
         hint += f.cropSide > 0 ? ` ／ 端材はコンベアでパレットへ（${f.scrapRest - f.tailRest} 個積載）`
-                               : ` ／ 端材は下台の真下の受け箱へ（${f.tailRest} 個積載）`;
+                               : ` ／ 端材は下台とともにパスライン下へ（${f.tailRest} 個）`;
       }
       else if (p.finish.plateStage === 'DIVIDE') {
         const f = p.finish, PL = CONFIG.PILER; cls = 'is-run'; ic = 'fa-layer-group';
