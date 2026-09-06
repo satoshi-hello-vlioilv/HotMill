@@ -22,7 +22,7 @@ const out = await page.evaluate((EPS) => {
   add(Object.values(W.millView.rolls));
   for (const k of ['chockWR', 'chockBR', 'capRod', 'capBody', 'wedge', 'bender', 'headers'])
     { const v = W.millView[k]; if (v) { add(v.near); add(v.far); add(v); } }
-  add(W.driveView.spindles); add(W.driveView.pinions);
+  add(W.driveView.spindles); add(W.driveView.pinions); add(W.driveView.heads);
   for (const z of W.tableView.zones) add(z.rolls);
   add(W.tableView.eRolls);                                 // E-1 / E-2 のローラ（回る）
   for (const st of W.guideView.stations) for (const g of st.sides) add(g);

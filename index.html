@@ -573,7 +573,17 @@ const CONFIG = {
     // ハウジング（オペレータ側/駆動側の2枚。窓の中にチョックが収まる）
     HOUSING: { POST_X: 1350, WIN_X: 1600, THICK_Z: 1300, INNER_Z: 1400,
                TOP_Y: 7000, BOT_Y: -3600, WIN_TOP: 5200, WIN_BOT: -2100, SOLE_T: 700 },
-    CHOCK:   { WR: { x: 1500, y: 820,  z: 1300 }, BR: { x: 1500, y: 1400, z: 1300 } },
+    /* チョック（軸受箱）。x/y/z は本体の外形。DETAIL は図面（チョックをはめた状態）の
+     * 作り込み: 上下のキーパー板とそのボルト、端面の軸受カバー、窓を滑るライナ、
+     * BUR だけが持つ «圧下シリンダ／パスラインウェッジを受ける張り出しブロック»。 */
+    CHOCK:   { WR: { x: 1500, y: 820,  z: 1300 }, BR: { x: 1500, y: 1400, z: 1300 },
+               DETAIL: { KEEP_T: 90, KEEP_IN: 120, BOLT_D: 90, CAP_K: 1.35, CAP_L: 160,
+                         LINER_T: 70, SEAT_H: 180, SEAT_KX: 0.62, SEAT_KZ: 0.66 } },
+    /* ロールの首（図面の «チョックをはめた状態»）。胴 → 胴端の逃げ → フィレット →
+     * 軸受首（チョックの中）→ 軸端、と段が付く。駆動側のワークロールだけは
+     * スピンドルの平頭を受ける «二又（フォーク）» で終わる。K が付く値は首径に対する比。 */
+    NECK:    { FILLET: 160, END_K: 0.72, END_L: 340, END_L_DRIVE: 320,
+               FORK_T: 0.62, FORK_H: 1.06, FORK_SLOT: 0.50, FORK_BACK: 260, FORK_PRONG: 460 },
     CAPSULE: { D: 1300, BODY_L: 800 },     // 油圧圧下シリンダ
     WEDGE:   { H: 300 },                   // パスライン調整ステップウェッジ
     BENDER:  { D: 300, L: 520 },           // ロールベンディングシリンダ
@@ -586,7 +596,7 @@ const CONFIG = {
     // 主電動機 1,900 kW × 2 台（直流）。0/150/330 rpm、減速比 5.96:1。
     // 150 rpm までは定トルク、そこから 330 rpm までは定出力という直流機の特性を持つ。
     MOTOR_KW: 1900, MOTOR_N: 2, RPM_BASE: 150, RPM_MAX: 330, GEAR: 5.96,
-    COUPLING_Z: -3400,                      // スピンドル継手（ロール側）
+    COUPLING_Z: -3960,                      // スピンドル継手（ロール側）＝ フォークの外側の自在継手中心
     PINION_Z:   -9500,                      // ピニオンスタンド出力軸（ここからミル側へ 1,200 mm 出る）
     PINION_SPAN: 1800, STAND_L: 2200,       // ピニオン軸間 / ギヤボックス奥行
     PINION_Y_LO:  433, PINION_Y_HI: 1733,   // ピニオン軸の固定高さ（公称ギャップ300相当）
@@ -3227,32 +3237,78 @@ const Parts = {
       parts.push(G.at(G.cyl(220, 1400, 'y', 10), sx * (soleX / 2 - 250), H.BOT_Y + 1050, sz * (outer + 380)));
     return G.merge(parts);
   },
-  /* --- ロール（胴 + 首 + 継手端）。胴と首で材質が異なるため2ジオメトリ返す --- */
-  roll(dia, barrel, neckD, withCoupling) {
-    const M = CONFIG.MILL;
-    const neckL = M.HOUSING.INNER_Z + M.HOUSING.THICK_Z - barrel / 2 + 150;   // 窓を貫通する長さ
-    const face = G.cyl(dia, barrel, 'z', 48);
-    const necks = [];
+  /* --- ロール（胴 + 首）。胴と首で材質が異なるため 2 ジオメトリ返す --------- */
+  /**
+   * 図面（チョックをはめた状態）の段付き:
+   *   胴 → 胴端の逃げ → フィレット → 軸受首（チョックの中）→ 軸端
+   * 軸受首は «軸受カバーの外面» まで通し、そこから先は細い軸端になる。チョックの端面には
+   * 軸受カバー（Parts.chock）が付くので、外から見ると «大きな円盤 → 細い軸» という
+   * 図面どおりの見え方になる。coupling（ワークロール）は駆動側だけ、スピンドルの平頭を
+   * 受ける二又で終わる。
+   */
+  roll(dia, barrel, neckD, coupling) {
+    const M = CONFIG.MILL, H = M.HOUSING, N = M.NECK;
+    const zOut = H.INNER_Z + H.THICK_Z + M.CHOCK.DETAIL.CAP_L;   // 軸受カバーの外面
+    const zb = barrel / 2, face = G.cyl(dia, barrel, 'z', 48), necks = [];
     for (const s of [-1, 1]) {
-      const z = s * (barrel / 2 + neckL / 2);
-      necks.push(G.at(G.cyl(neckD, neckL, 'z', 20), 0, 0, z));
-      necks.push(G.at(G.cyl(dia * 0.92, 90, 'z', 24), 0, 0, s * (barrel / 2 - 45)));  // 胴端の逃げ
+      necks.push(G.at(G.cyl(dia * 0.92, 90, 'z', 24), 0, 0, s * (zb - 45)));                      // 胴端の逃げ
+      // フィレット: −Z 端が胴径、+Z 端が首径。−Z 側の首では前後を入れ替える
+      necks.push(G.at(G.taper(s > 0 ? dia * 0.92 : neckD, s > 0 ? neckD : dia * 0.92, N.FILLET, 24),
+                      0, 0, s * (zb + N.FILLET / 2)));
+      const j0 = zb + N.FILLET, jL = zOut - j0;                                                   // 軸受首（チョックの中）
+      necks.push(G.at(G.cyl(neckD, jL, 'z', 24), 0, 0, s * (j0 + jL / 2)));
+      const eL = (coupling && s < 0) ? N.END_L_DRIVE : N.END_L;                                   // 軸端
+      necks.push(G.at(G.cyl(neckD * N.END_K, eL, 'z', 20), 0, 0, s * (zOut + eL / 2)));
     }
-    if (withCoupling) {   // 駆動側のスピンドル継手フランジ
-      const z = -(barrel / 2 + neckL + 260);
-      necks.push(G.at(G.cyl(neckD * 1.5, 520, 'z', 14), 0, 0, z));
-      necks.push(G.at(G.cyl(neckD * 0.75, 620, 'z', 12), 0, 0, z - 560));
-    }
+    if (coupling) necks.push(...Parts.rollFork(neckD, -(zOut + N.END_L_DRIVE)));
     return { face, neck: G.merge(necks) };
   },
+  /**
+   * 駆動側ワークロールの軸端（二又／スペード）。上下 2 枚の爪の間へスピンドルの平頭が
+   * 入り、爪の側面でトルクを受ける。z0 は又の根元（負＝駆動側）で、外側（−Z）へ伸ばす。
+   */
+  rollFork(neckD, z0) {
+    const N = CONFIG.MILL.NECK;
+    const t = neckD * N.FORK_T, h = neckD * N.FORK_H, slot = neckD * N.FORK_SLOT;
+    const py = (h - slot) / 2, out = [G.at(G.box(t, h, N.FORK_BACK), 0, 0, z0 - N.FORK_BACK / 2)];
+    for (const sy of [-1, 1])
+      out.push(G.at(G.box(t, py, N.FORK_PRONG), 0, sy * (slot + py) / 2, z0 - N.FORK_BACK - N.FORK_PRONG / 2));
+    return out;
+  },
 
-  /* --- チョック（軸受箱）: 本体 + 軸受ボス + 摺動ライナ -------------------- */
+  /* --- チョック（軸受箱）: 本体 + キーパー板 + 軸受カバー + ライナ ---------- */
+  /**
+   * 図面（チョックをはめた状態）に合わせた作り。
+   *  ・本体（角箱）の上下に «キーパー板»（一回り小さい板 + 四隅のボルト）が載る
+   *  ・端面には軸受カバー（円盤 + 中央のボルト）。ハウジング外面から少し出る
+   *  ・ハウジング窓を滑るライナは本体の左右
+   *  ・BUR だけ、圧下シリンダ（上）／パスラインウェッジ（下）を受ける張り出しブロックを持つ
+   * 同じジオメトリを OS/DS・上下のチョックで使い回すため、上下・前後対称に作る。
+   */
   chock(kind) {
-    const c = CONFIG.MILL.CHOCK[kind], bore = kind === 'WR' ? CONFIG.MILL.WR_NECK_D : CONFIG.MILL.BR_NECK_D;
-    const parts = [G.at(G.box(c.x, c.y, c.z), 0, 0, 0)];
-    parts.push(G.at(G.cyl(bore * 1.55, c.z * 0.55, 'z', 20), 0, 0, 0));       // 軸受ボス
-    for (const s of [-1, 1]) parts.push(G.at(G.box(70, c.y * 0.86, c.z * 0.8), s * (c.x / 2 + 30), 0, 0)); // ライナ
-    parts.push(G.at(G.box(c.x * 0.5, 130, 260), 0, c.y / 2 + 60, -c.z * 0.28));  // 給油ブロック
+    const c = CONFIG.MILL.CHOCK[kind], K = CONFIG.MILL.CHOCK.DETAIL;
+    const bore = kind === 'WR' ? CONFIG.MILL.WR_NECK_D : CONFIG.MILL.BR_NECK_D;
+    const parts = [G.at(G.box(c.x, c.y - 2 * K.KEEP_T, c.z), 0, 0, 0)];                 // 本体
+    for (const sy of [-1, 1]) {
+      parts.push(G.at(G.box(c.x - 2 * K.KEEP_IN, K.KEEP_T, c.z - 2 * K.KEEP_IN),        // キーパー板
+                      0, sy * (c.y - K.KEEP_T) / 2, 0));
+      for (const sx of [-1, 1]) for (const sz of [-1, 1])                               // キーパーのボルト
+        parts.push(G.at(G.cyl(K.BOLT_D, K.KEEP_T + 50, 'y', 8),
+                        sx * (c.x / 2 - 260), sy * (c.y - K.KEEP_T) / 2, sz * (c.z / 2 - 300)));
+    }
+    parts.push(G.at(G.cyl(bore * 1.5, c.z * 0.92, 'z', 24), 0, 0, 0));                  // 軸受ボス（本体の中）
+    for (const sz of [-1, 1]) {                                                          // 軸受カバー（端面）
+      parts.push(G.at(G.cyl(bore * K.CAP_K, K.CAP_L, 'z', 28), 0, 0, sz * (c.z + K.CAP_L) / 2));
+      parts.push(G.at(G.cyl(bore * 0.30, K.CAP_L + 70, 'z', 14), 0, 0, sz * (c.z + K.CAP_L) / 2));
+      parts.push(G.at(G.box(c.x * 0.30, 200, 220), 0, c.y * 0.30, sz * (c.z / 2 + 110)));  // 給油ブロック
+    }
+    // 窓を滑るライナ。外面をハウジング窓の内側（WIN_X/2 − 5）に合わせる。
+    // «本体の外側に足す» と置くと窓からはみ出す（実測 20 mm）
+    const lx = CONFIG.MILL.HOUSING.WIN_X / 2 - 5 - K.LINER_T / 2;
+    for (const sx of [-1, 1])
+      parts.push(G.at(G.box(K.LINER_T, (c.y - 2 * K.KEEP_T) * 0.86, c.z * 0.8), sx * lx, 0, 0));
+    if (kind === 'BR') for (const sy of [-1, 1])                                         // 圧下／ウェッジの受け
+      parts.push(G.at(G.box(c.x * K.SEAT_KX, K.SEAT_H, c.z * K.SEAT_KZ), 0, sy * (c.y + K.SEAT_H) / 2, 0));
     return G.merge(parts);
   },
 
@@ -3284,6 +3340,22 @@ const Parts = {
       G.at(G.box(340, 640, 700), 0, 0, 0),
       G.at(G.cyl(B.D, B.L, 'y', 14), 0, B.L * 0.55, 200),
       G.at(G.cyl(B.D, B.L, 'y', 14), 0, -B.L * 0.55, 200),
+    ]);
+  },
+
+  /**
+   * スピンドルのロール側の平頭（スリッパ）。ロール軸端の二又の中へ入り、爪の側面で
+   * トルクを受ける。原点＝自在継手の中心で、−Z（ロール側）へ板を伸ばす。
+   * スピンドル本体は毎フレーム «長さ» を伸縮させるので、伸縮しないこの頭は別メッシュにする。
+   */
+  spindleHead() {
+    const M = CONFIG.MILL, N = M.NECK, D = CONFIG.DRIVE;
+    const slot = M.WR_NECK_D * N.FORK_SLOT, t = M.WR_NECK_D * N.FORK_T;
+    // 板の長さは «爪の長さ» まで。又の底（FORK_BACK の面）を突くと組み立てられない
+    const L = N.FORK_PRONG;
+    return G.merge([
+      G.at(G.box(t - 30, slot - 70, L), 0, 0, -L / 2),            // 平頭（爪の間へ入る板）
+      G.at(G.cyl(D.SPINDLE_D * 0.92, 300, 'z', 20), 0, 0, 230),   // 継手のハブ（爪の先より外）
     ]);
   },
 
@@ -4614,13 +4686,14 @@ class MillStandView {
       this.chockBR[k].set(0, 0, bt, sz * zC).set(1, 0, bb, sz * zC).commit();
     }
     // ロッドはシリンダ下端から上BURチョック天端までを埋める（＝圧下量そのもの）
-    const rodTop = H.WIN_TOP - M.CAPSULE.BODY_L, rodBot = bt + M.CHOCK.BR.y / 2;
+    // 上 BUR チョックは圧下の受けブロック（SEAT_H）を持つので、ロッドはその天端まで
+    const rodTop = H.WIN_TOP - M.CAPSULE.BODY_L, rodBot = bt + M.CHOCK.BR.y / 2 + M.CHOCK.DETAIL.SEAT_H;
     const len = Math.max(rodTop - rodBot, 20);
     this.capRod.near.set(0, 0, (rodTop + rodBot) / 2,  zC, 0, 0, 0, 1, len / 1000, 1).commit();
     this.capRod.far .set(0, 0, (rodTop + rodBot) / 2, -zC, 0, 0, 0, 1, len / 1000, 1).commit();
 
     // パスライン調整ウェッジは、研削で細くなった分だけ厚みを増して下BURチョックを支える
-    const wedgeTop = bb - M.CHOCK.BR.y / 2, seatY = H.WIN_BOT + 200;
+    const wedgeTop = bb - M.CHOCK.BR.y / 2 - M.CHOCK.DETAIL.SEAT_H, seatY = H.WIN_BOT + 200;
     const fill = Math.max(wedgeTop - seatY, 120);
     for (const [k, s] of [1, -1].entries())
       this.wedge.set(k, 0, (wedgeTop + seatY) / 2, s * zC, 0, 0, 0, 1, fill / M.WEDGE.H, 1);
@@ -4664,6 +4737,13 @@ class DriveView {
       m.castShadow = true; this.group.add(m); return m;
     });
     sg.dispose();
+    // ロール側の平頭。スピンドル本体は長さを伸縮させるので、伸縮しない頭は別メッシュで持つ
+    const hg = Parts.spindleHead();
+    this.heads = [0, 1].map(() => {
+      const m = new THREE.Mesh(hg.clone(), MAT.spindle); m.castShadow = true; m.name = 'スピンドル平頭';
+      this.group.add(m); return m;
+    });
+    hg.dispose();
     this._a = new THREE.Vector3(); this._b = new THREE.Vector3(); this._d = new THREE.Vector3();
     this._zAxis = new THREE.Vector3(0, 0, 1);
   }
@@ -4685,7 +4765,11 @@ class DriveView {
       m.position.copy(this._a).addScaledVector(this._d, 0.5);
       m.quaternion.setFromUnitVectors(this._zAxis, this._d.normalize());
       m.scale.set(1, 1, len);
-      m.rotateZ(i === 0 ? mill.rollAngle : -mill.rollAngle);
+      // 平頭は継手中心に置き、姿勢はスピンドルと同じ（首振りも一緒に見える）。
+      // 回転角はスピンドルへ入れる «前» の姿勢から与える（後だと二重に回る）
+      const hd = this.heads[i], ra = i === 0 ? mill.rollAngle : -mill.rollAngle;
+      hd.position.copy(this._a); hd.quaternion.copy(m.quaternion);
+      m.rotateZ(ra); hd.rotateZ(ra);
     });
   }
 }
