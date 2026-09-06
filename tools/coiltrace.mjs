@@ -4,6 +4,9 @@
 //  3. 渡り板の先端がコイルの巻き付け円に接しているか（接線で入る）
 //  4. 押えコロがコイル外周（段を含む）に接し、当たりの極角が上側（95〜135°）にあるか
 //  5. マンドレルセグメントが拡張時に Φ610、縮小時にそれより小さいか
+//  6. ベルトラッパー: 先端が来る前に閉じ切るか、ロールがコイル外周に接するか、
+//     所定の巻き数で開くか（マンドレルは板を掴まないので、ここが «巻き始め» を成立させる）
+//  （コイルカーはリールの真下に出側テーブルが通っていて成立しないため未実装）
 import { openApp, installHelpers } from './harness.mjs';
 const { browser, page } = await openApp({ viewport: { width: 900, height: 520 }, quiet: true });
 await installHelpers(page);
@@ -14,6 +17,19 @@ const out = await page.evaluate(() => {
   const checks = [], ok = (name, cond, detail) => checks.push({ name, pass: !!cond, detail });
   const samples = [];
   let expandedR = 0, collapsedR = 0;
+  // --- ベルトラッパー / コイルカーの記録 ---
+  const WR = C.WRAPPER;
+  let wrapAtGrip = null, wrapAfterHold = null, gapClosed = [];
+  const rollGaps = () => {                   // 閉じたときのロール面とコイル外周の隙間 [mm]
+    const cy = K.MILL.PASS_LINE + C.Y_ABOVE, f = P.finish, s = P.slab;
+    const h = s.inBite ? P.mill.gap : s.thickness;
+    return FV.wrapRolls.map(w => {
+      const dx = w.roll.position.x / sc, dy = w.roll.position.y / sc - cy;
+      // コイルは 1 周ごとに段が付くので、当たりの極角での実半径と比べる（押えコロと同じ式）
+      const rC = window.__ROLL.coilRadiusAt(Math.atan2(dy, dx), h, f.turns, f.entry, f.windSign);
+      return Math.hypot(dx, dy) - C.WRAPPER.ROLL_D / 2 - rC;
+    });
+  };
   const segR = () => {                       // セグメント外面の実半径（インスタンス行列から）
     const m = new T.Matrix4(), v = new T.Vector3(); let r = 0;
     const g = FV.segments.mesh.geometry.attributes.position;
@@ -24,7 +40,7 @@ const out = await page.evaluate(() => {
   window.__ff((p, n) => {
     if (n % 60 === 0) W.render(P, 0.5);
     if (n % 60 === 0 && p.finish.expand <= 0) collapsedR = segR();
-    if (n % 120 === 0 && p.finish.gripped && p.finish.turns > 0.5) {
+    if (n % 120 === 0 && p.finish.gripped && !p.finish.done && p.finish.turns > 0.5) {
       const f = p.finish, s = p.slab, h = s.inBite ? p.mill.gap : s.thickness;
       const cy = K.MILL.PASS_LINE + C.Y_ABOVE;
       // 2. 板メッシュの先端
@@ -48,7 +64,15 @@ const out = await page.evaluate(() => {
         tipR: +tipR.toFixed(0), layR: +f.layR.toFixed(0),
         rollGap: +(rollDist - rOut - C.HOLD.ROLL_D / 2).toFixed(1), rollAng: +rollAng.toFixed(0) });
     }
-    return p.finish.done;
+    const f = p.finish;
+    // 描画は n % 60 で更新されるので、ロール位置を読むのも同じ刻みに合わせる
+    // （ずらすと «そのフレームの巻き数» と «描かれている半径» が食い違って見える）
+    if (n % 60 === 0) {
+      if (wrapAtGrip === null && f.gripped) wrapAtGrip = f.wrap;
+      if (f.wrap >= 0.999 && f.gripped) gapClosed.push(...rollGaps());
+      if (wrapAfterHold === null && f.turns > WR.TURNS_HOLD + 1) wrapAfterHold = f.wrap;
+    }
+    return f.done;
   }, 120 * 2500, 0);
   const f = P.finish;
   const last = samples[samples.length - 1];
@@ -63,7 +87,15 @@ const out = await page.evaluate(() => {
   const shrink = 2 * C.SEG_STROKE * Math.cos(Math.PI / 4);
   ok('マンドレル拡張時 Φ610・縮小時は外接径が 42 mm 以上小さい', Math.abs(expandedR * 2 - C.MANDREL_D) < 2 && collapsedR * 2 < C.MANDREL_D - shrink + 3,
      `拡張 Φ${(expandedR * 2).toFixed(0)} / 縮小 Φ${(collapsedR * 2).toFixed(0)}（外接径の減少 ${(C.MANDREL_D - collapsedR * 2).toFixed(0)} mm）`);
-  ok('巻取完了時にマンドレルが縮小してコイルを解放', f.done && f.expand < 1, `expand=${f.expand.toFixed(2)}`);
+  // --- ベルトラッパー ---
+  ok('ベルトラッパーは先端が来る前に閉じ切っている（掴む機構が無いので必須）',
+     wrapAtGrip !== null && wrapAtGrip >= 0.999, `巻き付き開始時の閉じ度 ${wrapAtGrip === null ? '—' : wrapAtGrip.toFixed(3)}`);
+  ok('閉じたラッパーロールがコイル外周に接する', gapClosed.length > 0 && Math.max(...gapClosed.map(Math.abs)) < 3,
+     `最大隙間 ${gapClosed.length ? Math.max(...gapClosed.map(Math.abs)).toFixed(1) : '—'} mm（${gapClosed.length} 標本）`);
+  ok(`${C.WRAPPER.TURNS_HOLD} 巻きした後にベルトが開く`, wrapAfterHold !== null && wrapAfterHold < 0.05,
+     `${C.WRAPPER.TURNS_HOLD}+1 巻き時点の閉じ度 ${wrapAfterHold === null ? '—' : wrapAfterHold.toFixed(3)}`);
+  ok('巻取中はマンドレルが拡張したまま（途中で縮んでコイルを落とさない）',
+     samples.length > 0 && expandedR * 2 >= C.MANDREL_D - 2, `巻取中の外接径 Φ${(expandedR * 2).toFixed(0)}`);
   return { checks, n: samples.length, first: samples[0], last, turns: +f.turns.toFixed(1) };
 });
 console.log(JSON.stringify({ first: out.first, last: out.last, turns: out.turns }, null, 1));

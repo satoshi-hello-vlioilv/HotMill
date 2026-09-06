@@ -809,6 +809,21 @@ const CONFIG = {
     // SEG_STROKE だけ拡縮する（拡張時 Φ610 = コイル内径、縮小時はコイルを抜ける）。
     SEG_STROKE: 30, SEG_GAP: 26, SEG_WALL: 95, T_EXPAND: 0.8,
     APPROACH: 3000,                          // 先端がデフレクタの手前この距離に来たらマンドレルを拡張する
+    /* ベルトラッパー —— リールで «巻き始める» ための装置。
+     * マンドレルは板を掴む機構を持たない（拡縮するだけ）ので、先端はベルトで
+     * マンドレルへ押し付けて摩擦で連れ回す。3 本のラッパーロールが揺動アームに載り、
+     * その外周を 1 本の無端ベルトが回る。ロールが内側へ閉じるとベルトがマンドレルに
+     * 沿い、先端はベルトとマンドレルの間に入って巻き付く。数巻きしてコイルが自分で
+     * 形を保てるようになったらアームが開き、ベルトは離れる。
+     *   ANGLES はロール中心の極角 [deg]（真上が 90°、板の入口 A の側から順に並べる）。
+     *   PIVOT_R / ARM_L は支点の半径とアーム長。閉時はロール面がコイル外周に接し、
+     *   開時は OPEN_GAP だけ離す。※各寸法は推定値。 */
+    WRAPPER: {
+      N: 3, ANGLES: [212, 300, 25], ROLL_D: 240, PIVOT_R: 1450, ARM_L: 820,
+      BELT_T: 18, BELT_MARGIN: 60, OPEN_GAP: 420, T_MOVE: 0.9,
+      TURNS_HOLD: 3,                         // 何巻き押さえてからベルトを開くか
+      APPROACH: 1500,                        // 先端がこの距離まで来たらベルトを閉じ始める
+    },
     COIL_SEG: 72,                            // コイル形状の周方向分割数
     // コイル押え。サイドトリマー架構の上部梁から出したアームの先端に金属コロ（Φ200 ×
     // 面長 600）を付け、コイル外周に当てて巻き広がり（テレスコープ）を抑える。
@@ -1743,6 +1758,7 @@ class FinishState {
     this.trimmedWidth = 0;
     // 75 mm クロップシャーによる端部切断（上刃固定・下台上昇式、複数カット）
     this.cropStage = 'IDLE'; this.cropDone = false;
+    this.cropSide = 1;                              // 端材が落ちた側（+1: 出側エプロン / −1: ミル側）
     this.cropEnd = 0;                               // いま切っている端（+1: xMax 側 / −1: xMin 側）
     this.cropEndsDone = { 1: false, '-1': false };  // 端ごとの完了
     this.cropBlade = 0;        // 下台の昇降 0:待機（上面＝パスライン） → 1:上死点
@@ -1770,6 +1786,8 @@ class FinishState {
     this.entry = 0;            // 板の入口の極角（world, rad）
     this.expand = 0;           // マンドレルセグメント 0:縮小 → 1:拡張
     this.tailPast = 0;         // 尾端が板の入口 A を過ぎてから進んだ距離 [mm]
+    // ベルトラッパー。wrap 0:開 → 1:閉。wrapDone はコイルが自立して開いたあと
+    this.wrap = 0; this.wrapDone = false; this.beltAngle = 0;
     // 板材モードの払い出し。板厚 75 mm 超だけがテーブル末端からクレーンで板置き場へ
     this.plateStage = 'IDLE'; this.plateZ = 0; this.plateY = 0; this.plateT = 0;
     this.phase = 'IDLE';
@@ -2009,6 +2027,8 @@ class FinishController {
   beginCrop() {
     const s = this.s, sl = this.slab, end = this._nextCropEnd();
     s.cropEnd = end;
+    // 端材は «刃を挟んで切る端の側» に落ちる。先端カットなら出側、後端カットならミル側。
+    s.cropSide = end === Num.sign0(CONFIG.FLIP) ? 1 : -1;
     // 切り落とす量はその端の欠陥長（ワニ口・ラウンド）から計画する。1 カット 300〜500 mm
     const plan = Rolling.cropPlan(sl.overhangAt(end));
     s.cropCuts = plan.n; s.cropEach = plan.each; s.cropTotal = plan.total; s.cropNeed = plan.need; s.cropIndex = 0;
@@ -2219,19 +2239,35 @@ class FinishController {
 
     // --- マンドレルの拡縮。先端が近づいたら拡張して待ち、巻き終えたら縮小してコイルを解放する ---
     const A = s.entryPoint(this._headThickness()), headPast = F * (this._head() - A.x);
-    const wantExpand = s.mode === 'COIL' && finalPass && !s.done && headPast > -CO.APPROACH;
+    // マンドレルは «巻き終えてコイルを抜くまで» 拡張したまま。全パス完了で passIndex が
+    // −1 になると finalPass は偽になるので、それだけを条件にすると巻取の途中で縮んでしまう。
+    const wantExpand = s.mode === 'COIL' && !s.done
+                    && (s.gripped || s.winding || (finalPass && headPast > -CO.APPROACH));
     s.expand = Num.rateTo(s.expand, wantExpand ? 1 : 0, 1 / CO.T_EXPAND, dt);
 
-    // --- リールへの通板と把持（マンドレルが拡張し切ってから先端を掴む）---
-    // 先端が入口 A を過ぎたら板はマンドレルに巻き付き始める（通板中）。巻き数と巻いた長さは
+    // --- ベルトラッパーによる巻き付け ------------------------------------
+    // マンドレルは板を掴む機構を持たない。先端はベルトでマンドレルへ押し付けられ、
+    // 摩擦で連れ回されて巻き付く。したがって «閉じてから通板» の順序でなければならない。
+    const WR = CO.WRAPPER;
+    const wantWrap = s.mode === 'COIL' && finalPass && !s.wrapDone
+                  && s.expand >= 1 && headPast > -WR.APPROACH;
+    s.wrap = Num.rateTo(s.wrap, wantWrap ? 1 : 0, 1 / WR.T_MOVE, dt);
+    // ベルトはマンドレル外周と同じ周速で回る（見た目の回転角）
+    s.beltAngle = s.mandrelAngle;
+    // 先端が入口 A を過ぎ、ベルトが閉じ切っていれば巻き付きが始まる。巻き数と巻いた長さは
     // どちらも A を基準に数えるので、通板の長さが «巻かれていないのに巻き長さに入る» ことがない。
-    if (s.mode === 'COIL' && finalPass && !s.gripped && headPast > 0 && s.expand >= 1) {
+    if (s.mode === 'COIL' && finalPass && !s.gripped && headPast > 0 && s.wrap >= 1) {
       s.threading = true;
       s.thread = Math.min(1, s.thread + dt / CO.T_THREAD);
       if (s.thread >= 1) {
         s.gripped = true; s.threading = false;
-        this.bus.emit('SYS_MESSAGE', { text: 'リール: マンドレル拡張・先端を把持しました（張力付与開始）', kind: 'info' });
+        this.bus.emit('SYS_MESSAGE', { text: `リール: ベルトラッパーが先端をマンドレルへ巻き付けました（張力付与開始）`, kind: 'info' });
       }
+    }
+    // 数巻きしてコイルが自分で形を保てるようになったらベルトを開く
+    if (s.gripped && !s.wrapDone && s.turns >= WR.TURNS_HOLD) {
+      s.wrapDone = true;
+      this.bus.emit('SYS_MESSAGE', { text: `リール: ${WR.TURNS_HOLD} 巻きしたのでベルトラッパーを開きます`, kind: 'info' });
     }
 
     // --- 巻取中の諸量。巻き数は «板の周速 ÷ 巻き付け半径» の積分で、1 回転＝1 巻 ---
@@ -2786,6 +2822,18 @@ function initMaterials(envMap) {
   MAT.envMap = envMap;
   // BoxGeometry のグループ順は +X, -X, +Y, -Y, +Z, -Z。+Y/-Y だけ鏡面にする。
   MAT.slabFaces = [MAT.slab, MAT.slab, MAT.slabMirror, MAT.slabMirror, MAT.slab, MAT.slab];
+  /**
+   * 材料の色は毎フレーム «材料温度» で更新される（World3D.render）。両面表示などの都合で
+   * 複製した材料は色オブジェクトも複製されるため、元だけを更新すると複製は構築時の色で
+   * 固まってしまう（コイルが板と違う色に見えていた原因）。複製はここに登録して一緒に更新する。
+   */
+  MAT.tint = { slab: [MAT.slab], mirror: [MAT.slabMirror] };
+  /** 両面表示の複製を作り、温度追従の対象として登録する。 */
+  MAT.doubleSided = (mat, kind) => {
+    const c = mat.clone(); c.side = THREE.DoubleSide;
+    MAT.tint[kind].push(c);
+    return c;
+  };
   /**
    * 実体マテリアルに対応する «透過版» を作って使い回す。断面表示の対象を増やしても
    * マテリアル定義を書き足さずに済み、シェーダプログラム数も増えない。
@@ -3445,7 +3493,38 @@ const Parts = {
     ]);
   },
 
-  /* --- 装入設備: 転倒装置 / 縦送りテーブル / 横送りローラ ------------------ */  /* --- 装入設備: 転倒装置 / 縦送りテーブル / 横送りローラ ------------------ */
+  /* --- ベルトラッパー（リールの巻き始め機構）----------------------------- */
+  /**
+   * ラッパーロール 1 本。面長はコイル幅で変わるので «単位長 1000 mm» で作り、
+   * View 側が scale.z で伸ばす。軸受はアーム側（wrapperArm の先端ボス）に持たせ、
+   * ロール自身は純粋な円筒にしておく（scale.z が軸受まで伸ばしてしまわない）。
+   */
+  wrapperRoll() { return G.cyl(CONFIG.COILER.WRAPPER.ROLL_D, 1000, 'z', 16); },
+  /** ラッパーアーム（片側）。支点が原点、単位長 1000 mm（+X）で作り scale.x で伸ばす。 */
+  wrapperArm() {
+    const W = CONFIG.COILER.WRAPPER;
+    return G.merge([
+      G.at(G.box(1000, 190, 150), 500, 0, 0),
+      G.cyl(300, 200, 'z', 12),                                  // 支点ボス
+      G.at(G.cyl(W.ROLL_D * 0.7, 190, 'z', 12), 1000, 0, 0),     // ロール軸受
+    ]);
+  },
+  /**
+   * ベルト。3 本のラッパーロールに掛かる無端ベルトのうち «コイルに沿う側» を、
+   * 半径 1・高さ 1 の開いた円筒殻として作る（View が半径と面長へスケールする）。
+   * 角度範囲は最初と最後のロールの間で固定なので、太るコイルには半径だけで追従できる。
+   */
+  wrapperBelt() {
+    const W = CONFIG.COILER.WRAPPER, d = Math.PI / 180;
+    const a0 = W.ANGLES[0] * d, a1 = W.ANGLES[W.ANGLES.length - 1] * d + 2 * Math.PI;
+    // CylinderGeometry の theta t は rotateX(π/2) 後に XY の極角 φ = t − π/2 へ写るので、
+    // 欲しい極角範囲 [a0, a1] を出すには thetaStart = a0 + π/2 とする。
+    const g = new THREE.CylinderGeometry(1, 1, 1, 96, 1, true, a0 + Math.PI / 2, a1 - a0);
+    g.rotateX(Math.PI / 2);                                      // 軸を Z へ（マンドレルと同じ）
+    return g;
+  },
+
+  /* --- 装入設備: 転倒装置 / 縦送りテーブル / 横送りローラ ------------------ */
   /**
    * 転倒装置(down-ender)の腕。縦置きインゴットを立ち上がり面で受け、90°倒して
    * 自身のローラベッドへ寝かせる。ベッド上面は倒した状態でパスラインと一致する。
@@ -4348,8 +4427,8 @@ class FinishView {
     this.mandrel.add(this.segments.mesh);
     // コイル本体（段付き）。板面はロール面のように鏡面、耳は鋳肌に近い質感で描き分ける
     this.coilGeo = new CoilGeometry(C.COIL_SEG);
-    const dbl = (m) => { const c = m.clone(); c.side = THREE.DoubleSide; return c; };
-    this.coil = new THREE.Mesh(this.coilGeo.geo, [dbl(MAT.slabMirror), dbl(MAT.slab)]);
+    this.coil = new THREE.Mesh(this.coilGeo.geo,
+      [MAT.doubleSided(MAT.slabMirror, 'mirror'), MAT.doubleSided(MAT.slab, 'slab')]);
     this.coil.name = 'コイル'; this.coil.position.y = u(this.mandrelY); this.coil.castShadow = true;
     this.coil.visible = false; this.coil.frustumCulled = false; this.coiler.add(this.coil);
     // コイル押え: サイドトリマー架構の梁から出したアームの先端の金属コロをコイル外周に当てる。
@@ -4364,6 +4443,23 @@ class FinishView {
     this.holdRoll.castShadow = true; this.coiler.add(this.holdRoll);
     this.holdCyl = new THREE.Mesh(Parts.holdDownCyl(), MAT.hydraulic); this.holdCyl.name = '押えシリンダ';
     this.holdCyl.castShadow = true; this.coiler.add(this.holdCyl);
+    // --- ベルトラッパー: 3 本のロールが揺動アームに載り、その外側を無端ベルトが回る ---
+    // マンドレルは板を掴まないので、巻き始めはこのベルトが先端をマンドレルへ押し付ける。
+    const WR = C.WRAPPER, rollGeo = Parts.wrapperRoll(), armGeo = Parts.wrapperArm();
+    this.wrapRolls = WR.ANGLES.map((deg) => {
+      const th = deg * Math.PI / 180;
+      const pivot = { x: WR.PIVOT_R * Math.cos(th), y: this.mandrelY + WR.PIVOT_R * Math.sin(th) };
+      const roll = new THREE.Mesh(rollGeo, MAT.rollFace); roll.name = 'ラッパーロール';
+      roll.castShadow = true; this.coiler.add(roll);
+      const arms = [-1, 1].map(() => { const m = new THREE.Mesh(armGeo, MAT.hydraulic);
+        m.name = 'ラッパーアーム'; m.castShadow = true; this.coiler.add(m); return m; });
+      return { th, pivot, roll, arms };
+    });
+    this.belt = new THREE.Mesh(Parts.wrapperBelt(), (() => {
+      const m = MAT.rod.clone(); m.side = THREE.DoubleSide; return m; })());
+    this.belt.name = 'ラッパーベルト'; this.belt.position.y = u(this.mandrelY);
+    this.belt.castShadow = true; this.belt.frustumCulled = false; this.coiler.add(this.belt);
+
     // 3ロール出側からコイルへの渡り板（板の入口 A からコイル外周の接点へ、接線方向に張る）
     this.bridge = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
     this.bridge.name = '渡り板'; this.bridge.visible = false; this.bridge.castShadow = true; scene.add(this.bridge);
@@ -4531,6 +4627,38 @@ class FinishView {
         this.holdCyl.position.set(u(q.x), u(q.y), 0);
         this.holdCyl.rotation.z = Math.atan2(ay - q.y, ax - q.x);
         this.holdCyl.scale.x = Math.hypot(ax - q.x, ay - q.y) / 1000;
+      }
+    }
+
+    // --- ベルトラッパー: ロールはアームの揺動で «コイル外周に接する半径» へ出入りする ---
+    {
+      const WR = C.WRAPPER, faceW = w + WR.BELT_MARGIN * 2;
+      const show = fin.wrap > 0.01, gap = Num.lerp(WR.OPEN_GAP, 0, fin.wrap);
+      this.belt.visible = show;
+      let rBeltMax = r0;
+      for (const wr of this.wrapRolls) {
+        // コイルは 1 周ごとに段が付くので、ロールごとに «その極角での実半径» に当てる
+        // （押えコロと同じ扱い。平均半径で当てると 1 板厚ぶん浮く）
+        const rCoil = wound ? Rolling.coilRadiusAt(wr.th, h, fin.turns, fin.entry, fin.windSign) : r0;
+        const rRoll = rCoil + WR.ROLL_D / 2 + gap;
+        rBeltMax = Math.max(rBeltMax, rRoll);
+        const cx = rRoll * Math.cos(wr.th), cy = this.mandrelY + rRoll * Math.sin(wr.th);
+        wr.roll.visible = show;
+        wr.roll.position.set(u(cx), u(cy), 0);
+        wr.roll.scale.z = faceW / 1000;
+        wr.roll.rotation.z = -fin.beltAngle * (2 * rCoil / WR.ROLL_D);
+        const dx = cx - wr.pivot.x, dy = cy - wr.pivot.y, L = Math.hypot(dx, dy);
+        wr.arms.forEach((m, i) => {
+          m.visible = show;
+          m.position.set(u(wr.pivot.x), u(wr.pivot.y), u((i ? 1 : -1) * (faceW / 2 + 120)));
+          m.rotation.z = Math.atan2(dy, dx);
+          m.scale.x = L / 1000;
+        });
+      }
+      // ベルトはロールの外周に掛かるので、いちばん外にあるロールの外接半径に合わせる
+      if (show) {
+        const rBelt = rBeltMax + WR.ROLL_D / 2 + WR.BELT_T / 2;
+        this.belt.scale.set(rBelt, rBelt, faceW);
       }
     }
 
@@ -5293,10 +5421,9 @@ class World3D {
     this.sprayView.update(dt, phys);
     // 熱間アルミは 400〜540 ℃ では可視発光しない。温度は色味と粗さの微差だけで表す。
     const t = Num.clamp((slab.temperature - 300) / 260, 0, 1);
-    MAT.slab.color.copy(World3D.COLD).lerp(World3D.HOT, t);
-    MAT.slab.roughness = 0.54 + 0.16 * t;
-    MAT.slabMirror.color.copy(World3D.COLD).lerp(World3D.HOT, t * 0.6);
-    MAT.slabMirror.roughness = 0.08 + 0.10 * t;
+    // 複製（コイルの両面表示など）も同じ色・粗さにする。元だけ更新すると複製が取り残される。
+    for (const m of MAT.tint.slab) { m.color.copy(World3D.COLD).lerp(World3D.HOT, t); m.roughness = 0.54 + 0.16 * t; }
+    for (const m of MAT.tint.mirror) { m.color.copy(World3D.COLD).lerp(World3D.HOT, t * 0.6); m.roughness = 0.08 + 0.10 * t; }
 
     this._tween(dt);
     this.controls.update();
