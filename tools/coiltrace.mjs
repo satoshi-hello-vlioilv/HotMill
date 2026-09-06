@@ -19,7 +19,7 @@ const out = await page.evaluate(() => {
   let expandedR = 0, collapsedR = 0;
   // --- ベルトラッパー / コイルカーの記録 ---
   const WR = C.WRAPPER;
-  let wrapAtGrip = null, wrapAfterHold = null, gapClosed = [];
+  let wrapAtGrip = null, wrapAfterHold = null, gapClosed = [], beltErr = [];
   const rollGaps = () => {                   // 閉じたときのロール面とコイル外周の隙間 [mm]
     const cy = K.MILL.PASS_LINE + C.Y_ABOVE, f = P.finish, s = P.slab;
     const h = s.inBite ? P.mill.gap : s.thickness;
@@ -69,7 +69,13 @@ const out = await page.evaluate(() => {
     // （ずらすと «そのフレームの巻き数» と «描かれている半径» が食い違って見える）
     if (n % 60 === 0) {
       if (wrapAtGrip === null && f.gripped) wrapAtGrip = f.wrap;
-      if (f.wrap >= 0.999 && f.gripped) gapClosed.push(...rollGaps());
+      if (f.wrap >= 0.999 && f.gripped) {
+        gapClosed.push(...rollGaps());
+        // ベルトの実寸（メッシュのスケール）をロールの外接半径と突き合わせる
+        const cy = K.MILL.PASS_LINE + C.Y_ABOVE;
+        const rMax = Math.max(...FV.wrapRolls.map(w => Math.hypot(w.roll.position.x / sc, w.roll.position.y / sc - cy)));
+        beltErr.push(Math.abs(FV.belt.scale.x / sc - (rMax + C.WRAPPER.ROLL_D / 2 + C.WRAPPER.BELT_T / 2)));
+      }
       if (wrapAfterHold === null && f.turns > WR.TURNS_HOLD + 1) wrapAfterHold = f.wrap;
     }
     return f.done;
@@ -92,6 +98,8 @@ const out = await page.evaluate(() => {
      wrapAtGrip !== null && wrapAtGrip >= 0.999, `巻き付き開始時の閉じ度 ${wrapAtGrip === null ? '—' : wrapAtGrip.toFixed(3)}`);
   ok('閉じたラッパーロールがコイル外周に接する', gapClosed.length > 0 && Math.max(...gapClosed.map(Math.abs)) < 3,
      `最大隙間 ${gapClosed.length ? Math.max(...gapClosed.map(Math.abs)).toFixed(1) : '—'} mm（${gapClosed.length} 標本）`);
+  ok('ベルトの半径がロール外周と一致する（単位系の取り違えが無い）',
+     beltErr.length > 0 && Math.max(...beltErr) < 3, `最大差 ${beltErr.length ? Math.max(...beltErr).toFixed(1) : '—'} mm`);
   ok(`${C.WRAPPER.TURNS_HOLD} 巻きした後にベルトが開く`, wrapAfterHold !== null && wrapAfterHold < 0.05,
      `${C.WRAPPER.TURNS_HOLD}+1 巻き時点の閉じ度 ${wrapAfterHold === null ? '—' : wrapAfterHold.toFixed(3)}`);
   ok('巻取中はマンドレルが拡張したまま（途中で縮んでコイルを落とさない）',

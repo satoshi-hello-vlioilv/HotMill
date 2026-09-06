@@ -3514,6 +3514,8 @@ const Parts = {
    * 半径 1・高さ 1 の開いた円筒殻として作る（View が半径と面長へスケールする）。
    * 角度範囲は最初と最後のロールの間で固定なので、太るコイルには半径だけで追従できる。
    */
+  /* 注意: この殻は «半径 1 シーン単位» で作る（G.cyl のように u() を通していない）。
+   * View は u(半径 mm) を scale に入れること。mm をそのまま scale に入れると 1/SCALE 倍に膨れる。 */
   wrapperBelt() {
     const W = CONFIG.COILER.WRAPPER, d = Math.PI / 180;
     const a0 = W.ANGLES[0] * d, a1 = W.ANGLES[W.ANGLES.length - 1] * d + 2 * Math.PI;
@@ -4658,7 +4660,7 @@ class FinishView {
       // ベルトはロールの外周に掛かるので、いちばん外にあるロールの外接半径に合わせる
       if (show) {
         const rBelt = rBeltMax + WR.ROLL_D / 2 + WR.BELT_T / 2;
-        this.belt.scale.set(rBelt, rBelt, faceW);
+        this.belt.scale.set(u(rBelt), u(rBelt), u(faceW));      // 単位円筒なので u() を通す
       }
     }
 
