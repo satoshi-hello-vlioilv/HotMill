@@ -100,6 +100,8 @@ canvas { display:block; }
   color:var(--ink-2); }
 #dlg-ver .rel .ttl { font-weight:700; font-size:12.5px; color:var(--ink-1); }
 #dlg-ver .rel .dt { margin-left:auto; font-size:10.5px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+#dlg-ver .rel .base { font-family:ui-monospace,Consolas,monospace; font-size:10px; color:var(--ink-3);
+  background:var(--s-2); border:1px solid var(--line-2); border-radius:var(--r-s); padding:1px 6px; }
 #dlg-ver .rel .cur { padding:1px 7px; border-radius:999px; font-size:9.5px; font-weight:800; letter-spacing:.06em;
   background:var(--accent-soft); color:var(--accent); border:1px solid #c5d9f2; }
 #dlg-ver .rel.is-cur .no { color:var(--accent); }
@@ -585,7 +587,7 @@ body.sb-collapsed #btn-expand { display:block; }
   <header>
     <div>
       <div class="ttl">版数と変更履歴</div>
-      <div class="sub">新しい版が上。各版のコミットには <code>v&lt;x.y.z&gt;</code> の git タグが付いています。</div>
+      <div class="sub">新しい版が上。<code>base</code> はその版の作業を始めたコミットで、<code>git log base..次の版の base</code> でその版の差分が読めます。</div>
     </div>
     <button id="btn-ver-close" type="button" title="閉じる（Esc）" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
   </header>
@@ -620,62 +622,63 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
  *      y  設備や機能の追加、図面の反映
  *      z  不具合修正・数値の調整だけの更新
  *
- *    各版のコミットには git tag `v<x.y.z>` を打ってある。
- *      git show v1.0.0            … その版で何を変えたか
- *      git log  v0.8.0..v1.0.0    … その版に入ったコミット
- *    したがって «画面のバッジ → 版数 → タグ → 実装» が一本で辿れる。
+ *    base は «その版の作業を始めたコミット»（＝1 つ前の版の最後のコミット）。
+ *    書く時点で必ず分かる値なので、あとから前の版へ書き足す必要がない。
+ *      git log 0704131..33b11db   … VER.0.8.0 に入ったコミット（base..次の版の base）
+ *      git log 33b11db..HEAD      … 最新の版に入ったコミット
+ *    したがって «画面のバッジ → 版数 → base → 実装» が一本で辿れる。
  *
  *    items の w は «どこで実装したか»（主な関数・データの名前）。
  * ========================================================================== */
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
-    { v: '1.0.0', date: '2026-09-06', title: '版数と変更履歴の表示を導入', items: [
+    { v: '1.0.0', base: '33b11db', date: '2026-09-06', title: '版数と変更履歴の表示を導入', items: [
       { t: '版数バッジをサイドバーの製品名の横に置き、押すと変更履歴が開く', w: 'VERSION / UIManager._version' },
       { t: '版数・日付・履歴をコードの 1 か所に集約し、画面と評価器が同じものを見る', w: 'VERSION.LOG' },
-      { t: '各版のコミットに git tag `v<x.y.z>` を打ち、版数から実装を辿れるようにした', w: 'git tag' },
+      { t: '各版に base（作業を始めたコミット）を持たせ、版数から実装の差分を辿れるようにした', w: 'VERSION.LOG[].base' },
     ] },
-    { v: '0.8.0', date: '2026-09-06', title: 'ロールとチョックを図面（チョックをはめた状態）どおりに', items: [
+    { v: '0.8.0', base: '0704131', date: '2026-09-06', title: 'ロールとチョックを図面（チョックをはめた状態）どおりに', items: [
       { t: 'ロールの首を段付きへ。駆動側ワークロールの軸端は二又（フォーク）', w: 'Parts.roll / Parts.rollFork' },
       { t: 'スピンドルのロール側に平頭（スペードブレード）を追加', w: 'Parts.spindleHead / DriveView.heads' },
       { t: 'チョックにキーパー板・軸受カバー・給油ブロック・摺動ライナ・受け座', w: 'Parts.chock' },
       { t: 'ロール組立ての評価器を新設（11 項目）', w: 'tools/rolltrace.mjs' },
     ] },
-    { v: '0.7.0', date: '2026-09-06', title: 'クロップ屑の払い出しを OS 一本化、E テーブル追加', items: [
+    { v: '0.7.0', base: '98d8a0c', date: '2026-09-06', title: 'クロップ屑の払い出しを OS 一本化、E テーブル追加', items: [
       { t: '刃の入側・出側の屑をライン下の 1 本の傾斜コンベアで操作側へ抜く', w: 'Scrap / Parts.scrapConveyorFrame' },
       { t: 'E-1 / E-2 テーブル（Φ380 × 857L を OS/DS 分割）を追加', w: 'CONFIG.TABLE.EROLL / Parts.eTableRoll' },
       { t: 'テーブル区分の記号バッジを ON/OFF できるようにした', w: 'LabelView.zoneItems' },
       { t: '先端ワニ口が反りと逆へ折れる描画の誤りを修正（実測 254 mm）', w: 'SlabView.update / _curlLift' },
       { t: 'コイルカーの V スキッドの向きと芯高さの式を修正', w: 'Cradle.centerY' },
     ] },
-    { v: '0.6.0', date: '2026-09-06', title: 'ベルトラッパー・コイルカー・トロリ・後端クロップ', items: [
+    { v: '0.6.0', base: '1a4fad2', date: '2026-09-06', title: 'ベルトラッパー・コイルカー・トロリ・後端クロップ', items: [
       { t: 'ベルトラッパーで巻き始め、巻取中のコイルの色を板の温度に追従させた', w: 'CoilerView' },
       { t: '巻き終えたコイルをコイルカーで受けて操作側へ抜き取る', w: 'Parts.coilCar' },
       { t: '75 mm シャーで後端もカットし、端材をライン下のピットへ落とす', w: 'FinishView / Scrap' },
       { t: 'トランスファークレーンのトロリを平面図どおりのクラブトロリへ', w: 'Parts.craneTrolley' },
     ] },
-    { v: '0.5.0', date: '2026-09-06', title: '装入の送りをローラ化、トングを図面どおりの挟み込み式へ', items: [
+    { v: '0.5.0', base: '4f8e3de', date: '2026-09-06', title: '装入の送りをローラ化、トングを図面どおりの挟み込み式へ', items: [
       { t: 'プッシャを廃止し、転倒機ベッドと受取テーブルをテーブルローラに', w: 'CONFIG.SUPPLY.ROLLER' },
       { t: 'トングをマスト＋受け梁＋2 本のアームの挟み込み式へ作り直した', w: 'Parts.tong / tools/tongtrace.mjs' },
       { t: 'クーラント冷却をライデンフロスト込みで作り直した', w: 'PhysicsEngine' },
     ] },
-    { v: '0.4.0', date: '2026-09-05', title: '装入をトランスファークレーン方式へ、図面のテーブル区分', items: [
+    { v: '0.4.0', base: '3a5de30', date: '2026-09-05', title: '装入をトランスファークレーン方式へ、図面のテーブル区分', items: [
       { t: '図面の「各テーブルローラ本数」を転記し、区分ごとに配置する形へ', w: 'CONFIG.TABLE.SECTIONS / Layout' },
       { t: '30 mm シャーとパイラーを追加し、板材を定尺に切り分けて積む', w: 'FinishView' },
       { t: 'トランスファークレーンを専用の低いフレームで独立させた', w: 'CONFIG.TRANSFER.FRAME' },
       { t: 'メニューを作業の流れ順に並べ替え、視点・断面をツールバーへ', w: 'UIManager' },
     ] },
-    { v: '0.3.0', date: '2026-09-05', title: '物理的原理原則に基づく全面改良', items: [
+    { v: '0.3.0', base: '4780e1d', date: '2026-09-05', title: '物理的原理原則に基づく全面改良', items: [
       { t: '段付きコイル、下台上昇式の 75 mm シャー、材質・温度分布・反り', w: 'CoilGeometry / Rolling' },
       { t: '主機の駆動包絡線（直流の定トルク／定出力）と過負荷停止', w: 'PhysicsEngine' },
       { t: '静的構造の全数検査を導入（接地・開口上の浮き・食い込み）', w: 'tools/structure.mjs' },
     ] },
-    { v: '0.2.0', date: '2026-09-04', title: '実機諸元の反映と出側仕上げ設備', items: [
+    { v: '0.2.0', base: '92eb3d1', date: '2026-09-04', title: '実機諸元の反映と出側仕上げ設備', items: [
       { t: 'サイドトリマー・スリーロール・巻取リール・75 mm シャーを追加', w: 'FinishView' },
       { t: '入側／出側の左右反転とピット炉からの装入を再現', w: 'CONFIG.FLIP / SupplyView' },
       { t: '断面表示（実体・半断面・透視）と板と設備の干渉検査', w: 'G.sided / tools/interfere.mjs' },
     ] },
-    { v: '0.1.0', date: '2026-09-03', title: '初版（3D モデルとアプリの骨格）', items: [
+    { v: '0.1.0', base: '2310d83', date: '2026-09-03', title: '初版（3D モデルとアプリの骨格）', items: [
       { t: '4 段可逆圧延機・テーブル・パススケジュール・計器の骨格', w: 'App' },
     ] },
   ],
@@ -6243,6 +6246,7 @@ class UIManager {
           ${i === 0 ? '<span class="cur">現在</span>' : ''}
           <span class="ttl">${r.title}</span>
           <span class="dt">${r.date}</span>
+          <span class="base" title="この版の作業を始めたコミット（git log ${r.base}..${VERSION.LOG[i - 1]?.base ?? 'HEAD'}）">${r.base}</span>
         </div>
         <ul>${r.items.map(q => `<li><span>${q.t}</span>${q.w ? `<span class="w">${q.w}</span>` : ''}</li>`).join('')}</ul>
       </div>`).join('');

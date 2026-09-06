@@ -625,6 +625,11 @@ const run = async () => {
          V.LOG.every((r, i) => i === 0 || (cmp(V.LOG[i - 1].v, r.v) > 0 && V.LOG[i - 1].date >= r.date)),
          V.LOG.map(r => r.v).join(' > '));
       ok('版数の重複が無い', new Set(V.LOG.map(r => r.v)).size === V.LOG.length, `${V.LOG.length} 版`);
+      // base は «その版の作業を始めたコミット»。全版が持ち、重複しなければ
+      // «base..次の版の base» がその版の差分になる（範囲が抜けたり重なったりしない）
+      ok('全ての版が base（作業を始めたコミット）を持ち、重複しない',
+         V.LOG.every(r => /^[0-9a-f]{7,40}$/.test(r.base || '')) && new Set(V.LOG.map(r => r.base)).size === V.LOG.length,
+         V.LOG.map(r => r.base).join(' < '));
       ok('全ての版に日付・表題・変更点がある',
          V.LOG.every(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.title && r.items?.length),
          `変更点 ${V.LOG.reduce((a, r) => a + r.items.length, 0)} 件`);
