@@ -6141,10 +6141,14 @@ class UIManager {
       else if (p.finish.winding) { cls = 'is-run'; ic = 'fa-arrows-spin'; st = 'コイル巻取中';
         hint = `外径 Φ${p.finish.od.toFixed(0)} mm ／ ${(p.finish.coilMass / 1000).toFixed(1)} t ／ 張力 ${(p.finish.tensionKg / 1000).toFixed(1)} t`; }
       else if (p.finish.cropStage !== 'IDLE' && p.finish.cropStage !== 'DONE') {
-        const f = p.finish; cls = 'is-run'; ic = 'fa-scissors'; st = `75 mm シャー 端部切断 ${Math.min(f.cropIndex + 1, f.cropCuts)}/${f.cropCuts}`;
-        hint = { STOP: '先端を刃の手前で減速・停止', ALIGN: `先端を刃から ${f.cropEach} mm 先へ位置決め`, CUT: '下台が上昇し、固定上刃で剪断',
-                 RETURN: '下台が下降', EJECT: '端材をプッシャでコンベアへ押し出し', RETRACT: 'プッシャが待機位置へ戻る' }[f.cropStage] ?? '';
-        hint += ` ／ 端材はコンベアでパレットへ（${f.scrapRest} 個積載）`;
+        const f = p.finish, en = f.cropEnd === Num.sign0(CONFIG.FLIP) ? '先端' : '後端';
+        cls = 'is-run'; ic = 'fa-scissors'; st = `75 mm シャー ${en}切断 ${Math.min(f.cropIndex + 1, f.cropCuts)}/${f.cropCuts}`;
+        hint = { STOP: `${en}を刃の手前で減速・停止`, ALIGN: `${en}を刃から ${f.cropEach} mm の位置へ位置決め`, CUT: '下台が上昇し、固定上刃で剪断',
+                 RETURN: '下台が下降', EJECT: '端材をプッシャでコンベアへ押し出し', RETRACT: 'プッシャが待機位置へ戻る',
+                 BEDDOWN: '後端の端材を下台ごと降ろす', BEDUP: '下台がパスラインへ戻る' }[f.cropStage] ?? '';
+        // 端材の行き先は端で違う（先端＝出側エプロン → コンベア → パレット、後端＝下台の真下の受け箱）
+        hint += f.cropSide > 0 ? ` ／ 端材はコンベアでパレットへ（${f.scrapRest - f.tailRest} 個積載）`
+                               : ` ／ 端材は下台の真下の受け箱へ（${f.tailRest} 個積載）`;
       }
       else if (p.finish.plateStage === 'DIVIDE') {
         const f = p.finish, PL = CONFIG.PILER; cls = 'is-run'; ic = 'fa-layer-group';
