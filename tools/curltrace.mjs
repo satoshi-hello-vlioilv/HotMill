@@ -14,12 +14,23 @@ const out = await page.evaluate(({ alloy, target }) => {
     window.__startAuto(false);
     const rows = [], checks = [], ok = (n, c, d) => checks.push({ name: n, pass: !!c, detail: d });
     let last = -2, maxAsym = 0, drawnMax = 0, analyticMax = 0, wasRolling = false;
+    // 未圧延側（尾端）の反りがパス中に変わっていないか。ワークロールに触れていない部分は
+    // 曲率も «自分の板厚から決まる浮き上がり長» も変わってはいけない。
+    const tailProbe = [];
     window.__ff((p, n) => {
       const s = p.slab;
       if (n % 24 === 0 && s.onLine) {
         maxAsym = Math.max(maxAsym, s.tBot - s.tTop);
         if (s.rollingActive && n % 240 === 0) {
           W.render(P, 2);
+          // 尾端（ロールをまだ通っていない側）の反りパラメータを描画側から取り出す
+          const cp = W.slabView._curlParams(s, p.mill, s.xMin, s.xMax, false);
+          const tail = cp.ends.find(e => !e.head);
+          if (tail) {
+            const want = R.curlSpan(tail.kappa, s.thickness, s.width, s.alloy);   // 入側厚（未圧延）で計算
+            tailProbe.push({ pass: p.mill.passIndex, k: tail.kappa, ell: tail.ell,
+                             wantEll: Math.min(want.liftOff, Math.abs(tail.xe)) });
+          }
           const pos = W.slabView.mesh.geometry.attributes.position; let my = -1e9;
           for (let i = 0; i < pos.count; i++) my = Math.max(my, pos.getY(i));
           const lift = my / sc - (K.MILL.PASS_LINE + p.mill.gap);
@@ -37,7 +48,31 @@ const out = await page.evaluate(({ alloy, target }) => {
     }, 120 * 2500, 0);
     const s = P.slab;
     ok('上面が下面より冷える（クーラントの流れ落ち）', maxAsym > 0.5, `最大上下差 ${maxAsym.toFixed(1)} ℃`);
-    ok('反りは上反り（冷えた上面が硬く、上へ曲がる）', rows.every(r => r.k > 0), rows.map(r => r.k).join(', '));
+    // 薄板の最終パスでは上下差がほぼ消え、テーブルローラ接触で下面がわずかに強く冷えて
+    // 符号が反転しうる。曲率半径 1 km を超えていれば実質平坦なので «下反り» とは呼ばない。
+    ok('反りは上反り（下反りが出ても曲率半径 1 km 超＝実質平坦）',
+       rows.every(r => r.k > 0 || Math.abs(1 / r.k) / 1000 > 1000), rows.map(r => `${r.k}(R=${r.R_m}m)`).join(', '));
+    // 指摘(2): ワークロールに接していない部分の反りを変えない
+    {
+      const bad = tailProbe.filter(t => Math.abs(t.ell - t.wantEll) > Math.max(5, 0.02 * t.wantEll));
+      ok('未圧延側（尾端）の反りが «入側厚» のまま扱われている（圧延した瞬間に減らない）',
+         tailProbe.length > 0 && bad.length === 0,
+         `標本 ${tailProbe.length} 件 / 不一致 ${bad.length} 件` + (bad[0] ? ` 例: ell ${bad[0].ell.toFixed(0)} ≠ ${bad[0].wantEll.toFixed(0)}` : ''));
+      const byPass = new Map();
+      for (const t of tailProbe) { const v = byPass.get(t.pass) ?? []; v.push(t.k); byPass.set(t.pass, v); }
+      const drift = [...byPass.values()].map(v => Math.max(...v) - Math.min(...v));
+      ok('パス中、未圧延側の曲率が変化しない', drift.every(d => d < 1e-12), `パス内の最大変動 ${Math.max(...drift, 0).toExponential(1)} 1/mm`);
+    }
+    // 指摘(1): 板面は膜沸騰（ライデンフロスト）域にあり、熱の受け手は蒸気膜の飽和温度
+    {
+      const CO = K.MATERIAL.COOLANT, hot = P.constructor.boiling(450), cold = P.constructor.boiling(60);
+      ok('400 ℃ 級の板面は膜沸騰（熱伝達率が核沸騰の 1/10 以下）', hot.h <= CO.H_NB / 10 && hot.h === CO.H_FILM,
+         `450 ℃: ${hot.h} W/m²K ／ 60 ℃: ${cold.h} W/m²K`);
+      ok('膜沸騰では熱の受け手が液温でなく蒸気膜の飽和温度', Math.abs(hot.T - CO.T_SAT) < 1 && Math.abs(cold.T - CO.T_BULK) < 1,
+         `450 ℃ → ${hot.T.toFixed(0)} ℃（液温 ${CO.T_BULK} ℃ ではなく飽和 ${CO.T_SAT} ℃）`);
+      ok('下面はクーラントに直接濡れず、上面より濡れ面積が小さい', CO.WET_BOT < CO.WET_TOP,
+         `上面 ${CO.WET_TOP} / 下面 ${CO.WET_BOT}（濡れたテーブルローラの跡だけ）`);
+    }
     ok('先端の浮き上がりが現実的（厚板で 50〜1500 mm）', rows.some(r => r.th > 20 && r.tip_mm >= 50 && r.tip_mm <= 1500), `最大 ${Math.max(...rows.map(r => r.tip_mm))} mm`);
     ok('描画の持ち上がりが現実的（1.5 m 以内、片持ちの立ち上がりを含む）', drawnMax <= 1500, `描画最大 ${drawnMax.toFixed(0)} mm ／ 着地後のスキー最大 ${analyticMax.toFixed(0)} mm`);
     ok('圧延が完走した', P.finish.done, `done=${P.finish.done}`);

@@ -965,15 +965,38 @@ const CONFIG = {
     EMISSIVITY: 0.18, H_AIR: 8, H_ROLL: 30000,
     T_ROLL: 80, T_AMBIENT: 30,
     // 板厚方向の温度分布。板を LAYERS 層に分けて 1 次元の熱伝導を陰解法で解く。
-    // クーラント（水主体のエマルジョン）はロール面へ噴射されるが、上ロールから板の上面へ
-    // 流れ落ちるぶんが板を直接冷やす。下面は流れ落ちないので効きが弱い（上面が冷えやすい）。
-    // 400 ℃ 級の面では膜沸騰（ライデンフロスト）になるので熱伝達率は 1 kW/m²K 未満に留まる。
-    // 冷却域はミル前後 COOL_ZONE で、板が通過する時間だけ効く。
-    LAYERS: 9, H_COOL_TOP: 800, H_COOL_BOT: 250, T_COOL: 40, COOL_ZONE: 2400,
-    // 板面クーラント（サイドガイド上のヘッダ）。板の上面へ直接噴射するので膜沸騰域でも
-    // ロールからの流れ落ちより強い。冷却域はヘッダごとに TABLE.GUIDE.HEADER.ZONE、
-    // 板がその下を通過している割合だけ効く。ENABLED は表示メニューのトグルと連動する。
-    GUIDE_COOL: { H_TOP: 700, ENABLED: true },
+    LAYERS: 9,
+    /* クーラント（水主体のエマルジョン、液温 20〜50 ℃）。
+     *
+     * 板面は 300〜600 ℃ で、水系のライデンフロスト点（概ね 200 ℃ 前後）を大きく超える。
+     * つまり液は面に触れられず、蒸気膜を挟んだ «膜沸騰» になる。ここで効くのは 2 つ:
+     *   ・熱伝達率が核沸騰の 1/20 以下（数百 W/m²K）まで落ちる
+     *   ・熱の受け手は液のバルク温度ではなく «蒸気膜の飽和温度»（≒105 ℃）になる
+     * どちらも熱移動量を大きく下げる向きなので、«液温 40 ℃ との差 × 800 W/m²K» と
+     * していた旧版は抜熱を過大に見ていた（その結果、上下面の温度差＝反りも過大だった）。
+     *
+     * 濡れ方も面ごとに違う。上ロールから流れ落ちる液は上面をほぼ全面覆い、側面（板厚の
+     * 面）も濡れる。下面には液が回り込まず、«濡れたテーブルローラが下面に残す跡» だけが
+     * 濡れる（WET_BOT）。側面は幅方向に一様な体積損失として全層へ入れる ——
+     * 上下差を作らないので、平均温度は下げるが反りは増やさない。 */
+    COOLANT: {
+      T_BULK: 35, T_SAT: 105,        // 液温（20〜50 ℃ の中央）／ 蒸気膜の温度
+      T_NB: 130, T_LEID: 220,        // 核沸騰の上限 ／ ライデンフロスト点（これ以上は膜沸騰）
+      // 膜沸騰でも «噴射» は静止プールより効く（液滴が蒸気膜を部分的に突き破る）ので、
+      // プール膜沸騰の 100〜300 ではなく噴流冷却の実測域 500〜2,000 の下寄りを採る。
+      H_NB: 12000, H_FILM: 700,      // 核沸騰 ／ 膜沸騰の熱伝達率 [W/m²K]
+      ZONE: 2400,                    // ミル前後の噴射域。板がここを通る時間だけ効く
+      WET_TOP: 1.0, WET_BOT: 0.18, WET_SIDE: 1.0,   // 各面の濡れ面積割合
+      GUIDE_TOP: 1.0, ENABLED: true, // 板面クーラント（ガイド上ヘッダ）。ENABLED は表示メニュー連動
+    },
+    /* テーブルローラとの接触による下面の抜熱。
+     * ローラは胴端 Φ281.6 → 中央 Φ219.6 の «鼓の逆» 形なので、平らな板は自分の板幅の位置で
+     * ローラの太い側に載る（自動調心）。つまり接触は板の «両エッジ寄りの 2 本の線» で、
+     * 幅中央は浮いている。ワークロールのように両面を均一に抱くのとは違い、下面だけに、
+     * しかも局所的に効く。見かけの熱伝達率は接触面積の割合で薄めて与える。 */
+    // BAND / ARC は接触線の «濡れて熱が抜ける» 幅と長さ。ヘルツ接触幅そのもの（数 mm）より
+    // 広く、しかし面全体からは程遠い。T はローラ表面温度（クーラントで濡れている）。
+    TABLE_TOUCH: { H: 14000, BAND: 40, ARC: 18, PITCH: 640, T: 90 },
     CHILL_DEPTH_K: 2.0,                                // ロール抜熱の浸透深さ ＝ K·√(α·接触時間)
     // 温度下限は工程と材質で変わる: 圧延中は熱間域下限 − 30 ℃、巻取中は巻取温度 − 30 ℃
     T_MARGIN: 30,
@@ -1375,9 +1398,9 @@ const Rolling = {
    * 1パスでの材料平均温度の変化 [K]（加工発熱 − ロール抜熱 − クーラント冷却 − 表面放熱）。
    * スケジュール生成用の集中定数モデル。運転時は板厚方向の層モデルで同じ要素を解く。
    */
-  passTempChange(hIn, hOut, speedMpm, T, passTime = 30, alloy = Rolling.alloy()) {
-    const M = CONFIG.MATERIAL, rc = alloy.RHO * alloy.CP;
-    const r = Rolling.solve(hIn, hOut, 1000, speedMpm, T, 0, alloy);
+  passTempChange(hIn, hOut, speedMpm, T, passTime = 30, alloy = Rolling.alloy(), width = CONFIG.SLAB.WID_DEFAULT) {
+    const M = CONFIG.MATERIAL, CO = M.COOLANT, TT = M.TABLE_TOUCH, rc = alloy.RHO * alloy.CP;
+    const r = Rolling.solve(hIn, hOut, width, speedMpm, T, 0, alloy);
     const v = Math.max(Math.abs(speedMpm) / 60 * 1000, 1);          // mm/s
     const tc = r.Ld / v;
     const x = 2 * M.H_ROLL * tc / (rc * (hOut / 1000));
@@ -1385,15 +1408,22 @@ const Rolling = {
     // パス中の板は入側厚の部分と出側厚の部分が混在する。表面からの放熱に効く実効板厚は
     // 体積 ÷ 平均長さ ＝ 2·hOut/(1 + hOut/hIn)（運転時の hEff と同じ考え方）
     const hEff = 2 * hOut / (1 + hOut / hIn) / 1000;
-    // クーラント: 冷却域 COOL_ZONE を通過する時間だけ上下面に効く（上面が強い）。
-    // 板面クーラント（サイドガイド上のヘッダ 4 本）は上面だけに、その冷却域の通過時間だけ効く
-    const gz = M.GUIDE_COOL.ENABLED ? 4 * CONFIG.TABLE.GUIDE.HEADER.ZONE : 0;
-    const cool = ((M.H_COOL_TOP + M.H_COOL_BOT) * M.COOL_ZONE + M.GUIDE_COOL.H_TOP * gz) * (T - M.T_COOL) / v / (rc * hEff);
+    // クーラント: 噴射域 COOLANT.ZONE を通過する時間だけ効く。板面は膜沸騰域なので、
+    // 熱伝達率も «熱の受け手温度» も PhysicsEngine.boiling() から取る（運転時と同じ前提）。
+    // 濡れ面積は面ごとに違い、側面は板厚 / 板幅の比で上下面と同じ «面» 換算にする。
+    const bo = PhysicsEngine.boiling(T);
+    const gz = CO.ENABLED ? 4 * CONFIG.TABLE.GUIDE.HEADER.ZONE : 0;
+    const wet = (CO.WET_TOP + CO.WET_BOT) * CO.ZONE + CO.GUIDE_TOP * gz
+              + CO.WET_SIDE * CO.ZONE * 2 * hEff * 1000 / width;      // 側面（幅方向に一様）
+    const cool = bo.h * wet * (T - bo.T) / v / (rc * hEff);
+    // テーブルローラとの接触（下面のみ、両エッジ寄りの 2 本の線）。パス中ずっと効く。
+    const touch = TT.H * Math.min(1, 2 * TT.BAND / width) * Math.min(1, TT.ARC / TT.PITCH)
+                * (T - TT.T) * passTime / (rc * hEff);
     // パス時間 ≒ 材長 / 速度。板厚が薄いほど表面放熱で冷えやすい。
     const Tk = T + 273.15, Ak = M.T_AMBIENT + 273.15;
     const q = M.EMISSIVITY * 5.67e-8 * (Tk ** 4 - Ak ** 4) + M.H_AIR * (T - M.T_AMBIENT);
     const surface = 2 * q * passTime / (rc * hEff);
-    return r.heat - chill - cool - surface;
+    return r.heat - chill - cool - touch - surface;
   },
 
   /**
@@ -1592,7 +1622,7 @@ class SlabState {
     // 板厚方向の層温度（上面 → 下面）。炉出しは均一
     this.T = new Float64Array(CONFIG.MATERIAL.LAYERS).fill(temp);
     this.inBite = false; this.rollingActive = false; this.onLine = false; this.biteOk = true;
-    this.cropped = false; this.croppedEnd = 0;      // どちら側の端を切ったか (+1: xMax 側 / −1: xMin 側)
+    this.cropped = { 1: false, '-1': false };       // 端ごとに «クロップ済みか»（+1: xMax 側 / −1: xMin 側）
     this.tailCut = 0;                                // 尾端側の切断面（30 mm / 75 mm シャーで切り分けた面）の有無
     this.rollForce = 0; this.rollTorque = 0; this.rollPower = 0; this.contactLength = 0;
     this.currentSpeed = 0; this.strainRate = 0; this.flowStress = 0;
@@ -1630,7 +1660,7 @@ class SlabState {
    * 描画（SlabView）と切断位置の計算（クロップシャー）がこの 1 か所を参照する。
    */
   overhangAt(end) {                                // end: +1 = xMax 側 / −1 = xMin 側
-    if (this.cropped && this.croppedEnd === end) return 0;
+    if (this.cropped[end]) return 0;
     const O = CONFIG.SLAB.OVERHANG, r = Num.clamp(this.reduction, 0, 1), al = this.alloy ?? Rolling.alloy();
     // 熱間域の下限に近いほど端は割れやすい（ワニ口が伸びる）。上限で ×1、下限で ×1.8
     const cold = Num.clamp((al.T_ROLL[1] - this.temperature) / (al.T_ROLL[1] - al.T_ROLL[0]), 0, 1);
@@ -1713,8 +1743,10 @@ class FinishState {
     this.trimmedWidth = 0;
     // 75 mm クロップシャーによる端部切断（上刃固定・下台上昇式、複数カット）
     this.cropStage = 'IDLE'; this.cropDone = false;
+    this.cropEnd = 0;                               // いま切っている端（+1: xMax 側 / −1: xMin 側）
+    this.cropEndsDone = { 1: false, '-1': false };  // 端ごとの完了
     this.cropBlade = 0;        // 下台の昇降 0:待機（上面＝パスライン） → 1:上死点
-    this.cropCuts = 0; this.cropIndex = 0; this.cropEach = 0; this.cropTotal = 0; this.cropNeed = 0;
+    this.cropCuts = 0; this.cropIndex = 0; this.cropCutsAll = 0;   // cropCutsAll: 先端＋後端の総カット数 this.cropEach = 0; this.cropTotal = 0; this.cropNeed = 0;
     this.cropPush = 0;         // プッシャ 0:待機 → 1:押し出し完了
     this.cropFace = CONFIG.CROP_SHEAR.EJECT.Z_HOME;   // プッシャ面の Z
     this.cropForceT = 0;       // その切断で要した剪断力 [tonf]
@@ -1843,7 +1875,9 @@ class MillController {
       if (Math.abs(m.gap - m.targetGap) < 0.5 && Math.abs(m.currentSpeed) < 1) m.passPhase = 'RUN';
     } else if (m.passPhase === 'RUN') {
       m.targetSpeed = sch.dir * Math.min(sch.speed, m.powerCap);
-      const cleared = sch.dir > 0 ? s.xMin > CONFIG.SAFE_CLEAR : s.xMax < -CONFIG.SAFE_CLEAR;
+      // 尻抜け後も «後端の切断が残っていれば» 送り続ける（そのまま板を送って後端を刃へ運ぶ）
+      const cleared = (sch.dir > 0 ? s.xMin > CONFIG.SAFE_CLEAR : s.xMax < -CONFIG.SAFE_CLEAR)
+                    && !(finish && finish.cropPending());
       if (cleared) { m.passPhase = 'CLEAR'; m.targetSpeed = 0; }
     } else if (m.passPhase === 'CLEAR') {
       m.targetSpeed = 0;
@@ -1901,7 +1935,16 @@ class FinishController {
   /** 材料の実際の先端（張り出しを含む）。切断位置の判定はこれで行う。 */
   _tip() { return this.slab.tipX(CONFIG.FLIP > 0 ? 1 : -1); }
   /** 先端をここまで進めたら止める位置（刃からこのカットの長さぶん先） */
-  _cropStopX() { const S = CONFIG.CROP_SHEAR; return S.X + CONFIG.FLIP * (this.s.cropEach || S.CUT_MIN); }
+  /** 切断待機位置: 切る端の «先» が刃から cropEach だけ出た（先端）／手前に残った（後端）位置。
+   *  end は切る端（+1: xMax 側 / −1: xMin 側）。端材は必ず刃と端の間なので、端の向きに置く。 */
+  _cropStopX(end) { const S = CONFIG.CROP_SHEAR; return S.X + end * (this.s.cropEach || S.CUT_MIN); }
+  /** 次に切るべき端。先端（進行方向側）が先、次に後端。両方切り終えたら 0。 */
+  _nextCropEnd() {
+    const s = this.s, head = Num.sign0(CONFIG.FLIP);
+    if (!s.cropEndsDone[head]) return head;
+    if (!s.cropEndsDone[-head]) return -head;
+    return 0;
+  }
   /** 下台の持ち上げ量 [mm]（cropBlade 0〜1 に対する実位置）。描画と物理でこの 1 式を使う。 */
   bedLift(b = this.s.cropBlade) { const S = CONFIG.CROP_SHEAR; return b * (S.UPPER_CLR + S.OVERTRAVEL); }
 
@@ -1922,21 +1965,59 @@ class FinishController {
   wantCrop() {
     const s = this.s, m = this.mill, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
     if (s.cropDone || s.cropStage !== 'IDLE') return false;
-    if (this._headThickness() > S.MAX_TH) return false;
-    if (F * Num.sign0(m.currentSpeed) <= 0) return false;             // 出側へ進んでいること
-    const v = Math.abs(m.currentSpeed) / 60 * 1000;                   // mm/s
+    const end = this._nextCropEnd();
+    if (end === 0) return false;
+    // 先端はまだ圧延中のことがあるのでロールギャップが実厚。後端が刃に来るのは圧延後なので板厚そのもの。
+    if (this._cropThickness(end) > S.MAX_TH) return false;
+    const feed = this._feedMpm();
+    if (F * Num.sign0(feed) <= 0) return false;                       // 出側へ進んでいること
+    const v = Math.abs(feed) / 60 * 1000;                             // mm/s
     const brake = v * v / (2 * CONFIG.PROCESS.ACCEL / 60 * 1000);     // 減速に要る距離
-    return F * (this._tip() - this._cropStopX()) > -brake;
+    return F * (this.slab.tipX(end) - this._cropStopX(end)) > -brake;
+  }
+  /**
+   * 出側へ送っている実効速度 [mpm]。先端は «圧延の通板中» に刃へ来るのでミル速度だが、
+   * 後端が刃へ来るのは全パスが終わったあとの走行（巻取の引き込み・板材の放出）なので、
+   * そのときはテーブル搬送の速度で見ないと «進んでいない» と誤判定する。
+   */
+  _feedMpm() {
+    const s = this.s;
+    if (s.winding) return CONFIG.FLIP * CONFIG.COILER.ROLL_SPEED_MAX;
+    if (s.plateStage === 'RUNOUT' || s.plateStage === 'DIVIDE') return CONFIG.FLIP * CONFIG.PILER.SPEED;
+    return this.mill.currentSpeed;
+  }
+  /** 切る端の板厚。先端は噛み込み中なら圧延済み（ロールギャップ）、後端はパス後なので板厚。 */
+  _cropThickness(end) { return end === Num.sign0(CONFIG.FLIP) ? this._headThickness() : this.slab.thickness; }
+  /**
+   * 先端を切り終えたが後端がまだ、という状態か。true の間はパスを終わらせずに
+   * «そのまま板を送って» 後端を刃まで運ぶ。
+   *
+   * 巻取リール（ミルから 8.4 m）は 75 mm シャー（30.6 m）より手前にあるので、最終パスで
+   * 巻き始めてしまうと後端は刃へ届かない（先にコイルへ入ってしまう）。したがって後端は
+   * «先端を切ったのと同じ通板の続き» で切る必要がある。送り切れるだけの出側テーブルが
+   * 残っていないときは諦めてパスを終える（無理に送ると板が線路の外へ出る）。
+   */
+  cropPending() {
+    const s = this.s, sl = this.slab, F = CONFIG.FLIP, head = Num.sign0(F), tail = -head;
+    if (s.cropDone || !s.cropEndsDone[head] || s.cropEndsDone[tail]) return false;
+    if (this._cropThickness(tail) > CONFIG.CROP_SHEAR.MAX_TH) return false;
+    const need = F * (this._cropStopX(tail) - sl.tipX(tail));          // 後端を刃へ運ぶのに要る送り
+    const end = F > 0 ? CONFIG.TABLE.X_MAX : CONFIG.TABLE.X_MIN;       // 出側テーブルの末端
+    const room = F * (end - sl.tipX(head));                            // 先端が走れる残り
+    return need > 0 && need < room;
   }
   beginCrop() {
-    const s = this.s, sl = this.slab, F = CONFIG.FLIP;
-    // 切り落とす量は先端の欠陥長（ワニ口・ラウンド）から計画する。1 カット 300〜500 mm
-    const plan = Rolling.cropPlan(sl.overhangAt(F > 0 ? 1 : -1));
+    const s = this.s, sl = this.slab, end = this._nextCropEnd();
+    s.cropEnd = end;
+    // 切り落とす量はその端の欠陥長（ワニ口・ラウンド）から計画する。1 カット 300〜500 mm
+    const plan = Rolling.cropPlan(sl.overhangAt(end));
     s.cropCuts = plan.n; s.cropEach = plan.each; s.cropTotal = plan.total; s.cropNeed = plan.need; s.cropIndex = 0;
     s.cropStage = 'STOP';
     this.bus.emit('SYS_MESSAGE', {
-      text: `75 mm シャー: 先端の欠陥 ${plan.need.toFixed(0)} mm を ${plan.n} カット × ${plan.each} mm で切り落とします（板厚 ${this._headThickness().toFixed(0)} mm）`, kind: 'info' });
+      text: `75 mm シャー: ${this._cropEndName(end)}の欠陥 ${plan.need.toFixed(0)} mm を ${plan.n} カット × ${plan.each} mm で切り落とします`
+          + `（板厚 ${this._cropThickness(end).toFixed(0)} mm）`, kind: 'info' });
   }
+  _cropEndName(end) { return end === Num.sign0(CONFIG.FLIP) ? '先端' : '後端'; }
 
   /**
    * 端部切断（上刃固定・下台上昇式）。実機の順序どおりに進める。
@@ -1956,10 +2037,12 @@ class FinishController {
 
       // 行き過ぎ／不足を低速で詰める。先端が刃からこのカット長の位置に来るまで。
       case 'ALIGN': {
-        const err = F * (this._tip() - this._cropStopX());          // + なら行き過ぎ
-        // 戻し過ぎて尾端をロールへ押し戻さない。戻せないときはその場で切る
-        // （端材が規定より長くなるだけで、切断位置は必ず刃の位置になる）
-        const backOk = err <= 0 || F * this._tail() < -CONFIG.SAFE_CLEAR - err;
+        const err = F * (this.slab.tipX(s.cropEnd) - this._cropStopX(s.cropEnd));   // + なら行き過ぎ
+        // 戻し過ぎて材料をロールへ押し戻さない。上流端がロールの手前にあるうちは «さらに離れる»
+        // ので戻せる。すでにロールを出ているなら、戻した後もバイトから離れていれば戻せる。
+        // 戻せないときはその場で切る（端材が規定より長くなるだけで、切断位置は必ず刃の位置）。
+        const tf = F * this._tail();
+        const backOk = err <= 0 || tf < -CONFIG.SAFE_CLEAR - err || tf - err > CONFIG.SAFE_CLEAR;
         if (Math.abs(err) < 5 || (err > 0 && !backOk)) {
           m.targetSpeed = 0; m.currentSpeed = 0; s.cropStage = 'CUT';
         } else {
@@ -1971,10 +2054,10 @@ class FinishController {
       // 下台が上昇。板の上面が上刃に当たり、板厚の半分まで食い込んだところで割れて切り離される。
       case 'CUT': {
         m.targetSpeed = 0; m.currentSpeed = 0;
-        const before = s.cropBlade, th = this._headThickness();
+        const before = s.cropBlade, th = this._cropThickness(s.cropEnd);
         s.cropBlade = Math.min(1, s.cropBlade + dt / S.T_CUT);
         const through = (b) => this.bedLift(b) >= S.UPPER_CLR - th * 0.5;
-        if (!through(before) && through(s.cropBlade)) this._severHead();
+        if (!through(before) && through(s.cropBlade)) this._sever(s.cropEnd);
         if (s.cropBlade >= 1) s.cropStage = 'RETURN';
         break;
       }
@@ -2007,8 +2090,16 @@ class FinishController {
           s.cropIndex++;
           if (s.cropIndex < s.cropCuts) s.cropStage = 'ALIGN';       // 次のカットへ（板を送って再度切る）
           else {
-            s.cropStage = 'DONE'; s.cropDone = true;
-            this.bus.emit('SYS_MESSAGE', { text: `75 mm シャー: 端部切断完了（${s.cropCuts} カット・計 ${s.cropTotal} mm）`, kind: 'info' });
+            const name = this._cropEndName(s.cropEnd);
+            s.cropEndsDone[s.cropEnd] = true;
+            // 先端を切り終えたら «そのまま板を送って» 後端が刃に来るのを待つ。IDLE に戻すと
+            // wantCrop() が後端についても同じ判定をするので、工程は 1 本の流れのまま。
+            const next = this._nextCropEnd();
+            s.cropStage = next === 0 ? 'DONE' : 'IDLE';
+            if (next === 0) s.cropDone = true;
+            this.bus.emit('SYS_MESSAGE', {
+              text: `75 mm シャー: ${name}切断完了（${s.cropCuts} カット・計 ${s.cropTotal} mm）`
+                  + (next === 0 ? '' : `。このまま板を送り、${this._cropEndName(next)}も同じ手順で切ります`), kind: 'info' });
           }
         }
         break;
@@ -2057,29 +2148,32 @@ class FinishController {
   }
 
   /** 切り離し。板の先端を «刃の位置» に更新し、刃より先にあった材料を端材にする。 */
-  _severHead() {
-    const s = this.s, sl = this.slab, F = CONFIG.FLIP, S = CONFIG.CROP_SHEAR;
-    const tip = this._tip(), before = F > 0 ? sl.xMax : sl.xMin;
-    const cut = Math.abs(tip - S.X);                 // 刃より先にあった材料の長さ
-    const end = F > 0 ? 1 : -1;                      // 先端がどちら側か
-    s.cropTh = this._headThickness();
+  /**
+   * 端 end（+1: xMax 側 / −1: xMin 側）を刃の位置で切り離す。先端・後端で共通。
+   * 端材は必ず «刃と端の間» の部分で、切断位置は必ず刃の位置 S.X。
+   */
+  _sever(end) {
+    const s = this.s, sl = this.slab, S = CONFIG.CROP_SHEAR;
+    const tip = sl.tipX(end), before = end > 0 ? sl.xMax : sl.xMin;
+    const cut = Math.abs(tip - S.X);                 // 刃より端側にあった材料の長さ
+    s.cropTh = this._cropThickness(end);
     // 端材は切断時の形（舌・ワニ口、前回の切断面）をそのまま持つ。形状は板と同じ 1 式から取る
     const piece = this._piece(sl.shape(), end, S.X, tip, s.cropTh);
     piece.stage = 'BED'; piece.y = this.bedLift(); piece.z = 0; piece.rot = 0;
     s.scraps.push(piece);
     // 刃が張り出しの途中なら端はそこで平らに打ち切られ（残りの張り出しは次のカットへ）、
     // 健全部まで切り込んだら論理端を刃の位置にして張り出しは無くなる。
-    if (F * (S.X - before) > 0) { sl.cut[end] = Math.abs(S.X - before); s.cropSound = 0; }
+    if (end * (S.X - before) > 0) { sl.cut[end] = Math.abs(S.X - before); s.cropSound = 0; }
     else {
       if (end > 0) sl.xMax = S.X; else sl.xMin = S.X;
-      sl.cut[end] = null; sl.cropped = true; sl.croppedEnd = end;
+      sl.cut[end] = null; sl.cropped[end] = true;
       sl.length = sl.xMax - sl.xMin;
       s.cropSound = Math.abs(before - S.X);          // 健全部（板長として減る分）
     }
-    s.cropLen = cut;                                 // 切り落とした全長（張り出しを含む）
+    s.cropLen = cut; s.cropCutsAll++;                // 切り落とした全長（張り出しを含む）
     s.cropForceT = Rolling.cropForce(s.cropTh, sl.width);
     this.bus.emit('SYS_MESSAGE', {
-      text: `75 mm シャー: カット ${s.cropIndex + 1}/${s.cropCuts} ＝ ${cut.toFixed(0)} mm ／ 剪断力 ${s.cropForceT.toFixed(0)} t`
+      text: `75 mm シャー: ${this._cropEndName(end)} カット ${s.cropIndex + 1}/${s.cropCuts} ＝ ${cut.toFixed(0)} mm ／ 剪断力 ${s.cropForceT.toFixed(0)} t`
           + `（定格 ${S.RATED_FORCE_T} t）`, kind: 'info' });
   }
 
@@ -2104,6 +2198,9 @@ class FinishController {
     this._scraps(dt);
     this._sheets(dt);
     s.tableSpeed = 0;
+    // 全パスが終わったあとの走行中（巻取の引き込み・板材の放出）に後端が刃へ来たら切る。
+    // パス中は MillController が同じ判定をしているので、ここは «パスが終わっている間» だけ。
+    if (this.mill.passIndex < 0 && s.cropStage === 'IDLE' && this.wantCrop()) { this.beginCrop(); return; }
     if (s.cropStage !== 'IDLE' && s.cropStage !== 'DONE') return;   // クロップ中はライン制御を占有
     const finalPass = this.mill.passIndex === CONFIG.SCHEDULE.length - 1;
     const head = this._head();
@@ -2261,7 +2358,7 @@ class FinishController {
     piece.stage = 'RUN'; piece.y = 0; piece.z = 0;
     s.sheets.push(piece); s.sheetCount++;
     if (end > 0) sl.xMax = sx; else sl.xMin = sx;
-    sl.cut[end] = null; sl.cropped = true; sl.croppedEnd = end;   // 切り分け面は平ら
+    sl.cut[end] = null; sl.cropped[end] = true;                   // 切り分け面は平ら
     sl.length = sl.xMax - sl.xMin;
     this.bus.emit('SYS_MESSAGE', { text: `${s.divideShear === 'S30' ? '30 mm' : '75 mm'} シャー: シート ${s.sheetCount} 枚目（${(piece.len / 1000).toFixed(1)} m）を切り分けました`, kind: 'info' });
   }
@@ -2358,7 +2455,7 @@ class PhysicsEngine {
     bus.on('CMD_RESET', () => this.reset());
     bus.on('CMD_SET_SLAB', (d) => { this._pending = d; this.reset(); });
     bus.on('CMD_SET_ENV', (d) => { Object.assign(this.env, d);
-      if (d.stripCool !== undefined) CONFIG.MATERIAL.GUIDE_COOL.ENABLED = !!d.stripCool; });   // スケジュール予測と運転で同じ前提を見る
+      if (d.stripCool !== undefined) CONFIG.MATERIAL.COOLANT.ENABLED = !!d.stripCool; });   // スケジュール予測と運転で同じ前提を見る
     bus.on('CMD_SET_SUPPLY_ANIM', (v) => { this.supply.enabled = v; });
     bus.on('CMD_PAUSE', (v) => { this.paused = v; });
     bus.on('CMD_STOP_LINE', () => { this.mill.targetSpeed = 0; });
@@ -2517,32 +2614,69 @@ class PhysicsEngine {
   }
 
   /**
-   * 板厚方向の 1 次元熱伝導を陰解法（三重対角）で解く。表面は放射・自然対流に加えて、
-   * ミルを通過中はクーラントの流れ落ち（上面が強い）で冷える。クーラントは冷却域
-   * COOL_ZONE を通過する板にだけ効くので、板全体の平均としては COOL_ZONE/板長 に薄まる。
+   * クーラントの沸騰熱伝達。面温度 Ts がライデンフロスト点を超えると蒸気膜ができて
+   * 液が面に触れられなくなり、熱伝達率が核沸騰の 1/20 以下へ落ちる（膜沸騰）。
+   * 同時に «熱の受け手» も液のバルク温度から蒸気膜の飽和温度へ移る。
+   * 戻り値は { h: 熱伝達率 [W/m²K], T: 受け手温度 [℃] }。
+   */
+  static boiling(Ts) {
+    const C = CONFIG.MATERIAL.COOLANT;
+    const g = Num.smoothstep(C.T_NB, C.T_LEID, Ts);          // 0: 核沸騰 → 1: 膜沸騰
+    return { h: Num.lerp(C.H_NB, C.H_FILM, g), T: Num.lerp(C.T_BULK, C.T_SAT, g) };
+  }
+
+  /**
+   * テーブルローラ接触による下面の «見かけの» 熱伝達率 [W/m²K]。
+   * ローラは鼓の逆形なので接触は板の両エッジ寄りの 2 本の線だけ。面積割合は
+   * （幅方向: 2·BAND / 板幅）×（長さ方向: 接触弧 ARC / ローラピッチ）で薄める。
+   */
+  get tableTouchH() {
+    const s = this.slab, TT = CONFIG.MATERIAL.TABLE_TOUCH;
+    if (!s.onLine) return 0;
+    return TT.H * Math.min(1, 2 * TT.BAND / Math.max(s.width, 1)) * Math.min(1, TT.ARC / TT.PITCH);
+  }
+
+  /**
+   * 板厚方向の 1 次元熱伝導を陰解法（三重対角）で解く。境界は面ごとに条件が違う:
+   *   上面 —— 放射・対流 ＋ ロールから流れ落ちるクーラント（ほぼ全面が濡れる）
+   *   下面 —— 放射・対流 ＋ 濡れたテーブルローラが残す液膜（一部だけ）＋ 接触線からの伝導
+   *   側面 —— クーラントが濡らすが、幅方向に一様なので «体積損失» として全層に入れる
+   * クーラントは噴射域 COOLANT.ZONE を通る板にだけ効くので、板全体の平均としては
+   * ZONE/板長 に薄まる。熱伝達率と受け手温度は面温度から boiling() が返す（膜沸騰）。
    */
   _thermal(dt) {
-    const s = this.slab, M = CONFIG.MATERIAL, al = s.alloy, T = s.T, n = T.length;
+    const s = this.slab, M = CONFIG.MATERIAL, CO = M.COOLANT, al = s.alloy, T = s.T, n = T.length;
     const rc = al.RHO * al.CP, h = s.hEff / 1000, dz = h / (n - 1), k = al.K;
     const Ta = M.T_AMBIENT, Ak = Ta + 273.15;
     const hRad = (Ts) => { const Tk = Ts + 273.15; return M.EMISSIVITY * 5.67e-8 * (Tk * Tk + Ak * Ak) * (Tk + Ak); };
     const cooling = this.env.coolant && s.inBite && Math.abs(this.mill.currentSpeed) > 3;
-    const dil = cooling ? Math.min(M.COOL_ZONE / Math.max(s.length, 1), 1) : 0;
-    const hc = [M.H_COOL_TOP * dil, M.H_COOL_BOT * dil];
-    // 板面クーラント（サイドガイド上のヘッダ）。板がヘッダの下を通過している割合だけ上面に効く
-    hc[0] += M.GUIDE_COOL.H_TOP * this.guideCoolFrac;
-    // 表面の有効熱伝達率と環境温度（放射・対流は周囲温度へ、クーラントは液温へ）
-    const surf = (j, side) => {
-      const hr = hRad(T[j]) + M.H_AIR, hcc = hc[side];
-      return { hEff: hr + hcc, Tenv: (hr * Ta + hcc * M.T_COOL) / (hr + hcc) };
+    const dil = cooling ? Math.min(CO.ZONE / Math.max(s.length, 1), 1) : 0;
+    const gFrac = this.guideCoolFrac, touchH = this.tableTouchH;
+    // 面ごとの有効熱伝達率と受け手温度（放射・対流は周囲温度へ、クーラントは沸騰の受け手温度へ、
+    // ローラ接触はロール表面温度へ）。h と受け手温度の加重平均で 1 つの対流境界にまとめる。
+    const surf = (j, top) => {
+      const Ts = T[j], hr = hRad(Ts) + M.H_AIR;
+      let hs = hr, ht = hr * Ta;
+      const wet = (frac) => { if (frac <= 0) return; const bo = PhysicsEngine.boiling(Ts); hs += bo.h * frac; ht += bo.h * frac * bo.T; };
+      wet(dil * (top ? CO.WET_TOP : CO.WET_BOT));
+      if (top) wet(gFrac * CO.GUIDE_TOP);
+      else { hs += touchH; ht += touchH * M.TABLE_TOUCH.T; }
+      return { hEff: hs, Tenv: ht / hs };
     };
+    // 側面（板厚の面）: 面積 2·h·L に対し体積は w·h·L なので、単位体積あたり 2/w [1/m]。
+    // 全層に同じだけ効くので上下差は作らない（＝反りを増やさずに平均温度だけ下げる）。
+    const sideCoef = dil > 0 ? dil * CO.WET_SIDE * 2 / (s.width / 1000) : 0;
     const a = new Float64Array(n), b = new Float64Array(n), c = new Float64Array(n), d = new Float64Array(n);
     const K = k / dz;
     for (let j = 0; j < n; j++) {
-      const half = (j === 0 || j === n - 1), cap = rc * (half ? dz / 2 : dz) / dt;
+      const half = (j === 0 || j === n - 1), thk = half ? dz / 2 : dz, cap = rc * thk / dt;
       a[j] = j > 0 ? -K : 0; c[j] = j < n - 1 ? -K : 0;
       b[j] = cap + (j > 0 ? K : 0) + (j < n - 1 ? K : 0); d[j] = cap * T[j];
-      if (half) { const sf = surf(j, j === 0 ? 0 : 1); b[j] += sf.hEff; d[j] += sf.hEff * sf.Tenv; }
+      if (half) { const sf = surf(j, j === 0); b[j] += sf.hEff; d[j] += sf.hEff * sf.Tenv; }
+      if (sideCoef > 0) {                                   // 側面からの体積損失
+        const bo = PhysicsEngine.boiling(T[j]), hv = bo.h * sideCoef * thk;
+        b[j] += hv; d[j] += hv * bo.T;
+      }
     }
     for (let j = 1; j < n; j++) { const m = a[j] / b[j - 1]; b[j] -= m * c[j - 1]; d[j] -= m * d[j - 1]; }
     T[n - 1] = d[n - 1] / b[n - 1];
@@ -2552,7 +2686,7 @@ class PhysicsEngine {
   /** 板面クーラントの有効割合: 板がヘッダ（4 本）の冷却域の下を通過している長さ ÷ 板長 */
   get guideCoolFrac() {
     const s = this.slab, M = CONFIG.MATERIAL, G = CONFIG.TABLE.GUIDE, HD = G.HEADER;
-    if (!(this.env.stripCool && M.GUIDE_COOL.ENABLED && s.onLine && Math.abs(this.mill.currentSpeed) > 3)) return 0;
+    if (!(this.env.stripCool && M.COOLANT.ENABLED && s.onLine && Math.abs(this.mill.currentSpeed) > 3)) return 0;
     let cover = 0;
     for (const sx of [-1, 1]) for (const d of [-1, 1]) {
       const hx = sx * G.X + d * HD.DX;
@@ -4761,14 +4895,19 @@ class SlabView {
    * 先端側には «ロールから出た片持ち» を持つ。曲率と自重の釣り合いは Rolling.curlSpan。
    */
   _curlParams(slab, mill, x0, x1, clipHead) {
-    const F = CONFIG.FLIP, h = slab.inBite ? mill.gap : slab.thickness, out = { ends: [], sig: '' };
+    const F = CONFIG.FLIP, out = { ends: [], sig: '' };
     const rolling = slab.inBite && slab.rollingActive;
     for (const e of [1, -1]) {
       const xe = e > 0 ? x1 : x0;
       if (clipHead && e === F) continue;                                   // コイルに入った端には無い
+      const head = rolling && e === Num.sign0(slab.dir);                   // ロールから出ている先端側
+      // 板厚は端ごとに違う。噛み込み中、尾端側はまだワークロールを通っていないので入側厚の
+      // まま（slab.thickness）で、出側厚（mill.gap）を当ててはいけない。浮き上がり長は
+      // ℓ = √(2·EI/q·κ) ∝ h·√κ、先端高さは κℓ²/4 ∝ κ·h² と板厚の 2 乗で効くので、
+      // 尾端に出側厚を当てると «圧延していない側の反りが噛み込んだ瞬間に減る» ことになる。
+      const h = (rolling && !head) ? slab.thickness : (slab.inBite ? mill.gap : slab.thickness);
       const kappa = slab.curlAt(e), sp = Rolling.curlSpan(kappa, h, slab.width, slab.alloy);
       if (!(Math.abs(kappa) > 1e-9) || sp.liftOff < 50) continue;
-      const head = rolling && e === Num.sign0(slab.dir);                   // ロールから出ている先端側
       const free = head ? Math.abs(xe) : 0;                                // 片持ちの自由長（バイト出口〜先端）
       // 反対側の端が近い／バイトに挟まれていると浮き上がりの根元が取れないので短くする
       const rootMax = rolling && !head ? Math.max(Math.abs(xe), 0) : (x1 - x0);
@@ -4813,7 +4952,7 @@ class SlabView {
     // 形状が変わっていなければ頂点更新も法線再計算も行わない（停止中のコストをゼロに）
     const sig = x0 + ':' + x1 + ':' + slab.thickness + ':' + slab.width + ':'
               + mill.gap + ':' + mill.passLine + ':' + slab.inBite + ':' + slab.dir + ':'
-              + slab.cropped + ':' + slab.croppedEnd + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig;
+              + slab.cropped[1] + ':' + slab.cropped[-1] + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig;
     if (sig === this._sig) return;
     this._sig = sig;
     const L = x1 - x0, w = slab.width, P = mill.passLine;
@@ -4908,7 +5047,7 @@ class SprayView {
     this.coolant.update(dt, mill.passLine - 800);
 
     // 板面クーラント: 板がヘッダの下を通過している間だけ、そのヘッダから噴射する
-    if (env.stripCool && CONFIG.MATERIAL.GUIDE_COOL.ENABLED && running) {
+    if (env.stripCool && CONFIG.MATERIAL.COOLANT.ENABLED && running) {
       const G = CONFIG.TABLE.GUIDE, H = G.HEADER, T = CONFIG.TABLE;
       const active = [];
       for (const sx of [-1, 1]) for (const d of [-1, 1]) {
@@ -5376,7 +5515,7 @@ class UIManager {
       ['30 mm シャー', `ミル中心から ${Math.abs(CONFIG.SHEAR30.X).toLocaleString()} mm（J-3 の先）／ 板厚 ${CONFIG.SHEAR30.MAX_TH} mm 以下を定尺 ${CONFIG.PILER.SHEET_L / 1000} m に切り分け`],
       ['パイラー', `ミル中心から ${(Math.min(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)}〜${(Math.max(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)} m ／ 開閉アーム式・リフトテーブル付`],
       ['装入設備', `転倒機 ミル中心から ${(Math.abs(CONFIG.SUPPLY.TILTER_X) / 1000).toFixed(1)} m（A-9 / A-8 の操作側）／ トランスファークレーンで横移動`],
-      ['板面クーラント', `サイドガイド上 各 2 本（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 上面 ${CONFIG.MATERIAL.GUIDE_COOL.H_TOP} W/m²K`],
+      ['板面クーラント', `サイドガイド上 各 2 本（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 膜沸騰域の熱伝達率 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）`],
       ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
     ];
     $('spec-body').innerHTML = rows.map(([k, v]) =>

@@ -22,7 +22,10 @@ const out = await page.evaluate(() => {
   const T2 = s.temperature;
   for (let i = 0; i < 120 * 60; i++) P._thermal(1 / 120);
   res.coolant = { drop: +(T2 - s.temperature).toFixed(2), top: +s.tTop.toFixed(1), core: +s.tCore.toFixed(1), bot: +s.tBot.toFixed(1),
-    expectApprox: +(((M.H_COOL_TOP + M.H_COOL_BOT) * (2400 / 50000) * 360 + 2 * q) * 60 / (rc * 0.03)).toFixed(2) };
+    // 概算値も «膜沸騰の h と飽和温度» で立てる（上面 WET_TOP + 下面 WET_BOT ＋ ローラ接触）
+    expectApprox: +((M.COOLANT.H_FILM * (M.COOLANT.WET_TOP + M.COOLANT.WET_BOT) * (M.COOLANT.ZONE / 50000) * (400 - M.COOLANT.T_SAT)
+                     + M.TABLE_TOUCH.H * Math.min(1, 2 * M.TABLE_TOUCH.BAND / 1500) * Math.min(1, M.TABLE_TOUCH.ARC / M.TABLE_TOUCH.PITCH) * (400 - M.TABLE_TOUCH.T)
+                     + 2 * q) * 60 / (rc * 0.03)).toFixed(2) };
   // (4) 8 mm 薄板・150 m・70 mpm で 170 s
   s.T.fill(300); s.inBite = true; P.mill.currentSpeed = 70; s.length = 150000; s.thickness = 8;
   const T3 = s.temperature;

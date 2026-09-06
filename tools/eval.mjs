@@ -451,7 +451,7 @@ const run = async () => {
       const sl = window.__app.physics.slab, keep = { th: sl.thickness, w: sl.width, T: Array.from(sl.T), al: sl.alloy, h0: sl.initialThickness };
       let cutMin = 1e9, cutMax = 0, totMin = 1e9, totMax = 0;
       for (const [k, a] of Object.entries(K.ALLOYS)) for (const w of [900, 1500, 2200]) for (const T of [a.T_ROLL[0], a.T_ROLL[1]]) {
-        sl.thickness = 60; sl.width = w; sl.initialThickness = 382; sl.alloy = a; sl.T.fill(T); sl.cropped = false;
+        sl.thickness = 60; sl.width = w; sl.initialThickness = 382; sl.alloy = a; sl.T.fill(T); sl.cropped = { 1: false, '-1': false };
         const plan = window.__ROLL.cropPlan(sl.overhangAt(1));
         cutMin = Math.min(cutMin, plan.each); cutMax = Math.max(cutMax, plan.each); totMin = Math.min(totMin, plan.total); totMax = Math.max(totMax, plan.total);
       }
@@ -526,7 +526,22 @@ const run = async () => {
          Object.keys(K.ALLOYS).join(' '));
       ok('変形抵抗は温度が低いほど高い（全材質）', Object.keys(K.ALLOYS).every(k => R2.flowStress(350, 5, K.ALLOYS[k]) > R2.flowStress(450, 5, K.ALLOYS[k])),
          Object.keys(K.ALLOYS).map(k => `${k}:${R2.flowStress(450, 5, K.ALLOYS[k]).toFixed(0)}`).join(' '));
-      ok('クーラント冷却は上面が強い（上面が冷えやすい）', M.H_COOL_TOP > M.H_COOL_BOT, `${M.H_COOL_TOP} / ${M.H_COOL_BOT} W/m²K`);
+      {   // クーラントは «上面と側面がメイン»。下面は濡れたテーブルローラの跡だけ
+        const CO = M.COOLANT, PE = window.__app.physics.constructor;
+        ok('クーラント冷却は上面が強い（下面は濡れたローラの跡だけ）', CO.WET_TOP > CO.WET_BOT,
+           `上面 ${CO.WET_TOP} / 下面 ${CO.WET_BOT} / 側面 ${CO.WET_SIDE}`);
+        ok('板面（300〜600 ℃）は膜沸騰域で熱伝達率が核沸騰より桁で低い', PE.boiling(450).h < CO.H_NB / 10 && CO.T_LEID > 150,
+           `450 ℃ ${PE.boiling(450).h} / 60 ℃ ${PE.boiling(60).h} W/m²K（ライデンフロスト点 ${CO.T_LEID} ℃）`);
+        ok('膜沸騰の熱の受け手は液温でなく飽和温度', CO.T_SAT > CO.T_BULK && Math.abs(PE.boiling(450).T - CO.T_SAT) < 1,
+           `液温 ${CO.T_BULK} ℃ / 飽和 ${CO.T_SAT} ℃`);
+        // テーブルローラは鼓の逆形なので接触は板の «両エッジ寄りの 2 本の線» に限られる
+        const TB = K.TABLE, TT = M.TABLE_TOUCH;
+        ok('テーブルローラは胴端が太く、平板は自分のエッジ位置で載る（自動調心）', TB.ROLL_D_END > TB.ROLL_D_MID,
+           `胴端 Φ${TB.ROLL_D_END} > 中央 Φ${TB.ROLL_D_MID}`);
+        const frac = Math.min(1, 2 * TT.BAND / 1500) * Math.min(1, TT.ARC / TT.PITCH);
+        ok('ローラ接触の見かけの熱伝達率は放熱と同程度（«多少» の寄与）', TT.H * frac > 5 && TT.H * frac < 60,
+           `${(TT.H * frac).toFixed(0)} W/m²K（幅 1,500 mm、面積割合 ${(frac * 100).toFixed(2)} %）`);
+      }
       const sp = R2.curlSpan(2e-5, 60, 1500);
       ok('反りの自重釣り合い: 60 mm 板・R=50 m で浮き上がり長 2〜15 m', sp.liftOff > 2000 && sp.liftOff < 15000, `ℓ=${(sp.liftOff / 1000).toFixed(1)} m / 先端 ${sp.tip.toFixed(0)} mm`);
       ok('板厚方向の層数は奇数（中心層を持つ）', M.LAYERS % 2 === 1 && M.LAYERS >= 5, `${M.LAYERS} 層`);

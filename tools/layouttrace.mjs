@@ -139,7 +139,8 @@ const out = await page.evaluate(() => {
     const gv = W.guideView;
     const has = !!gv.headers;
     ok('サイドガイド上に板面クーラントヘッダがある', has, has ? `ヘッダ ${gv.headers.count ?? gv.headers.mesh?.count} 本` : '無し');
-    ok('熱モデルに板面冷却域（ガイド上ヘッダ）がある', !!K.MATERIAL.GUIDE_COOL, K.MATERIAL.GUIDE_COOL ? JSON.stringify(K.MATERIAL.GUIDE_COOL) : '無し');
+    ok('熱モデルに板面冷却域（ガイド上ヘッダ）がある', !!K.MATERIAL.COOLANT && K.MATERIAL.COOLANT.GUIDE_TOP > 0,
+       K.MATERIAL.COOLANT ? `上面 ${K.MATERIAL.COOLANT.GUIDE_TOP} / 膜沸騰 ${K.MATERIAL.COOLANT.H_FILM} W/m²K` : '無し');
   }
 
   /* ================= 3. 断面表示（シャー） ================= */
@@ -198,8 +199,11 @@ const out = await page.evaluate(() => {
     const onPallet = pieces.filter(m => { const b = new T.Box3().setFromObject(m); return PAL && b.min.y / sc >= PAL.H - 5 && b.min.y / sc < PAL.H + 2000 && Math.abs(b.getCenter(new T.Vector3()).z / sc - PAL.Z) < PAL.L / 2; });
     R.scrap.pieces = pieces.length; R.scrap.onPallet = onPallet.length;
     R.scrap.rest = pieces.map(m => { const b = new T.Box3().setFromObject(m); return { y: mm(b.min.y / sc), z: mm(b.getCenter(new T.Vector3()).z / sc) }; });
-    ok('端材はすべて可視のままパレットの上に載る', pieces.length > 0 && onPallet.length === pieces.length && onPallet.length === P.finish.cropCuts,
-       `可視 ${pieces.length} / パレット上 ${onPallet.length} / カット数 ${P.finish.cropCuts}${PAL ? '' : '（パレット未定義）'}`);
+    ok('先端と後端の両方をクロップする（そのまま板を送って後端も切る）',
+       P.finish.cropEndsDone[1] && P.finish.cropEndsDone[-1] && P.finish.cropCutsAll >= 2,
+       `先端 ${P.finish.cropEndsDone[-K.FLIP > 0 ? 1 : -1] ? '済' : '未'} / 後端 ${P.finish.cropEndsDone[K.FLIP > 0 ? 1 : -1] ? '済' : '未'} / 総カット ${P.finish.cropCutsAll}`);
+    ok('端材はすべて可視のままパレットの上に載る', pieces.length > 0 && onPallet.length === pieces.length && onPallet.length === P.finish.cropCutsAll,
+       `可視 ${pieces.length} / パレット上 ${onPallet.length} / カット数 ${P.finish.cropCutsAll}${PAL ? '' : '（パレット未定義）'}`);
   }
 
   R.failed = R.checks.filter(c => !c.pass).length;
