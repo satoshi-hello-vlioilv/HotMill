@@ -36,21 +36,53 @@ const out = await page.evaluate(() => {
   const SV = W.supplyView, S = K.SUPPLY, F = K.FLIP, TR = K.TRANSFER, PL0 = K.MILL.PASS_LINE;
   R.supply = {};
   {
-    // 転倒機まわりに搬送ローラが無い（ライン側への移動はクレーン）
-    let supplyRolls = 0; SV.group.traverse(o => { if (/ローラ/.test(o.name)) supplyRolls++; });
-    ok('装入設備に搬送ローラが無い（ラインへの移動はトランスファークレーン）', supplyRolls === 0, `ローラ部材 ${supplyRolls}`);
+    // 転倒機ベッドと受取テーブルは «テーブルローラ» で構成されている
+    const TG = TR.TONG, rr = K.TABLE.ROLL_D_END / 2, zOpen = TG.W_MAX / 2 - TG.JAW_T;
+    ok('転倒機ベッドと受取テーブルがテーブルローラで構成されている',
+       SV.bedRolls.xs.length >= 3 && SV.runoutRolls.xs.length >= 3,
+       `ベッド ${SV.bedRolls.xs.length} 本 / 受取 ${SV.runoutRolls.xs.length} 本`);
     window.__startAuto(true);
-    // 倒し切った直後: スラブは転倒機ベッド上（底面＝パスライン）、クランプは開いている
+
+    // --- 送り（FEED）: ローラが «転がり条件» どおりに回り、板が FEED_DX だけ進む ---
+    const locX = () => F * (SV.slab.position.x / sc - S.TILTER_X);   // 転倒軸ローカルの板中心 X
+    const rz = (rt) => inst(rt.inst.mesh, 0).rz;
+    const wrap = (v) => ((v + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+    window.__ff(Pp => Pp.supply.phase === 'FEED'); W.render(P, 1 / 60);
+    const xF0 = locX(), aB0 = rz(SV.bedRolls);
+    window.__ff(Pp => Pp.supply.phase !== 'FEED'); W.render(P, 1 / 60);
+    const fed = locX() - xF0;
+    // 板が +X へ進むとき上面も +X へ動く向き＝ −Z 回り。角度は 1 回転を超えるので位相で比べる
+    const slipMm = Math.abs(wrap(rz(SV.bedRolls) - aB0 + fed / rr)) * rr;
+    ok('テーブルローラの送り量が FEED_DX に一致する', Math.abs(fed - S.FEED_DX) < 5, `送り ${mm(fed)} / ${S.FEED_DX} mm`);
+    ok('ローラの回転が送り量と一致する（転がり条件・すべりが無い）', slipMm < 20, `すべり ${slipMm.toFixed(1)} mm`);
+    ok('受取テーブルのローラがベッドと同じだけ回る', Math.abs(wrap(rz(SV.runoutRolls) - rz(SV.bedRolls))) < 1e-6,
+       `差 ${(rz(SV.runoutRolls) - rz(SV.bedRolls)).toExponential(1)} rad`);
+
+    // 送り終わり: スラブは受取テーブル上（底面＝パスライン）、トングは開いている
     window.__ff(Pp => Pp.supply.phase === 'GRAB'); W.render(P, 1 / 60);
     const th = P.slab.thickness, w = P.slab.width;
     const bot0 = SV.slab.position.y / sc - th / 2, z0 = SV.slab.position.z / sc;
-    const tongZ = () => Math.max(...SV.tongs.map(t => Math.abs(t.position.z / sc - SV.slab.position.z / sc)));
+    // 爪の «内面下端» をアームのワールド行列で実測する（描かれている姿勢そのものを測る）
+    const jv = new T.Vector3();
+    const jaws = () => { const out = [];
+      for (const tg of SV.tongs) for (const arm of tg.arms) {
+        arm.updateWorldMatrix(true, false);
+        jv.set(0, -TG.PIVOT_H * sc, zOpen * sc).applyMatrix4(arm.matrixWorld);
+        out.push({ z: jv.z / sc, y: jv.y / sc });
+      }
+      return out; };
+    const tongZ = () => Math.max(...jaws().map(j => Math.abs(j.z - SV.slab.position.z / sc)));
     const open0 = tongZ();
-    ok('倒したスラブの底面が転倒機ベッド面（パスライン）にある', Math.abs(bot0 - PL0) < 5 && Math.abs(z0 - S.SIDE_Z) < 5, `底面 ${mm(bot0)} / Z ${mm(z0)}`);
-    // 掴んだあと: クランプが板の側面に当たり、板が吊り上がる
+    ok('送ったスラブの底面が受取テーブル面（パスライン）にある', Math.abs(bot0 - PL0) < 5 && Math.abs(z0 - S.SIDE_Z) < 5, `底面 ${mm(bot0)} / Z ${mm(z0)}`);
+    ok('トングが最大巾まで開いて板を跨いでいる', Math.abs(open0 - zOpen) < 5 && open0 > w / 2, `爪内面 ${mm(open0)} / 全開 ${mm(zOpen)} / 板半幅 ${w / 2}`);
+    // 掴んだあと: 爪が板の側面に当たり、板が吊り上がる
     window.__ff(Pp => Pp.supply.phase === 'TRANSFER' && Pp.supply.p.transfer > 0.3); W.render(P, 1 / 60);
     const closed = tongZ(), lift = SV.slab.position.y / sc - th / 2 - PL0;
-    ok('クランプが閉じて板の側面に当たる（開き → 幅/2 + 余裕）', open0 > closed && Math.abs(closed - (w / 2 + 60)) < 5, `開 ${mm(open0)} → 閉 ${mm(closed)} mm（幅/2 = ${w / 2}）`);
+    ok('トングが閉じて板の側面に当たる（全開 → 幅/2）', open0 > closed && Math.abs(closed - w / 2) < 5, `開 ${mm(open0)} → 閉 ${mm(closed)} mm（幅/2 = ${w / 2}）`);
+    // 爪先はローラ上面より上（テーブルローラの胴に当てず、板の側面だけを掴む）
+    const jawBot = Math.min(...jaws().map(j => j.y));
+    ok('爪先が板の底面より上にある（ローラの胴に当たらない）', jawBot > SV.slab.position.y / sc - th / 2 - 1,
+       `爪先 ${mm(jawBot)} / 板底面 ${mm(SV.slab.position.y / sc - th / 2)}`);
     ok('横移動中のスラブ底面が転倒機の受け面（リップ）より上', lift > S.LIP_H, `底面 パスライン上 ${mm(lift)} mm > リップ ${S.LIP_H} mm`);
     // 吊り具（ビーム・クランプ）が板の位置に追従している
     const bx = SV.beamT.position.x / sc, sx = SV.slab.position.x / sc, bz = SV.beamT.position.z / sc, sz = SV.slab.position.z / sc;
@@ -61,8 +93,8 @@ const out = await page.evaluate(() => {
     const a9 = K.TABLE.SECTIONS.find(q => q.name === 'A-9'), lo = Math.min(a9.side * a9.x0, a9.side * a9.x1), hi = Math.max(a9.side * a9.x0, a9.side * a9.x1);
     ok('降ろしたスラブが A-9 テーブルの上に載る（ライン上に移った）', xs >= lo && xe <= hi && P.slab.onLine && W.slabView.mesh.visible,
        `スラブ ${mm(xs)}〜${mm(xe)} / A-9 ${lo}〜${hi}`);
-    const tongBot = Math.min(...SV.tongs.map(t => t.position.y / sc - t.scale.y * 1000));
-    ok('降ろしたあとクランプが板より上へ退避している', tongBot > PL0 + th + 100, `クランプ下端 ${mm(tongBot)} / 板上面 ${mm(PL0 + th)}`);
+    const tongBot = Math.min(...jaws().map(j => j.y));
+    ok('降ろしたあとトングが板より上へ退避している', tongBot > PL0 + th + 100, `爪先 ${mm(tongBot)} / 板上面 ${mm(PL0 + th)}`);
     R.supply = { bot0: mm(bot0), open0: mm(open0), closed: mm(closed), lift: mm(lift), slab: [mm(xs), mm(xe)] };
   }
 

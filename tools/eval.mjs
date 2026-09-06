@@ -351,22 +351,36 @@ const run = async () => {
     ok('転倒アーム長 ≥ 最大スラブ長', (armB.x1 - armB.x0) >= CFG.LEN_MAX,
        `アーム長 ${(armB.x1 - armB.x0).toFixed(0)} mm ≥ ${CFG.LEN_MAX} mm`);
 
-    // 15) 倒した状態でアームのベッド面＝パスライン（受け面を除いたベッド部の最高点で測る）
-    {
-      const g = arm.children[0].geometry.attributes.position; let top = -1e9;
-      for (let i = 0; i < g.count; i++) if (g.getX(i) / 0.02 > 700) top = Math.max(top, g.getY(i) / 0.02);
-      const bedTop = (passLine - CFG.PIVOT_DROP) + top;
-      ok('転倒アームのベッド面＝パスライン', Math.abs(bedTop - passLine) < 5, `${bedTop.toFixed(0)} vs ${passLine.toFixed(0)} mm`);
+    // 15) 転倒機ベッドと受取テーブルは «テーブルローラ» で、その上面＝パスライン
+    //     （ジオメトリの胴部最高点＋インスタンスの軸心高さから実測する）
+    for (const [label, rt] of [['転倒機ベッド', SV.bedRolls], ['受取テーブル', SV.runoutRolls]]) {
+      const g = rt.inst.mesh.geometry.attributes.position; let top = -1e9;
+      for (let i = 0; i < g.count; i++)
+        if (Math.abs(g.getZ(i) / 0.02) < K.SUPPLY.ROLLER.BARREL / 2) top = Math.max(top, g.getY(i) / 0.02);
+      const axisY = rt.inst.mesh.instanceMatrix.array[13] / 0.02;      // 1 本目の軸心（全数同じ高さ）
+      const bedTop = (passLine - CFG.PIVOT_DROP) + axisY + top;
+      ok(`${label}のローラ上面＝パスライン`, Math.abs(bedTop - passLine) < 5 && rt.xs.length >= 3,
+         `上面 ${bedTop.toFixed(0)} vs ${passLine.toFixed(0)} mm / ローラ ${rt.xs.length} 本`);
     }
+    // 15b) 受取テーブルは転倒アームの回転半径の外にある（起き上がるアームが当たらない）
+    ok('受取テーブルが転倒アームの回転半径の外にある', SV.runoutRolls.xs[0] > CFG.ARM_L,
+       `先頭ローラ ${SV.runoutRolls.xs[0].toFixed(0)} mm > アーム長 ${CFG.ARM_L} mm`);
 
     // 16) トランスファークレーンの吊り上げ高さは転倒機の受け面（リップ）を越える
     ok('横移動時のスラブ底面が転倒機の受け面より上', K.TRANSFER.LIFT > CFG.LIP_H + 100,
        `吊り上げ ${K.TRANSFER.LIFT} mm > 受け面 ${CFG.LIP_H} mm`);
 
-    // 17) 開いたクランプが転倒アームのサイドレールの内側に収まる（最大幅のスラブ）
+    // 17) トング（図面: 最大巾 W_MAX）の成立条件
     {
-      const outer = CFG.WID_MAX / 2 + 60 + K.TRANSFER.TONG_OPEN + 60, railIn = CFG.ARM_W / 2 - 80 - 80;
-      ok('開いたクランプが転倒アームのサイドレールの内側に収まる', outer < railIn, `クランプ外面 ${outer} mm < レール内面 ${railIn} mm`);
+      const TG = K.TRANSFER.TONG, railIn = CFG.ARM_W / 2 - 80 - 80;
+      ok('全開のトングが転倒アームのサイドレールの内側に収まる', TG.W_MAX / 2 < railIn,
+         `トング外面 ${TG.W_MAX / 2} mm < レール内面 ${railIn} mm`);
+      // 爪の内面（= W_MAX/2 − JAW_T）が最大幅スラブの側面より外にないと、そもそも被せられない
+      ok('全開のトングが最大幅スラブを跨げる', TG.W_MAX / 2 - TG.JAW_T > CFG.WID_MAX / 2,
+         `爪内面 ${TG.W_MAX / 2 - TG.JAW_T} mm > 板半幅 ${CFG.WID_MAX / 2} mm`);
+      // 爪先はローラ上面より上（テーブルローラの胴に当てずに側面だけを掴む）
+      ok('トングの爪先がテーブルローラの上面より上で止まる', TG.JAW_LIFT > 0 && TG.JAW_LIFT < CFG.CAST_TH[0] / 2,
+         `爪先 パスライン + ${TG.JAW_LIFT} mm（最薄スラブ ${CFG.CAST_TH[0]} mm の半分未満）`);
     }
     // 18) 装入クレーンとトランスファークレーンの桁が待機時に重ならない
     {

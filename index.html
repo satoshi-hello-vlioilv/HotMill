@@ -652,22 +652,34 @@ const CONFIG = {
 
   /* スラブ装入設備 —— 実機配置では転倒機とその周辺（ピット炉・クレーン）は入側テーブル
    * A-8 / A-9 / B-1 の操作側（+Z）にある。縦置きスラブを転倒機で倒し、倒したスラブは
-   * «トランスファークレーン» が吊り上げてラインへ横移動する（テーブルローラによる送り出し
-   * ではない）。ラインに降ろされたスラブは A-9 テーブルからミルへ搬送される。
+   * 転倒機ベッドと受取テーブルの «テーブルローラ» で出側へ送り、そこから
+   * «トランスファークレーン» がトングで吊り上げてラインへ横移動する。
+   * ラインに降ろされたスラブは A-9 テーブルからミルへ搬送される。
    * 駆動側(-Z)にはスピンドル・ピニオンスタンド・主電動機があるため装入設備は置けない。 */
   SUPPLY: {
     SIDE_Z: 3800,                            // ラインから転倒機ベッド中心までの側方距離
     TILTER_X: -33000,                        // 転倒軸（A-9 / A-8 境界付近）。倒したスラブはここからミル側へ横たわる
     ARM_L: 4600,                             // 転倒アーム長（最大スラブ長 4200 mm を受ける）
-    ARM_W: 3100,                             // 転倒アーム幅（最大スラブ幅 2200 mm と開いたクランプを受ける）
+    ARM_W: 3100,                             // 転倒アーム幅（最大スラブ幅 2200 mm と開いたトングを受ける）
     // 転倒軸はベッド面（＝パスライン）より PIVOT_DROP 下に置く。軸（Φ560）がベッド面から
     // 突き出ると、寝かせた板にも立てた板にも軸が食い込む。立てた板は受け面（リップ）に載り、
     // その底面はパスラインより PIVOT_DROP 低い。
     PIVOT_DROP: 330, SHAFT_D: 560, HUB_D: 640, BEARING_Z: 1700,
     LIP_H: 1510,                             // 受け面（立ち上がり）の高さ
+    /* 転倒機ベッドと受取テーブルのローラ。«同じ 1 本の搬送ライン» なので仕様は 1 か所に持ち、
+     * 形状は本線と同じ Parts.tableRoll() をそのまま使う（胴長と軸端長だけを差し替える）。
+     * 胴長は最大スラブ幅 2,200 を受けて余る 2,400。軸端（カラー＋ジャーナル）は本線の 450 では
+     * アーム側枠（内面 ±1,390）に収まらないので 120 に詰める。 */
+    ROLLER: { BARREL: 2400, END_L: 190, PITCH: 640 },
+    /* 転倒後、テーブルローラでスラブを出側へ送る距離。
+     * 転倒直後のスラブはピットクレーンの脚の内側にあり、そのままではトランスファー
+     * クレーンの低いフレームの受け持ち域に届かない。ここまで送れば受け取れる。
+     * 上限は «降ろしたスラブが A-9 テーブル（-34,800〜-25,800）に載る» ことで決まり、
+     *   |TILTER_X| − FEED_DX − LEN_MAX ≥ 25,800 → FEED_DX ≤ 3,000。 */
+    FEED_DX: 2500,
   },
   /*
-   * トランスファークレーン —— 倒した（平置きの）スラブをクランプで吊り、ラインへ横移動する。
+   * トランスファークレーン —— 倒した（平置きの）スラブをトングで掴んで吊り、ラインへ横移動する。
    *
    * ピットクレーン（装入クレーン）とは «完全に別» の、独立した低い最小限のフレームを持つ。
    * ピットクレーンは縦置きスラブを吊るため桁高さ 12.5 m の背の高いフレームが要るが、
@@ -677,18 +689,47 @@ const CONFIG = {
    *
    * フレームが別であれば、ピットクレーンの脚（転倒軸のすぐ脇に立つ最小限の門型）と
    * トランスファークレーンの脚が同じ床面を取り合わないよう、両者の受け渡しには
-   * すき間が要る。そこで転倒直後のスラブは «少しだけ出側へ押し出して» から
-   * トランスファークレーンへ渡す（SHIFT_DX）。低いフレーム自身の Z スパン
+   * すき間が要る。そこで転倒直後のスラブはテーブルローラで «少しだけ出側へ送って» から
+   * トランスファークレーンへ渡す（SUPPLY.FEED_DX）。低いフレーム自身の Z スパン
    * （FRAME.GIRDER_Z0/Z1）も転倒アームの占有域より外に置き、桁・柱のどちらも
    * 転倒機側の設備と重ならない。
    */
   TRANSFER: {
-    SHIFT_DX: 2500,                          // 転倒後、渡す前にプッシャで押し出す距離（出側へ）
-    PARK_DX: 5200,                           // 待機位置（転倒軸からミル側へ）。最大スラブの受け取り位置より先
+    /* 待機位置（転倒軸からミル側へ）。転倒アームは «起きる途中» に先端が半径 ARM_L =
+     * 4,600 mm いっぱいまでミル側へ張り出すので、待機中のトング（中心から ±TONG_DX、
+     * 爪パッド半長 450）がその円の外に居ないと、転倒の最中にアームがトングを突く。
+     *   PARK_DX − TONG_DX − 450 ≥ ARM_L + 余裕  →  PARK_DX ≥ 6,350
+     * （この干渉は tools/tongtrace.mjs が実測して見つけた） */
+    PARK_DX: 6500,
     LIFT: 1700,                              // 横移動時のスラブ底面高さ（パスライン上）。転倒機の受け面 1,510 を越える
-    TONG_OPEN: 150,                          // クランプの開き（片側）。開いても転倒機のサイドレールの内側
-    TONG_DX: 1100,                           // クランプ 2 対のビーム中心からの X
+    TONG_DX: 1100,                           // トング 2 基のビーム中心からの X（1 基では長尺スラブが首を振る）
     BEAM_L: 3200,
+    /* トング（板つかみ）—— 図面の «トング最大巾 2,680 / ロッド芯間 1,525 / 全高 3,355 /
+     * 爪 560» に合わせた、共通の中心ピンに 2 本のアームを吊る挟み込み式。
+     * アームの肘を吊りロッドで引き上げると、両アームが中心ピンまわりに逆向きに回り、
+     * 爪が内側へ閉じてスラブの «側面（板厚の面）» を掴む。爪はスラブの下へは回り込まず、
+     * 爪先はローラ上面（＝パスライン）より JAW_LIFT だけ上で止める（テーブルローラの
+     * 胴に当てないため）。開き量はアーム回転角から幾何的に決まるので、開閉と爪先高さは
+     * 常に整合する（View 側で asin により逆算する）。 */
+    TONG: {
+      W_MAX: 2680,        // 最大巾（爪の外幅）              ── 図面
+      ROD_SPAN: 1525,     // シリンダ 2 本の芯間             ── 図面
+      H: 3355,            // 全高（爪先 〜 吊りピン）          ── 図面
+      JAW_H: 560,         // 爪の高さ                        ── 図面
+      // 以下は図面の «形» から起こした寸法（中心ピンを原点、全開姿勢での [z, y]）。
+      PIVOT_H: 1250,      // 全開姿勢での爪先から中心ピンまでの高さ
+      SHOULDER_Z: 1180, SHOULDER_Y: -250,   // 上リンク外端ピン（中心ピンから «V» に開く）
+      OUTER_Z: 1290, OUTER_Y: -740,         // アーム外端（ここから爪へ内側に曲がる）
+      ROD_PIN_Y: -430,                      // ロッドピン（Z は ROD_SPAN/2。ロッドはほぼ鉛直）
+      CROSS_Y: 615, CROSS_H: 340,           // シリンダ受け梁
+      CYL_D: 380, CYL_L: 560, CYL_Y: 675,   // シリンダ本体（梁がその中ほどを抱く）
+      ROD_D: 190,                           // ロッド径
+      ARM_T: 190,         // アームの板厚（X 方向）
+      JAW_T: 200,         // 爪パッドの厚み（Z 方向）。全開時の爪内面 = W_MAX/2 − JAW_T
+      JAW_PAD: 900,       // 爪パッドの X 長さ（スラブ側面に当たる面）
+      MAST: 420,          // マスト断面（Z）
+      JAW_LIFT: 60,       // 爪先をローラ上面より上げる量（テーブルローラの胴に当てない）
+    },
     // トランスファークレーン専用の低い最小限フレーム（ピットクレーンの FRAME とは別定義）。
     // GIRDER_Z0/Z1 は転倒アームの占有域（SIDE_Z ± 概ね ARM_W/2 + 500）の外側であること
     // «だけ» では足りない。柱は床付近から立つので、主テーブル架台（ロール胴端の外、
@@ -699,9 +740,15 @@ const CONFIG = {
     // GIRDER_Z0 はライン中心（Z=0）でトロリが吊りビームごと止まれるだけの桁の延び代
     // （ビーム半長 1,600 mm）も確保している。
     FRAME: {
-      // GIRDER_Y はワイヤに十分な垂れ代を残せる高さ（最大板厚・最大吊上げ高さでも
-      // 桁下フランジと吊りビームの間に 300 mm 以上のロープ長が残る値）で決めている。
-      GIRDER_Y: 5000, GIRDER_Z0: -2100, GIRDER_Z1: 6200, COL_SIZE: 450,
+      /* GIRDER_Y はトングの «積み上げ» から決まる従属値。最も高くなるのは最小幅スラブ
+       * （W_MIN = 900）を掴んだとき —— アームが立つぶん中心ピンが爪先から遠のくため：
+       *   爪先        = パスライン 900 + LIFT 1,700 + JAW_LIFT 60      = 2,660
+       *   中心ピン    = 爪先 + R·cos(asin(450/R))  （R = 1,692）        ≒ 4,293
+       *   吊りピン    = 中心ピン + (TONG.H − TONG.PIVOT_H) = +2,105     ≒ 6,398
+       *   吊りビーム上面 = +420、ロープ最小 300、トロリ下面 = GIRDER_Y − 80
+       * ⇒ GIRDER_Y ≥ 7,198。余裕を見て 7,500。ピットクレーンの 12,500 よりは十分低いが、
+       *   «図面どおりの全高 3,355 のトング» を吊る以上、5,000 では収まらない。 */
+      GIRDER_Y: 7500, GIRDER_Z0: -2100, GIRDER_Z1: 6200, COL_SIZE: 450,
       RUN_X0: 2000, RUN_X1: 7000, COL_PITCH: 2500,
       TROLLEY: { W: 1400, H: 700, L: 1400 },
     },
@@ -726,8 +773,8 @@ const CONFIG = {
     ['TRAVERSE', 'traverse', 3.4, '転倒機まで横行しています'],
     ['SET',      'set',      2.6, '転倒機にスラブを立てかけています'],
     ['TILT',     'tilt',     3.6, '転倒装置でスラブを倒しています'],
-    ['SHIFT',    'shift',    1.6, 'プッシャでスラブをトランスファークレーンの受け渡し位置へ押し出しています'],
-    ['GRAB',     'grab',     3.2, 'トランスファークレーンが倒したスラブをクランプで吊り上げています'],
+    ['FEED',     'feed',     1.6, '転倒機ベッドのテーブルローラでスラブを受取テーブルへ送っています'],
+    ['GRAB',     'grab',     3.2, 'トランスファークレーンが倒したスラブをトングで掴んで吊り上げています'],
     ['TRANSFER', 'transfer', 3.2, 'トランスファークレーンでミルラインへ横移動しています'],
     ['LOWER',    'lower',    2.6, '入側テーブル（A-9）へ降ろしています'],
   ],
@@ -1100,10 +1147,19 @@ const Layout = {
     for (const g of CONFIG.TABLE.SELECT) { const r = Layout.groupRange(g); if (xa >= r[0] && xb <= r[1]) return g; }
     return CONFIG.TABLE.SELECT[CONFIG.TABLE.SELECT.length - 1];
   },
-  /** 倒したスラブの中心 X（転倒軸からミル側へ L/2）。ラインへの移載位置もこの X。 */
-  /** 倒したスラブの中心 X。転倒軸から «出側への押し出し量 SHIFT_DX + L/2» の位置＝
+  /** 倒したスラブの中心 X。転倒軸から «ローラでの送り量 FEED_DX + L/2» の位置＝
    *  トランスファークレーンが受け取り、ラインへ移載する位置もこの X で変わらない。 */
-  entryX(length) { return CONFIG.SUPPLY.TILTER_X + CONFIG.FLIP * (CONFIG.TRANSFER.SHIFT_DX + length / 2); },
+  entryX(length) { return CONFIG.SUPPLY.TILTER_X + CONFIG.FLIP * (CONFIG.SUPPLY.FEED_DX + length / 2); },
+  /** 転倒機ベッド／受取テーブルのローラ X（転倒軸ローカル）。両端を x0/x1 に合わせて等配する。 */
+  tilterRollXs(x0, x1) {
+    const n = Math.max(2, Math.round((x1 - x0) / CONFIG.SUPPLY.ROLLER.PITCH) + 1), out = [];
+    for (let i = 0; i < n; i++) out.push(x0 + (x1 - x0) * i / (n - 1));
+    return out;
+  },
+  /** 転倒機ベッド（アーム上）と受取テーブルのローラ配置範囲 [x0, x1]（転倒軸ローカル）。 */
+  get bedSpan() { return [560, CONFIG.SUPPLY.ARM_L - 200]; },
+  /** 受取テーブルは «転倒アームの回転半径 ARM_L の外» から始める（アームが当たらない）。 */
+  get runoutSpan() { const S = CONFIG.SUPPLY; return [S.ARM_L + 300, S.FEED_DX + CONFIG.SLAB.LEN_MAX + 400]; },
 };
 
 class EventBus {
@@ -2843,7 +2899,8 @@ const Parts = {
    * 胴端 Φ281.6 → 中央 Φ219.6。材料は胴端の Φ281.6 部で支持され、テーパで自動調心する。
    * 胴長違い（縦送りテーブル）は同じ比率で相似縮小する。
    */
-  tableRoll(barrel = CONFIG.TABLE.BARREL) {
+  /** 胴長 barrel・軸端長 endL のテーブルローラ。転倒機ベッドと受取テーブルは軸端を詰めて使う。 */
+  tableRoll(barrel = CONFIG.TABLE.BARREL, endL = CONFIG.TABLE.COLLAR_L + CONFIG.TABLE.JOURNAL_L) {
     const T = CONFIG.TABLE;
     const k = barrel / (T.ROLL_FLAT * 2 + T.ROLL_TAPER * 2 + T.ROLL_MID);
     const f = T.ROLL_FLAT * k, tp = T.ROLL_TAPER * k, md = T.ROLL_MID * k, zE = barrel / 2;
@@ -2854,8 +2911,7 @@ const Parts = {
     parts.push(G.at(G.taper(T.ROLL_D_END, T.ROLL_D_MID, tp, SEG, true), 0, 0, -(md + tp) / 2));
     for (const sz of [-1, 1]) {
       parts.push(G.at(G.cyl(T.ROLL_D_END, f, 'z', SEG), 0, 0, sz * (zE - f / 2)));
-      parts.push(G.at(G.cyl(T.COLLAR_D, T.COLLAR_L + T.JOURNAL_L, 'z', 8), 0, 0,
-                      sz * (zE + (T.COLLAR_L + T.JOURNAL_L) / 2)));
+      parts.push(G.at(G.cyl(T.COLLAR_D, endL, 'z', 8), 0, 0, sz * (zE + endL / 2)));
     }
     return G.merge(parts);
   },
@@ -3278,8 +3334,9 @@ const Parts = {
     }
     for (let i = 0; i < 7; i++)                                                           // クロスメンバ
       parts.push(G.at(G.box(240, 180, W - 400), 560 + i * (L - 900) / 6, D - 390, 0));
-    // ベッド面（倒した状態でパスライン）。ローラは無く、トランスファークレーンが吊り上げる
-    parts.push(G.at(G.box(L - 560, 60, W - 2 * 160 - 40), 520 + (L - 560) / 2, D - 30, 0));
+    // ベッド面はテーブルローラ（別メッシュ。回すので SupplyView 側で Instances にする）。
+    // ローラ軸はサイドレールに直接ジャーナルされるので、ここに受け板は要らない。
+    // 倒した状態ではローラ上面がパスライン、立てた状態では «その同じ面» に板が寄りかかる。
     parts.push(G.at(G.box(260, S.LIP_H, W), -130, D - 10 + S.LIP_H / 2, 0));               // 立ち上がり（受け面）
     return G.merge(parts);
   },
@@ -3299,17 +3356,94 @@ const Parts = {
     parts.push(G.at(G.box(500, 420, 440), -3100, y0 + 210, zc));                          // シリンダ受け（床上）
     return G.merge(parts);
   },
-  /* --- トランスファークレーンの吊りビーム（X 方向）とクランプ ------------------- */
-  /** 吊りビーム。原点＝ビーム中心。両端のハンガーにクランプ（別メッシュ）が付く。 */
+  /* --- トランスファークレーンの吊りビーム（X 方向）とトング --------------------- */
+  /** 吊りビーム。原点＝ビーム中心。両端のハンガーにトング 2 基（別メッシュ）が吊り下がる。 */
   transferBeam() {
     const T = CONFIG.TRANSFER, parts = [G.at(G.box(T.BEAM_L, 420, 600), 0, 0, 0)];
-    for (const sx of [-1, 1]) parts.push(G.at(G.box(360, 360, 900), sx * T.TONG_DX, -300, 0));   // ハンガー（クランプの軸受）
+    for (const sx of [-1, 1]) parts.push(G.at(G.box(360, 360, 900), sx * T.TONG_DX, -300, 0));   // ハンガー（トングの吊り金具）
     for (const sx of [-1, 1]) parts.push(G.at(G.box(240, 260, 320), sx * (T.BEAM_L * 0.34), 340, 0));   // ワイヤ受け
     return G.merge(parts);
   },
-  /** クランプ 1 本（縦棒 + 板の側面に当たる爪）。原点＝上端。長さ 1000 で作り scale.y で伸ばす。 */
-  transferTong() {
-    return G.merge([G.at(G.box(160, 1000, 120), 0, -500, 0), G.at(G.box(360, 120, 120), 0, -1000 + 60, 0)]);
+  /*
+   * --- トング（板つかみ）------------------------------------------------
+   * 図面の «トング最大巾 2,680 / ロッド芯間 1,525 / 全高 3,355 / 爪 560» の挟み込み式。
+   * マスト下端の «中心ピン» に 2 本のアームを吊り、肘ピンをシリンダで押し引きすると
+   * 両アームが中心ピンまわりに逆向きに回って爪が閉じる。爪はスラブの側面（板厚の面）を
+   * 掴むだけで下へ回り込まないので、テーブルローラ上のスラブをそのまま持ち上げられる。
+   * どの部品も原点＝中心ピン。開閉はアームの回転角だけで表すため、爪の位置と開き量は
+   * 常に幾何的に整合する（逆算は SupplyView.update）。
+   */
+  /** マスト（中心ピン 〜 吊りピン）。 */
+  tongMast() {
+    const T = CONFIG.TRANSFER.TONG, h = T.H - T.PIVOT_H, t = T.ARM_T, mw = t + 120;
+    const parts = [
+      G.at(G.box(mw, h - 500, T.MAST), 0, 250 + (h - 500) / 2, 0),           // マスト本体
+      G.at(G.box(mw + 200, 300, T.MAST + 160), 0, h - 150, 0),               // 上部ヘッド
+      G.at(G.cyl(240, mw + 460, 'x', 12), 0, h - 150, 0),                    // 吊りピン
+      G.at(G.cyl(120, 400, 'y', 8), 0, h + 200, 0),                          // 頂部の吊り金具
+      G.at(G.cyl(460, t + 420, 'x', 16), 0, 0, 0),                           // 中心ピン（アーム 2 本の共通軸）
+    ];
+    // 下端は «下すぼまり» に開いて中心ピンを抱く（図面の三角形の裾）
+    for (const sz of [-1, 1])
+      parts.push(G.at(G.box(mw, 200, Math.hypot(T.MAST, 500)), 0, 250, sz * T.MAST / 4,
+                      Math.atan2(500, sz * T.MAST / 2) - Math.PI / 2));
+    return G.merge(parts);
+  },
+  /** シリンダ受け梁。マストに固定され、両端でシリンダ本体の胴を抱く。 */
+  tongCrosshead() {
+    const T = CONFIG.TRANSFER.TONG, t = T.ARM_T;
+    const parts = [G.at(G.box(t + 60, T.CROSS_H, T.ROD_SPAN + 2 * T.CYL_D), 0, T.CROSS_Y, 0)];
+    for (const sz of [-1, 1]) {                                              // シリンダの取付バンド（上下 2 枚）
+      for (const dy of [-T.CROSS_H / 2, T.CROSS_H / 2])
+        parts.push(G.at(G.cyl(T.CYL_D + 120, 90, 'y', 14), 0, T.CROSS_Y + dy, sz * T.ROD_SPAN / 2));
+    }
+    return G.merge(parts);
+  },
+  /**
+   * 爪を開閉する油圧シリンダ 1 本。受け梁の端に «鉛直に» 据え、胴の中ほどを梁が抱く。
+   * ロッドは下向きに出てアームのロッドピンへ届く（tongRod は別メッシュで伸縮させる）。
+   */
+  tongCylinder() {
+    const T = CONFIG.TRANSFER.TONG;
+    return G.merge([
+      G.at(G.cyl(T.CYL_D, T.CYL_L, 'y', 16), 0, T.CYL_Y, 0),                 // 胴
+      G.at(G.cyl(T.CYL_D - 60, 120, 'y', 16), 0, T.CYL_Y + T.CYL_L / 2 + 60, 0),   // 上蓋
+      G.at(G.cyl(140, 220, 'y', 10), 0, T.CYL_Y + T.CYL_L / 2 + 200, 0),     // 給油口
+      G.at(G.cyl(T.CYL_D - 40, 100, 'y', 16), 0, T.CYL_Y - T.CYL_L / 2 - 50, 0),   // 下蓋（ロッド案内）
+    ]);
+  },
+  /** シリンダロッド。上端が原点、長さ 1000 で作り View 側が scale.y で伸ばす。 */
+  tongRod() { return G.at(G.cyl(CONFIG.TRANSFER.TONG.ROD_D, 1000, 'y', 10), 0, -500, 0); },
+  /**
+   * アーム 1 本。+Z 側の姿勢で、しかも «全開» の角度で作る。−Z 側は親グループを
+   * Y 軸まわりに 180° 回して使い（アームは X について対称なので鏡像になる）、
+   * 開閉は中心ピンまわりの rotation.x だけで表す。
+   *
+   * 図面では «中心ピンから V に開く上リンク» と «そこにピンで繋がる湾曲した爪アーム» が
+   * 別部材だが、ここでは中心ピンまわりに回る 1 個の剛体として扱う。こうすると
+   * 開き量・爪先高さ・ロッドピン位置がすべて 1 つの回転角から決まり、姿勢が食い違わない
+   * （実機の 4 節リンクを解く必要が無い代わり、リンク間の «たすき掛けのタイバー» は省く）。
+   */
+  tongArm() {
+    const T = CONFIG.TRANSFER.TONG, t = T.ARM_T;
+    const jz = T.W_MAX / 2 - T.JAW_T / 2;                            // 爪パッドの中心 Z
+    const rz = T.ROD_SPAN / 2, ry = T.ROD_PIN_Y;                     // ロッドピン
+    // 2 点 (z0,y0)-(z1,y1) を結ぶ帯板。箱は Z 方向に長く作り、X 軸まわりに倒して向ける。
+    const bar = (z0, y0, z1, y1, hh) => {
+      const dz = z1 - z0, dy = y1 - y0;
+      return G.at(G.box(t, hh, Math.hypot(dz, dy)), 0, (y0 + y1) / 2, (z0 + z1) / 2, Math.atan2(-dy, dz));
+    };
+    return G.merge([
+      G.at(G.cyl(420, t, 'x', 16), 0, 0, 0),                                        // 中心ピンのボス
+      bar(0, 0, T.SHOULDER_Z, T.SHOULDER_Y, 320),                                   // 上リンク（中心ピン → 肩ピン）
+      G.at(G.cyl(300, t + 140, 'x', 12), 0, T.SHOULDER_Y, T.SHOULDER_Z),            // 肩ピン
+      bar(0, 0, rz, ry, 240),                                                       // ロッドピンの腕
+      G.at(G.cyl(260, t + 140, 'x', 12), 0, ry, rz),                                // ロッドピン
+      bar(rz, ry, T.SHOULDER_Z, T.SHOULDER_Y, 200),                                 // 腕と肩を繋ぐリブ
+      bar(T.SHOULDER_Z, T.SHOULDER_Y, T.OUTER_Z, T.OUTER_Y, 340),                   // 肩 → アーム外端
+      bar(T.OUTER_Z, T.OUTER_Y, jz, -T.PIVOT_H + T.JAW_H, 320),                     // アーム外端 → 爪（内側へ曲がる）
+      G.at(G.box(T.JAW_PAD, T.JAW_H, T.JAW_T), 0, -T.PIVOT_H + T.JAW_H / 2, jz),    // 爪パッド
+    ]);
   },
 
   /* --- ピット炉（スラブを立てたまま加熱する） ----------------------------- */
@@ -3388,46 +3522,27 @@ const Parts = {
   craneRope() { return G.cyl(90, 1000, 'y', 8); },
 
   /*
-   * --- 転倒後の押し出し機構 ------------------------------------------------
+   * --- 受取テーブル（トランスファークレーンの受取先）------------------------
    * ピットクレーンとトランスファークレーンのフレームが別になったことで、転倒直後の
    * スラブは «ピットクレーンの脚の内側» にあり、そのままではトランスファークレーンの
-   * 低いフレームの受け持ち域（FRAME.RUN_X0 より出側）に届かない。プッシャが板の近端
-   * （転倒軸側の端）を押し、SHIFT_DX だけ出側の受け台（tilterRunout）へ滑らせる。
-   * 転倒シリンダの反対側（+Z）に置き、シリンダと重ならないようにする。
-   */
-  /**
-   * 原点＝転倒軸（tilterArm/tilterBase と同じローカル系。+X がミル側、
-   * y は転倒軸基準＝ワールドの (PASS_LINE − PIVOT_DROP) が y=0）。
-   * 押し板の前面が板の近端に当たり、そこから F 方向へ押し出す。
-   * ロッド・シリンダは簡略化のため押し板と «一体» で並進させる（実機は
-   * シリンダ本体が固定でロッドだけ伸びるが、この規模の描画では往復動作の
-   * 視認性を優先し、他のプッシャ（cropPusher 等）と同じ簡略化に合わせた）。
-   */
-  tilterPusher() {
-    const S = CONFIG.SUPPLY, D = S.PIVOT_DROP, zc = S.ARM_W / 2 + 250, h = 640;
-    return G.merge([
-      G.at(G.box(220, h, S.ARM_W - 300), -110, D + 70, 0),  // 押し板（厚み 220。前面ちょうどが原点＝x=0）
-      G.at(G.cyl(220, 1500, 'x', 12), -750, D + 60, zc),    // ロッド
-      G.at(G.box(420, 420, 560), -1650, D + 60, zc),        // シリンダ
-      G.at(G.box(600, 300, 460), -1650, D - 250, zc),       // シリンダ受け（床上寄り）
-    ]);
-  },
-  /**
-   * 押し出し先の受け台。原点・ローカル系は tilterPusher() と同じ（転倒軸基準）。
-   * 転倒アームのベッド（ローラ無し）の続きとして、上面をパスラインに合わせた固定の
-   * 低いデッキを転倒アーム先端からトランスファークレーンの受け渡し域まで敷く。
-   * ローラは持たない（この区間もクレーンが吊って移動させるだけで、送り出しはしない）。
-   * 始点は tilterBase() の「寝かせたアームの受け台」ブラケット（ARM_L − 700 〜 ARM_L − 100）
-   * の先まで離す。ベッド面の終端（ARM_L − 40）からは 300 mm ほど間が空くが、剛体である
-   * スラブがまたぐには十分小さい。
+   * 低いフレームの受け持ち域（FRAME.RUN_X0 より出側）に届かない。そこで転倒機ベッドと
+   * «同じテーブルローラ» を転倒アームの回転半径の外に固定で並べ、ベッドのローラから
+   * 続けて FEED_DX だけ送り、ここでクレーンが掴む。
+   * 原点・ローカル系は tilterArm/tilterBase と同じ（転倒軸基準。+X がミル側、
+   * 床は y = −(PASS_LINE − PIVOT_DROP)）。ローラ本体は回すので別メッシュ
+   * （SupplyView の Instances）にし、ここは固定側の架構だけを作る。
    */
   tilterRunout() {
-    const S = CONFIG.SUPPLY, TR = CONFIG.TRANSFER, D = S.PIVOT_DROP;
-    const x0 = S.ARM_L + 300, x1 = TR.SHIFT_DX + CONFIG.SLAB.LEN_MAX + 400, len = x1 - x0;
-    const deckY = D - 30, y0 = -(CONFIG.MILL.PASS_LINE - D), legH = (deckY - 30) - y0, w = S.ARM_W - 300;
-    const parts = [G.at(G.box(len, 60, w), x0 + len / 2, deckY, 0)];             // デッキ（上面＝パスライン）
-    for (const sx of [0, 1]) for (const sz of [-1, 1])
-      parts.push(G.at(G.box(360, legH, 360), x0 + sx * len, y0 + legH / 2, sz * (w / 2 - 200)));  // 脚
+    const S = CONFIG.SUPPLY, D = S.PIVOT_DROP, zr = S.ARM_W / 2 - 80;
+    const [x0, x1] = Layout.runoutSpan, len = x1 - x0 + 400, xc = (x0 + x1) / 2;
+    const y0 = -(CONFIG.MILL.PASS_LINE - D), legH = (D - 480) - y0, parts = [];
+    for (const sz of [-1, 1]) {
+      parts.push(G.at(G.box(len, 480, 160), xc, D - 240, sz * zr));                        // 側枠（ローラ軸受）
+      for (const x of [x0 - 100, xc, x1 + 100])
+        parts.push(G.at(G.box(360, legH, 360), x, y0 + legH / 2, sz * zr));                // 脚
+    }
+    for (let i = 0; i < 3; i++)                                                            // 横つなぎ
+      parts.push(G.at(G.box(240, 180, 2 * zr - 240), x0 + (i + 0.5) * (x1 - x0) / 3, D - 390, 0));
     return G.merge(parts);
   },
 
@@ -4403,14 +4518,33 @@ class SupplyView {
     this.trolleyT = new THREE.Mesh(Parts.craneTrolley(FT.TROLLEY), MAT.hydraulic);
     this.trolleyT.name = 'トランスファートロリ'; this.trolleyT.castShadow = true; this.group.add(this.trolleyT);
     this.beamT = new THREE.Mesh(Parts.transferBeam(), MAT.hydraulic);
-    this.beamT.name = '吊りビーム（クランプ）'; this.beamT.castShadow = true; this.group.add(this.beamT);
+    this.beamT.name = '吊りビーム（トング）'; this.beamT.castShadow = true; this.group.add(this.beamT);
     this.ropesT = [-1, 1].map(() => { const m = new THREE.Mesh(Parts.craneRope(), MAT.rod); m.name = 'ワイヤ'; this.group.add(m); return m; });
-    const tongGeo = Parts.transferTong();
-    this.tongs = [];
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const m = new THREE.Mesh(tongGeo, MAT.hydraulic); m.name = 'クランプ'; m.castShadow = true;
-      m.userData.sx = sx; m.userData.sz = sz; this.group.add(m); this.tongs.push(m);
-    }
+    // トング 2 基（吊りビームの両端）。1 基では長尺スラブが前後に首を振るため 2 点吊りにする。
+    // 各基は「マスト＋シリンダ受け梁」＋「±Z のアーム 2 本とそのシリンダロッド」。
+    // −Z 側は親グループを Y 180° 回した鏡像なので、アームの回転は両側とも同じ符号で書ける。
+    const TG = TR.TONG;
+    const mastGeo = Parts.tongMast(), crossGeo = Parts.tongCrosshead();
+    const cylGeo = Parts.tongCylinder(), armGeo = Parts.tongArm(), rodGeo = Parts.tongRod();
+    this.rodTopY = TG.CYL_Y - TG.CYL_L / 2 - 100;      // ロッドが出る位置（シリンダ下蓋の下面）
+    this.tongs = [-1, 1].map((sx) => {
+      const g = new THREE.Group(); g.name = 'トング'; this.group.add(g);
+      for (const geo of [mastGeo, crossGeo]) {
+        const m = near(new THREE.Mesh(geo, MAT.hydraulic), MAT.hydraulic); m.castShadow = true; g.add(m);
+      }
+      const arms = [], rods = [];
+      for (const sz of [-1, 1]) {
+        const side = new THREE.Group(); if (sz < 0) side.rotation.y = Math.PI; g.add(side);
+        const arm = new THREE.Group(); side.add(arm); arms.push(arm);
+        const am = near(new THREE.Mesh(armGeo, MAT.hydraulic), MAT.hydraulic); am.castShadow = true; arm.add(am);
+        const cyl = near(new THREE.Mesh(cylGeo, MAT.hydraulic), MAT.hydraulic); cyl.castShadow = true;
+        cyl.position.z = u(TG.ROD_SPAN / 2); side.add(cyl);          // 受け梁の端に鉛直に据える
+        const rod = new THREE.Mesh(rodGeo, MAT.rod); rod.name = 'トングシリンダロッド';
+        rod.position.set(0, u(this.rodTopY), u(TG.ROD_SPAN / 2));
+        side.add(rod); rods.push(rod);
+      }
+      return { g, arms, rods, sx };
+    });
 
     // --- 転倒装置（縦置きスラブを 90° 倒す。ローラは持たない）------------------
     // 転倒軸はベッド面（パスライン）より PIVOT_DROP 下。軸がベッド面から突き出さない
@@ -4425,14 +4559,26 @@ class SupplyView {
     const tb = near(new THREE.Mesh(Parts.tilterBase(), MAT.base), MAT.base); tb.receiveShadow = true;
     tb.name = '転倒装置基部';
     this.tilterPivot.add(tb);
-    // --- 押し出し機構と受け台：転倒後、ピットクレーンの脚の内側からトランスファークレーンの
-    //     受け持ち域まで、板をプッシャで滑らせる（詳細は Parts.tilterPusher/tilterRunout）。
-    //     どちらも tilterArm/tilterBase と同じローカル系（原点＝転倒軸）で作っているので、
+    // --- 受取テーブル：転倒後、ピットクレーンの脚の内側からトランスファークレーンの
+    //     受け持ち域まで、ベッドのローラから続けて板を送る（詳細は Parts.tilterRunout）。
+    //     tilterArm/tilterBase と同じローカル系（原点＝転倒軸）で作っているので、
     //     tilterPivot の子として追加すれば向きの反転（scale.x = F）も自動でそろう。
     const runout = near(new THREE.Mesh(Parts.tilterRunout(), MAT.base), MAT.base); runout.receiveShadow = true;
-    runout.name = '受け台'; this.tilterPivot.add(runout);
-    this.pusher = near(new THREE.Mesh(Parts.tilterPusher(), MAT.hydraulic), MAT.hydraulic); this.pusher.castShadow = true;
-    this.pusher.name = 'プッシャ'; this.tilterPivot.add(this.pusher);
+    runout.name = '受取テーブル架構'; this.tilterPivot.add(runout);
+    // テーブルローラ本体。転倒機ベッド（アームの子＝アームと一緒に起きる）と受取テーブル
+    // （転倒軸ローカルの固定側）で、本線と同じ Parts.tableRoll() を胴長だけ変えて使う。
+    // ローラ上面がパスラインに来るよう軸心を胴端半径ぶん下げる（本線テーブルと同じ理屈）。
+    const RO = S.ROLLER, rollGeo = Parts.tableRoll(RO.BARREL, RO.END_L);
+    this.rollY = S.PIVOT_DROP - CONFIG.TABLE.ROLL_D_END / 2;
+    const mkRolls = (span, parent, name) => {
+      const xs = Layout.tilterRollXs(...span);
+      const inst = new Instances(rollGeo, MAT.rollFace, xs.length, { dynamic: true, cull: false, name });
+      xs.forEach((x, i) => inst.set(i, x, this.rollY, 0));
+      inst.commit(); parent.add(inst.mesh);
+      return { inst, xs };
+    };
+    this.bedRolls = mkRolls(Layout.bedSpan, this.tilterArm, '転倒機ベッドローラ');
+    this.runoutRolls = mkRolls(Layout.runoutSpan, this.tilterPivot, '受取テーブルローラ');
     this.group.add(this.tilterPivot);
 
     this.slab = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
@@ -4465,13 +4611,13 @@ class SupplyView {
         return { x: S.TILTER_X + F * (L / 2 * c - (D + th / 2) * sn), y: (P - D) + (L / 2 * sn + (D + th / 2) * c),
                  z: S.SIDE_Z, rot: tilt, hung: false };
       }
-      // プッシャがベッド上を出側へ滑らせる（クレーンはまだ触れていない）。
-      // 転倒直後の位置（x = TILTER_X + F·L/2）から xFlat（= 転倒軸 + F·(SHIFT_DX + L/2)）まで。
-      case 'SHIFT': {
+      // 転倒機ベッドのテーブルローラが受取テーブルへ送る（クレーンはまだ触れていない）。
+      // 転倒直後の位置（x = TILTER_X + F·L/2）から xFlat（= 転倒軸 + F·(FEED_DX + L/2)）まで。
+      case 'FEED': {
         const x0 = S.TILTER_X + F * L / 2;
-        return { x: Num.lerp(x0, xFlat, p.shift), y: P + th / 2, z: S.SIDE_Z, rot: 0, hung: false };
+        return { x: Num.lerp(x0, xFlat, p.feed), y: P + th / 2, z: S.SIDE_Z, rot: 0, hung: false };
       }
-      // トランスファークレーン: クランプで掴んで吊り上げ（GRAB）→ 横移動（TRANSFER）→ 降ろす（LOWER）
+      // トランスファークレーン: トングで掴んで吊り上げ（GRAB）→ 横移動（TRANSFER）→ 降ろす（LOWER）
       case 'GRAB':     return { x: xFlat, y: P + th / 2 + TR.LIFT * Num.smoothstep(0.75, 1, p.grab), z: S.SIDE_Z, rot: 0, hung: false };
       case 'TRANSFER': return { x: xFlat, y: P + th / 2 + TR.LIFT, z: Num.lerp(S.SIDE_Z, 0, Num.smoothstep(0, 1, p.transfer)), rot: 0, hung: false };
       case 'LOWER':    return { x: xFlat, y: P + th / 2 + TR.LIFT * (1 - Num.smoothstep(0, 0.6, p.lower)), z: 0, rot: 0, hung: false };
@@ -4479,7 +4625,9 @@ class SupplyView {
     }
   }
 
-  /** トランスファークレーンの姿勢: 桁の X・トロリの Z・吊りビームの下面高さ・クランプの開き(0〜1) */
+  /** トランスファークレーンの姿勢: 桁の X・トロリの Z・トング爪先の高さ・トングの開き(0〜1)。
+   *  «爪先» を基準にするのは、トングの開き具合で爪先と中心ピンの距離が変わるため。
+   *  中心ピン → マスト → 吊りビーム → ロープ → トロリ は View 側で爪先から積み上げる。 */
   _transferPose(sup, slab, P, pose) {
     const S = CONFIG.SUPPLY, TR = CONFIG.TRANSFER, F = CONFIG.FLIP, p = sup.p, th = slab.thickness;
     // xFlat は「転倒後にトランスファークレーンが降ろした位置」で固定。slab.length は圧延で
@@ -4487,22 +4635,24 @@ class SupplyView {
     // 出側へ流れてしまう（実際には降ろした後クレーンはその場に留まる）。降ろした時点の
     // 長さ（= 装入時の長さ）で固定した slab.initialLength を使う。
     const park = S.TILTER_X + F * TR.PARK_DX, xFlat = Layout.entryX(slab.initialLength);
-    const grabBot = P + th + 700, high = grabBot + TR.LIFT;        // 掴む高さ（板上面 + 700）／ 吊り上げ高さ
+    // 爪先はスラブ底面より JAW_LIFT 上（ローラの胴に当てない）。掴む高さ／吊り上げ高さ。
+    const grabY = P + TR.TONG.JAW_LIFT, high = grabY + TR.LIFT;
+    const jawOf = (y) => y - th / 2 + TR.TONG.JAW_LIFT;             // スラブ中心 y → 爪先
     const ph = sup.active ? sup.phase : (slab.onLine ? 'DONE' : 'LID');
     switch (ph) {
       case 'GRAB': {
         const g = p.grab;
         return { x: Num.lerp(park, xFlat, Num.smoothstep(0, 0.35, g)), z: S.SIDE_Z,
-                 beamBot: Num.lerp(high, grabBot, Num.smoothstep(0.35, 0.6, g)) + TR.LIFT * Num.smoothstep(0.75, 1, g),
+                 jawY: Num.lerp(high, grabY, Num.smoothstep(0.35, 0.6, g)) + TR.LIFT * Num.smoothstep(0.75, 1, g),
                  open: 1 - Num.smoothstep(0.6, 0.75, g) };
       }
-      case 'TRANSFER': return { x: xFlat, z: pose.z, beamBot: pose.y + th / 2 + 700, open: 0 };
+      case 'TRANSFER': return { x: xFlat, z: pose.z, jawY: jawOf(pose.y), open: 0 };
       case 'LOWER': {
         const l = p.lower;
-        return { x: xFlat, z: 0, beamBot: pose.y + th / 2 + 700 + (high - grabBot) * Num.smoothstep(0.8, 1, l), open: Num.smoothstep(0.6, 0.8, l) };
+        return { x: xFlat, z: 0, jawY: jawOf(pose.y) + TR.LIFT * Num.smoothstep(0.8, 1, l), open: Num.smoothstep(0.6, 0.8, l) };
       }
-      case 'DONE':     return { x: xFlat, z: 0, beamBot: high, open: 1 };
-      default:         return { x: park, z: S.SIDE_Z, beamBot: high, open: 1 };
+      case 'DONE':     return { x: xFlat, z: 0, jawY: high, open: 1 };
+      default:         return { x: park, z: S.SIDE_Z, jawY: high, open: 1 };
     }
   }
 
@@ -4510,15 +4660,17 @@ class SupplyView {
     const S = CONFIG.SUPPLY, F = CONFIG.FLIP, P = mill.passLine, p = sup.p, TR = CONFIG.TRANSFER;
 
     this.tilterArm.rotation.z = (1 - p.tilt) * Math.PI / 2;
-    // プッシャ: LID〜TILT の間は RETRACT まで退避させておく。立てた板は転倒軸まわりを
-    // 回転するので、寝た状態・立った状態のどちらよりも «斜めの瞬間» のほうが軸から遠くまで
-    // 張り出す（対角線ぶん）。実測（tools/pushercheck.mjs）では立てた状態の張り出しが
-    // 最大で軸から 712 mm。390 mm の余裕を見て RETRACT = 1100 まで下げておけば、
-    // 回転中のどの角度でも板がプッシャに触れない。SHIFT の間だけ RETRACT → SHIFT_DX − GAP
-    // （板の近端ちょうどだと «接触» と «食い込み» の判定が数値上見分けられないので、
-    // GAP だけ手前で止める）へ動かす。
-    const RETRACT = 1100, GAP = 30;
-    this.pusher.position.x = u(Num.lerp(-RETRACT, TR.SHIFT_DX - GAP, Num.clamp(p.shift ?? 0, 0, 1)));
+    // テーブルローラ: FEED の進捗から «送り距離» を出し、転がり条件 θ = −距離 / 半径 で
+    // 回す（角度を積算しないので、コマ落ちや巻き戻しがあっても板とローラがずれない）。
+    // 符号は板が +X（ローカル）へ進むとき上面が +X へ動く向き＝ −Z 回り。
+    const fed = S.FEED_DX * Num.clamp(p.feed ?? 0, 0, 1), ang = -fed / (CONFIG.TABLE.ROLL_D_END / 2);
+    if (ang !== this._rollAng) {
+      this._rollAng = ang;
+      for (const r of [this.bedRolls, this.runoutRolls]) {
+        r.xs.forEach((x, i) => r.inst.set(i, x, this.rollY, 0, 0, 0, ang));
+        r.inst.commit();
+      }
+    }
 
     // 炉蓋は開いたら閉じない（材料が出た後にゆっくり閉じる演出は行わない）
     this.lid.position.z = this.lidHome.z + u(this.lidTravel * Num.smoothstep(0, 1, p.lid));
@@ -4545,23 +4697,35 @@ class SupplyView {
 
     // --- トランスファークレーン（専用の低いフレーム。trolleyYT はピットクレーンの
     //     trolleyY とは別の、自分のフレーム高さ FT.GIRDER_Y から決まる値） ---
-    const FT = TR.FRAME;
+    const FT = TR.FRAME, TG = TR.TONG;
     const t = this._transferPose(sup, slab, P, pose);
+    // --- トング: 開き（爪内面 Z）→ アーム回転角 → 中心ピン高さ、と «幾何で» 解く。
+    //     全開姿勢を基準に、爪内面は中心ピンから半径 R の円周上を動くので、
+    //     目標の開きに対する角度は asin で一意に決まり、爪先高さもそれに従う。
+    const zOpen = TG.W_MAX / 2 - TG.JAW_T;                       // 全開時の爪内面 Z
+    const R = Math.hypot(zOpen, TG.PIVOT_H), a0 = Math.atan2(zOpen, TG.PIVOT_H);
+    const a = Math.asin(Num.clamp(Num.lerp(w / 2, zOpen, t.open) / R, -1, 1));
+    const pivotY = t.jawY + R * Math.cos(a), mastTop = pivotY + (TG.H - TG.PIVOT_H);
+    // ロッドピンはアームと一体なので «同じ回転» を掛けるだけ。シリンダ本体は受け梁に
+    // 固定されたままなので、ロッドの «出代» がこの 2 点間の距離として自然に決まる。
+    const arot = a0 - a, cs = Math.cos(arot), sn = Math.sin(arot);
+    const rz0 = TG.ROD_SPAN / 2, ry0 = TG.ROD_PIN_Y;
+    const rz = ry0 * sn + rz0 * cs, ry = ry0 * cs - rz0 * sn;
+    const dz = rz - rz0, dy = ry - this.rodTopY;
+    const rl = Math.hypot(dz, dy), rAng = Math.atan2(-dz, -dy);
+    for (const tg of this.tongs) {
+      tg.g.position.set(u(t.x + tg.sx * TR.TONG_DX), u(pivotY), u(t.z));
+      for (const arm of tg.arms) arm.rotation.x = arot;         // 角度 φ の点は X 回転 θ で φ−θ へ移る
+      for (const rod of tg.rods) { rod.rotation.x = rAng; rod.scale.y = rl / 1000; }
+    }
     this.girderT.position.x = u(t.x);
     this.trolleyT.position.set(u(t.x), u(this.trolleyYT), u(t.z));
-    this.beamT.position.set(u(t.x), u(t.beamBot + 210), u(t.z));
-    const ropeT = Math.max(this.trolleyYT - FT.TROLLEY.H / 2 - (t.beamBot + 680), 10);
+    this.beamT.position.set(u(t.x), u(mastTop + 210), u(t.z));
+    const ropeT = Math.max(this.trolleyYT - FT.TROLLEY.H / 2 - (mastTop + 680), 10);
     this.ropesT.forEach((m, i) => {
-      m.position.set(u(t.x + (i ? 1 : -1) * TR.BEAM_L * 0.34), u(t.beamBot + 680 + ropeT / 2), u(t.z));
+      m.position.set(u(t.x + (i ? 1 : -1) * TR.BEAM_L * 0.34), u(mastTop + 680 + ropeT / 2), u(t.z));
       m.scale.y = ropeT / 1000;
     });
-    // クランプ: ハンガー下端（ビーム下面 − 270）から板の底面 + 100 まで。開閉は Z
-    const tongLen = Math.max(330 + th, 200), tongTop = t.beamBot - 270;
-    for (const m of this.tongs) {
-      const { sx, sz } = m.userData;
-      m.position.set(u(t.x + sx * TR.TONG_DX), u(tongTop), u(t.z + sz * (w / 2 + 60 + t.open * TR.TONG_OPEN)));
-      m.scale.y = tongLen / 1000;
-    }
 
     if (!active) return;
     this.slab.scale.set(u(L), u(th), u(w));

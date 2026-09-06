@@ -32,8 +32,10 @@ const out = await page.evaluate((EPS) => {
     add(F[k]);
   for (const side of (F.pilerSides ?? [])) add(side.grp);
   const S = W.supplyView;
-  for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT', 'tongs', 'pusher'])
+  for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT'])
     add(S[k]);
+  for (const t of S.tongs) add(t.g);                       // トングはマスト・アーム・ロッドの入れ子
+  add(S.bedRolls.inst.mesh); add(S.runoutRolls.inst.mesh); // 転倒機ベッド／受取テーブルのローラ（回る）
   W.scene.traverse(o => { if (o.isPoints || o.userData.telescoping) moving.add(o); });
 
   const name = (o) => {

@@ -16,7 +16,9 @@ const out = await page.evaluate((EPS) => {
   // 検査対象: 装入設備の全メッシュ（スラブ自身と搬送ローラは «当たってよい» ので除外）
   const allow = new Set();
   const add = (o) => { if (!o) return; if (o.mesh) return add(o.mesh); o.traverse ? o.traverse(x => allow.add(x)) : allow.add(o); };
-  add(SV.slab); add(SV.ropes); add(SV.hookBeam); add(SV.ropesT); add(SV.beamT); for (const t of SV.tongs) add(t);
+  add(SV.slab); add(SV.ropes); add(SV.hookBeam); add(SV.ropesT); add(SV.beamT);
+  for (const t of SV.tongs) add(t.g);
+  add(SV.bedRolls.inst.mesh); add(SV.runoutRolls.inst.mesh);   // 板が載る側なので当たってよい
   const meshes = [];
   SV.group.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && !allow.has(o)) meshes.push(o); });
   for (const z of W.tableView.zones) { meshes.push(z.peds.mesh); }
