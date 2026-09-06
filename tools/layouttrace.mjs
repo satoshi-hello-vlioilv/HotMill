@@ -1,7 +1,7 @@
 // 配置・機構の «成立» を数値で判定する評価器（今回の指摘 1〜5 に対応）。
 //  1. 装入ローラ: 回転が «ローラ軸まわり» か（軸から外れた部材が一緒に振れていないか）、
 //     回転の向きが材料の進行方向と一致するか、横送りローラが上昇時に主テーブルローラ面より上で板を運ぶか
-//  2. 板面クーラント: サイドガイド上にヘッダがあり、熱モデルに板面冷却域があるか
+//  2. 板面クーラント: 入側 A-5 / 出側サイドガイド上にヘッダがあり、熱モデルと位置が一致するか
 //  3. 断面表示: 75 mm シャーの手前側と天面（クロスヘッド・上刃ホルダ）が半断面で透過するか
 //  4. 端材: 切り落とした端材が板端の変形（舌・ワニ口）を保っているか、最終的にパレット上に載るか
 //  5. テーブル: 図面の区分（本数・ピッチ・区間長）どおりにローラが並ぶか、シャー周辺のピッチ
@@ -179,9 +179,30 @@ const out = await page.evaluate(() => {
   {
     const gv = W.guideView;
     const has = !!gv.headers;
-    ok('サイドガイド上に板面クーラントヘッダがある', has, has ? `ヘッダ ${gv.headers.count ?? gv.headers.mesh?.count} 本` : '無し');
-    ok('熱モデルに板面冷却域（ガイド上ヘッダ）がある', !!K.MATERIAL.COOLANT && K.MATERIAL.COOLANT.GUIDE_TOP > 0,
+    ok('板面クーラントヘッダがある', has, has ? `ヘッダ ${gv.headers.count ?? gv.headers.mesh?.count} 本` : '無し');
+    ok('熱モデルに板面冷却域がある', !!K.MATERIAL.COOLANT && K.MATERIAL.COOLANT.GUIDE_TOP > 0,
        K.MATERIAL.COOLANT ? `上面 ${K.MATERIAL.COOLANT.GUIDE_TOP} / 膜沸騰 ${K.MATERIAL.COOLANT.H_FILM} W/m²K` : '無し');
+    // 入側は A-5 テーブルの中央、出側はサイドガイドの上。門型の実位置（描画）と
+    // 熱計算が見るヘッダ X（Layout）が同じ 1 式から来ていることまで見る。
+    {
+      const L = window.__LAYOUT, st = L.coolStations(), a5 = L.range('A-5');
+      const inA5 = st.filter(x => x >= a5[0] && x <= a5[1]);
+      const atGuide = st.filter(x => Math.abs(Math.abs(x) - K.TABLE.GUIDE.X) < 1);
+      ok('入側の板面クーラントが A-5 テーブルの範囲にある', inA5.length === 1,
+         `門型 ${st.map(Math.round).join(' / ')} mm ／ A-5 ${Math.round(a5[0])}〜${Math.round(a5[1])} mm`);
+      ok('出側の板面クーラントはサイドガイドの上', atGuide.length === 1,
+         `サイドガイド ±${K.TABLE.GUIDE.X} mm`);
+      const hx = L.coolHeaderXs(), gx = [];
+      gv.headers.mesh.updateWorldMatrix(true, false);
+      const m4 = new T.Matrix4();
+      for (let i = 0; i < gv.headers.mesh.count; i++) {
+        gv.headers.mesh.getMatrixAt(i, m4); m4.premultiply(gv.headers.mesh.matrixWorld);
+        gx.push(m4.elements[12] / sc);
+      }
+      const worst = Math.max(...hx.map(x => Math.min(...gx.map(g => Math.abs(g - x)))));
+      ok('描画したヘッダの位置と熱計算が見る位置が一致', hx.length === gx.length && worst < 1,
+         `${hx.length} 本 / 最大のずれ ${worst.toFixed(1)} mm`);
+    }
   }
 
   /* ================= 3. 断面表示（シャー） ================= */
