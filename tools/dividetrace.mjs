@@ -13,10 +13,13 @@ const out = await page.evaluate((target) => {
   return new Promise(res => setTimeout(() => {
     window.__startAuto(false);
     const log = [], checks = [], ok = (n, c, d) => checks.push({ name: n, pass: !!c, detail: d });
+    // 材料の «実長» ＝ 論理板長 + 両端の張り出し（舌・ワニ口）。切り分けたシートは張り出しごと
+    // 持っていくので、保存を見るときは張り出しを含めた実長で比べる。
+    const span = q => q.length + q.overhangAt(1) + q.overhangAt(-1);
     let L0 = 0, last = '', minGap = 1e9, overlapAt = null;
     window.__ff((p, n) => {
       const f = p.finish, s = p.slab;
-      if (f.plateStage === 'DIVIDE' && !L0) L0 = s.length;
+      if (f.plateStage === 'DIVIDE' && !L0) L0 = span(s);
       const key = `${f.plateStage}/${f.divideStage}/${f.pilerStage}/${f.sheetCount}/${f.piled}`;
       if (key !== last) { last = key; log.push({ t: +(n / 120).toFixed(1), stage: key, len: +(s.length / 1000).toFixed(2), head: Math.round(F > 0 ? s.xMax : s.xMin) }); }
       const run = f.sheets.filter(q => q.stage === 'RUN');
@@ -30,7 +33,7 @@ const out = await page.evaluate((target) => {
     }, 120 * 2500, 0);
     const f = P.finish, s = P.slab;
     const sheets = f.sheets.map(q => ({ len: Math.round(q.len), stage: q.stage, k: q.k }));
-    const total = f.sheets.reduce((a, q) => a + q.len, 0) + s.length;
+    const total = f.sheets.reduce((a, q) => a + q.len, 0) + span(s);
     ok('切り分けたシートはすべて定尺以下', f.sheets.every(q => q.len <= PL.SHEET_L + 1), sheets.map(q => q.len).join(' '));
     ok('最後の板（切らずに送った残り）が定尺 + 余裕以下', s.length <= PL.SHEET_L + 200 + 1, `${s.length.toFixed(0)} mm`);
     ok('総長が保存される（シート + 残り = 切り分け前）', Math.abs(total - L0) < 5, `${(total / 1000).toFixed(2)} / ${(L0 / 1000).toFixed(2)} m`);

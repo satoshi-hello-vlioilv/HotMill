@@ -660,10 +660,10 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
     </details>
 
     <details class="sec" id="sec-keys">
-      <summary><i class="fa-solid fa-keyboard"></i> ショートカット<span class="sum">Space / P / R / L / C / 1–9</span><i class="fa-solid fa-chevron-right chev"></i></summary>
+      <summary><i class="fa-solid fa-keyboard"></i> ショートカット<span class="sum">Space / P / R / L / C / 1–9・0</span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body"><div class="shortcuts">
         <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
-        <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>9</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>G</kbd>圧延実績</span><span><kbd>V</kbd>版数と履歴</span>
+        <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>9</kbd><kbd>0</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>G</kbd>圧延実績</span><span><kbd>V</kbd>版数と履歴</span>
       </div></div>
     </details>
   </div>
@@ -795,6 +795,31 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.8.0', base: '83fc89b', date: '2026-09-07', title: '鋳肌ラウンド断面・装入設備の再配置（9 炉バンクとスラブヤード）・ラベルの実測是正', items: [
+      // --- 材料の断面形状 ---
+      { t: 'スラブ断面を «角の丸い長方形» にした。鋳造ままのコーナー半径 R が面削で頂部を削られ、鏡面（面削面）と鋳肌が稜線で出会う', w: 'Sect.prep / Sect.at' },
+      { t: '丸みは圧延で自己相似に縮む（R = R0·(h/h0)^1.5）。板・端材・シート・装入スラブが同じ 1 式を使う', w: 'SlabState.edgeAt' },
+      { t: '断面形状の検査を評価器に追加（面削面の平坦・円弧・断面積・自己相似な縮み）', w: 'tools/edgetrace.mjs' },
+      // --- 端部欠陥（薄い領域） ---
+      { t: '一度クロップした端は張り出しを 0 に固定していた（第 8 パス以降ずっと 0 mm だった）', w: 'SlabState.overhangAt' },
+      { t: '端部欠陥は «その端を最後に平らにしてからの圧下» で育つようにした（起点の板厚を端ごとに持つ）', w: 'SlabState.hCut' },
+      { t: '舌（幅中央が伸びる）とワニ口（表裏が開く）を別の量に分けた。機構が違うため', w: 'SlabState.overhangParts' },
+      { t: 'ワニ口は表層集中変形（Δ = hMean/Ld > 1）のパスでだけ育つようにした。薄板では出ない', w: 'Rolling.inhomogeneity / hHomo' },
+      { t: '端部欠陥の検査を評価器に追加（切った直後は平ら／薄板で舌は付き直しワニ口は出ない）', w: 'tools/modeltrace.mjs' },
+      { t: '切り分けの総長保存の判定を «張り出し込みの実長» に直した（舌が付き直すようになったため）', w: 'tools/dividetrace.mjs' },
+      // --- 配置 ---
+      { t: '入側の板面冷却を A-5 テーブルから «入側サイドガイドの上» へ移した（出側と対称。バイト直前で効かせる）', w: 'TABLE.GUIDE.HEADER.STATIONS' },
+      { t: 'スラブ転倒機・トランスファークレーン・ライン投入位置を C-2〜C-1 へセットで移した', w: 'SUPPLY.TILTER_X' },
+      { t: 'ピット炉を 9 基のバンクにし、A-4〜A-1 の脇（操作側）へ並べた', w: 'CONFIG.FURNACE / Layout.pitX' },
+      { t: '材質ごとに «その材質を焼く炉» を持たせ、選んだ材質の炉の蓋だけが開いてそこから取り出す', w: 'ALLOYS[].pit / Layout.pitOf' },
+      { t: 'ラインと炉バンクの間にスラブヤードを新設。面削済み（鏡面 + 鋳肌の丸み）のスラブを寝かせて置いた', w: 'CONFIG.SLAB_YARD' },
+      { t: 'ヤードのスラブは加熱前なので «冷えた色» の専用マテリアルにし、圧延材の温度色に引きずられないようにした', w: 'MAT.slabColdFaces' },
+      { t: '装入クレーンを X 方向へ走行させ、炉バンクから転倒機まで走る «走行» 工程を足した', w: 'SEQUENCE[TRAVEL]' },
+      // --- 設備ラベル ---
+      { t: '設備ラベルが実物から離れていた（ワークロール 3.3 m / バックアップロール 3.5 m / チョック 1.7 m）。実物の上へ戻し、重なりは高さと胴端で分けた', w: 'LabelView.items' },
+      { t: 'ロール胴・架構のメッシュに名前を付け、ラベルと実物の照合を評価器で自動化した', w: 'tools/labeltrace.mjs' },
+      { t: 'ピット炉・スラブヤードへ寄る視点（キー 0）を足した。視点が 10 個になったのでキー判定を数値比較に直した', w: 'VIEWS[pit]' },
+    ] },
     { v: '1.7.0', base: '88d70cb', date: '2026-09-07', title: '圧延モデルの精度向上（ロール扁平・Zener–Hollomon・前進率・摩擦・ロール温度・FF-AGC）', items: [
       { t: 'ロールの弾性扁平（Hitchcock）を実装。荷重で接触弧が伸び、薄板パスで 1 割以上効く', w: 'Rolling.flattenedRadius' },
       { t: '荷重 → 扁平 → 接触弧 → 荷重 の陰的関係を緩和つき不動点反復で解く（残差 1e-5）', w: 'Rolling.solve' },
@@ -1124,22 +1149,28 @@ const CONFIG = {
               * 1 本あたりの冷却域は ZONE。※各寸法は推定値
               *   STATIONS = 門型を立てる位置。«テーブル区分の名前»（その区分の中央）か
               *   «正準 X»（第 1 パスが +X ＝ 出側が正）で書き、Layout.coolStations が世界 X に直す。
-              *   入側は A-5 テーブルの中央（図面 61.8〜70.8 m）、出側はサイドガイドの上（3.4 m）。 */
-             HEADER: { STATIONS: [{ sec: 'A-5' }, { x: 3400 }],
+              *   入側・出側とも «サイドガイドの上»（正準 ∓3,400）。板面冷却はロールバイトの
+              *   直前・直後で効かせるのが本来で、遠いテーブル上に置くと «次のパスまでに
+              *   どれだけ冷えるか» しか効かない。門型はサイドガイド架台（|x| ≤ 4,310、
+              *   Z ±3,910）の外側に柱を立てられるよう POST_X / POST_Z を持つ。 */
+             HEADER: { STATIONS: [{ x: -3400 }, { x: 3400 }],
                        DX: 500, Y: 950, D: 140, POST_X: 960, POST_W: 240, POST_Z: 2900, BEAM_Y: 1600, ZONE: 600,
                        // 材料が来る手前で開弁する距離（噴射の見た目だけ。熱計算は実通過長で効かせる）
                        LEAD: 6000 } },
   },
 
-  /* スラブ装入設備 —— 実機配置では転倒機とその周辺（ピット炉・クレーン）は入側テーブル
-   * A-8 / A-9 / B-1 の操作側（+Z）にある。縦置きスラブを転倒機で倒し、倒したスラブは
+  /* スラブ装入設備 —— 転倒機とその周辺（ピット炉・装入クレーン・トランスファークレーン）は
+   * 入側テーブル C-2 / C-1（ミル中心から 7.5〜18.6 m）の操作側（+Z）にひとまとまりで置く。
+   * ピット炉・クレーン・投入位置はすべて TILTER_X からの相対で決まるので、TILTER_X を
+   * 動かせば «セットで» 動く（Layout.entryX / FURNACE.Z / CRANE.RUN_X0/X1）。
+   * 縦置きスラブを転倒機で倒し、倒したスラブは
    * 転倒機ベッドと受取テーブルの «テーブルローラ» で出側へ送り、そこから
    * «トランスファークレーン» がトングで吊り上げてラインへ横移動する。
    * ラインに降ろされたスラブは A-9 テーブルからミルへ搬送される。
    * 駆動側(-Z)にはスピンドル・ピニオンスタンド・主電動機があるため装入設備は置けない。 */
   SUPPLY: {
     SIDE_Z: 3800,                            // ラインから転倒機ベッド中心までの側方距離
-    TILTER_X: -33000,                        // 転倒軸（A-9 / A-8 境界付近）。倒したスラブはここからミル側へ横たわる
+    TILTER_X: -13000,                        // 転倒軸（C-1 の中ほど）。倒したスラブはここからミル側へ横たわる
     ARM_L: 4600,                             // 転倒アーム長（最大スラブ長 4200 mm を受ける）
     ARM_W: 3100,                             // 転倒アーム幅（最大スラブ幅 2200 mm と開いたトングを受ける）
     // 転倒軸はベッド面（＝パスライン）より PIVOT_DROP 下に置く。軸（Φ560）がベッド面から
@@ -1155,8 +1186,9 @@ const CONFIG = {
     /* 転倒後、テーブルローラでスラブを出側へ送る距離。
      * 転倒直後のスラブはピットクレーンの脚の内側にあり、そのままではトランスファー
      * クレーンの低いフレームの受け持ち域に届かない。ここまで送れば受け取れる。
-     * 上限は «降ろしたスラブが A-9 テーブル（-34,800〜-25,800）に載る» ことで決まり、
-     *   |TILTER_X| − FEED_DX − LEN_MAX ≥ 25,800 → FEED_DX ≤ 3,000。 */
+     * 上限は «降ろしたスラブが入側テーブルに載り切る» ことで決まる。ミル側の端は
+     * D テーブルの始まり（2,500）なので
+     *   |TILTER_X| − FEED_DX − LEN_MAX ≥ 2,500 → FEED_DX ≤ 6,300（LEN_MAX = 4,200）。 */
     FEED_DX: 2500,
   },
   /*
@@ -1237,16 +1269,40 @@ const CONFIG = {
     },
   },
 
-  /* ピット炉 —— スラブは立てた状態で加熱され、装入クレーンで吊り上げられて
-   * 転倒機に立てかけられる。ここではその一連の動きを再現する。 */
-  FURNACE: { Z: 10800, DEPTH: 5200, W: 2800, L: 2400, WALL: 500, LID_T: 380 },
+  /* ピット炉（9 基のバンク）—— スラブは立てた状態で加熱され、装入クレーンで吊り上げられて
+   * 転倒機に立てかけられる。
+   *
+   * 配置は入側テーブルの操作側（+Z）。ラインから外へ向かって
+   *     ライン ── スラブヤード（面削済み・ピット入り待ち）── ピット炉バンク
+   * の順に並ぶ。X 方向は A-4〜A-1 の範囲（正準 −74,000 〜 −118,800）に渡し、
+   * 装入クレーンがその上を走行して «材質ごとの炉» から取り出す。
+   *
+   * «材質ごとに炉が違う» のは実機の運用そのもので、同じ炉に違う合金を入れると
+   * 温度履歴（均熱温度・保持時間）を材質ごとに作れず、炉内の汚染管理もできないため。
+   * どの合金がどの炉かは ALLOYS[key].pit（1 起点）で持ち、炉番号の真実は 1 か所。
+   *   X0    …… 1 番炉の中心（正準）。PITCH ぶんずつ外側（ミルから遠い側）へ並ぶ
+   *   Z     …… 炉口の中心 Z（スラブヤードの外側）
+   */
+  FURNACE: { N: 9, X0: -74000, PITCH: -5600, Z: 24000,
+             DEPTH: 5200, W: 2800, L: 2400, WALL: 500, LID_T: 380 },
+
+  /* スラブヤード —— 面削（フライス）を終えてピット炉へ入るのを待つスラブの置き場。
+   * 上下面は鏡面、側面と長辺の丸みは鋳肌のまま（＝圧延材と同じ Sect / MAT.slabFaces）。
+   * 加熱前なので «冷えた色» で描く（圧延材の温度色に引きずられない別マテリアル）。
+   * ラインと炉バンクの間に 2 列で寝かせ、各列はスキッドの上に載る。 */
+  SLAB_YARD: { Z0: 12000, ROW_DZ: 5200, ROWS: 2, PER_ROW: 8, PITCH: -6200,
+               X0: -74000, SKID_W: 2600, SKID_H: 320, STACK: 2 },
   /*
    * 装入クレーン（ピットクレーン）—— 転倒軸の真上に固定された橋（X 方向には走行しない。
    * トロリが桁上を Z 方向に動いて炉と転倒機の間を往復する）。したがって走行桁の X 方向の
    * 長さは «脚を支える最小限» で足り、トランスファークレーンのような広い走行域は要らない
    * （RUN_X0/X1 は転倒軸 ±1 m の門型脚 2 対のみ）。
    */
-  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -1000, RUN_X1: 1000, COL_PITCH: 2000,
+  /* 装入クレーンは «炉バンク〜転倒機» を X 方向に走行する（RUN_X0/X1 は転倒軸からの
+   * 正準オフセット）。炉が 9 基に増えて 100 m 近い走行域になったので、柱のピッチも広げる。
+   * 走行桁の Z は «ラインを跨いで» 反対側（−6,500）と炉の外側（+27,000）に置く ——
+   * 入側テーブル（Z ±1,765）とスラブヤード・炉バンクのどれにも柱を落とさないため。 */
+  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 27000, RUN_X0: -107000, RUN_X1: 0, COL_PITCH: 12000,
              TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600,
              /* 巻上ワイヤ。ドラムから «トロリ下面のシーブ» を経て吊りビーム上面の
               * シーブへ降り、2 本掛け（FALLS）で戻る。ワイヤの上端＝トロリのシーブ芯、
@@ -1262,13 +1318,14 @@ const CONFIG = {
   SEQUENCE: [
     ['LID',      'lid',      1.8, 'ピット炉の蓋を開けています'],
     ['HOIST',    'hoist',    3.6, '加熱済みスラブを吊り上げています'],
+    ['TRAVEL',   'travel',   4.6, '炉バンクから転倒機まで走行しています'],
     ['TRAVERSE', 'traverse', 3.4, '転倒機まで横行しています'],
     ['SET',      'set',      2.6, '転倒機にスラブを立てかけています'],
     ['TILT',     'tilt',     3.6, '転倒装置でスラブを倒しています'],
     ['FEED',     'feed',     1.6, '転倒機ベッドのテーブルローラでスラブを受取テーブルへ送っています'],
     ['GRAB',     'grab',     3.2, 'トランスファークレーンが倒したスラブをトングで掴んで吊り上げています'],
     ['TRANSFER', 'transfer', 3.2, 'トランスファークレーンでミルラインへ横移動しています'],
-    ['LOWER',    'lower',    2.6, '入側テーブル（A-9）へ降ろしています'],
+    ['LOWER',    'lower',    2.6, '入側テーブルへ降ろしています'],
   ],
 
   /* 巻取機（出側リール）—— 板材放出だけでなくコイル巻取ができる。
@@ -1515,6 +1572,15 @@ const CONFIG = {
     // 板で 800 mm の舌が出るという非物理な形になる）。材質係数は合金ごと（ALLOYS.end）。
     // 75 mm シャーはこの長さに余裕を足した量を切り落とす。描画と物理で同じ式を使う。
     OVERHANG: { TH_K: 3.0, WID_K: 0.30 },
+    /* 鋳造まま（DC 鋳造）のスラブは長辺のコーナーが丸い。上下面は圧延前に片面 SCALP だけ
+     * 面削するので、丸みの «上の部分» は削り取られ、鏡面の平らな面と鋳肌の丸みが角度を
+     * もって出会う（＝写真に見える稜線）。側面は面削しないので鋳肌のまま残る。
+     *   EDGE_R —— 鋳造まま（面削前）のコーナー半径 [mm]
+     *   c0 = EDGE_R − 面削量 …… 上面から円弧が始まる深さ。面削量が半径を超えれば角は直角
+     * 圧延が進むとロールが端まで平らに押すので丸みは急速に消える。自己相似に縮めて
+     *   R = R0·(h/h0)^EDGE_K,  c = c0·(h/h0)^EDGE_K
+     * とする（EDGE_K = 1.5。板厚 1/2 で丸み 1/2.8、1/10 で 1/32）。 */
+    EDGE_R: 60, EDGE_K: 1.5,
   },
 
   /* パイラー —— 30 mm シャーの先にある板積み装置。シャーで切り分けた板（シート）を
@@ -1542,14 +1608,17 @@ const CONFIG = {
    *   end: 端部欠陥（ワニ口・舌）の出やすさ ＝ クロップ長の材質係数
    *   RHO/CP/K: 密度・比熱・熱伝導率、E: 熱間域の縦弾性係数 [GPa]（反りの自重たわみに効く）
    * 数値は熱間圧延域の公表データからの代表値（推定を含む）。 */
+  /* 材質。pit は «その材質を焼くピット炉の番号»（1 起点、FURNACE.N 以内）。
+   * 同じ炉に違う合金を入れると材質ごとの均熱条件を作れないので、実機と同じく炉を分ける。
+   * 8・9 番炉は予備（この 7 材質では使わない）。 */
   ALLOYS: {
-    A1050: { name: 'A1050  純アルミ',        series: 1000, C: 20, b: 0.0050, m: 0.15, Q_ACT: 156, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
-    A3003: { name: 'A3003  Al-Mn（既定）',    series: 3000, C: 32, b: 0.0055, m: 0.13, Q_ACT: 180, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
-    A4045: { name: 'A4045  Al-Si（ろう材）',  series: 4000, C: 30, b: 0.0060, m: 0.12, Q_ACT: 160, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
-    A5052: { name: 'A5052  Al-2.5Mg',       series: 5000, C: 52, b: 0.0060, m: 0.12, Q_ACT: 175, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
-    A5083: { name: 'A5083  Al-4.5Mg',       series: 5000, C: 75, b: 0.0068, m: 0.11, Q_ACT: 185, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
-    A6061: { name: 'A6061  Al-Mg-Si',       series: 6000, C: 42, b: 0.0062, m: 0.12, Q_ACT: 145, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
-    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    series: 7000, C: 85, b: 0.0080, m: 0.10, Q_ACT: 230, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
+    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, C: 20, b: 0.0050, m: 0.15, Q_ACT: 156, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
+    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, C: 32, b: 0.0055, m: 0.13, Q_ACT: 180, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
+    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, C: 30, b: 0.0060, m: 0.12, Q_ACT: 160, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
+    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, C: 52, b: 0.0060, m: 0.12, Q_ACT: 175, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
+    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, C: 75, b: 0.0068, m: 0.11, Q_ACT: 185, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
+    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, C: 42, b: 0.0062, m: 0.12, Q_ACT: 145, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
+    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, C: 85, b: 0.0080, m: 0.10, Q_ACT: 230, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
   },
 
   MATERIAL: {
@@ -1698,14 +1767,16 @@ const CONFIG = {
     { id:'stand',    name:'圧延機',     icon:'fa-industry',         pos:[ 17000,  8000, 21000], tgt:[     0,  1900,     0] },
     { id:'bite',     name:'ロールバイト', icon:'fa-magnifying-glass', pos:[  6600,  2000,  2200], tgt:[   200,  1150,     0] },
     { id:'drive',    name:'駆動側',     icon:'fa-gears',            pos:[ 34000, 13000,-16000], tgt:[     0,  1400, -9500] },
-    { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[-44000,  9500, 20000], tgt:[-30500,   900,  3000] },
+    { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[  6000,  9000, 21000], tgt:[-13000,  1200,  3800] },
     { id:'coiler',   name:'巻取設備',   icon:'fa-arrows-spin',      pos:[ 15500,  4600,  9500], tgt:[  8000,  2500,     0] },
     // 75 mm シャーはワークロールから約 30.6 m。他の視点では画面外なので専用の視点を置く。
     { id:'shear',    name:'75mmシャー', icon:'fa-scissors',         pos:[ 36500,  5200, 11500], tgt:[ 30800,  1200,  1500] },
     { id:'piler',    name:'30mmシャー・パイラー', icon:'fa-layer-group', pos:[ 92000,  7000, 17000], tgt:[ 85500,  1000,     0] },
-    // 入側の板面冷却は A-5 テーブルの中央（ミル中心から 66.3 m）。他のどの視点からも
-    // 画面外なので専用の視点を置く（«移したのに見えない» の実体はこれだった）。
-    { id:'cool',     name:'入側冷却（A-5）', icon:'fa-shower',  pos:[-60500,  5200, 11000], tgt:[-66300,  1500,     0] },
+    // 板面冷却（入側・出側ともサイドガイドの上）。ミル近傍なので «圧延機» 視点でも
+    // 画角には入るが、ヘッダとノズルを見るには寄った視点が要る。
+    { id:'cool',     name:'板面冷却',   icon:'fa-shower',           pos:[ 12000,  5500, 12000], tgt:[     0,  1700,     0] },
+    // ピット炉バンク（9 基）とスラブヤードは A-4〜A-1 の脇。ラインからいちばん遠いので専用の視点を置く
+    { id:'pit',      name:'ピット炉・スラブヤード', icon:'fa-fire', pos:[-60000, 26000, 52000], tgt:[-96000,  2000, 18000] },
   ],
 };
 
@@ -1726,6 +1797,10 @@ const CONFIG = {
   [C.PILER.YARD.X0, C.PILER.YARD.X1] = [neg(C.PILER.YARD.X1), neg(C.PILER.YARD.X0)];
   C.SHEAR30.X = neg(C.SHEAR30.X);
   C.SUPPLY.TILTER_X = neg(C.SUPPLY.TILTER_X);
+  // ピット炉バンクとスラブヤードは «並びの向き» ごと折り返す（PITCH は符号付きの間隔）
+  C.FURNACE.X0 = neg(C.FURNACE.X0); C.FURNACE.PITCH = neg(C.FURNACE.PITCH);
+  C.SLAB_YARD.X0 = neg(C.SLAB_YARD.X0); C.SLAB_YARD.PITCH = neg(C.SLAB_YARD.PITCH);
+  // CRANE.RUN_X0/X1 は Parts.craneRunway が自分で FLIP を掛けるので、ここでは触らない
   for (const s of C.TABLE.SECTIONS) s.side = -s.side;
   for (const v of C.VIEWS) { v.pos[0] = neg(v.pos[0]); v.tgt[0] = neg(v.tgt[0]); }
 })(CONFIG.FLIP);
@@ -1854,6 +1929,20 @@ const Layout = {
   /** 倒したスラブの中心 X。転倒軸から «ローラでの送り量 FEED_DX + L/2» の位置＝
    *  トランスファークレーンが受け取り、ラインへ移載する位置もこの X で変わらない。 */
   entryX(length) { return CONFIG.SUPPLY.TILTER_X + CONFIG.FLIP * (CONFIG.SUPPLY.FEED_DX + length / 2); },
+  /** ピット炉 i 番（0 起点）の中心 X（世界）。並びの向きは PITCH の符号が持つ。 */
+  pitX(i) { const F = CONFIG.FURNACE; return F.X0 + i * F.PITCH; },
+  /** 材質キー → 炉の添字（0 起点）。ALLOYS[key].pit が真実で、範囲外は 1 番炉へ落とす。 */
+  pitOf(alloyKey = CONFIG.MATERIAL.ALLOY) {
+    const a = CONFIG.ALLOYS[alloyKey], n = CONFIG.FURNACE.N;
+    return Num.clamp((a?.pit ?? 1) - 1, 0, n - 1);
+  },
+  /** スラブヤードの置き場所（世界座標の配列）。列（Z）× 並び（X）× 段（Y）。 */
+  yardSlots() {
+    const Y = CONFIG.SLAB_YARD, out = [];
+    for (let r = 0; r < Y.ROWS; r++) for (let i = 0; i < Y.PER_ROW; i++)
+      out.push({ x: Y.X0 + i * Y.PITCH, z: Y.Z0 + r * Y.ROW_DZ, row: r, i });
+    return out;
+  },
   /** 転倒機ベッド／受取テーブルのローラ X（転倒軸ローカル）。両端を x0/x1 に合わせて等配する。 */
   tilterRollXs(x0, x1) {
     const n = Math.max(2, Math.round((x1 - x0) / CONFIG.SUPPLY.ROLLER.PITCH) + 1), out = [];
@@ -1896,6 +1985,69 @@ const Drive = {
     if (!(torqueNm > 1)) return vMax;
     const vBase = Math.PI * (dia / 1000) * (D.RPM_BASE / D.GEAR);
     return Num.clamp(vBase * Drive.maxTorque / torqueNm, 5, vMax);
+  },
+};
+
+/* -----------------------------------------------------------------------------
+ * 断面形状 —— «角の丸い長方形»。板・端材・シート・装入スラブで共通に使う 1 式。
+ *
+ * 鋳造まま（DC 鋳造）のスラブは長辺のコーナーが半径 R の丸みを持つ。上下面だけを
+ * 面削するので丸みの頂部は削られ、鏡面（面削面）と鋳肌（丸み＋側面）が稜線をなして
+ * 出会う。断面は次の 3 区間でできている（右上 1/4 を示す。上下左右対称）:
+ *
+ *      ┌────────── 上面（面削・鏡面） y = H, |z| ≤ zt
+ *      │        ╲
+ *      │         ╲  円弧（鋳肌） 中心 (W−R, H−c)、掃き角 0〜θ1 = asin(c/R)
+ *      │          │
+ *      │          │ 側面（鋳肌） z = W, |y| ≤ H−c
+ *
+ *   H = 板厚/2、W = 板幅/2、c = 上面から円弧が始まる深さ（= R − 面削量）、
+ *   zt = (W−R) + √(R²−c²) …… 平らな上面の半幅。
+ *
+ * ボックスの面分割をそのまま使えるよう、正規化断面座標 (a, b) ∈ [−1,1]² から写す。
+ *   ・|a| ≥ |b|（上下面）→ 平らな面。ゆえに面削面のマテリアルは «平ら» なまま
+ *   ・|a| <  |b|（側面）  → 円弧 + 直線。丸みは側面側にだけ現れる（＝鋳肌のまま）
+ *   ・内部の点は同じ向きの線分上へ比例配分する（端面キャップも同じ 1 式で描ける）
+ * 側面の媒介変数は «|a| ≤ 0.5 が直線・0.5 < |a| が円弧» と固定配分にする。分割数に
+ * よらず円弧に必ず半分の行が当たるので、丸みが «1 セグメント» に潰れない。
+ * -------------------------------------------------------------------------- */
+const Sect = {
+  /** 板厚 h・板幅 w・丸み {R, c} から断面パラメータを作る（頂点ループの外で 1 度だけ）。 */
+  prep(h, w, edge) {
+    const H = h / 2, W = w / 2;
+    const R = Math.min(edge?.R ?? 0, W * 0.98, H * 0.98);
+    const c = Math.min(edge?.c ?? 0, R, H * 0.98);
+    if (!(R > 0.02 && c > 0.02)) return { H, W, R: 0 };
+    const zc = W - R, yc = H - c;
+    return { H, W, R, c, zc, yc, th1: Math.asin(Num.clamp(c / R, 0, 1)),
+             zt: zc + Math.sqrt(Math.max(R * R - c * c, 0)) };
+  },
+  /** 正規化断面座標 (a, b) ∈ [−1,1]² → 断面上の (y, z) [mm]（中心が原点）。 */
+  at(P, a, b) {
+    if (!P.R) return { y: a * P.H, z: b * P.W };
+    const rho = Math.max(Math.abs(a), Math.abs(b));
+    if (rho < 1e-9) return { y: 0, z: 0 };
+    const sa = a / rho, sb = b / rho;                     // 単位正方形の境界へ射影
+    let y, z;
+    if (Math.abs(sa) >= Math.abs(sb)) { y = Math.sign(sa) * P.H; z = sb * P.zt; }
+    else {
+      const p = Math.abs(sa), sy = Math.sign(sa) || 1, sz = Math.sign(sb);
+      if (p <= 0.5) { y = sy * (p / 0.5) * P.yc; z = sz * P.W; }
+      else { const t = ((p - 0.5) / 0.5) * P.th1;
+             y = sy * (P.yc + P.R * Math.sin(t)); z = sz * (P.zc + P.R * Math.cos(t)); }
+    }
+    return { y: rho * y, z: rho * z };
+  },
+  /**
+   * 断面積 [mm²]。長方形 2H×2W から «角の欠け» を 4 隅ぶん引く。
+   * 高さ v = y − yc（0〜c）での欠け幅は R − √(R²−v²) なので
+   *   D = ∫₀^c (R − √(R²−v²)) dv = R·c − c√(R²−c²)/2 − R²·θ1/2
+   * （c = R すなわち面削なしなら D = R²(1 − π/4) ＝ 1/4 円の欠けに一致する）。
+   */
+  area(P) {
+    if (!P.R) return 4 * P.H * P.W;
+    const D = P.R * P.c - P.c * Math.sqrt(Math.max(P.R * P.R - P.c * P.c, 0)) / 2 - P.R * P.R * P.th1 / 2;
+    return 4 * (P.H * P.W - D);
   },
 };
 
@@ -2473,15 +2625,29 @@ const Rolling = {
    */
   endZone(oh, L) { return Num.clamp(3 * oh, 600, L * 0.25); },
   /**
-   * 端部の張り出し形状。端から dEnd だけ内側の材料点が、板厚方向位置 ny（−1 下面〜+1 上面）・
-   * 幅方向位置 nz（−1〜+1）でどれだけ端の向きへ伸びるか [mm]。舌（幅中央が伸びる）と
-   * ワニ口（表裏が開く）の合成で、端の最大変位が oh になる。描画（板・端材・シート）は
-   * すべてこの 1 式を参照する。
+   * 変形の不均一さ Δ = hMean / Ld。接触弧が板厚より短い（Δ > 1）と変形が表層に集中し、
+   * 板厚中央が置いていかれて «ワニ口»（表裏が開く割れ）になる。Δ < 1 では板厚方向に
+   * 均一に変形するのでワニ口は出ない。厚板の前段パスだけが Δ > 1 になる
+   * （実測: 536→455 で 2.61、213→132 で 0.91、14.3→10.9 で 0.30）。
    */
-  endOffset(dEnd, oh, zone, ny, nz) {
-    if (!(oh > 0) || dEnd >= zone) return 0;
+  inhomogeneity(hIn, hOut, Ld) {
+    const L = Ld > 0 ? Ld : Rolling.contactLength(hIn, hOut);
+    return L > 0 ? (hIn + hOut) / 2 / L : Infinity;
+  },
+  /**
+   * 端部の張り出し形状。端から dEnd だけ内側の材料点が、板厚方向位置 ny（−1 下面〜+1 上面）・
+   * 幅方向位置 nz（−1〜+1）でどれだけ端の向きへ伸びるか [mm]。
+   *
+   * 舌（tongue）とワニ口（gator）は発生機構が違うので別々の大きさで受け取る:
+   *   舌     —— 幅方向の不均一な広がり。幅中央がいちばん伸びる（1 − nz²）。どのパスでも付く
+   *   ワニ口 —— 表層集中変形による割れ。表裏がいちばん開く（ny²）。Δ > 1 のパスだけ
+   * 端の最大変位は «幅中央かつ表裏» で tongue + gator になる。
+   * 描画（板・端材・シート）と先端位置の計算はすべてこの 1 式を参照する。
+   */
+  endOffset(dEnd, tongue, gator, zone, ny, nz) {
+    if (!((tongue > 0 || gator > 0)) || dEnd >= zone) return 0;
     const e = 1 - dEnd / zone;
-    return oh * e * e * 0.5 * ((1 - nz * nz) + ny * ny);
+    return e * e * (tongue * (1 - nz * nz) + gator * ny * ny);
   },
   /** ロールバイト内の板厚プロファイル h(x) と下面高さ。x は圧延中心からの mm。 */
   profile(x, hIn, gap, dir) {
@@ -2529,6 +2695,12 @@ class SlabState {
     this.T = new Float64Array(CONFIG.MATERIAL.LAYERS).fill(temp);
     this.inBite = false; this.rollingActive = false; this.onLine = false; this.biteOk = true;
     this.cropped = { 1: false, '-1': false };       // 端ごとに «クロップ済みか»（+1: xMax 側 / −1: xMin 側）
+    /* 端部欠陥は «その端を最後に平らにしてからの圧下» で育つ。切った瞬間に 0 に戻り、
+     * そのあとのパスでまた付いてくる。hCut はその起点の板厚（null なら素材のまま）。 */
+    this.hCut = { 1: null, '-1': null };
+    /* ワニ口が育つのは変形が表層に集中する Δ = hMean/Ld > 1 のパスだけ。Δ が 1 を切った
+     * 時点の板厚を覚えておき、それより薄い側ではワニ口を伸ばさない（舌だけが伸びる）。 */
+    this.hHomo = null;
     this.tailCut = 0;                                // 尾端側の切断面（30 mm / 75 mm シャーで切り分けた面）の有無
     this.rollForce = 0; this.rollTorque = 0; this.rollPower = 0; this.contactLength = 0;
     this.rollForceAvg = 0; this.biteFill = 0;   // 過負荷保護が見る «短時間平均» の荷重
@@ -2676,16 +2848,44 @@ class SlabState {
     return this.kNew;
   }
   /**
-   * 端部の張り出し長 [mm]。圧下率に比例して舌・ワニ口が伸びる。
-   * 描画（SlabView）と切断位置の計算（クロップシャー）がこの 1 か所を参照する。
+   * 端部の張り出し [mm] を «舌» と «ワニ口» に分けて返す。end: +1 = xMax 側 / −1 = xMin 側。
+   *
+   * どちらも «その端を最後に平らにしてからの圧下» で育つ。クロップで切った端は
+   * その時点の板厚が起点になるので、切った直後は 0、そのあとのパスでまた付いてくる。
+   * ここを «切ったら以後ずっと 0» としていたため、クロップ後の薄い領域では
+   * 舌もワニ口も一切計算されていなかった（実測: 第 8 パス以降ずっと 0 mm）。
+   *
+   * ワニ口だけは «表層集中変形（Δ > 1）» のパスでしか育たないので、Δ が 1 を切った
+   * 板厚（hHomo）より薄い側では伸びない。薄板のクロップ後に舌だけが付き、ワニ口は
+   * 付かないのはこのため（実機と同じ）。
    */
-  overhangAt(end) {                                // end: +1 = xMax 側 / −1 = xMin 側
-    if (this.cropped[end]) return 0;
-    const O = CONFIG.SLAB.OVERHANG, r = Num.clamp(this.reduction, 0, 1), al = this.alloy ?? Rolling.alloy();
-    // 熱間域の下限に近いほど端は割れやすい（ワニ口が伸びる）。上限で ×1、下限で ×1.8
+  overhangParts(end) {                             // end: +1 = xMax 側 / −1 = xMin 側
+    const O = CONFIG.SLAB.OVERHANG, al = this.alloy ?? Rolling.alloy();
+    const h = this.thickness, h0 = this.hCut[end] ?? this.initialThickness;
+    if (!(h0 > h)) return { tongue: 0, gator: 0 };
+    // 熱間域の下限に近いほど端は割れやすい。上限で ×1、下限で ×1.8
     const cold = Num.clamp((al.T_ROLL[1] - this.temperature) / (al.T_ROLL[1] - al.T_ROLL[0]), 0, 1);
-    return r * r * al.end * (1 + 0.8 * cold) * (O.TH_K * this.thickness + O.WID_K * this.width);
+    const base = al.end * (1 + 0.8 * cold) * (O.TH_K * h + O.WID_K * this.width) * 0.5;
+    const rT = Num.clamp(1 - h / h0, 0, 1);                       // 切ってからの圧下（舌）
+    const hg = this.hHomo === null ? h : Math.max(h, this.hHomo); // ワニ口が育つのは hHomo まで
+    const rG = Num.clamp(1 - hg / h0, 0, 1);
+    return { tongue: rT * rT * base, gator: rG * rG * base };
   }
+  /** 端部の張り出し長 [mm]（先端のいちばん出る点。舌とワニ口の合成） */
+  overhangAt(end) { const p = this.overhangParts(end); return p.tongue + p.gator; }
+
+  /**
+   * いまの断面の «角の丸み» {R: 半径, c: 上面から円弧が始まる深さ}。
+   * 鋳造ままの半径 EDGE_R から面削量 scalp だけ頂部が削られて c0 = R0 − scalp となり、
+   * 圧延で自己相似に縮む（R = R0·(h/h0)^EDGE_K）。面削量が半径以上なら角は直角。
+   */
+  edgeAt(h) {
+    const S = CONFIG.SLAB;
+    const s = Math.pow(Num.clamp(h / Math.max(this.initialThickness, 1e-6), 0, 1), S.EDGE_K);
+    return { R: S.EDGE_R * s, c: Math.max(S.EDGE_R - this.scalp, 0) * s };
+  }
+  get edge() { return this.edgeAt(this.thickness); }
+
   /** 材料の実際の先端／尾端（張り出しを含む。切断面があればそこで打ち切る）。 */
   tipX(end) {
     const c = this.cut[end];
@@ -2696,19 +2896,18 @@ class SlabState {
    * 板の形状パラメータ（描画とピース生成で共有）。end ごとの健全端 xE・張り出し oh・影響範囲 zone・
    * 切断面 cut。長さ方向の座標 x（世界）と ny/nz を受け取り、張り出し込みの X を返す関数も持つ。
    */
-  shape(x0 = this.xMin, x1 = this.xMax, ohP = this.overhangAt(1), ohM = this.overhangAt(-1)) {
+  shape(x0 = this.xMin, x1 = this.xMax, pP = this.overhangParts(1), pM = this.overhangParts(-1)) {
     const L = Math.max(x1 - x0, 1);
-    const ends = {
-      1:    { xE: x1, oh: ohP, zone: Rolling.endZone(ohP, L), cut: this.cut[1] },
-      '-1': { xE: x0, oh: ohM, zone: Rolling.endZone(ohM, L), cut: this.cut['-1'] },
-    };
+    const mk = (xE, p, cut) => ({ xE, tongue: p.tongue, gator: p.gator,
+                                  zone: Rolling.endZone(p.tongue + p.gator, L), cut });
+    const ends = { 1: mk(x1, pP, this.cut[1]), '-1': mk(x0, pM, this.cut['-1']) };
     return {
       x0, x1, ends,
       /** 材料点 (x, ny, nz) の張り出し込み X。切断面があればそこで打ち切る。 */
       map(x, ny, nz) {
         const e = x > (x0 + x1) / 2 ? ends[1] : ends['-1'], sgn = x > (x0 + x1) / 2 ? 1 : -1;
         const dEnd = sgn > 0 ? e.xE - x : x - e.xE;
-        let xo = x + sgn * Rolling.endOffset(Math.max(dEnd, 0), e.oh, e.zone, ny, nz);
+        let xo = x + sgn * Rolling.endOffset(Math.max(dEnd, 0), e.tongue, e.gator, e.zone, ny, nz);
         if (e.cut !== null) xo = sgn > 0 ? Math.min(xo, e.xE + e.cut) : Math.max(xo, e.xE - e.cut);
         return xo;
       },
@@ -3604,6 +3803,7 @@ class FinishController {
       const L0 = sl.length;
       if (end > 0) sl.xMax = S.X; else sl.xMin = S.X;
       sl.cut[end] = null; sl.cropped[end] = true;
+      sl.hCut[end] = sl.thickness;      // ここから端部欠陥が付き直す（切り口は平ら）
       sl.length = sl.xMax - sl.xMin;
       s.cropSound = Math.abs(before - S.X);          // 健全部（板長として減る分）
       // 長手プロファイル（板厚・端部の冷え）も «落ちた端» のぶんを外して張り直す。
@@ -3631,7 +3831,7 @@ class FinishController {
     // メッシュを作ることがあり、x を基準にすると動いたぶんだけ形がずれる。
     const x0 = (xCut + tip) / 2;
     return { id: ++FinishController._pid, th, w: sl.width, len: Math.abs(tip - xCut), x: x0, x0, end, xCut,
-             xEndAt, y: 0, z: 0, vy: 0, vx: 0, rot: 0, rotZ: 0, spin: 0, t: 0, stage: 'NEW' };
+             xEndAt, edge: sl.edgeAt(th), y: 0, z: 0, vy: 0, vx: 0, rot: 0, rotZ: 0, spin: 0, t: 0, stage: 'NEW' };
   }
 
   update(dt) {
@@ -3828,6 +4028,7 @@ class FinishController {
     s.sheets.push(piece); s.sheetCount++;
     if (end > 0) sl.xMax = sx; else sl.xMin = sx;
     sl.cut[end] = null; sl.cropped[end] = true;                   // 切り分け面は平ら
+    sl.hCut[end] = sl.thickness;                                  // 端部欠陥の起点もここへ
     sl.length = sl.xMax - sl.xMin;
     this.bus.emit('SYS_MESSAGE', { text: `${s.divideShear === 'S30' ? '30 mm' : '75 mm'} シャー: シート ${s.sheetCount} 枚目（${(piece.len / 1000).toFixed(1)} m）を切り分けました`, kind: 'info' });
   }
@@ -4158,6 +4359,9 @@ class PhysicsEngine {
       s._kAcc += k * passedFrac; s._kW += passedFrac; s.kNew = s._kAcc / Math.max(s._kW, 1e-9);
       s.biteOk = res.biteOk;
       s.forwardSlip = res.forwardSlip;
+      /* 変形が «表層集中（Δ>1）» から «均一（Δ<1）» へ移った板厚を覚える。
+       * これより薄い側ではワニ口は伸びない（舌だけが伸びる）。 */
+      if (s.hHomo === null && s.biteFill > 0.99 && Rolling.inhomogeneity(hLoc, gap, res.Ld) < 1) s.hHomo = gap;
     } else {
       if (s.rollingActive && (s.xMin > 0 || s.xMax < 0)) {   // 尻抜け: 板厚を確定
         /* 確定に使うのは «噛んでいた間の» ギャップ。尻が抜けた瞬間の m.gap は荷重が抜けて
@@ -4463,6 +4667,11 @@ function initMaterials(envMap) {
   MAT.envMap = envMap;
   // BoxGeometry のグループ順は +X, -X, +Y, -Y, +Z, -Z。+Y/-Y だけ鏡面にする。
   MAT.slabFaces = [MAT.slab, MAT.slab, MAT.slabMirror, MAT.slabMirror, MAT.slab, MAT.slab];
+  /* 加熱前のスラブ（スラブヤード）用。質感は同じだが «温度追従の対象にしない» ので、
+   * 圧延材が赤らんでもヤードのスラブは冷えた色のまま。MAT.tint には登録しない。 */
+  MAT.slabCold = matte(0xd8dce0, 0.30, 0.62);          // World3D.COLD と同じ «冷えた» 色
+  MAT.slabColdMirror = shiny(0xd5d9dd, 0.78, 0.10);
+  MAT.slabColdFaces = [MAT.slabCold, MAT.slabCold, MAT.slabColdMirror, MAT.slabColdMirror, MAT.slabCold, MAT.slabCold];
   /**
    * 材料の色は毎フレーム «材料温度» で更新される（World3D.render）。両面表示などの都合で
    * 複製した材料は色オブジェクトも複製されるため、元だけを更新すると複製は構築時の色で
@@ -4933,13 +5142,30 @@ const Parts = {
    * 板から切り離したピース（端材・シート）のジオメトリ。板と同じ端部形状関数で、幅方向・板厚方向の
    * 各点の端の X を焼き込む。原点＝ピース中心（X）・下面（Y）・幅中央（Z）。
    */
+  /**
+   * 装入スラブの本体（長さ×板厚×板幅）。鋳造ままの角の丸みを持つ。
+   * 上下面（面削・鏡面）は平ら、側面と丸みは鋳肌のまま — マテリアルは MAT.slabFaces。
+   */
+  slabBody(len, th, w, edge) {
+    const geo = new THREE.BoxGeometry(1, 1, 1, 1, 12, 6), pos = geo.attributes.position, base = pos.clone();
+    const sec = Sect.prep(th, w, edge);
+    for (let i = 0; i < pos.count; i++) {
+      const q = Sect.at(sec, base.getY(i) * 2, base.getZ(i) * 2);
+      pos.setXYZ(i, u(base.getX(i) * len), u(q.y), u(q.z));
+    }
+    geo.computeVertexNormals(); geo.computeBoundingSphere();
+    return geo;
+  },
+
   plateSegment(piece, nx = 8) {
-    const geo = new THREE.BoxGeometry(1, 1, 1, nx, 2, 6), pos = geo.attributes.position, base = pos.clone();
+    const geo = new THREE.BoxGeometry(1, 1, 1, nx, 12, 6), pos = geo.attributes.position, base = pos.clone();
+    const sec = Sect.prep(piece.th, piece.w, piece.edge);          // 切り離した瞬間の丸みを焼き込む
     for (let i = 0; i < pos.count; i++) {
       const bx = base.getX(i) + 0.5, by = base.getY(i) + 0.5, bz = base.getZ(i);
       const xe = piece.xEndAt(by * 2 - 1, bz * 2);
       const x = piece.end > 0 ? Num.lerp(piece.xCut, xe, bx) : Num.lerp(xe, piece.xCut, bx);
-      pos.setXYZ(i, u(x - (piece.x0 ?? piece.x)), u(by * piece.th), u(bz * piece.w));
+      const q = Sect.at(sec, by * 2 - 1, bz * 2);
+      pos.setXYZ(i, u(x - (piece.x0 ?? piece.x)), u(q.y + piece.th / 2), u(q.z));
     }
     geo.computeVertexNormals(); geo.computeBoundingSphere();
     geo.userData.base = base;
@@ -6154,16 +6380,19 @@ class MillStandView {
     struct.castShadow = struct.receiveShadow = true; this.group.add(struct);
 
     // --- ロール4本（胴 / 首の2メッシュ = 回転体として1つのグループ）-------
-    const mk = (dia, barrel, neckD, coupling) => {
+    // 胴のメッシュには名前を付ける。設備ラベルの位置が実物と合っているかを
+    // tools/labeltrace.mjs が «名前で引いた AABB» と突き合わせて実測できるようにするため。
+    const mk = (dia, barrel, neckD, coupling, name) => {
       const r = Parts.roll(dia, barrel, neckD, coupling), g = new THREE.Group();
       const f = new THREE.Mesh(r.face, MAT.rollFace), n = new THREE.Mesh(r.neck, MAT.rollNeck);
+      f.name = name; n.name = name + '首';
       f.castShadow = true; g.add(f, n); this.group.add(g); return g;
     };
     this.rolls = {
-      workTop:   mk(M.WR_D, M.BARREL,    M.WR_NECK_D, true),
-      workBot:   mk(M.WR_D, M.BARREL,    M.WR_NECK_D, true),
-      backupTop: mk(M.BR_D, M.BR_BARREL, M.BR_NECK_D, false),
-      backupBot: mk(M.BR_D, M.BR_BARREL, M.BR_NECK_D, false),
+      workTop:   mk(M.WR_D, M.BARREL,    M.WR_NECK_D, true,  'ワークロール'),
+      workBot:   mk(M.WR_D, M.BARREL,    M.WR_NECK_D, true,  'ワークロール'),
+      backupTop: mk(M.BR_D, M.BR_BARREL, M.BR_NECK_D, false, 'バックアップロール'),
+      backupBot: mk(M.BR_D, M.BR_BARREL, M.BR_NECK_D, false, 'バックアップロール'),
     };
 
     // --- チョック / 圧下シリンダは「手前側」「奥側」に分けて保持する ---------
@@ -6428,7 +6657,7 @@ class GuideView {
       return { x, sides };
     });
     // --- 板面クーラント: 門型架台を立て、2 本のヘッダを吊って板の上面へ噴射する ---
-    //  出側はサイドガイドの上、入側は A-5 テーブルの中央（位置は CONFIG.TABLE.GUIDE.HEADER.STATIONS）。
+    //  入側・出側ともサイドガイドの上（位置は CONFIG.TABLE.GUIDE.HEADER.STATIONS）。
     //  柱は手前/奥、梁と吊りは «天面»（板の上に架かる）として断面表示に従う。ヘッダ自体は透過しない
     const H = g.HEADER, postGeo = Parts.guideHeaderPosts(), beamGeo = Parts.guideHeaderBeams(), hdrGeo = Parts.guideHeader();
     const supGeo = Parts.guideHeaderSupply();
@@ -6500,7 +6729,7 @@ class FinishView {
 
     // --- サイドトリマー ---
     this.trimmer = new THREE.Group(); this.trimmer.position.x = u(T.X); scene.add(this.trimmer);
-    addFrame(this.trimmer, Parts.trimmerFrame());
+    addFrame(this.trimmer, Parts.trimmerFrame(), 'サイドトリマー架構');
     // 刃物軸は 上下 × OS/DS の 4 本。板の上を軸が横切らないよう片持ちにする。
     this.knifeShafts = [];
     for (const sy of [1, -1]) for (const sz of [-1, 1]) {
@@ -6514,7 +6743,7 @@ class FinishView {
 
     // --- スリーロール（下2本・上1本）---
     this.three = new THREE.Group(); this.three.position.x = u(C.DEFLECTOR_X); scene.add(this.three);
-    addFrame(this.three, Parts.threeRollFrame());
+    addFrame(this.three, Parts.threeRollFrame(), 'スリーロール架構');
     // 下 2 本 Φ230（軸間 260 mm、上面＝パスライン）／ 上 1 本 Φ320
     const loRoll = Parts.deflectorRoll(C.ROLL_LO_D);
     this.lowerRolls = [-1, 1].map(sx => {
@@ -6900,16 +7129,49 @@ class SupplyView {
     this.sided = { near: [], far: [] };
     const near = (m, mat) => { this.sided.near.push(ghostable(m, mat)); return m; };
 
-    // --- ピット炉 --------------------------------------------------------
-    const FU = CONFIG.FURNACE;
-    const pit = near(new THREE.Mesh(Parts.furnacePit(), MAT.pit), MAT.pit); pit.receiveShadow = true;
-    pit.name = 'ピット炉'; pit.position.set(u(S.TILTER_X), 0, u(FU.Z)); this.group.add(pit);
     this.group.name = '装入設備';
-    this.lid = near(new THREE.Mesh(Parts.furnaceLid(), MAT.base), MAT.base); this.lid.castShadow = true;
-    this.lid.name = '炉蓋';
-    this.lidHome = new THREE.Vector3(u(S.TILTER_X), u(FU.LID_T / 2 + 240), u(FU.Z));
-    this.lid.position.copy(this.lidHome); this.group.add(this.lid);
+    // --- ピット炉バンク（N 基）------------------------------------------
+    // 炉体は同じ形なので 1 つのジオメトリを N 回置く。蓋も N 枚あるが、開くのは
+    // «いま使う炉»（材質で決まる）の 1 枚だけ。どれが開いているかが材質と一致する。
+    const FU = CONFIG.FURNACE;
+    const pitGeo = Parts.furnacePit(), lidGeo = Parts.furnaceLid();
+    this.pits = []; this.lids = [];
+    for (let i = 0; i < FU.N; i++) {
+      const x = Layout.pitX(i);
+      const pit = near(new THREE.Mesh(pitGeo, MAT.pit), MAT.pit); pit.receiveShadow = true;
+      pit.name = 'ピット炉'; pit.position.set(u(x), 0, u(FU.Z)); this.group.add(pit); this.pits.push(pit);
+      const lid = near(new THREE.Mesh(lidGeo, MAT.base), MAT.base); lid.castShadow = true;
+      lid.name = '炉蓋'; lid.position.set(u(x), u(FU.LID_T / 2 + 240), u(FU.Z));
+      this.group.add(lid); this.lids.push(lid);
+    }
     this.lidTravel = FU.W + 2 * FU.WALL + 900;
+
+    // --- スラブヤード（面削済み・ピット入り待ち。寝かせ置き）---------------
+    // 加熱前なので «冷えた色» の専用マテリアルで描く（圧延材の温度色に引きずらせない）。
+    // 断面は圧延材と同じ Sect（上下は鏡面の平ら、長辺は鋳肌の丸み）。
+    {
+      const Y = CONFIG.SLAB_YARD, SL = CONFIG.SLAB;
+      const th = SL.CAST_DEFAULT - 2 * SL.SCALP_DEFAULT, w = SL.WID_DEFAULT, len = SL.LEN_DEFAULT;
+      const edge = { R: SL.EDGE_R, c: Math.max(SL.EDGE_R - SL.SCALP_DEFAULT, 0) };
+      const geo = Parts.slabBody(len, th, w, edge);
+      const skid = G.box(Y.SKID_W, Y.SKID_H, 700);
+      const slots = Layout.yardSlots();
+      const inst = new Instances(skid, MAT.tableFrame, slots.length * 2, { receive: true, name: 'ヤードスキッド' });
+      let k = 0;
+      this.yard = [];
+      for (const sl of slots) {
+        for (const dx of [-len * 0.3, len * 0.3]) inst.set(k++, sl.x + dx, Y.SKID_H / 2, sl.z);
+        // 段積み。上の段ほど «後から置いた» ので少しずらして重ねる（現場の見え方）
+        const n = 1 + ((sl.i + sl.row) % Y.STACK);
+        for (let j = 0; j < n; j++) {
+          const m = new THREE.Mesh(geo, MAT.slabColdFaces);
+          m.name = 'ヤードスラブ'; m.castShadow = m.receiveShadow = true;
+          m.position.set(u(sl.x + j * 70), u(Y.SKID_H + th / 2 + j * th), u(sl.z + j * 40));
+          this.group.add(m); this.yard.push(m);
+        }
+      }
+      inst.commit().finalize(); this.group.add(inst.mesh);
+    }
 
     // --- 装入クレーン（ピットクレーン）：転倒軸の真上に固定した橋。X 方向には走行しない ---
     const CR = CONFIG.CRANE;
@@ -6942,7 +7204,7 @@ class SupplyView {
       const m = new THREE.Mesh(clampGeo, MAT.hydraulic); m.name = 'クランプアーム';
       m.castShadow = true; m.userData.clamp = { sd, sx }; this.group.add(m); this.clampArms.push(m);
     }
-    this._crane = { z: CONFIG.FURNACE.Z, beamY: null };   // 装入クレーンの現在位置（急に戻さず速度制限で戻す）
+    this._crane = { x: null, z: CONFIG.FURNACE.Z, beamY: null };   // 装入クレーンの現在位置（走行 X・横行 Z・巻上。急に戻さず速度制限で戻す）
 
     // --- トランスファークレーン：ピットクレーンとは完全に別の、低い最小限フレーム ---
     // フレーム自体の Z スパン（FT.GIRDER_Z0/Z1）は転倒アームの占有域の外に置いてあるので、
@@ -7030,8 +7292,11 @@ class SupplyView {
     this.runoutRolls = mkRolls(Layout.runoutSpan, this.tilterPivot, '受取テーブルローラ');
     this.group.add(this.tilterPivot);
 
-    this.slab = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), MAT.slabFaces);
+    // 装入スラブは «角の丸い» 実寸ジオメトリで作る（スケールでは丸みが歪む）。
+    // 寸法が変わったときだけ作り直す（ロットのリセット時のみ）。
+    this.slab = new THREE.Mesh(Parts.slabBody(1, 1, 1, null), MAT.slabFaces);
     this.slab.name = '装入スラブ'; this.slab.castShadow = true; scene.add(this.slab);
+    this._slabGeo = '';
     this._state = {};
   }
 
@@ -7042,14 +7307,17 @@ class SupplyView {
     // 立てた板は転倒アームの受け面（転倒軸より D 上のベッド面が立ち上がったもの）に
     // 寄りかかり、底面はリップ（軸より D 下）に載る。
     const xStand = S.TILTER_X - F * (D + th / 2);        // 立てかけ時のスラブ中心 X
+    const xPit = Layout.pitX(Layout.pitOf(slab.alloyKey));  // 材質ごとの炉の X（そこから取り出す）
     const xFlat = Layout.entryX(L);                      // 倒したスラブの中心 X（＝ラインへ降ろす X）
     const yPit = -FU.DEPTH + L / 2;                      // 炉内（底に着地）
     const yHi  = P + CR.HOIST_CLEAR + L / 2;             // 吊上げ高さ
     const yStand = P - D + L / 2;                        // 立てかけ高さ（底面がリップ上）
     const ph = sup.active ? sup.phase : 'LID';
     switch (ph) {
-      case 'LID':      return { x: xStand, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: true };
-      case 'HOIST':    return { x: xStand, y: Num.lerp(yPit, yHi, p.hoist), z: FU.Z, rot: Math.PI / 2, hung: true };
+      case 'LID':      return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: true };
+      case 'HOIST':    return { x: xPit, y: Num.lerp(yPit, yHi, p.hoist), z: FU.Z, rot: Math.PI / 2, hung: true };
+      // 走行: 炉バンクの上を転倒機の X まで（吊ったまま。Z はまだ炉の列）
+      case 'TRAVEL':   return { x: Num.lerp(xPit, xStand, Num.smoothstep(0, 1, p.travel)), y: yHi, z: FU.Z, rot: Math.PI / 2, hung: true };
       case 'TRAVERSE': return { x: xStand, y: yHi, z: Num.lerp(FU.Z, S.SIDE_Z, p.traverse), rot: Math.PI / 2, hung: true };
       case 'SET':      return { x: xStand, y: Num.lerp(yHi, yStand, p.set), z: S.SIDE_Z, rot: Math.PI / 2, hung: p.set < 1 };
       case 'TILT': {
@@ -7121,8 +7389,12 @@ class SupplyView {
       }
     }
 
-    // 炉蓋は開いたら閉じない（材料が出た後にゆっくり閉じる演出は行わない）
-    this.lid.position.z = this.lidHome.z + u(this.lidTravel * Num.smoothstep(0, 1, p.lid));
+    // 炉蓋は «いま使う炉»（材質で決まる）の 1 枚だけが開く。開いたら閉じない。
+    // どの炉が開いているかが選んだ材質と一致するので、画面から材質と炉の対応が読める。
+    {
+      const FU = CONFIG.FURNACE, pi = Layout.pitOf(slab.alloyKey), dz = u(this.lidTravel * Num.smoothstep(0, 1, p.lid));
+      for (let i = 0; i < this.lids.length; i++) this.lids[i].position.z = u(FU.Z) + (i === pi ? dz : 0);
+    }
 
     const active = sup.active || !slab.onLine;
     this.slab.visible = active;
@@ -7132,12 +7404,16 @@ class SupplyView {
     // --- 装入クレーン（トロリ・吊具・ワイヤ）: 吊っている間は材料に追従、離したら速度制限で炉へ戻る ---
     const CR = CONFIG.CRANE;
     const hung = active && pose.hung;
+    // クレーンは X（走行）も追う。炉が材質ごとに違うので «どの炉の上に居るか» が動く。
+    const homeX = Layout.pitX(Layout.pitOf(slab.alloyKey));
     const beamHome = this.trolleyY - CR.TROLLEY.H / 2 - 1800, c = this._crane;
-    if (c.beamY === null) { c.beamY = beamHome; c.z = CONFIG.FURNACE.Z; }
-    if (hung) { c.beamY = pose.y + L / 2 + 760; c.z = pose.z; }
-    else { c.beamY = Num.rateTo(c.beamY, beamHome, 1800, dt); c.z = Num.rateTo(c.z, CONFIG.FURNACE.Z, 2200, dt); }
-    this.trolley.position.set(u(S.TILTER_X), u(this.trolleyY), u(c.z));
-    this.hookBeam.position.set(u(S.TILTER_X), u(c.beamY), u(c.z));
+    if (c.beamY === null) { c.beamY = beamHome; c.z = CONFIG.FURNACE.Z; c.x = homeX; }
+    if (hung) { c.beamY = pose.y + L / 2 + 760; c.z = pose.z; c.x = pose.x; }
+    else { c.beamY = Num.rateTo(c.beamY, beamHome, 1800, dt); c.z = Num.rateTo(c.z, CONFIG.FURNACE.Z, 2200, dt);
+           c.x = Num.rateTo(c.x, homeX, 5000, dt); }
+    this.girder.position.x = u(c.x);
+    this.trolley.position.set(u(c.x), u(this.trolleyY), u(c.z));
+    this.hookBeam.position.set(u(c.x), u(c.beamY), u(c.z));
     // ワイヤ: 上端＝トロリのシーブ芯、下端＝吊具のシーブ芯。両端がシーブに隠れるので
     // «途中で切れて見える» ことがない（以前は上端をトロリ下面に置いて 280 mm 浮いていた）
     {
@@ -7146,7 +7422,7 @@ class SupplyView {
       const len = Math.max(yTop - yBot, 10);
       for (const m of this.ropes) {
         const { sd, sf } = m.userData.rope;
-        m.position.set(u(S.TILTER_X + sf * R.SPREAD / 2), u((yTop + yBot) / 2), u(c.z + sd * R.SPAN));
+        m.position.set(u(c.x + sf * R.SPREAD / 2), u((yTop + yBot) / 2), u(c.z + sd * R.SPAN));
         m.scale.y = len / 1000;
       }
     }
@@ -7158,7 +7434,7 @@ class SupplyView {
       const pinY = c.beamY - 230 - K.PIVOT_H;
       for (const m of this.clampArms) {
         const { sd, sx } = m.userData.clamp;
-        m.position.set(u(S.TILTER_X), u(pinY), u(c.z + sd * CR.BEAM_L * 0.34));
+        m.position.set(u(c.x), u(pinY), u(c.z + sd * CR.BEAM_L * 0.34));
         m.rotation.z = -sx * a;                    // 中心ピンまわりに逆向きへ開く
       }
     }
@@ -7201,7 +7477,11 @@ class SupplyView {
     }
 
     if (!active) return;
-    this.slab.scale.set(u(L), u(th), u(w));
+    const key = `${L}:${th}:${w}:${slab.scalp}`;
+    if (key !== this._slabGeo) {
+      this._slabGeo = key; this.slab.geometry.dispose();
+      this.slab.geometry = Parts.slabBody(L, th, w, slab.edgeAt(th));
+    }
     this.slab.position.set(u(pose.x), u(pose.y), u(pose.z));
     this.slab.rotation.set(0, 0, F * pose.rot);
   }
@@ -7210,7 +7490,10 @@ class SupplyView {
 /** 圧延材。ロールバイト内の板厚プロファイルを持つ単一メッシュ。 */
 class SlabView {
   constructor(scene) {
-    this.geo = new THREE.BoxGeometry(1, 1, 1, 96, 2, 6);
+    // 板厚方向の分割（側面 ±z と端面 ±x に効く）は角の丸みを描くために 12 とる。
+    // Sect.at は «側面の媒介変数の後ろ半分» を円弧に固定配分するので、板厚・半径に
+    // よらず円弧に 6 行が当たる（分割を増やしても上下面の頂点数は変わらない）。
+    this.geo = new THREE.BoxGeometry(1, 1, 1, 96, 12, 6);
     this.base = this.geo.attributes.position.clone();
     this.mesh = new THREE.Mesh(this.geo, MAT.slabFaces);
     this.mesh.castShadow = true; this.mesh.frustumCulled = false;
@@ -7293,7 +7576,7 @@ class SlabView {
     // 形状が変わっていなければ頂点更新も法線再計算も行わない（停止中のコストをゼロに）
     const sig = x0 + ':' + x1 + ':' + slab.thickness + ':' + slab.width + ':'
               + mill.gap + ':' + mill.passLine + ':' + slab.inBite + ':' + slab.dir + ':'
-              + slab.cropped[1] + ':' + slab.cropped[-1] + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig;
+              + slab.hCut[1] + ':' + slab.hCut[-1] + ':' + slab.hHomo + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig;
     if (sig === this._sig) return;
     this._sig = sig;
     const L = x1 - x0, w = slab.width, P = mill.passLine;
@@ -7314,9 +7597,13 @@ class SlabView {
     }
     // 端部の張り出しは実際の先尾端にだけ付く。コイル側で打ち切った端には付けない。
     // 形状（舌・ワニ口・切断面での打ち切り）は板・端材・シートで同じ関数（SlabState.shape）を使う
-    const ohP = (clipHead && F > 0) ? 0 : slab.overhangAt(1), ohM = (clipHead && F < 0) ? 0 : slab.overhangAt(-1);
-    const shape = slab.shape(x0, x1, ohP, ohM);
+    const flat = { tongue: 0, gator: 0 };
+    const pP = (clipHead && F > 0) ? flat : slab.overhangParts(1);
+    const pM = (clipHead && F < 0) ? flat : slab.overhangParts(-1);
+    const shape = slab.shape(x0, x1, pP, pM);
 
+    // 断面の角の丸み（鋳肌のラウンド）。板厚が薄くなるほど自己相似に縮む
+    const sec = Sect.prep(hIn, w, slab.edge);
     const pos = this.geo.attributes.position, base = this.base, n = pos.count;
     for (let i = 0; i < n; i++) {
       const bx = base.getX(i) + 0.5, by = base.getY(i) + 0.5, bz = base.getZ(i);
@@ -7328,13 +7615,15 @@ class SlabView {
       let h = hIn, dip = 0;
       if (rolling) { const p = Rolling.profile(xm, hIn, gap, slab.dir); h = p.h; dip = p.dip; }
       const x = shape.map(xm, by * 2 - 1, bz * 2);
+      // 断面座標。ロールバイト内では板厚が h に変わるので、丸みも同じ比率で潰す
+      const q = Sect.at(sec, by * 2 - 1, bz * 2), sy = h / Math.max(hIn, 1e-6);
       let yl = 0;
       if (lift > 0) {                     // 下台（刃の上流 BED_L）に載る区間は全量、その上流 2 m で滑らかに 0 へ
         const sBed = F * (xm - (CS.X - F * CS.BED_L));
         yl = lift * Num.smoothstep(-2000, 0, sBed);
       }
       yl += this._curlLift(curl, xm);
-      pos.setXYZ(i, u(x), u(P - dip + by * h + dy + yl), u(bz * w + dz));
+      pos.setXYZ(i, u(x), u(P - dip + (q.y * sy + h / 2) + dy + yl), u(q.z + dz));
     }
     pos.needsUpdate = true;
     this.geo.computeVertexNormals();
@@ -7469,23 +7758,27 @@ class LabelView {
     const M = CONFIG.MILL, D = CONFIG.DRIVE, S = CONFIG.SUPPLY, F = CONFIG.FLIP;
     // ラベル文言は CONFIG から生成する（表示と実体の食い違いを構造的に起こさない）
     this.items = [
+      /* アンカーは «実物の上» に置く。X を横へ振ってタグを散らすと、寄ったときに
+       * 指しているものが分からなくなる（ロールを指すタグがテーブルの上に浮く）。
+       * 重なりは «高さ» と «胴端（Z）» で分ける ── ロール系は Z = 胴端 ＋ 少し外側、
+       * 高さはそれぞれの軸心。位置は tools/labeltrace.mjs が実測して照合する。 */
       ['圧延スタンド（4段可逆）',                    0,  7900,        0, 70000],
-      [`ワークロール φ${M.WR_D}`,        F *  3300,  1150,        0, 26000],
-      [`バックアップロール φ${M.BR_D}`,  F * -3500,  3600,        0, 26000],
+      [`ワークロール φ${M.WR_D}`,                   0,  M.PASS_LINE + 250,  M.BARREL / 2 + 150,    26000],
+      [`バックアップロール φ${M.BR_D}`,             0,  M.PASS_LINE + M.WR_D + M.BR_D / 2,  M.BR_BARREL / 2 + 150, 26000],
       ['油圧圧下シリンダ',                          0,  5500,     2450, 32000],
-      ['ロールチョック',                 F *  2500,  2700,     2450, 20000],
+      ['ロールチョック',                            0,  2400,     2600, 20000],
       ['パスライン調整ウェッジ',                    0, -1900,     2450, 20000],
       ['ユニバーサルスピンドル',                    0,  1600,    -6400, 32000],
       ['ピニオンスタンド',                          0,  3500,    -9500, 42000],
       ['主電動機',                                  0,  3700, D.MOTOR_Z, 60000],
       ['サイドガイド',                   F * -3300,  1900,     2300, 18000],
-      // 板面冷却は入側（A-5 テーブルの中央）と出側（サイドガイドの上）の 2 か所にある。
-      // «移したのに見つからない» のは、ラベルも視点も出側にしか無かったため。位置は
+      // 板面冷却は入側・出側それぞれのサイドガイドの上にある。位置は
       // Layout.coolStations() から取るので、CONFIG を変えればラベルも一緒に動く。
       ...Layout.coolStations().map((x, i) => [
-        i === 0 ? '入側 板面冷却（A-5）' : '出側 板面冷却（サイドガイド上）',
+        i === 0 ? '入側 板面冷却（サイドガイド上）' : '出側 板面冷却（サイドガイド上）',
         x, M.PASS_LINE + CONFIG.TABLE.GUIDE.HEADER.BEAM_Y + 900, 0, 26000]),
-      ['入側テーブル',                   F *-16000,  1600,        0, 95000],
+      // 入側テーブルのタグは «装入設備（C-2/C-1）と重ならない» 位置に置く
+      ['入側テーブル',                   F *-30000,  1600,        0, 95000],
       ['出側テーブル',                   F * 18000,  1600,        0, 95000],
       ['転倒装置',                        S.TILTER_X,  3600, S.SIDE_Z,  75000],
       ['トランスファークレーン',  Layout.entryX(3000), CONFIG.TRANSFER.FRAME.GIRDER_Y + 900, S.SIDE_Z / 2, 90000],
@@ -7493,12 +7786,15 @@ class LabelView {
       ['75 mm クロップシャー',   CONFIG.CROP_SHEAR.X,  2900,        0, 95000],
       ['クロップ屑コンベア・屑箱', CONFIG.CROP_SHEAR.X + F * Scrap.convCx, 1500, 5200, 40000],
       ['30 mm シャー',              CONFIG.SHEAR30.X,  3200,        0, 95000],
-      ['パイラー',   (CONFIG.PILER.X0 + CONFIG.PILER.X1) / 2, 2600, 0, 95000],
+      ['パイラー',   (CONFIG.PILER.X0 + CONFIG.PILER.X1) / 2, 2100, 0, 95000],
       ['板置き場（75 mm 超）', (CONFIG.PILER.YARD.X0 + CONFIG.PILER.YARD.X1) / 2, 1500, CONFIG.PILER.YARD.Z, 60000],
       ['スリーロール',      CONFIG.COILER.DEFLECTOR_X,  CONFIG.MILL.PASS_LINE + 1750, 0, 30000],
       ['巻取リール',                  CONFIG.COILER.X, CONFIG.MILL.PASS_LINE + CONFIG.COILER.Y_ABOVE + CONFIG.COILER.OD_DRAWING / 2 + 350, 0, 45000],
-      ['ピット炉',                        S.TILTER_X,  1800, CONFIG.FURNACE.Z, 80000],
-      ['装入クレーン',                    S.TILTER_X, CONFIG.CRANE.GIRDER_Y + 1500, CONFIG.FURNACE.Z, 90000],
+      // ピット炉は 9 基のバンク。ラベルはバンクの中央（＝どの炉かではなく «炉の列» を指す）
+      ['ピット炉（9 基）',  (Layout.pitX(0) + Layout.pitX(CONFIG.FURNACE.N - 1)) / 2, 1800, CONFIG.FURNACE.Z, 120000],
+      ['スラブヤード（面削済み）', (Layout.yardSlots()[0].x + Layout.yardSlots()[CONFIG.SLAB_YARD.PER_ROW - 1].x) / 2,
+       CONFIG.SLAB_YARD.SKID_H + 1200, CONFIG.SLAB_YARD.Z0 + CONFIG.SLAB_YARD.ROW_DZ / 2, 120000],
+      ['装入クレーン',   (Layout.pitX(0) + CONFIG.SUPPLY.TILTER_X) / 2, CONFIG.CRANE.GIRDER_Y + 1500, CONFIG.FURNACE.Z, 130000],
     ].map(([t, x, y, z, maxD]) => {
       const el = document.createElement('div'); el.className = 'tag'; el.textContent = t;
       el.title = `${t} へ視点を移す`;
@@ -8144,8 +8440,9 @@ class UIManager {
     const host = $('cam-chips');
     this.chips = CONFIG.VIEWS.map((v, i) => {
       const b = document.createElement('button');
-      b.className = 'chip'; b.setAttribute('aria-pressed', i === 1 ? 'true' : 'false'); b.title = `${v.name}（${i + 1}）`;
-      b.innerHTML = `<i class="fa-solid ${v.icon}"></i>${v.name}<span class="kbd">${i + 1}</span>`;
+      const key = i < 9 ? String(i + 1) : i === 9 ? '0' : '';    // 10 番目は «0»
+      b.className = 'chip'; b.setAttribute('aria-pressed', i === 1 ? 'true' : 'false'); b.title = key ? `${v.name}（${key}）` : v.name;
+      b.innerHTML = `<i class="fa-solid ${v.icon}"></i>${v.name}${key ? `<span class="kbd">${key}</span>` : ''}`;
       b.onclick = () => this.selectView(i);
       host.appendChild(b); return b;
     });
@@ -8288,7 +8585,7 @@ class UIManager {
       ['30 mm シャー', `ミル中心から ${Math.abs(CONFIG.SHEAR30.X).toLocaleString()} mm（J-3 の先）／ 板厚 ${CONFIG.SHEAR30.MAX_TH} mm 以下を定尺 ${CONFIG.PILER.SHEET_L / 1000} m に切り分け`],
       ['パイラー', `ミル中心から ${(Math.min(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)}〜${(Math.max(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)} m ／ 開閉アーム式・リフトテーブル付`],
       ['装入設備', `転倒機 ミル中心から ${(Math.abs(CONFIG.SUPPLY.TILTER_X) / 1000).toFixed(1)} m（A-9 / A-8 の操作側）／ トランスファークレーンで横移動`],
-      ['板面冷却ヘッダ', `入側 A-5 テーブル中央 ／ 出側 サイドガイド上 各 2 本（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 水冷 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（膜沸騰・ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）・空冷 ${CONFIG.MATERIAL.STRIP_COOL.MODES.AIR.H} W/m²K（強制対流）`],
+      ['板面冷却ヘッダ', `入側・出側とも サイドガイド上 各 2 本（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 水冷 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（膜沸騰・ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）・空冷 ${CONFIG.MATERIAL.STRIP_COOL.MODES.AIR.H} W/m²K（強制対流）`],
       ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
     ];
     $('spec-body').innerHTML = rows.map(([k, v]) =>
@@ -8457,7 +8754,9 @@ class UIManager {
       else if (k === 'v') this.toggleVersion();
       else if (k === 'm') this.setSidebar(document.body.classList.contains('sb-collapsed'));
       else if (k === 'c') this.setCutaway(this.cutaway === 'half' ? 'xray' : this.cutaway === 'xray' ? 'solid' : 'half');
-      else if (k >= '1' && k <= String(CONFIG.VIEWS.length)) this.selectView(+k - 1);
+      // 視点は 1〜9 と 0（＝10 番目）。文字列比較で '9' <= '10' は偽なので、数値で判定する
+      else if (k >= '1' && k <= '9' && +k <= CONFIG.VIEWS.length) this.selectView(+k - 1);
+      else if (k === '0' && CONFIG.VIEWS.length >= 10) this.selectView(9);
     });
     this._manualLabels();
   }

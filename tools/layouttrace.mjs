@@ -1,7 +1,7 @@
 // 配置・機構の «成立» を数値で判定する評価器（今回の指摘 1〜5 に対応）。
 //  1. 装入ローラ: 回転が «ローラ軸まわり» か（軸から外れた部材が一緒に振れていないか）、
 //     回転の向きが材料の進行方向と一致するか、横送りローラが上昇時に主テーブルローラ面より上で板を運ぶか
-//  2. 板面クーラント: 入側 A-5 / 出側サイドガイド上にヘッダがあり、熱モデルと位置が一致するか
+//  2. 板面クーラント: 入側・出側ともサイドガイド上にヘッダがあり、熱モデルと位置が一致するか
 //  3. 断面表示: 75 mm シャーの手前側と天面（クロスヘッド・上刃ホルダ）が半断面で透過するか
 //  4. 端材: 切り落とした端材が板端の変形（舌・ワニ口）を保っているか、最終的にパレット上に載るか
 //  5. テーブル: 図面の区分（本数・ピッチ・区間長）どおりにローラが並ぶか、シャー周辺のピッチ
@@ -87,12 +87,17 @@ const out = await page.evaluate(() => {
     // 吊り具（ビーム・クランプ）が板の位置に追従している
     const bx = SV.beamT.position.x / sc, sx = SV.slab.position.x / sc, bz = SV.beamT.position.z / sc, sz = SV.slab.position.z / sc;
     ok('吊りビームがスラブの真上にある', Math.abs(bx - sx) < 5 && Math.abs(bz - sz) < 5, `ビーム (${mm(bx)}, ${mm(bz)}) / スラブ (${mm(sx)}, ${mm(sz)})`);
-    // 降ろしたあと: スラブは A-9 テーブルの上、Z = 0、底面＝パスライン。クランプは開いて上昇
+    // 降ろしたあと: スラブは入側テーブルの上、Z = 0、底面＝パスライン。クランプは開いて上昇
     window.__ff(Pp => !Pp.supply.active); W.render(P, 1 / 60);
     const xs = P.slab.xMin, xe = P.slab.xMax;
-    const a9 = K.TABLE.SECTIONS.find(q => q.name === 'A-9'), lo = Math.min(a9.side * a9.x0, a9.side * a9.x1), hi = Math.max(a9.side * a9.x0, a9.side * a9.x1);
-    ok('降ろしたスラブが A-9 テーブルの上に載る（ライン上に移った）', xs >= lo && xe <= hi && P.slab.onLine && W.slabView.mesh.visible,
-       `スラブ ${mm(xs)}〜${mm(xe)} / A-9 ${lo}〜${hi}`);
+    /* 降ろす位置は転倒機の位置から決まる（Layout.entryX）ので、区分の名前を書くのではなく
+     * «入側テーブルのローラが連続して並んでいる範囲に載っているか» で見る。転倒機を
+     * 移したときに、テーブルの端からはみ出していれば必ず落ちる。 */
+    const sgn = Math.sign((xs + xe) / 2) || 1;                      // 板が居る側（入側）
+    const exs = window.__LAYOUT.rolls().map(r => r.x).filter(x => Math.sign(x) === sgn);
+    const lo = Math.min(...exs), hi = Math.max(...exs);
+    ok('降ろしたスラブが入側テーブルの上に載る（ライン上に移った）', xs >= lo && xe <= hi && P.slab.onLine && W.slabView.mesh.visible,
+       `スラブ ${mm(xs)}〜${mm(xe)} / 入側テーブル ${Math.round(lo)}〜${Math.round(hi)}`);
     const tongBot = Math.min(...jaws().map(j => j.y));
     ok('降ろしたあとトングが板より上へ退避している', tongBot > PL0 + th + 100, `爪先 ${mm(tongBot)} / 板上面 ${mm(PL0 + th)}`);
     R.supply = { bot0: mm(bot0), open0: mm(open0), closed: mm(closed), lift: mm(lift), slab: [mm(xs), mm(xe)] };
@@ -182,16 +187,15 @@ const out = await page.evaluate(() => {
     ok('板面クーラントヘッダがある', has, has ? `ヘッダ ${gv.headers.count ?? gv.headers.mesh?.count} 本` : '無し');
     ok('熱モデルに板面冷却域がある', !!K.MATERIAL.COOLANT && K.MATERIAL.COOLANT.GUIDE_TOP > 0,
        K.MATERIAL.COOLANT ? `上面 ${K.MATERIAL.COOLANT.GUIDE_TOP} / 膜沸騰 ${K.MATERIAL.COOLANT.H_FILM} W/m²K` : '無し');
-    // 入側は A-5 テーブルの中央、出側はサイドガイドの上。門型の実位置（描画）と
+    // 入側・出側とも «サイドガイドの上»。門型の実位置（描画）と
     // 熱計算が見るヘッダ X（Layout）が同じ 1 式から来ていることまで見る。
     {
-      const L = window.__LAYOUT, st = L.coolStations(), a5 = L.range('A-5');
-      const inA5 = st.filter(x => x >= a5[0] && x <= a5[1]);
+      const L = window.__LAYOUT, st = L.coolStations();
       const atGuide = st.filter(x => Math.abs(Math.abs(x) - K.TABLE.GUIDE.X) < 1);
-      ok('入側の板面クーラントが A-5 テーブルの範囲にある', inA5.length === 1,
-         `門型 ${st.map(Math.round).join(' / ')} mm ／ A-5 ${Math.round(a5[0])}〜${Math.round(a5[1])} mm`);
-      ok('出側の板面クーラントはサイドガイドの上', atGuide.length === 1,
-         `サイドガイド ±${K.TABLE.GUIDE.X} mm`);
+      ok('板面クーラントは入側・出側ともサイドガイドの上', atGuide.length === 2 && st.length === 2,
+         `門型 ${st.map(Math.round).join(' / ')} mm ／ サイドガイド ±${K.TABLE.GUIDE.X} mm`);
+      ok('入側と出側にそれぞれ 1 基ずつある', st.filter(x => x > 0).length === 1 && st.filter(x => x < 0).length === 1,
+         `入側 ${st.filter(x => x > 0).map(Math.round).join('')} / 出側 ${st.filter(x => x < 0).map(Math.round).join('')} mm`);
       const hx = L.coolHeaderXs(), gx = [];
       gv.headers.mesh.updateWorldMatrix(true, false);
       const m4 = new T.Matrix4();
@@ -204,7 +208,7 @@ const out = await page.evaluate(() => {
          `${hx.length} 本 / 最大のずれ ${worst.toFixed(1)} mm`);
 
       /* «移したのに見えない» を二度と起こさないための 3 点。設備として立っていること、
-       * ミルから遠いステーションを断面表示で透かさないこと、そして
+       * 断面表示の扱いが «ミルからの距離» の規則どおりであること、そして
        * ラベルと視点から «たどり着けること»。位置が正しくても辿り着けなければ無いのと同じ。 */
       const near = (x, r) => (o) => { o.updateWorldMatrix(true, false);
         const b = new T.Box3().setFromObject(o); const c = (b.min.x + b.max.x) / 2 / sc;
@@ -218,20 +222,27 @@ const out = await page.evaluate(() => {
       ok('入側の板面冷却が設備として立っている（架台・梁・給液管）',
          kinds['架台'] >= 2 && kinds['梁'] >= 1 && kinds['給液管'] >= 1,
          Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(' / '));
-      // ミルから遠いステーションは断面表示の対象にしない（透けて «幽霊» にしない）
+      /* 断面表示の対象は «ミルから CUT_RANGE 以内のステーション» だけ。
+       * 近いものは板を見るために透ける必要があり、遠いものは透かしても得るものが無い
+       * （幽霊に見えるだけ）。両ステーションとも近いので、両方が対象に入っていること。 */
       const sided = [...(gv.sided.near || []), ...(gv.sided.far || []), ...(gv.sided.top || [])];
-      const farSided = sided.filter(near(st[0], 4000));
-      ok('ミルから遠い冷却ステーションは断面表示で透けない', farSided.length === 0,
-         `断面対象に入っている遠方の部材 ${farSided.length} 個`);
+      const R = A.world.guideView.constructor.CUT_RANGE ?? 20000;
+      let bad = 0;
+      for (const x of st) { const n = sided.filter(near(x, 4000)).length;
+        if ((Math.abs(x) < R) !== (n > 0)) bad++; }
+      ok('断面表示の対象がミルからの距離の規則どおり', bad === 0,
+         st.map(x => `${Math.round(x)}: ${sided.filter(near(x, 4000)).length} 個`).join(' / ') + `（範囲 ±${R} mm）`);
       // ラベルと視点からたどり着けること
       // ラベルは DOM 要素へ組み立て済みなので、文言と位置は要素そのものから読む
       const lv = W.labels, items = lv ? lv.items : [];
-      const lab = items.filter(q => Math.abs(q.v.x / sc - st[0]) < 2000);
-      ok('入側の板面冷却に設備ラベルがある', lab.length === 1,
-         lab.map(q => q.el.textContent).join(' / ') || `${items.length} 件中 0`);
+      const lab = st.map(x => items.filter(q => q.el.textContent.includes('板面冷却') && Math.abs(q.v.x / sc - x) < 2000));
+      ok('入側・出側それぞれの板面冷却に設備ラベルがある', lab.every(q => q.length === 1),
+         lab.map(q => q.map(e => e.el.textContent).join('')).join(' / ') || `${items.length} 件中 0`);
+      // 視点は «両方のステーションが画角に入る» ところを見ていること
       const cv = K.VIEWS.find(v => v.id === 'cool');
-      ok('入側の板面冷却へ寄る視点がある', !!cv && Math.abs(cv.tgt[0] - st[0]) < 3000,
-         cv ? `${cv.name} → ${cv.tgt[0]} mm` : '無し');
+      const tgt = cv ? cv.tgt[0] : null;      // VIEWS は読み込み時に反転済み（＝世界 X）
+      ok('板面冷却へ寄る視点がある', !!cv && st.every(x => Math.abs(x - tgt) < 8000),
+         cv ? `${cv.name} → 注視点 ${tgt} mm ／ 門型 ${st.map(Math.round).join(' / ')} mm` : '無し');
     }
   }
 
