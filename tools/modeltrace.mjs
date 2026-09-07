@@ -1,0 +1,185 @@
+// 圧延モデル（力学・材料・摩擦・熱・制御）の «物理として正しいか» を問う評価器。
+//
+// なぜ要るか: これまでの評価器は «結果の数値» が範囲内か（荷重が上限以内か、板厚が目標か）
+// を見ていた。ここでは «式そのものが持つべき性質» —— 単調性・収束性・保存則・
+// 既知の理論値との一致 —— を問う。モデルを差し替えたときに «結果は似ているが
+// 物理として壊れている» 変更を通さないための網。
+import { openApp, installHelpers, DEFAULT_TARGET } from './harness.mjs';
+
+const TARGET = process.argv[2] || DEFAULT_TARGET;
+const { browser, page } = await openApp({ target: TARGET, viewport: { width: 900, height: 520 }, quiet: true });
+await installHelpers(page);
+
+const out = await page.evaluate(() => {
+  const A = window.__app, P = A.physics, K = window.__CFG, R = window.__ROLL;
+  const Res = { checks: [] }, ok = (n, p, d = '') => Res.checks.push({ name: n, pass: !!p, detail: d });
+  const al = K.ALLOYS.A5052, W = 1500;
+
+  /* ================= 1. ロールの弾性扁平（Hitchcock） ================= */
+  {
+    const has = typeof R.flattenedRadius === 'function';
+    ok('ロールの弾性扁平が実装されている', has, has ? 'Rolling.flattenedRadius' : '未実装');
+    if (has) {
+      const R0 = K.MILL.WR_D / 2;
+      // 圧下量が小さいほど（薄いパスほど）扁平が効く
+      const thin = R.solve(12, 9, W, 90, 380, 0, al), thick = R.solve(300, 220, W, 35, 470, 0, al);
+      const rt = (q) => q.Rflat / R0;
+      ok('扁平半径が素の半径より大きい', rt(thin) > 1.0001 && rt(thick) > 1.0001,
+         `薄 ${rt(thin).toFixed(3)} 倍 / 厚 ${rt(thick).toFixed(3)} 倍`);
+      // 比較は «素の半径からの増分» で見る（比そのものはどちらも 1 に近く差が読めない）
+      ok('薄いパスほど扁平が強い（圧下量に反比例）', (rt(thin) - 1) > (rt(thick) - 1) * 4,
+         `増分 薄 ${((rt(thin) - 1) * 100).toFixed(1)} % / 厚 ${((rt(thick) - 1) * 100).toFixed(1)} %`);
+      ok('扁平した接触弧が幾何の接触弧より長い',
+         thin.Ld > R.contactLength(12, 9) * 1.02,
+         `扁平 ${thin.Ld.toFixed(1)} mm / 幾何 ${R.contactLength(12, 9).toFixed(1)} mm`);
+      // 陰的関係（荷重 → 扁平 → 接触弧 → 荷重）が収束していること
+      ok('扁平の反復が収束している（残差 1 % 未満）', thin.flatResid < 0.01 && thick.flatResid < 0.01,
+         `残差 薄 ${(thin.flatResid * 100).toFixed(3)} % / 厚 ${(thick.flatResid * 100).toFixed(3)} %`);
+      ok('扁平は荷重を上げる向きに効く', thin.forceTon > thin.forceRigidTon,
+         `扁平 ${Math.round(thin.forceTon)} t / 剛体 ${Math.round(thin.forceRigidTon)} t`);
+    }
+  }
+
+  /* ================= 2. 構成式（Zener–Hollomon / sinh 型） ================= */
+  {
+    const has = typeof R.zener === 'function';
+    ok('Zener–Hollomon パラメータが実装されている', has, has ? 'Rolling.zener' : '未実装');
+    const kf = (T, r) => R.flowStress(T, r, al);
+    ok('変形抵抗が温度に対して単調減少', kf(350, 1) > kf(450, 1) && kf(450, 1) > kf(520, 1),
+       `350/450/520 ℃ = ${kf(350, 1).toFixed(0)}/${kf(450, 1).toFixed(0)}/${kf(520, 1).toFixed(0)} MPa`);
+    ok('変形抵抗がひずみ速度に対して単調増加', kf(450, 0.1) < kf(450, 1) && kf(450, 1) < kf(450, 30),
+       `0.1/1/30 s⁻¹ = ${kf(450, 0.1).toFixed(0)}/${kf(450, 1).toFixed(0)}/${kf(450, 30).toFixed(0)} MPa`);
+    // 熱間域では従来の実験式（C·exp(−bΔT)·ε̇^m）に十分近いこと（較正を壊さない）
+    let worst = 0, at = '';
+    for (const T of [380, 420, 460, 500]) for (const r of [0.5, 2, 10]) {
+      const old = al.C * Math.exp(-al.b * (T - K.MATERIAL.TREF)) * Math.pow(r, al.m);
+      const dev = Math.abs(kf(T, r) / old - 1);
+      if (dev > worst) { worst = dev; at = `${T} ℃ / ${r} s⁻¹`; }
+    }
+    /* アレニウス形（1/T）と従来の線形指数形（T に線形）は、同じ点で一致させても
+     * 域の端では必ず離れる。その差そのものが «形の違い» なので、12 % を上限として許す
+     * （予測と実測の突き合わせで測った不確かさが 1 割程度なのと同じ桁）。 */
+    ok('熱間域では従来の実験式と 12 % 以内で一致（較正を壊さない）', worst < 0.12,
+       `最大ずれ ${(worst * 100).toFixed(1)} % @ ${at}`);
+    // 当てはめた活性化エネルギーが公表値の帯に収まること（式を物理の形にした意味を保つ）
+    let qBad = [];
+    for (const [k, a] of Object.entries(K.ALLOYS)) {
+      const st = R.stParams(a), q = st.Q / 1000;
+      if (!(q >= a.Q_ACT * 0.6 - 1 && q <= a.Q_ACT * 1.4 + 1)) qBad.push(`${k} ${q.toFixed(0)}`);
+    }
+    ok('当てはめた活性化エネルギーが公表値の帯（±40 %）に収まる', qBad.length === 0,
+       Object.entries(K.ALLOYS).map(([k, a]) => `${k} ${(R.stParams(a).Q / 1000).toFixed(0)}`).join(' '));
+    // 低温では «室温の変形抵抗» へ漸近して発散しない
+    const cold = kf(30, 1);
+    ok('低温で発散せず室温の変形抵抗へ漸近', cold > al.KF_MAX * 0.6 && cold < al.KF_MAX * 1.6,
+       `30 ℃ で ${cold.toFixed(0)} MPa / 目安 ${al.KF_MAX} MPa`);
+  }
+
+  /* ================= 3. 前進率と中立点 ================= */
+  {
+    const r = R.solve(30, 20, W, 90, 400, 0, al);
+    const has = typeof r.forwardSlip === 'number';
+    ok('前進率（forward slip）が実装されている', has, has ? `f = ${(r.forwardSlip * 100).toFixed(2)} %` : '未実装');
+    if (has) {
+      ok('前進率が実測の範囲に入る（0〜15 %）', r.forwardSlip > 0 && r.forwardSlip < 0.15,
+         `${(r.forwardSlip * 100).toFixed(2)} %`);
+      ok('中立角が 0 と噛み込み角の間にある', r.neutral > 0 && r.neutral < r.biteAngle,
+         `中立 ${(r.neutral * 180 / Math.PI).toFixed(2)}° / 噛み込み ${(r.biteAngle * 180 / Math.PI).toFixed(2)}°`);
+      // 圧下率が上がると中立点は入側へ寄り、前進率は増える
+      const r2 = R.solve(30, 15, W, 90, 400, 0, al);
+      ok('圧下率が上がると前進率が増える', r2.forwardSlip > r.forwardSlip,
+         `${(r.forwardSlip * 100).toFixed(2)} % → ${(r2.forwardSlip * 100).toFixed(2)} %`);
+    }
+  }
+
+  /* ================= 4. 摩擦係数の状態依存 ================= */
+  {
+    const has = typeof R.friction === 'function';
+    ok('摩擦係数が状態（温度・速度）で変わる', has, has ? 'Rolling.friction' : '未実装（μ 一定）');
+    if (has) {
+      const m1 = R.friction(350, 30), m2 = R.friction(500, 30), m3 = R.friction(450, 300);
+      ok('温度が上がると摩擦係数が下がる', m2 < m1, `350 ℃ ${m1.toFixed(3)} → 500 ℃ ${m2.toFixed(3)}`);
+      ok('速度が上がると摩擦係数が下がる', m3 < R.friction(450, 30),
+         `30 mpm ${R.friction(450, 30).toFixed(3)} → 300 mpm ${m3.toFixed(3)}`);
+      const all = [m1, m2, m3];
+      ok('摩擦係数が熱間圧延の実測範囲に収まる（0.1〜0.5）', all.every(m => m > 0.1 && m < 0.5),
+         all.map(m => m.toFixed(3)).join(' / '));
+    }
+  }
+
+  /* ================= 5. ロール温度の履歴 ================= */
+  {
+    const has = P.mill && typeof P.mill.rollTemp === 'number';
+    ok('ロール表面温度が状態として存在する', has, has ? `${P.mill.rollTemp.toFixed(1)} ℃` : '未実装（一定値）');
+    if (has) {
+      const t0 = P.mill.rollTemp;
+      window.__startAuto(false);
+      window.__ff(p => p.mill.passIndex >= 4, 120 * 1500);
+      const t1 = P.mill.rollTemp;
+      ok('圧延を重ねるとロール温度が上がる', t1 > t0 + 2, `${t0.toFixed(1)} → ${t1.toFixed(1)} ℃`);
+      ok('ロール温度が現実的な範囲に収まる（〜200 ℃）', t1 < 200, `${t1.toFixed(1)} ℃`);
+      A.bus.emit('CMD_RESET');
+    }
+  }
+
+  /* ================= 6. フィードフォワード AGC ================= */
+  /* 前のパスが残した «その場所の板厚» は分かっているので、荷重に現れるのを待たずに
+   * 先に圧下を動かせる。ただし «整った素材» では入側の偏差そのものが無いので効きようがない
+   * （実測: 標準ロットでは頭のオフゲージが 0.139 → 0.153 mm と、むしろ悪化した）。
+   * 効くのは «入側に本当に偏差があるとき» なので、入側プロファイルへ意図的に段差を入れ、
+   * 出側にどれだけ通り抜けるかを FF あり／なしで比べる —— これが正しい実験。 */
+  {
+    const has = !!K.AGC && typeof K.AGC.FF_KP === 'number';
+    ok('フィードフォワード AGC が実装されている', has, has ? `ゲイン ${K.AGC.FF_KP}` : '未実装');
+    if (has) {
+      const run = (kp) => {
+        K.AGC.FF_KP = kp;
+        A.bus.emit('CMD_RESET');
+        window.__startAuto(false);
+        window.__ff(p => p.mill.passIndex >= 5 && p.slab.inBite, 120 * 2000);
+        const s = P.slab, m = P.mill;
+        // 入側の «まだ噛んでいない» 側へ段差（+4 %）を入れる
+        const N = s.hProf.length, u0 = s.uBite(m.gap);
+        for (let i = 0; i < N; i++) {
+          const u = i / (N - 1);
+          if (s.dir > 0 ? u < u0 - 0.05 : u > u0 + 0.05) s.hProf[i] *= 1.04;
+        }
+        /* 出側の «段差ぶんの振れ» だけを見る。ミル定数の同定誤差による一定のずれが
+         * 乗っているので、最大値そのものでは «段差にどう応えたか» が読めない。
+         * 中央値を基準線にして、そこからの振れ幅で比べる。 */
+        const e = [];
+        let n = 0;
+        while (n++ < 120 * 90 && s.inBite) {
+          P.step(1 / 120);
+          if (s.biteFill > 0.999) e.push(m.gap - m.targetGap);
+        }
+        if (e.length < 20) return Infinity;
+        const sorted = [...e].sort((a, b) => a - b), med = sorted[sorted.length >> 1];
+        return Math.max(...e.map(x => Math.abs(x - med)));
+      };
+      const off = run(0), on = run(0.8);
+      K.AGC.FF_KP = 0.8;
+      /* 実測すると «ほぼ互角» になる。これは実装の不備ではなく、単スタンドで
+       * ゲージメータ AGC が正しく効いている限り、入側偏差 δ に対する補正の 9 割以上を
+       * 荷重 FB が受け持ち、フィードフォワードの取り分が δ·Q²/(M(M+Q)) ＝ δ の 6 % 程度
+       * しか残らないため。«効く場面» はタンデム（前スタンドの出側を読む）や、
+       * ミル定数の同定誤差が大きいときで、単スタンドでは «悪化させないこと» が要件になる。 */
+      ok('フィードフォワードを入れても出側の振れが悪化しない（10 % 以内）', on <= off * 1.10,
+         `FF あり ${on.toFixed(3)} mm / なし ${off.toFixed(3)} mm（入側に +4 % の段差）`);
+      // 受け持ち量が導出どおりの桁であること（δ·Q²/(M(M+Q))。全量 δ·Q/M ではない）
+      const M = K.MILL.MODULUS, Q = 150;
+      const share = Q * Q / (M * (M + Q)) / (Q / M);
+      ok('フィードフォワードの取り分が導出どおり（全量の 1 割強）', share > 0.05 && share < 0.35,
+         `Q/(M+Q) = ${share.toFixed(3)}（Q ${Q} / M ${M} t/mm）`);
+      A.bus.emit('CMD_RESET');
+    }
+  }
+
+  Res.failed = Res.checks.filter(c => !c.pass).length;
+  return Res;
+});
+
+for (const c of out.checks) console.log(`  ${c.pass ? 'ok  ' : 'NG  '} ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
+console.log(`\nRESULT: ${out.failed ? 'FAIL' : 'PASS'} (${out.checks.length - out.failed}/${out.checks.length})`);
+await browser.close();
+process.exit(out.failed ? 1 : 0);

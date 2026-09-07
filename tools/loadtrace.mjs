@@ -32,7 +32,11 @@ const out = await page.evaluate(() => {
   let cur = null, rec = [], t = 0;
   const finish = () => {
     if (!cur || rec.length < 40) { cur = null; rec = []; return; }
-    const full = rec.filter(q => q.fill >= 0.999);
+    /* 弧が満ちていて、かつ «所定の速度で走っている» 標本だけで比べる。
+     * 75 mm シャーの端部切断はパスの途中でラインを止めるので、その前後の低速区間を
+     * 混ぜると «尻の荷重が低い» という別の理由（ひずみ速度が低い）が入ってしまう。 */
+    const vRun = Math.max(...rec.map(q => q.v)) * 0.5;
+    const full = rec.filter(q => q.fill >= 0.999 && q.v >= vRun);
     if (full.length < 20) { cur = null; rec = []; return; }
     const pick = (key, lo, hi) => full.filter(q => q[key] >= lo && q[key] < hi).map(q => q.f);
     const headF = avg(pick('dHead', 0, ZONE)), headRef = avg(pick('dHead', ZONE, REF));
@@ -58,7 +62,7 @@ const out = await page.evaluate(() => {
     if (s.inBite && i >= 0) {
       if (!cur || cur.pass !== i + 1) { finish(); cur = { pass: i + 1, gap: K.SCHEDULE[i]?.gap ?? 0, len: s.length }; }
       const gap = m.gap, hIn = s.thickness;
-      rec.push({ t: +t.toFixed(3), f: s.rollForce, fill: s.biteFill, gap,
+      rec.push({ t: +t.toFixed(3), f: s.rollForce, fill: s.biteFill, gap, v: Math.abs(m.currentSpeed),
                  dHead: (s.dir > 0 ? s.xMax : -s.xMin) * gap / Math.max(hIn, 1e-6),
                  dTail: s.dir > 0 ? -s.xMin : s.xMax });
       const D = s.dTProf, N = D.length;
