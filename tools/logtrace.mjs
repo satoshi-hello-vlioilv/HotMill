@@ -118,6 +118,25 @@ const out = await page.evaluate(async () => {
     const old = document.querySelectorAll('#log-table tbody tr').length;
     return old === n && old !== now;
   })(), `${n} 行`);
+  ok('項目チップが凡例を兼ねる（色と最大値がチップに出る）', (() => {
+    const b = document.querySelector('#log-series .chip[data-k="f"]');
+    return b && /最大/.test(b.textContent) && /rgb|#/.test(b.style.color);
+  })(), document.querySelector('#log-series .chip[data-k="f"]')?.textContent.trim());
+  ok('グラフをなぞると読み取り線とその時刻の値が出る', (() => {
+    const h = document.getElementById('log-chart'), b = h.getBoundingClientRect();
+    h.dispatchEvent(new PointerEvent('pointermove',
+      { clientX: b.left + b.width * 0.55, clientY: b.top + b.height * 0.5, bubbles: true }));
+    const c = document.getElementById('log-cross'), rd = document.getElementById('log-read');
+    return c && !c.hidden && rd && !rd.hidden && /P\d/.test(rd.textContent);
+  })(), document.getElementById('log-read')?.textContent.slice(0, 40));
+  ok('表の行を押すとそのパスだけになる', (() => {
+    const tr = document.querySelectorAll('#log-table tbody tr')[2];
+    if (!tr) return false;
+    tr.click();
+    const one = A.ui.logPass.size === 1 && A.ui.logPass.has(3);
+    document.getElementById('log-pass-all').click();
+    return one;
+  })(), 'クリック → 第 3 パスのみ');
   ok('パネルはモーダルではない（3D を操作できる）',
      document.getElementById('pnl-log').tagName === 'SECTION' && !document.querySelector('dialog[open]#pnl-log'),
      document.getElementById('pnl-log').tagName);

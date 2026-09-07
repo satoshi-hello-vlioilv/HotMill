@@ -25,7 +25,8 @@
 
   --hot:#c2410c;
   --r-s:6px; --r-m:10px; --r-l:16px;
-  --sb-w:372px;
+  --sb-full:372px;    /* サイドバーそのものの幅 */
+  --sb-w:var(--sb-full); /* 画面がサイドバーに空ける幅（たたむと 0 になる） */
   --shadow-1:0 1px 2px rgba(18,25,29,.06), 0 2px 8px rgba(18,25,29,.05);
   --shadow-2:0 8px 28px rgba(18,25,29,.10);
   --font:"Segoe UI","Yu Gothic UI","Meiryo",system-ui,-apple-system,sans-serif;
@@ -52,7 +53,7 @@ canvas { display:block; }
 
 /* ---------- サイドバー ---------- */
 #sidebar {
-  position:fixed; top:0; left:0; bottom:0; width:var(--sb-w); z-index:10;
+  position:fixed; top:0; left:0; bottom:0; width:var(--sb-full); z-index:10;
   background:rgba(255,255,255,.93); backdrop-filter:blur(14px);
   border-right:1px solid var(--line); box-shadow:var(--shadow-2);
   display:flex; flex-direction:column;
@@ -115,6 +116,9 @@ canvas { display:block; }
   padding:8px 14px; background:var(--s-2); border-bottom:1px solid var(--line-2); }
 #pnl-log .ctl .grp { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
 #pnl-log .ctl .k { font-size:10px; font-weight:700; color:var(--ink-3); letter-spacing:.08em; }
+#pnl-log .ctl .sep { width:1px; align-self:stretch; background:var(--line); margin:0 2px; }
+#pnl-log .chip em { font-style:normal; opacity:.55; font-weight:600; }
+#pnl-log .chip[aria-pressed="true"] em { opacity:.85; }
 #pnl-log .chips { display:flex; flex-wrap:wrap; gap:5px; }
 #pnl-log .chip { display:inline-flex; align-items:center; gap:5px; height:23px; padding:0 9px;
   border-radius:99px; border:1px solid var(--line); background:var(--s-1); color:var(--ink-3);
@@ -129,8 +133,19 @@ canvas { display:block; }
 /* 板を大きくしたぶんはチャートと表で分け合う（余白が増えるだけにしない） */
 #pnl-log .body { flex:1 1 auto; display:flex; flex-direction:column; gap:10px;
   padding:10px 14px 12px; overflow:hidden; min-height:0; }
-#pnl-log .chart { flex:1 1 44%; min-height:150px; border:1px solid var(--line-2); border-radius:var(--r-m);
-  background:var(--s-2); overflow:hidden; }
+#pnl-log .chart { position:relative; flex:1 1 44%; min-height:150px; border:1px solid var(--line-2);
+  border-radius:var(--r-m); background:var(--s-2); overflow:hidden; cursor:crosshair; }
+/* 読み取り線。グラフは «形» を見るためのものだが、数値をその場で読めないと結局
+   表に戻ることになる。線を当てた時刻の値をその場に出して、往復させない。 */
+#pnl-log .chart .cross { position:absolute; top:0; bottom:0; width:1px; background:var(--ink-3);
+  opacity:.55; pointer-events:none; }
+#pnl-log .chart .read { position:absolute; top:6px; pointer-events:none; z-index:2;
+  background:rgba(255,255,255,.96); border:1px solid var(--line); border-radius:8px;
+  padding:5px 8px; font-size:10.5px; line-height:1.55; box-shadow:var(--shadow-1);
+  font-variant-numeric:tabular-nums; white-space:nowrap; }
+#pnl-log .chart .read b { font-weight:800; }
+#pnl-log .chart .read i { font-style:normal; display:inline-block; width:8px; height:8px;
+  border-radius:2px; margin-right:5px; vertical-align:-1px; }
 #pnl-log .chart svg { display:block; width:100%; height:100%; }
 #pnl-log .tblwrap { flex:1 1 56%; min-height:90px; overflow:auto; }
 #pnl-log table { border-collapse:collapse; width:100%; font-size:11.5px; font-variant-numeric:tabular-nums; }
@@ -140,6 +155,8 @@ canvas { display:block; }
 #pnl-log td:first-child, #pnl-log th:first-child { text-align:center; font-weight:800; }
 #pnl-log td.dir { text-align:center; color:var(--ink-3); }
 #pnl-log tr.live td { background:var(--accent-soft); }
+#pnl-log tbody tr { cursor:pointer; }
+#pnl-log tbody tr:hover td { background:var(--s-2); }
 #pnl-log tr.off td { opacity:.34; }
 #pnl-log td.over { color:var(--crit); font-weight:800; }
 #pnl-log td.plan { color:var(--ink-3); }
@@ -209,11 +226,21 @@ canvas { display:block; }
 #panels::-webkit-scrollbar { width:9px; } #panels::-webkit-scrollbar-thumb { background:var(--line); border-radius:9px; }
 
 .sec { border-bottom:1px solid var(--line-2); }
+/* 見出しはスクロールしても上に残す。区分を全部たたんである設計なので、
+   «どこに何があるか» の一覧が常に見えていることが道しるべになる。 */
 .sec > summary {
   list-style:none; cursor:pointer; padding:11px 16px; display:flex; align-items:center; gap:8px;
   font-size:11px; font-weight:800; letter-spacing:.07em; color:var(--ink-2); text-transform:uppercase;
-  user-select:none;
+  user-select:none; position:sticky; top:0; z-index:2;
+  background:rgba(255,255,255,.94); backdrop-filter:blur(8px);
 }
+.sec[open] > summary { border-bottom:1px solid var(--line-2); }
+/* 群の見出し。«準備 → 運転 → 表示と設備» の順に並べ、目的で束ねる。 */
+.grp-hd { padding:13px 16px 5px; font-size:9.5px; font-weight:800; letter-spacing:.12em;
+  color:var(--ink-3); text-transform:uppercase; background:var(--s-2);
+  border-bottom:1px solid var(--line-2); display:flex; align-items:center; gap:7px; }
+.grp-hd i { font-size:10px; opacity:.7; }
+.grp-hd .hint { margin-left:auto; font-weight:600; letter-spacing:0; text-transform:none; font-size:10px; }
 .sec > summary::-webkit-details-marker { display:none; }
 .sec > summary .chev { margin-left:auto; transition:transform .18s; color:var(--ink-3); font-size:10px; }
 .sec[open] > summary .chev { transform:rotate(90deg); }
@@ -350,7 +377,7 @@ select.sel:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px
 
 
 /* ---------- ラベル(3D上の注記) ---------- */
-.shortcuts { padding:12px 16px 18px; font-size:10.5px; color:var(--ink-3); line-height:2.1; }
+.shortcuts { padding:2px 0 6px; font-size:10.5px; color:var(--ink-3); line-height:2.1; }
 .shortcuts b { display:block; font-size:10px; font-weight:800; letter-spacing:.07em; color:var(--ink-2);
   text-transform:uppercase; margin-bottom:4px; }
 .shortcuts span { display:inline-flex; align-items:center; gap:4px; margin-right:10px; white-space:nowrap; }
@@ -393,10 +420,17 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
 #btn-collapse:hover { background:rgba(255,255,255,.18); }
 #btn-expand { position:fixed; left:14px; top:14px; z-index:11; display:none; width:40px; height:40px; border-radius:10px; border:1px solid var(--line);
   background:rgba(255,255,255,.92); color:var(--ink-2); cursor:pointer; box-shadow:var(--shadow-2); font-size:15px; }
+/* たたむ: «画面が空ける幅»（--sb-w）だけを 0 にし、サイドバー自身の幅（--sb-full）は
+   そのまま残して丸ごと画面外へ送る。ここを 1 つの変数で兼ねていたため、たたむと
+   サイドバーの幅まで 0 になり、translateX(-100%) が 0 px の移動になって
+   «幅 1 px に潰れた中身が縦書きで残る» 崩れ方をしていた。 */
 body.sb-collapsed { --sb-w:0px; }
-body.sb-collapsed #sidebar { transform:translateX(-100%); }
+body.sb-collapsed #sidebar { transform:translateX(calc(-1 * var(--sb-full))); visibility:hidden; }
 body.sb-collapsed #btn-expand { display:block; }
-#sidebar { transition:transform .22s ease; }
+/* たたむと «開く» ボタンが左上に出るので、上部の帯はそのぶん右へ寄せて重ねない */
+body.sb-collapsed #hud-top { left:70px; }
+#sidebar { transition:transform .22s ease, visibility 0s linear .22s; }
+body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
 .sec > summary .step { width:18px; height:18px; border-radius:50%; background:var(--accent); color:#fff; font-size:10.5px; display:grid;
   place-items:center; flex:none; letter-spacing:0; }
 .sec > summary .sum { margin-left:auto; font-weight:600; text-transform:none; letter-spacing:0; color:var(--ink-3); font-size:10.5px;
@@ -471,6 +505,8 @@ body.sb-collapsed #btn-expand { display:block; }
 
   <div id="panels">
 
+    <div class="grp-hd"><i class="fa-solid fa-list-check"></i>準備<span class="hint">材料と圧延計画</span></div>
+
     <details class="sec" id="sec-material">
       <summary><span class="step">1</span> 素材と目標<span class="sum" id="sum-material"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
@@ -538,6 +574,8 @@ body.sb-collapsed #btn-expand { display:block; }
       </div>
     </details>
 
+    <div class="grp-hd"><i class="fa-solid fa-play"></i>運転<span class="hint">自動 / 手動と速度</span></div>
+
     <details class="sec" id="sec-run">
       <summary><span class="step">3</span> 運転<span class="sum" id="sum-run"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
@@ -570,6 +608,8 @@ body.sb-collapsed #btn-expand { display:block; }
       </div>
     </details>
 
+    <div class="grp-hd"><i class="fa-solid fa-sliders"></i>表示と設備<span class="hint">見え方・演出・諸元</span></div>
+
     <details class="sec" id="sec-view">
       <summary><i class="fa-solid fa-eye"></i> 見え方<span class="sum" id="sum-view"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
@@ -588,7 +628,7 @@ body.sb-collapsed #btn-expand { display:block; }
           </div>
           <div class="derived" id="der-quality">標準：環境反射あり・影あり・解像度 1.5×まで</div>
         </div>
-        <div class="derived">視点は画面上部のツールバー（<kbd>1</kbd>–<kbd>8</kbd>）、設備ラベルは <kbd>L</kbd>、テーブル区分の記号は <kbd>Z</kbd> で切り替えます。左ドラッグ回転 / 右ドラッグ平行移動 / ホイール拡大縮小。<b>3D 上の設備ラベルを押すと、その設備へ視点が寄ります</b>（向きは変えません）。</div>
+        <div class="derived">視点は画面上部のツールバー（<kbd>1</kbd>–<kbd>9</kbd>）、設備ラベルは <kbd>L</kbd>、テーブル区分の記号は <kbd>Z</kbd> で切り替えます。左ドラッグ回転 / 右ドラッグ平行移動 / ホイール拡大縮小。<b>3D 上の設備ラベルを押すと、その設備へ視点が寄ります</b>（向きは変えません）。</div>
       </div>
     </details>
 
@@ -619,11 +659,13 @@ body.sb-collapsed #btn-expand { display:block; }
       </div>
     </details>
 
-    <div class="shortcuts">
-      <b>ショートカット</b>
-      <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
-      <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>8</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>G</kbd>圧延実績</span><span><kbd>V</kbd>版数と履歴</span>
-    </div>
+    <details class="sec" id="sec-keys">
+      <summary><i class="fa-solid fa-keyboard"></i> ショートカット<span class="sum">Space / P / R / L / C / 1–9</span><i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body"><div class="shortcuts">
+        <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
+        <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>9</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>G</kbd>圧延実績</span><span><kbd>V</kbd>版数と履歴</span>
+      </div></div>
+    </details>
   </div>
 </aside>
 <button id="btn-expand" title="メニューを開く（M）" aria-label="メニューを開く"><i class="fa-solid fa-bars"></i></button>
@@ -684,8 +726,9 @@ body.sb-collapsed #btn-expand { display:block; }
   </header>
   <div class="ctl">
     <div class="grp"><span class="k">項目</span><div class="chips" id="log-series"></div></div>
+    <div class="sep"></div>
     <div class="grp"><span class="k">パス</span><div class="chips" id="log-passes"></div>
-      <button class="mini" id="log-pass-all" type="button">全て</button></div>
+      <button class="mini" id="log-pass-all" type="button" title="絞り込みを解除して全パスを出す">全て</button></div>
   </div>
   <div class="body">
     <div class="chart" id="log-chart"></div>
@@ -752,6 +795,19 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.6.0', base: 'acff0b2', date: '2026-09-07', title: '入側冷却を «見える設備» に、メニューと実績ビュワーの作り直し', items: [
+      { t: 'メニューをたたむと «幅 1 px に潰れた中身が縦書きで残る» 崩れ方をしていたのを直した', w: '--sb-full / --sb-w' },
+      { t: 'たたんだときに «開く» ボタンと上部ツールバーが重なっていたのも直した', w: 'body.sb-collapsed #hud-top' },
+      { t: 'メニューを «準備 / 運転 / 表示と設備» の 3 群に束ね、見出しはスクロールしても残るようにした', w: '.grp-hd / summary sticky' },
+      { t: 'ショートカット一覧を畳める区分にして、常時場所を取らないようにした', w: '#sec-keys' },
+      { t: '入側の板面冷却に給液系（立ち上がり管・マニホールド・降し管・元弁）を作った', w: 'Parts.guideHeaderSupply' },
+      { t: 'ミルから遠い冷却ステーションは断面表示の対象から外した（透けて幽霊に見えていた）', w: 'GuideView.CUT_RANGE' },
+      { t: '入側・出側それぞれに設備ラベルを出し、入側冷却（A-5）へ寄る視点を足した', w: 'LabelView / VIEWS[cool]' },
+      { t: '噴射をノズル列から自由落下で出すようにし、板が来ていないヘッダの下はテーブル面まで落とす', w: 'SprayView.update' },
+      { t: '材料が来る手前で開弁するようにした（実機の熱間材検出器と同じ順番）', w: 'HEADER.LEAD' },
+      { t: '実績ビュワー: 項目チップが凡例を兼ね（色と最大値）、グラフをなぞると値が読める', w: 'UIManager._logCrosshair' },
+      { t: '実績ビュワー: 表の行を押すとそのパスだけを見る（表とグラフを別々に操作させない）', w: 'UIManager.renderLog' },
+    ] },
     { v: '1.5.0', base: '416da57', date: '2026-09-07', title: '荷重の «頭・尻・噛み込み» を再現し、実績を移動できるビュワーへ', items: [
       { t: 'ミルばねを実装。実ギャップ ＝ 圧下位置 ＋ 荷重/ミル定数 で、荷重を受けてロールが開く', w: 'MILL.MODULUS / MillState.screw' },
       { t: '板厚制御（AGC）を実装。ゲージメータ（荷重 FB）＋ モニタ（X 線厚み計 FB、輸送遅れ付き）', w: 'CONFIG.AGC / PhysicsEngine._agc' },
@@ -1027,7 +1083,9 @@ const CONFIG = {
               *   «正準 X»（第 1 パスが +X ＝ 出側が正）で書き、Layout.coolStations が世界 X に直す。
               *   入側は A-5 テーブルの中央（図面 61.8〜70.8 m）、出側はサイドガイドの上（3.4 m）。 */
              HEADER: { STATIONS: [{ sec: 'A-5' }, { x: 3400 }],
-                       DX: 500, Y: 950, D: 140, POST_X: 960, POST_W: 240, POST_Z: 2900, BEAM_Y: 1600, ZONE: 600 } },
+                       DX: 500, Y: 950, D: 140, POST_X: 960, POST_W: 240, POST_Z: 2900, BEAM_Y: 1600, ZONE: 600,
+                       // 材料が来る手前で開弁する距離（噴射の見た目だけ。熱計算は実通過長で効かせる）
+                       LEAD: 6000 } },
   },
 
   /* スラブ装入設備 —— 実機配置では転倒機とその周辺（ピット炉・クレーン）は入側テーブル
@@ -1595,6 +1653,9 @@ const CONFIG = {
     // 75 mm シャーはワークロールから約 30.6 m。他の視点では画面外なので専用の視点を置く。
     { id:'shear',    name:'75mmシャー', icon:'fa-scissors',         pos:[ 36500,  5200, 11500], tgt:[ 30800,  1200,  1500] },
     { id:'piler',    name:'30mmシャー・パイラー', icon:'fa-layer-group', pos:[ 92000,  7000, 17000], tgt:[ 85500,  1000,     0] },
+    // 入側の板面冷却は A-5 テーブルの中央（ミル中心から 66.3 m）。他のどの視点からも
+    // 画面外なので専用の視点を置く（«移したのに見えない» の実体はこれだった）。
+    { id:'cool',     name:'入側冷却（A-5）', icon:'fa-shower',  pos:[-60500,  5200, 11000], tgt:[-66300,  1500,     0] },
   ],
 };
 
@@ -4539,6 +4600,30 @@ const Parts = {
     }
     return G.merge(parts);
   },
+  /**
+   * 板面冷却の給液系。ヘッダは «液が来ていないと» 設備として成立しないので、
+   * 柱に沿った立ち上がり管 → 梁上のマニホールド → 各ヘッダへの降し管 → 元弁の箱、まで作る。
+   * 原点＝ステーション中心（床）。柱と同じ側（+Z）に寄せて置く。
+   */
+  guideHeaderSupply() {
+    /* 配管は門型（柱・梁）とサイドガイド架台の «外側» を通す。中を抜こうとすると
+     * 柱や梁と体積が重なる（実測で最大 120 mm の食い込み）。ヘッダへの取り合いは
+     * ヘッダ端（胴長の外）で止め、パイプの中まで潜り込ませない。 */
+    const H = CONFIG.TABLE.GUIDE.HEADER, P = CONFIG.MILL.PASS_LINE, parts = [];
+    const top = P + H.BEAM_Y + 320;                 // 梁（〜BEAM_Y+300）より上を通す
+    const zp = H.POST_Z + 380;                      // 柱（POST_Z ± 150）より外side
+    const zh = CONFIG.TABLE.BARREL / 2 + 100;       // ヘッダ端（ここで止める）
+    const xr = H.POST_X + 420, D = 220;             // 立ち上がりは柱の外
+    parts.push(G.at(G.cyl(D, top - 300, 'y', 10), xr, (top + 300) / 2, zp));            // 立ち上がり
+    parts.push(G.at(G.cyl(D, 2 * (xr - H.DX) + 2 * H.DX, 'x', 10), 0, top, zp));        // マニホールド
+    for (const d of [-1, 1]) {
+      parts.push(G.at(G.cyl(D * 0.8, top - (P + H.Y), 'y', 8), d * H.DX, (top + P + H.Y) / 2, zp));  // 降し管
+      parts.push(G.at(G.cyl(D * 0.9, zp - zh, 'z', 8), d * H.DX, P + H.Y, (zp + zh) / 2));           // ヘッダへの取り合い
+      parts.push(G.at(G.box(280, 280, 280), d * H.DX, top - 420, zp));                               // 開閉弁
+    }
+    parts.push(G.at(G.box(520, 900, 440), xr, 700, zp + 460));                          // 元弁・流量計の箱
+    return G.merge(parts);
+  },
   /** ヘッダ 1 本（Z 方向のパイプ + 下向きノズル列）。原点＝パイプ中心。 */
   guideHeader() {
     const H = CONFIG.TABLE.GUIDE.HEADER, W = CONFIG.TABLE.BARREL + 200, parts = [G.cyl(H.D, W, 'z', 12)];
@@ -6048,20 +6133,33 @@ class GuideView {
     //  出側はサイドガイドの上、入側は A-5 テーブルの中央（位置は CONFIG.TABLE.GUIDE.HEADER.STATIONS）。
     //  柱は手前/奥、梁と吊りは «天面»（板の上に架かる）として断面表示に従う。ヘッダ自体は透過しない
     const H = g.HEADER, postGeo = Parts.guideHeaderPosts(), beamGeo = Parts.guideHeaderBeams(), hdrGeo = Parts.guideHeader();
+    const supGeo = Parts.guideHeaderSupply();
     this.sided.top = [];
     this.headers = new Instances(hdrGeo, MAT.tableFrame, 4, { cull: false, cast: true, name: '板面クーラントヘッダ' });
     this.headerXs = [];
     let hi = 0;
     for (const x of Layout.coolStations()) {
+      /* 断面表示は «ミルまわりで板を見る» ための機能なので、ミルから遠いステーション
+       * （入側 A-5 は 66 m 先）まで透過させると、設備が幽霊のように見えるだけで
+       * 得るものが無い。ミル近傍のステーションだけを断面表示の対象にする。 */
+      const near = Math.abs(x) < GuideView.CUT_RANGE;
+      const put = (m, key) => { if (near) this.sided[key].push(m); scene.add(m); };
       for (const s of [1, -1]) {
-        const m = ghostable(new THREE.Mesh(postGeo, MAT.guide), MAT.guide);
+        const m = near ? ghostable(new THREE.Mesh(postGeo, MAT.guide), MAT.guide)
+                       : new THREE.Mesh(postGeo, MAT.guide);
         m.name = '板面クーラント架台'; m.castShadow = m.receiveShadow = true;
         m.position.set(u(x), 0, 0); if (s < 0) m.rotation.y = Math.PI;
-        this.sided[s > 0 ? 'near' : 'far'].push(m); scene.add(m);
+        put(m, s > 0 ? 'near' : 'far');
       }
-      const b = ghostable(new THREE.Mesh(beamGeo, MAT.guide), MAT.guide);
+      const b = near ? ghostable(new THREE.Mesh(beamGeo, MAT.guide), MAT.guide)
+                     : new THREE.Mesh(beamGeo, MAT.guide);
       b.name = '板面クーラント梁'; b.castShadow = true; b.position.set(u(x), 0, 0);
-      this.sided.top.push(b); scene.add(b);
+      put(b, 'top');
+      const sup = near ? ghostable(new THREE.Mesh(supGeo, MAT.hydraulic), MAT.guide)
+                       : new THREE.Mesh(supGeo, MAT.hydraulic);
+      sup.name = '板面冷却給液管'; sup.castShadow = sup.receiveShadow = true;
+      sup.position.set(u(x), 0, 0);
+      put(sup, 'near');
       for (const d of [-1, 1]) { const hx = x + d * H.DX; this.headers.set(hi++, hx, P + H.Y, 0); this.headerXs.push(hx); }
     }
     this.headers.commit().finalize(); scene.add(this.headers.mesh);
@@ -6074,6 +6172,8 @@ class GuideView {
     }
   }
 }
+
+GuideView.CUT_RANGE = 20000;      // 断面表示の対象にするミルからの距離 [mm]
 
 /**
  * 出側仕上げ設備（サイドトリマー → スリーロール → 巻取リール）。
@@ -6961,8 +7061,8 @@ class SprayView {
       color: 0xffffff, color2: 0xd7e2ea, opacity: 0.62,
       buoy: 2000, drag: 0.95, swirl: 620, grow: 2.6, fadeIn: 0.22 });  // 終端上昇速度 2.1 m/s
     // 板面冷却（水冷）: ヘッダから板の上面へ落とす液滴。床＝板の上面
-    this.strip = new ParticleField(scene, { count: 600, map: Sprite.drop(),
-      color: C.COOLANT, color2: 0xbed3e0, opacity: 0.50,
+    this.strip = new ParticleField(scene, { count: 1100, map: Sprite.drop(),
+      color: C.COOLANT, color2: 0xbed3e0, opacity: 0.62,
       buoy: -9810, drag: 0.45, grow: 1.3, fadeIn: 0.05 });
     // 板面冷却（空冷）: 同じヘッダからの送風。液滴ではないので «薄く広がって消える塊» で描く
     this.stripAir = new ParticleField(scene, { count: 320, map: Sprite.puff(),
@@ -7003,18 +7103,37 @@ class SprayView {
     const sc = CONFIG.MATERIAL.STRIP_COOL.mode, wet = sc.spray === 'DROP';
     if (sc.spray && running) {
       const H = CONFIG.TABLE.GUIDE.HEADER, T = CONFIG.TABLE;
+      /* 実機の板面冷却バンクは «材料が来る手前で開く»（上流の熱間材検出器で開弁する）。
+       * 板が真下に来た瞬間に噴射を始めるのではなく、頭が近づいた時点から液が落ちている。
+       * 冷却の «熱計算» は今までどおり «実際に下を通った長さ» だけで効かせ、
+       * 噴射の «見た目» だけをこの先行分（LEAD）ぶん早く始める。 */
+      const LEAD = H.LEAD;
       const active = Layout.coolHeaderXs()
-        .filter(hx => slab.xMax > hx - H.ZONE && slab.xMin < hx + H.ZONE);
-      if (active.length) this._emit('strip', (wet ? 140 : 60) * active.length, dt, 20, r => {
+        .filter(hx => slab.xMax > hx - H.ZONE - LEAD && slab.xMin < hx + H.ZONE + LEAD);
+      /* 噴射はノズル列（300 mm ピッチ）から出す。ヘッダ 1 本を «1 点から» 出すと
+       * 遠くから見たとき «滴が少し落ちている» だけに見えて、設備が働いている感じが出ない。
+       * 粒は大きめ・寿命は短めにして «幕» として読めるようにする。 */
+      const nz = Math.max(2, Math.round(T.BARREL / 300));
+      if (active.length) this._emit('strip', (wet ? 460 : 200) * active.length, dt, 46, r => {
         const hx = active[Math.floor(r() * active.length)];
-        const x = hx + (r() - .5) * 160, y = mill.passLine + H.Y - H.D / 2 - 120, z = (r() - .5) * T.BARREL;
-        if (wet) this.strip.spawn(x, y, z, (r() - .5) * 320, -2200 - r() * 900, (r() - .5) * 320,
-                                  0.32 + r() * 0.25, 60 + r() * 60);
-        else this.stripAir.spawn(x, y, z, (r() - .5) * 500, -1500 - r() * 700, (r() - .5) * 500,
-                                 0.5 + r() * 0.4, 420 + r() * 320);
+        const zi = Math.floor(r() * nz), z = (zi / (nz - 1) - 0.5) * T.BARREL + (r() - .5) * 120;
+        const x = hx + (r() - .5) * 150, y = mill.passLine + H.Y - H.D / 2 - 90;
+        // 初速をほぼ 0 にして自由落下させる。終端速度で撃ち出すと 0.8 m を 0.05 s で
+        // 通り過ぎてしまい、同時に見えている粒が 20 個ほどにしかならず «幕» に見えない。
+        if (wet) this.strip.spawn(x, y, z, (r() - .5) * 200, -150 - r() * 350, (r() - .5) * 200,
+                                  0.42 + r() * 0.26, 170 + r() * 120);
+        else this.stripAir.spawn(x, y, z, (r() - .5) * 420, -1600 - r() * 700, (r() - .5) * 420,
+                                 0.45 + r() * 0.35, 480 + r() * 340);
       });
     }
-    const stripFloor = mill.passLine + (slab.inBite ? mill.gap : slab.thickness);
+    /* 噴射が «落ちる先» は、そのヘッダの下に板があるかどうかで変わる。板が来ていない
+     * ヘッダ（入側 A-5 は板が 62 m 以上伸びるパスまで来ない）の下は «テーブルの面»。
+     * ここを常に «板の上面» にしていたため、板が居ないヘッダでは液滴が数十 mm 落ちただけで
+     * 消えてしまい、遠目には何も出ていないように見えていた。 */
+    const H2 = CONFIG.TABLE.GUIDE.HEADER;
+    const onPlate = Layout.coolHeaderXs().some(hx =>
+      slab.onLine && slab.xMax > hx - H2.ZONE && slab.xMin < hx + H2.ZONE);
+    const stripFloor = mill.passLine + (onPlate ? (slab.inBite ? mill.gap : slab.thickness) : 0);
     this.strip.update(dt, stripFloor);
     this.stripAir.update(dt, stripFloor);
 
@@ -7062,7 +7181,12 @@ class LabelView {
       ['ピニオンスタンド',                          0,  3500,    -9500, 42000],
       ['主電動機',                                  0,  3700, D.MOTOR_Z, 60000],
       ['サイドガイド',                   F * -3300,  1900,     2300, 18000],
-      ['板面クーラントヘッダ',           F *  3400,  M.PASS_LINE + 2100, 0, 18000],
+      // 板面冷却は入側（A-5 テーブルの中央）と出側（サイドガイドの上）の 2 か所にある。
+      // «移したのに見つからない» のは、ラベルも視点も出側にしか無かったため。位置は
+      // Layout.coolStations() から取るので、CONFIG を変えればラベルも一緒に動く。
+      ...Layout.coolStations().map((x, i) => [
+        i === 0 ? '入側 板面冷却（A-5）' : '出側 板面冷却（サイドガイド上）',
+        x, M.PASS_LINE + CONFIG.TABLE.GUIDE.HEADER.BEAM_Y + 900, 0, 26000]),
       ['入側テーブル',                   F *-16000,  1600,        0, 95000],
       ['出側テーブル',                   F * 18000,  1600,        0, 95000],
       ['転倒装置',                        S.TILTER_X,  3600, S.SIDE_Z,  75000],
@@ -7343,7 +7467,7 @@ class UIManager {
     this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
     this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildStripCool(); this._buildCutScope();
     this._buildVersion();
-    this._bind(); this._listen(); this._logDragResize();
+    this._bind(); this._listen(); this._logDragResize(); this._logCrosshair();
     this.dims(); this._rollState(); this.renderSchedule(); this._banner('idle'); this._summaries();
   }
 
@@ -7376,12 +7500,16 @@ class UIManager {
     sel.disabled = list.length < 2;
   }
   /** 項目チップ（系列の ON/OFF）。色はチップと折れ線で同じものを使う。 */
-  _logSeriesChips() {
+  /**
+   * 項目チップ。色は折れ線と同じものを使い、«いま出ている範囲の最大値» をチップ自身に
+   * 出して凡例を兼ねる —— 凡例を別の場所に置くと、色と名前と数値を目で往復させることになる。
+   */
+  _logSeriesChips(shown = []) {
     const host = $('log-series');
     if (!host.childElementCount) {
       host.innerHTML = RollingLog.SERIES.map(q =>
-        `<button class="chip" type="button" data-k="${q.key}" style="color:${q.css}">` +
-        `<s></s>${q.name}<em style="font-style:normal;opacity:.6">${q.unit}</em></button>`).join('');
+        `<button class="chip" type="button" data-k="${q.key}" style="color:${q.css}"` +
+        ` title="${q.name} の表示を切り替える"><s></s>${q.name}<em data-v></em></button>`).join('');
       host.onclick = (e) => {
         const b = e.target.closest('.chip'); if (!b) return;
         const k = b.dataset.k;
@@ -7390,7 +7518,13 @@ class UIManager {
         this.renderLog();
       };
     }
-    for (const b of host.children) b.setAttribute('aria-pressed', String(this.logSeries.has(b.dataset.k)));
+    for (const b of host.children) {
+      const q = RollingLog.SERIES.find(x => x.key === b.dataset.k);
+      b.setAttribute('aria-pressed', String(this.logSeries.has(q.key)));
+      const m = Math.max(0, ...shown.map(p => p[q.key] || 0));
+      b.querySelector('[data-v]').textContent = shown.length
+        ? ` 最大 ${m >= 100 ? Math.round(m) : m.toFixed(1)} ${q.unit}` : ` ${q.unit}`;
+    }
   }
   /** パスチップ。押した 1 本だけを見たいことが多いので «全て» を横に置く。 */
   _logPassChips(rows) {
@@ -7415,7 +7549,8 @@ class UIManager {
 
   renderLog() {
     const tgt = this._logTarget();
-    this._logLots(); this._logSeriesChips();
+    this._logLots();
+    this._logSeriesChips((tgt?.series || []).filter(p => this._passOn(p.pass)));
     const lot = tgt?.lot, rows = tgt ? tgt.passes.map(c => this.log.row(c)) : [];
     this._logPassChips(rows);
     const tb = $('log-table').querySelector('tbody');
@@ -7426,7 +7561,7 @@ class UIManager {
       : '運転を開始すると記録が始まります。';
     tb.innerHTML = rows.length ? rows.map((r) => {
       const live = r.sec === null, over = r.fMax > CONFIG.MILL.RATED_FORCE_T;
-      return `<tr class="${live ? 'live' : ''}${this._passOn(r.no) ? '' : ' off'}">
+      return `<tr data-p="${r.no}" title="この行を押すとこのパスだけを見る" class="${live ? 'live' : ''}${this._passOn(r.no) ? '' : ' off'}">
         <td>${r.no}${live ? ' ●' : ''}</td><td class="dir">${r.dir}</td>
         <td>${f(r.hIn)}</td><td>${f(r.hOut)}</td><td>${f(r.red)}</td>
         <td class="${over ? 'over' : ''}">${f(r.fMax, 0)}</td><td>${f(r.fAvg, 0)}</td><td class="plan">${f(r.planForce, 0)}</td>
@@ -7435,6 +7570,14 @@ class UIManager {
         <td>${f(r.pMax, 2)}</td><td>${f(r.tIn, 0)}</td><td>${f(r.tOut, 0)}</td>
         <td>${f(r.len / 1000, 2)}</td><td>${f(r.sec)}</td></tr>`;
     }).join('') : '<tr><td colspan="18" class="empty">まだ記録がありません。「圧延サイクル開始」で記録が始まります。</td></tr>';
+    // 表の行を押すとそのパスだけを見る（表とグラフを別々に操作させない）
+    tb.onclick = (e) => {
+      const tr = e.target.closest('tr'); if (!tr || !tr.dataset.p) return;
+      const p = +tr.dataset.p;
+      if (this.logPass.size === 1 && this.logPass.has(p)) this.logPass.clear();
+      else { this.logPass.clear(); this.logPass.add(p); }
+      this.renderLog();
+    };
     this._logChart(tgt);
     const shown = rows.filter(r => this._passOn(r.no));
     const done = shown.filter(r => r.sec !== null).length;
@@ -7444,8 +7587,7 @@ class UIManager {
         + `<span>最大荷重 <b>${f(fMax, 0)}</b> t（常用最大 ${CONFIG.MILL.RATED_FORCE_T.toLocaleString()} t）</span>`
         + `<span>最大動力 <b>${f(pMax, 2)}</b> MW</span>`
         + `<span>経過 <b>${f(lot.t, 0)}</b> s</span>`
-        + RollingLog.SERIES.filter(q => this.logSeries.has(q.key))
-            .map(q => `<span class="lg"><s style="background:${q.css}"></s>${q.name}</span>`).join('')
+        + `<span>グラフ上でなぞると、その時刻の値が読めます</span>`
       : 'パスが終わるたびに 1 行増えます。平均は «噛んでいる間» だけで取っています。';
   }
 
@@ -7501,6 +7643,9 @@ class UIManager {
         ? `<text x="4" y="${pad.t + 9}" font-size="9.5" fill="${c}">${txt} ${u}</text>`
         : `<text x="${w - pad.r + 6}" y="${pad.t + 26 + (i - 1) * 13}" font-size="9.5" fill="${c}">${txt} ${u}</text>`;
     }).join('');
+    // 読み取り線が使う写像を残しておく（描いたときの縮尺でなぞれるようにする）
+    this._logMap = { w, h, pad, t0, t1, use, axMax, S,
+                     px: (t) => X(t) / w, val: (q, v) => Y(q, v) };
     host.innerHTML = `<svg viewBox="0 0 ${w} ${h}">
       ${grid}
       <line x1="${pad.l}" y1="${h - pad.b}" x2="${w - pad.r}" y2="${h - pad.b}" stroke="var(--line)"/>
@@ -7508,7 +7653,36 @@ class UIManager {
       ${labels}
       <text x="4" y="${h - pad.b - 2}" font-size="9.5" fill="var(--ink-3)">0</text>
       <text x="${w - pad.r + 6}" y="${h - pad.b - 2}" font-size="9.5" fill="var(--ink-3)">${Math.round(t1 - t0)} s</text>
-    </svg>`;
+    </svg>`
+      + `<div class="cross" id="log-cross" hidden></div><div class="read" id="log-read" hidden></div>`;
+  }
+
+  /**
+   * グラフの読み取り線。なぞった時刻にいちばん近い標本を選び、選んでいる項目の値を出す。
+   * グラフは «形» を見るためのものだが、数値をその場で読めないと結局表へ戻ることになる。
+   */
+  _logCrosshair() {
+    const host = $('log-chart');
+    const hide = () => { const c = $('log-cross'), r = $('log-read'); if (c) c.hidden = true; if (r) r.hidden = true; };
+    host.addEventListener('pointerleave', hide);
+    host.addEventListener('pointermove', (e) => {
+      const m = this._logMap, c = $('log-cross'), rd = $('log-read');
+      if (!m || !m.S.length || !c || !rd) return hide();
+      const b = host.getBoundingClientRect(), fx = (e.clientX - b.left) / b.width;
+      const inPlot = fx >= m.pad.l / m.w && fx <= (m.w - m.pad.r) / m.w;
+      if (!inPlot) return hide();
+      const t = m.t0 + (m.t1 - m.t0) * (fx - m.pad.l / m.w) / ((m.w - m.pad.l - m.pad.r) / m.w);
+      let best = m.S[0];
+      for (const p of m.S) if (Math.abs(p.t - t) < Math.abs(best.t - t)) best = p;
+      c.hidden = false; c.style.left = (b.width * fx).toFixed(1) + 'px';
+      rd.hidden = false;
+      rd.innerHTML = `<div><b>P${best.pass}</b>　${(best.t - m.t0).toFixed(1)} s</div>`
+        + m.use.map(q => `<div><i style="background:${q.css}"></i>${q.name} <b>${
+            (best[q.key] ?? 0) >= 100 ? Math.round(best[q.key]) : (+(best[q.key] ?? 0)).toFixed(1)
+          }</b> ${q.unit}</div>`).join('');
+      const rw = rd.offsetWidth || 150;
+      rd.style.left = Num.clamp(b.width * fx + 12, 4, Math.max(4, b.width - rw - 6)) + 'px';
+    });
   }
 
   toggleLog(open = $('pnl-log').hidden) {

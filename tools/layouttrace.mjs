@@ -202,6 +202,36 @@ const out = await page.evaluate(() => {
       const worst = Math.max(...hx.map(x => Math.min(...gx.map(g => Math.abs(g - x)))));
       ok('描画したヘッダの位置と熱計算が見る位置が一致', hx.length === gx.length && worst < 1,
          `${hx.length} 本 / 最大のずれ ${worst.toFixed(1)} mm`);
+
+      /* «移したのに見えない» を二度と起こさないための 3 点。設備として立っていること、
+       * ミルから遠いステーションを断面表示で透かさないこと、そして
+       * ラベルと視点から «たどり着けること»。位置が正しくても辿り着けなければ無いのと同じ。 */
+      const near = (x, r) => (o) => { o.updateWorldMatrix(true, false);
+        const b = new T.Box3().setFromObject(o); const c = (b.min.x + b.max.x) / 2 / sc;
+        return Math.abs(c - x) < r; };
+      const kinds = { 架台: 0, 梁: 0, 給液管: 0 };
+      W.scene.traverse(o => {
+        if (!(o.isMesh || o.isInstancedMesh)) return;
+        for (const k of Object.keys(kinds))
+          if ((o.name || '').includes('板面') && (o.name || '').includes(k) && near(st[0], 3000)(o)) kinds[k]++;
+      });
+      ok('入側の板面冷却が設備として立っている（架台・梁・給液管）',
+         kinds['架台'] >= 2 && kinds['梁'] >= 1 && kinds['給液管'] >= 1,
+         Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(' / '));
+      // ミルから遠いステーションは断面表示の対象にしない（透けて «幽霊» にしない）
+      const sided = [...(gv.sided.near || []), ...(gv.sided.far || []), ...(gv.sided.top || [])];
+      const farSided = sided.filter(near(st[0], 4000));
+      ok('ミルから遠い冷却ステーションは断面表示で透けない', farSided.length === 0,
+         `断面対象に入っている遠方の部材 ${farSided.length} 個`);
+      // ラベルと視点からたどり着けること
+      // ラベルは DOM 要素へ組み立て済みなので、文言と位置は要素そのものから読む
+      const lv = W.labels, items = lv ? lv.items : [];
+      const lab = items.filter(q => Math.abs(q.v.x / sc - st[0]) < 2000);
+      ok('入側の板面冷却に設備ラベルがある', lab.length === 1,
+         lab.map(q => q.el.textContent).join(' / ') || `${items.length} 件中 0`);
+      const cv = K.VIEWS.find(v => v.id === 'cool');
+      ok('入側の板面冷却へ寄る視点がある', !!cv && Math.abs(cv.tgt[0] - st[0]) < 3000,
+         cv ? `${cv.name} → ${cv.tgt[0]} mm` : '無し');
     }
   }
 
