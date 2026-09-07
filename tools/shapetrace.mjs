@@ -43,7 +43,9 @@ const out = await page.evaluate(() => {
     const a = run({ hIn: 60, hOut: 45 }), b = run({ hIn: 60, hOut: 30 });
     ok('圧下が大きい（荷重が高い）ほど中央が厚くなる', b.crownAbs > a.crownAbs,
        `45 mm: ${a.crownAbs.toFixed(1)} µm → 30 mm: ${b.crownAbs.toFixed(1)} µm`);
-    ok('クラウンが実機の桁（0〜300 µm）', a.crownAbs > 0 && a.crownAbs < 300, `${a.crownAbs.toFixed(1)} µm`);
+    /* 研削クラウンで «あらかじめ埋めて» あるので、荷重クラウンが取り切れれば
+     * 板クラウンは 0 をまたぐ。桁として実機の範囲（±300 µm）に収まることを見る。 */
+    ok('クラウンが実機の桁（|C| < 300 µm）', Math.abs(a.crownAbs) < 300, `${a.crownAbs.toFixed(1)} µm`);
     let mw = 0, sw = 0;
     for (let i = 0; i < a.n; i++) { mw += a.x[i] * a.wt[i]; sw += a.wt[i]; }
     ok('板厚分布が（重み付き）零平均', Math.abs(mw / sw) < 1e-12, `${(mw / sw).toExponential(2)} mm`);
@@ -67,10 +69,17 @@ const out = await page.evaluate(() => {
   }
   // 6) 幅方向の温度: 端が冷たい・薄い板ほど強い
   {
-    const zs = R.widthGrid(w).z.slice(R.widthGrid(w).i0, R.widthGrid(w).i1 + 1);
-    const a = R.widthChill(zs, 45, w, 6, al), b = R.widthChill(zs, 10, w, 6, al);
+    const g = R.widthGrid(w), zs = g.z.slice(g.i0, g.i1 + 1);
+    const a = R.widthChill(zs, 45, w, 6, al, 450), b = R.widthChill(zs, 10, w, 6, al, 450);
+    const c = R.widthChill(zs, 45, w, 60, al, 450);
     ok('幅方向は端がいちばん冷たい', a.prof[0] < a.prof[(a.prof.length - 1) >> 1], `端 ${a.prof[0].toFixed(1)} K`);
-    ok('薄い板ほど端の冷えが強い', b.drop > a.drop, `45 mm: ${a.drop.toFixed(1)} K / 10 mm: ${b.drop.toFixed(1)} K`);
+    /* 側面から出る熱量も冷える体積もどちらも板厚 h に比例するので、端の温度落ちは
+     * h に依らない（この «約分» が入っていないと薄板で数百 K という非物理な値になる）。 */
+    ok('端の冷えは板厚に依らない（面積と体積の h が約分する）', Math.abs(b.drop - a.drop) < 1e-9,
+       `45 mm: ${a.drop.toFixed(2)} K / 10 mm: ${b.drop.toFixed(2)} K`);
+    ok('パスが長いほど端が冷える（ただし √t で鈍る）', c.drop > a.drop && c.drop < a.drop * Math.sqrt(10) * 1.01,
+       `6 s: ${a.drop.toFixed(2)} K / 60 s: ${c.drop.toFixed(2)} K`);
+    ok('端の冷えが実機の桁（数 K〜数十 K）', a.drop > 0.5 && a.drop < 60, `${a.drop.toFixed(2)} K`);
   }
   // 7) 平坦度: «クラウン率の変化» で決まる（比例クラウンなら平坦）
   {

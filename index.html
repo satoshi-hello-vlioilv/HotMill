@@ -337,7 +337,7 @@ select.sel:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px
 /* ---------- 計測バー ---------- */
 #metrics {
   position:fixed; bottom:16px; left:calc(var(--sb-w) + 16px); right:16px; z-index:10;
-  display:grid; grid-template-columns:repeat(9,minmax(0,1fr)); gap:10px; pointer-events:none;
+  display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:10px; pointer-events:none;
 }
 .mc { background:rgba(255,255,255,.9); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.9);
   border-radius:var(--r-l); padding:10px 12px 11px; box-shadow:var(--shadow-2); min-width:0;
@@ -406,10 +406,17 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
 .tag:after { content:""; position:absolute; left:50%; top:100%; width:1px; height:var(--leader,0px);
   background:rgba(24,33,39,.42); }
 
-@media (max-width:1500px) {
-  #metrics { grid-template-columns:repeat(5,minmax(0,1fr)); }
+/* 計器は «1 行に収まっていること» が読みやすさの前提（2 行になると視線が往復する）。
+   幅が足りなくなったらまず文字を詰め、それでも足りなくなってから 2 行にする。 */
+@media (max-width:1760px) {
+  .mc { min-height:88px; padding:9px 10px 10px; }
   .mc .val { font-size:19px; }
 }
+@media (max-width:1400px) {
+  #metrics { grid-template-columns:repeat(5,minmax(0,1fr)); }
+}
+.mc .val .mode { font-size:10.5px; font-weight:800; color:var(--ink-3); margin-left:5px; letter-spacing:.02em; }
+.mc .val .mode.is-bad { color:var(--crit); }
 
 /* ---------- サイドバー: 主操作バー / 区分の要約 / 折りたたみ ---------- */
 #action-bar { flex:none; padding:10px 16px 12px; border-bottom:1px solid var(--line); background:var(--s-1); }
@@ -681,8 +688,10 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
   <div class="mc temp"><div class="k">材料温度（平均）</div><div class="val"><span id="m-temp-v">500</span><u>℃</u></div><div class="sub" id="m-temp-s">上 500 ／ 芯 500 ／ 下 500</div></div>
   <div class="mc"><div class="k">反り半径</div><div class="val"><span id="m-curl-v">–</span><u>m</u></div><div class="sub" id="m-curl-s">平坦</div></div>
   <div class="mc"><div class="k">ロールギャップ</div><div class="val"><span id="m-gap-v">400</span><u>mm</u></div><div class="sub" id="m-gap-s">目標 400 mm</div></div>
-  <div class="mc"><div class="k">板クラウン</div><div class="val"><span id="m-crown-v">–</span><u>µm</u></div><div class="sub" id="m-crown-s">中央 − 端</div></div>
-  <div class="mc"><div class="k">平坦度</div><div class="val"><span id="m-flat-v">–</span><u>I</u></div><div class="sub" id="m-flat-s">平坦</div></div>
+  <!-- 幅方向の形状。«操作の判断に使うのは平坦度と判定» なので主値をそちらにし、
+       原因であるクラウン・エッジドロップ・ベンダ力は副値へ回す（1 枚にまとめて行を増やさない） -->
+  <div class="mc"><div class="k">板形状（幅）</div><div class="val"><span id="m-flat-v">–</span><u>I</u>
+    <span id="m-flat-m" class="mode">平坦</span></div><div class="sub" id="m-crown-s">クラウン –</div></div>
 </div>
 
 <div id="hud-top">
@@ -808,7 +817,8 @@ const VERSION = {
       { t: '幅広がり（Helmi–Alexander 型）を実装。厚いパスで数 mm 広がり、薄いパスではほぼ 0', w: 'Rolling.spread' },
       { t: '剛体としての «据わり»（片側接触）を線形計画で解いた。両端が反って接地が狭まると板は重心側へ倒れる', w: 'Rolling.restPose' },
       { t: 'ワークロールの研削クラウンを 95 µm（中凸）にした。0 のままだと荷重クラウンが取り切れずクラウン率が 2 % を超える', w: 'MILL.WR_CROWN' },
-      { t: '計器に «板クラウン»（率・エッジドロップ・ベンダ力）と «平坦度»（I-unit・判定・座屈余裕）を出した', w: '#m-crown / #m-flat' },
+      { t: '計器に «板形状（幅）» を 1 枚足した。主値は判断に使う平坦度と判定、副値に原因のクラウン・エッジ・ベンダ力', w: '#m-flat / #m-crown-s' },
+      { t: '計器が 2 行に折り返さないよう、幅が足りないときはまず文字を詰めてから折り返す段取りにした', w: '@media (max-width:1760px)' },
       { t: '実績ビュワーにクラウン・平坦度・ベンディングの 3 系列を足した（CSV にも同じ列が入る）', w: 'RollingLog.SERIES' },
       { t: '形状の検査を評価器に新設（25 項目）。相反定理・左右対称・比例クラウン・片側接触の食い込み無しまで見る', w: 'tools/shapetrace.mjs' },
     ] },
@@ -9470,16 +9480,13 @@ class UIManager {
      * 平坦度は «クラウン率の変化» で決まるので、クラウンが大きくても比例していれば平坦。 */
     {
       const sh = s.wShape;
-      $('m-crown-v').textContent = sh ? sh.crownAbs.toFixed(0) : '–';
       $('m-crown-s').textContent = sh
-        ? `率 ${(sh.crownRatio * 100).toFixed(3)} % ／ エッジドロップ ${sh.edgeDrop.toFixed(0)} µm ／ ベンダ ${m.bendForceT.toFixed(0)} t`
-        : '中央 − 端';
-      const fv = $('m-flat-v'), fs = $('m-flat-s');
+        ? `クラウン ${sh.crownAbs.toFixed(0)} µm（${(sh.crownRatio * 100).toFixed(3)} %）／エッジ ${sh.edgeDrop.toFixed(0)} ／ベンダ ${m.bendForceT.toFixed(0)} t`
+        : 'クラウン –';
+      const fv = $('m-flat-v'), fm = $('m-flat-m');
       fv.textContent = sh ? sh.iUnit.toFixed(0) : '–';
-      fv.style.color = sh && sh.buckle ? 'var(--warn)' : '';
-      fs.textContent = sh
-        ? `${sh.modeName}${sh.buckle ? '（座屈）' : ''} ／ 圧縮 ${Math.abs(sh.sigComp).toFixed(1)} / 座屈 ${sh.sigCr.toFixed(1)} MPa`
-        : '平坦';
+      fm.textContent = sh ? sh.modeName + (sh.buckle ? '・座屈' : '') : '平坦';
+      fm.classList.toggle('is-bad', !!(sh && sh.buckle));
     }
     // 実ギャップは圧下位置そのものではない。«圧下位置 ＋ 荷重で伸びたぶん» を並べて出す。
     $('m-gap-v').textContent   = m.gap.toFixed(m.gap < 30 ? 1 : 0);

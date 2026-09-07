@@ -87,9 +87,11 @@ const out = await page.evaluate(async () => {
   ok('画面の表が記録と同じ行数を描く', tr.length === n, `${tr.length} 行`);
   ok('時系列グラフが描かれている', !!document.querySelector('#log-chart svg path'),
      `${document.querySelectorAll('#log-chart svg path').length} 本の折れ線`);
-  ok('項目チップが 4 つ出て、押すと系列が消える', (() => {
+  // チップの数は RollingLog.SERIES から決まる（系列を足すたびに検査を書き換えない）
+  const nSeries = window.__app.physics.log.constructor.SERIES.length;
+  ok(`項目チップが ${nSeries} つ出て、押すと系列が消える`, (() => {
     const chips = document.querySelectorAll('#log-series .chip');
-    if (chips.length !== 4) return false;
+    if (chips.length !== nSeries) return false;
     const before = document.querySelectorAll('#log-chart svg path').length;
     document.querySelector('#log-series .chip[data-k="g"]').click();
     const after = document.querySelectorAll('#log-chart svg path').length;
