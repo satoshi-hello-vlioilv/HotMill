@@ -681,6 +681,8 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
   <div class="mc temp"><div class="k">材料温度（平均）</div><div class="val"><span id="m-temp-v">500</span><u>℃</u></div><div class="sub" id="m-temp-s">上 500 ／ 芯 500 ／ 下 500</div></div>
   <div class="mc"><div class="k">反り半径</div><div class="val"><span id="m-curl-v">–</span><u>m</u></div><div class="sub" id="m-curl-s">平坦</div></div>
   <div class="mc"><div class="k">ロールギャップ</div><div class="val"><span id="m-gap-v">400</span><u>mm</u></div><div class="sub" id="m-gap-s">目標 400 mm</div></div>
+  <div class="mc"><div class="k">板クラウン</div><div class="val"><span id="m-crown-v">–</span><u>µm</u></div><div class="sub" id="m-crown-s">中央 − 端</div></div>
+  <div class="mc"><div class="k">平坦度</div><div class="val"><span id="m-flat-v">–</span><u>I</u></div><div class="sub" id="m-flat-s">平坦</div></div>
 </div>
 
 <div id="hud-top">
@@ -795,6 +797,21 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.9.0', base: '69eda2d', date: '2026-09-07', title: '幅方向の形状 —— 影響係数法によるクラウン・平坦度・形状制御・据わり', items: [
+      { t: 'ロールたわみを影響係数法で解いた。WR は自由端梁、BUR は軸受間の単純支持梁、両者は線接触でつぶれる連立', w: 'Rolling.stackOps' },
+      { t: '«たわみ → 板厚分布 → 荷重分布 → たわみ» の陰的関係を、塑性係数 Q_w を数値微分して 1 本の線形方程式にした', w: 'Rolling.crown' },
+      { t: '平坦度を実装。«クラウンそのもの» ではなく «クラウン率 C/h の変化» が伸び差になり残留応力・座屈を生む', w: 'Rolling.flatness' },
+      { t: '幅方向の板厚プロファイルをパス間で持ち越すようにした（長手の hProf と同じ役割）', w: 'SlabState.wProf' },
+      { t: '形状制御（比例クラウン制御）を実装。ベンディングのクラウン利得から必要な曲げ力を 1 回の割り算で出す', w: 'PhysicsEngine._shapeControl' },
+      { t: '熱クラウン・摩耗クラウンを実装。中凸のロールはギャップを閉じるので符号が反転する', w: 'Rolling.rollCrown' },
+      { t: '幅方向の温度分布（端の冷え）を «側面からの放熱 ÷ 冷える体積» で出し、変形抵抗の差として荷重分布に効かせた', w: 'Rolling.widthChill' },
+      { t: '幅広がり（Helmi–Alexander 型）を実装。厚いパスで数 mm 広がり、薄いパスではほぼ 0', w: 'Rolling.spread' },
+      { t: '剛体としての «据わり»（片側接触）を線形計画で解いた。両端が反って接地が狭まると板は重心側へ倒れる', w: 'Rolling.restPose' },
+      { t: 'ワークロールの研削クラウンを 95 µm（中凸）にした。0 のままだと荷重クラウンが取り切れずクラウン率が 2 % を超える', w: 'MILL.WR_CROWN' },
+      { t: '計器に «板クラウン»（率・エッジドロップ・ベンダ力）と «平坦度»（I-unit・判定・座屈余裕）を出した', w: '#m-crown / #m-flat' },
+      { t: '実績ビュワーにクラウン・平坦度・ベンディングの 3 系列を足した（CSV にも同じ列が入る）', w: 'RollingLog.SERIES' },
+      { t: '形状の検査を評価器に新設（25 項目）。相反定理・左右対称・比例クラウン・片側接触の食い込み無しまで見る', w: 'tools/shapetrace.mjs' },
+    ] },
     { v: '1.8.0', base: '83fc89b', date: '2026-09-07', title: '鋳肌ラウンド断面・装入設備の再配置（9 炉バンクとスラブヤード）・ラベルの実測是正', items: [
       // --- 材料の断面形状 ---
       { t: 'スラブ断面を «角の丸い長方形» にした。鋳造ままのコーナー半径 R が面削で頂部を削られ、鏡面（面削面）と鋳肌が稜線で出会う', w: 'Sect.prep / Sect.at' },
@@ -1003,7 +1020,8 @@ const CONFIG = {
                FORK_T: 0.62, FORK_H: 1.06, FORK_SLOT: 0.50, FORK_BACK: 260, FORK_PRONG: 460 },
     CAPSULE: { D: 1300, BODY_L: 800 },     // 油圧圧下シリンダ
     WEDGE:   { H: 300 },                   // パスライン調整ステップウェッジ
-    BENDER:  { D: 300, L: 520 },           // ロールベンディングシリンダ
+    // ロールベンディングシリンダ。FORCE は片側 1 対あたりの最大力 [tonf]
+    BENDER:  { D: 300, L: 520, FORCE: 160 },
     RATED_FORCE_T: 3920,                   // 常用最大圧延荷重 (tonf)
     LIMIT_FORCE_T: 4200,                   // 非常最大圧延荷重 (tonf)
     RATED_POWER_KW: 3800,                  // 主電動機定格 (1900 kW × 2台)
@@ -1025,6 +1043,36 @@ const CONFIG = {
     ROLL_T0: 60,                           // クーラントと釣り合う待機温度 [℃]
     ROLL_RC: 3.6e6,                        // 鍛鋼の体積熱容量 [J/m³K]
     ROLL_TAU: 45,                          // クーラントで待機温度へ戻る時定数 [s]
+
+    /* --- 幅方向の形状（クラウン・平坦度）に要る諸元 -------------------------
+     * 板の «幅方向の板厚分布» は、荷重でロール系がたわむことで決まる。
+     *   ・BUR は軸受間（BR_BEARING_SPAN）で支持された梁。荷重で中央が持ち上がる
+     *     ＝ ロールギャップが中央で開く ＝ 板の中央が厚くなる（正のクラウン）
+     *   ・WR は BUR に連続的に支えられているので、単独の梁としてはほとんど曲がらない。
+     *     効くのは «WR–BUR 間の接触つぶれ»（線接触のヘルツ変形）で、荷重の «その場» の
+     *     大きさに比例するので、荷重分布が不均一なぶんだけギャップ分布に効く
+     *   ・ロールベンディングは WR チョック（胴の外）に力をかけ、梁の端に «曲げモーメントの
+     *     対» を与える。正のベンディングは中央のギャップを閉じる＝クラウンを減らす
+     * したがって梁としては «WR + BUR の合成断面が BUR 軸受間で支持されている» と見て、
+     * 接触つぶれを対角項として足す。これで «たわみ → 板厚分布 → 荷重分布 → たわみ» の
+     * 陰的関係が n×n の線形方程式 1 本になる（Rolling.crown）。 */
+    BR_BEARING_SPAN: 3600,                 // BUR 軸受中心間距離 [mm]（胴 2,450 ＋ 首・チョック）
+    BEND_ARM: 175,                         // ベンディング力の作用点（軸受中心から外側）[mm]
+    /* ワークロールの研削クラウン [µm]（半径の 中央 − 端。正 = 中凸）。
+     * 実機は «荷重でギャップが中央に開くぶん» をあらかじめ埋めるために正のクラウンで
+     * 研削する。ここを 0 にすると、荷重クラウン（この線では 150〜230 µm）がそのまま
+     * 板に出てベンディングだけでは取り切れず、薄いパスでクラウン率が 2 % を超える。 */
+    WR_CROWN: 95,
+    // BR_CROWN（図面の −50 µm ＝ 凹クラウン）は BUR の研削クラウン。合わせて «無負荷ギャップの形» を作る
+    /* 熱クラウン。ロール胴は板から熱をもらって膨らむが、中央ほど熱く端ほど冷たいので
+     * 中凸になる。ΔD = 2·α·R·ΔT で、α = 12e-6、R = 465 mm、中央と端の温度差が
+     * ロール平均温度の上昇に比例すると見て µm/K に丸める。 */
+    THERM_CROWN_K: 0.8,                    // 熱クラウン [µm/K]（ロール温度の待機温度からの上昇）
+    THERM_CROWN_MAX: 180,                  // 熱クラウンの上限 [µm]
+    /* 摩耗クラウン。板が通る幅だけロールが減る（箱形の摩耗）。中央の減りが大きいので
+     * 負のクラウンとして効く。圧延した «通板長 × 荷重» に比例させる。 */
+    WEAR_CROWN_K: 6e-11,                   // 摩耗クラウン [µm /(t·mm)]
+    WEAR_CROWN_MAX: 120,                   // 摩耗クラウンの上限 [µm]
     FLAT_MAX: 4.0,                         // 扁平半径の上限（R'/R）。これ以上は圧延不能域
     /* 荷重に対する伸びの応答時定数 [s]。スタンドは «ばね» なので伸びは荷重にほぼ即応する
      * （固有振動数 10〜30 Hz 級 ＝ 時定数は数十 ms）。噛み込み衝撃が «高いが短い» のは
@@ -1620,6 +1668,18 @@ const CONFIG = {
     A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, C: 42, b: 0.0062, m: 0.12, Q_ACT: 145, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
     A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, C: 85, b: 0.0080, m: 0.10, Q_ACT: 230, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
   },
+
+  /* 幅方向の形状（クラウン・平坦度・幅広がり・据わり）の諸元。
+   *   NW        …… 板幅の内側の離散点数（影響係数法の次元）。21 点で端の勾配まで拾える
+   *   NOUT      …… 板幅の外から胴端までの点数（接触は胴全体にあるので外も刻む）
+   *   EDGE_MM   …… «エッジドロップ» を測る内側の位置（端から何 mm か）。実機の計測に合わせる
+   *   FLAT_DEAD …… 平坦度の判定の不感帯 [I-unit]。これ以下は «平坦» とする
+   *   EDGE_H    …… 板の «側面» の熱伝達率 [W/m²K]（放射 ＋ 対流 ＋ サイドガイドへの逃げ）
+   *   EDGE_DROP_MAX …… 端の温度落ちの上限 [K]（側面の放熱が板厚を貫くことはない）
+   *   SPREAD_C/K …… 幅広がり（Helmi–Alexander 型）の係数
+   *   BEND_RATE …… ベンディングシリンダの力の変化率 [t/s] */
+  SHAPE: { NW: 21, NOUT: 6, EDGE_MM: 25, FLAT_DEAD: 8, EDGE_H: 60, EDGE_DROP_MAX: 120, BEND_RATE: 260,
+           SPREAD_C: 0.95, SPREAD_K: 0.707 },
 
   MATERIAL: {
     ALLOY: 'A5052',                                    // 選択中の材質（ALLOYS のキー）
@@ -2294,6 +2354,432 @@ const Rolling = {
     const EIq = EI / q, liftOff = Math.sqrt(2 * EIq * k);
     return { EIq, liftOff, tip: k * liftOff * liftOff / 4, touch: Math.SQRT2 * liftOff };
   },
+  /* =========================================================================
+   * 幅方向の形状 —— クラウン（板厚分布）と平坦度（残留応力）
+   *
+   * 【原理】板の «幅方向の板厚分布» は、荷重でロール系がたわんだ結果として決まる。
+   * ところが荷重分布そのものが板厚分布で決まるので、両者は陰的に結びついている。
+   *
+   *     たわみ → ロールギャップ分布 → 板厚分布 → 荷重分布 → たわみ
+   *
+   * これを解くのが «影響係数法»。荷重分布を n 点に離散化し、単位荷重に対する
+   * たわみを並べた影響係数行列 C を作って、次の関係を連立させる。
+   *
+   *     x  = C̃·(p − p̄) + bend + crown        …… たわみ ＋ ロールの形
+   *     p  = p̄ − Q_w·x                        …… 薄いところほど荷重が高い（塑性係数）
+   *  ⇒ (I + Q_w·C̃)·x = bend + crown           …… n×n の線形方程式 1 本
+   *
+   * x は «平均板厚からのずれ»（零平均）。平均そのものは AGC とミルばねの受け持ちで、
+   * ここは «分布» だけを解く（長手方向のプロファイルと同じ役割分担）。
+   *
+   * Q_w は板の塑性係数（板厚を 1 mm 薄くすると単位幅あたり何 N/mm 荷重が増えるか）で、
+   * Rolling.solve を数値微分して求める。«式を 2 度使って整合を取る» ので、
+   * 荷重モデルを直せばクラウンも一緒に直る。
+   * ====================================================================== */
+
+  /**
+   * 幅方向の格子。板幅の内側を NW 点で刻み、胴端までを外側に足す。
+   * ±w/2 がちょうど格子点に来るので、クラウンもエッジドロップも補間せずに読める。
+   */
+  widthGrid(w, n = CONFIG.SHAPE.NW, nOut = CONFIG.SHAPE.NOUT) {
+    const L = Math.min(CONFIG.MILL.BARREL, CONFIG.MILL.BR_BARREL);   // 接触する胴長
+    const half = Math.min(w / 2, L / 2 - 1);
+    const z = [], din = 2 * half / (n - 1);
+    for (let i = 0; i < n; i++) z.push(-half + i * din);
+    const rest = L / 2 - half;
+    if (rest > 1 && nOut > 0) {
+      const d = rest / nOut;
+      for (let i = 1; i <= nOut; i++) { z.unshift(-half - i * d); z.push(half + i * d); }
+    }
+    z.sort((a, b) => a - b);
+    // 台形則の重み
+    const wt = new Float64Array(z.length);
+    for (let i = 0; i < z.length; i++) {
+      const a = i > 0 ? (z[i] - z[i - 1]) / 2 : 0, b = i < z.length - 1 ? (z[i + 1] - z[i]) / 2 : 0;
+      wt[i] = a + b;
+    }
+    return { z: Float64Array.from(z), wt, n: z.length, i0: nOut, i1: nOut + n - 1, half, L };
+  },
+
+  /** 平均と一次（くさび）を落とす。平均はミルばね、くさびは圧下の左右バランスの受け持ち。 */
+  detrend(y, z, wt) {
+    let sw = 0, sy = 0, szz = 0, szy = 0;
+    for (let i = 0; i < y.length; i++) { sw += wt[i]; sy += wt[i] * y[i]; szz += wt[i] * z[i] * z[i]; szy += wt[i] * z[i] * y[i]; }
+    const a = sy / sw, b = szz > 0 ? szy / szz : 0;
+    const out = new Float64Array(y.length);
+    for (let i = 0; i < y.length; i++) out[i] = y[i] - a - b * z[i];
+    return out;
+  },
+
+  /**
+   * 自由端梁のたわみ（曲げ ＋ せん断）。上向き線荷重 p [N/mm] と、左端で受け渡される
+   * せん断 V₀・モーメント M₀ から
+   *     V(x) = V₀ + ∫p,  M(x) = M₀ + ∫V,  EI·y'' = M,  y'_s = V/(G·As)
+   * を台形則で積分する。荷重系が釣り合っていれば結果は自由端梁の «形» そのもの
+   * （剛体運動の不定性は detrend で落とす）。
+   */
+  beamFF(z, p, EI, GAs, V0 = 0, M0 = 0) {
+    const n = z.length, V = new Float64Array(n), M = new Float64Array(n), th = new Float64Array(n), y = new Float64Array(n);
+    V[0] = V0; M[0] = M0;
+    for (let i = 1; i < n; i++) { const d = z[i] - z[i - 1];
+      V[i] = V[i - 1] + (p[i] + p[i - 1]) / 2 * d;
+      M[i] = M[i - 1] + (V[i] + V[i - 1]) / 2 * d; }
+    for (let i = 1; i < n; i++) { const d = z[i] - z[i - 1];
+      th[i] = th[i - 1] + (M[i] / EI + M[i - 1] / EI) / 2 * d;
+      y[i] = y[i - 1] + (th[i] + th[i - 1]) / 2 * d + (V[i] + V[i - 1]) / 2 * d / GAs; }
+    return y;
+  },
+
+  /** 単純支持梁（スパン S、支点は胴の外）のたわみ。上向き線荷重に対し中央が持ち上がる。 */
+  beamSS(z, p, wt, EI, GAs, S) {
+    const n = z.length, y = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = S / 2 + z[i]; let sum = 0;
+      for (let k = 0; k < n; k++) {
+        const P = p[k] * wt[k]; if (!P) continue;
+        const a = S / 2 + z[k], b = S - a;
+        let db, ds;
+        if (x <= a) { db = b * x * (S * S - b * b - x * x) / (6 * S * EI); ds = b * x / (S * GAs); }
+        else { const xp = S - x, ap = S - a, bp = S - ap;
+               db = bp * xp * (S * S - bp * bp - xp * xp) / (6 * S * EI); ds = bp * xp / (S * GAs); }
+        sum += P * (db + ds);
+      }
+      y[i] = sum;
+    }
+    return y;
+  },
+
+  /**
+   * WR–BUR 線接触の «単位長さあたり» の接触剛性 k [N/mm²]。
+   * ヘルツ線接触の近寄り量 δ = (2q/πE')·[ln(4R₁/b) + ln(4R₂/b) − 1]、
+   * 半接触幅 b = √(4qR/(πE'))、R = R₁R₂/(R₁+R₂)。荷重に対して対数でしか
+   * 変わらないので、そのパスの平均線荷重で 1 度だけ評価すれば足りる。
+   */
+  contactStiff(q) {
+    const M = CONFIG.MILL, Ep = M.ROLL_E * 1000 / (1 - M.ROLL_NU * M.ROLL_NU);
+    const R1 = M.WR_D / 2, R2 = M.BR_D / 2, R = R1 * R2 / (R1 + R2);
+    const qq = Math.max(q, 50);
+    const b = Math.sqrt(4 * qq * R / (Math.PI * Ep));
+    const d = (2 * qq / (Math.PI * Ep)) * (Math.log(4 * R1 / b) + Math.log(4 * R2 / b) - 1);
+    return qq / Math.max(d, 1e-9);
+  },
+
+  /**
+   * ロール系の «応答演算子» を作る（幅と接触剛性だけで決まるのでキャッシュする）。
+   *
+   * WR は自由端梁（板から p が上向き、BUR から q が下向き、ベンディング F_b が胴外で上向き）、
+   * BUR は軸受間の単純支持梁（q が上向き）、両者は線接触でつぶれる:
+   *
+   *     y_WR − y_BUR = q/k              …… 接触のつぶれ量
+   *     y_WR = A·(p − q) + y_b,  y_BUR = B·q
+   *  ⇒ (A + B + I/k)·q + c·1 + t·z = A·p + y_b        （c, t は剛体運動の不定性）
+   *     ∫q = ∫p + 2F_b,  ∫q·z = ∫p·z                  （WR の力とモーメントの釣り合い）
+   *
+   * これを (n+2)×(n+2) で解いて q を得れば、ギャップの形は 2·(A·(p−q) + y_b) になる。
+   * 単位荷重ごとに解いて並べたものが影響係数（G: 板荷重 → ギャップ、Hb: ベンディング → ギャップ）。
+   */
+  stackOps(w, kwb) {
+    const M = CONFIG.MILL, key = `${w}:${Math.round(kwb)}:${CONFIG.SHAPE.NW}`;
+    if (this._so && this._so.key === key) return this._so;
+    const g = this.widthGrid(w), n = g.n, z = g.z, wt = g.wt;
+    const E = M.ROLL_E * 1000, G = E / (2 * (1 + M.ROLL_NU));
+    const Iw = Math.PI * Math.pow(M.WR_D, 4) / 64, Ib = Math.PI * Math.pow(M.BR_D, 4) / 64;
+    const Aw = 0.9 * Math.PI * M.WR_D * M.WR_D / 4, Ab = 0.9 * Math.PI * M.BR_D * M.BR_D / 4;
+    const EIw = E * Iw, GAw = G * Aw, EIb = E * Ib, GAb = G * Ab;
+    const eb = (M.BR_BEARING_SPAN - g.L) / 2 + M.BEND_ARM;         // 胴端からベンディング作用点まで
+    const zero = new Float64Array(n);
+    // A（WR 自由端梁）と B（BUR 単純支持梁）の影響係数
+    const A = [], B = [];
+    for (let k = 0; k < n; k++) {
+      const e = new Float64Array(n); e[k] = 1 / Math.max(wt[k], 1e-9);   // 単位«力»になる線荷重
+      A.push(this.beamFF(z, e, EIw, GAw));
+      B.push(this.beamSS(z, e, wt, EIb, GAb, M.BR_BEARING_SPAN));
+    }
+    /* 影響係数は本来 «相反定理（A_ik = A_ki）» と «左右対称» を満たす。積分を左端から
+     * 始めるぶんだけ離散化の非対称が残るので、両方を明示的に課しておく
+     * （放っておくと 1 µm 級の左右差になって形状の判定を汚す）。 */
+    for (const Mx of [A, B]) {
+      for (let i = 0; i < n; i++) for (let k = i + 1; k < n; k++) {
+        const v = (Mx[k][i] + Mx[i][k]) / 2; Mx[k][i] = Mx[i][k] = v; }
+      for (let i = 0; i < n; i++) for (let k = 0; k < n; k++) {
+        const j = n - 1 - i, l = n - 1 - k;
+        if (k * n + i > l * n + j) continue;
+        const v = (Mx[k][i] + Mx[l][j]) / 2; Mx[k][i] = Mx[l][j] = v; }
+    }
+    const col = (Mx, k, i) => Mx[k][i];                                   // Mx[k] は k 番目の «列»
+    // ベンディング単独の WR たわみ（左端で V₀ = F_b、M₀ = F_b·e_b を受け渡す。F_b = 1 t）
+    const yb = this.beamFF(z, zero, EIw, GAw, 9807, 9807 * eb);
+    // (n+2)×(n+2) の係数行列（q, c, t）
+    const K = [];
+    for (let i = 0; i < n; i++) {
+      const r = new Float64Array(n + 2);
+      // 未知数 q は «線荷重»。A / B は «単位力» に対する応答なので、台形則の重みを掛ける
+      for (let k = 0; k < n; k++) r[k] = (col(A, k, i) + col(B, k, i)) * wt[k];
+      r[n] = 1; r[n + 1] = z[i];
+      K.push(r);
+    }
+    // 接触つぶれ q/k は «線荷重 → 変位» なので、そのまま対角へ足す
+    for (let i = 0; i < n; i++) K[i][i] += 1 / kwb;
+    const rEq = new Float64Array(n + 2), rMo = new Float64Array(n + 2);
+    for (let k = 0; k < n; k++) { rEq[k] = wt[k]; rMo[k] = wt[k] * z[k]; }
+    K.push(rEq); K.push(rMo);
+    // 右辺を作って解く関数
+    const solveFor = (p, Fb) => {
+      const rhs = new Float64Array(n + 2);
+      // A·p + y_b·Fb
+      for (let i = 0; i < n; i++) { let sum = 0;
+        for (let k = 0; k < n; k++) sum += col(A, k, i) * p[k] * wt[k];
+        rhs[i] = sum + yb[i] * Fb; }
+      let sp = 0, spz = 0;
+      for (let k = 0; k < n; k++) { sp += p[k] * wt[k]; spz += p[k] * wt[k] * z[k]; }
+      rhs[n] = sp + 2 * 9807 * Fb; rhs[n + 1] = spz;
+      const sol = this.solveLin(K.map(r => r), rhs);
+      const q = sol.subarray(0, n);
+      // ギャップの形 = 2·(A·(p−q) + y_b·Fb)
+      const y = new Float64Array(n);
+      for (let i = 0; i < n; i++) { let sum = 0;
+        for (let k = 0; k < n; k++) sum += col(A, k, i) * (p[k] - q[k]) * wt[k];
+        y[i] = 2 * (sum + yb[i] * Fb); }
+      return this.detrend(y, z, wt);
+    };
+    /* 影響係数を作る。板荷重は板幅の内側にしか立たないので、内側の格子点ごとに
+     * 単位線荷重を入れて応答を並べる（G）。ベンディングは 1 t あたりの応答（Hb）。 */
+    const ns = g.i1 - g.i0 + 1, G_ = [], p0 = new Float64Array(n);
+    for (let j = g.i0; j <= g.i1; j++) {
+      p0.fill(0); p0[j] = 1 / Math.max(wt[j], 1e-9);
+      G_.push(solveFor(p0, 0));
+    }
+    p0.fill(0);
+    const Hb = solveFor(p0, 1);
+    return (this._so = { key, g, n, ns, z, wt, G: G_, Hb, EIw, EIb });
+  },
+
+  /**
+   * 無負荷ギャップの «形»（研削クラウン ＋ 熱クラウン − 摩耗クラウン）[mm、零平均]。
+   * どれも «中央がどれだけ厚くなるか» を µm で持ち、幅方向は放物線で分布させる。
+   */
+  rollCrown(zs, w, rollTemp, wear) {
+    const M = CONFIG.MILL;
+    /* 符号の約束: 研削・熱・摩耗のクラウンはすべて «ロール半径の 中央 − 端»（正 = 中凸）。
+     * 中凸のロールはギャップを中央で «閉じる» ので、板厚の分布への寄与は符号が反転し、
+     * 上下 2 本ぶんで 2 倍になる。
+     *   ・WR が中凸  → ギャップが中央で狭くなる（板が薄くなる）
+     *   ・BUR が中凸 → WR を中央でより押し下げる → 同じくギャップが狭くなる
+     *   ・熱クラウンは中央が熱くて膨らむので中凸 ＝ クラウンを «減らす»
+     *   ・摩耗は板の通る中央が減るので中凹 ＝ クラウンを «増やす»
+     * 実機で «熱クラウンで平坦度が崩れる／摩耗で中伸びが出る» のはこの向きによる。 */
+    const ground = M.WR_CROWN + M.BR_CROWN;                       // 研削クラウン（µm、上下 1 組ぶん）
+    const therm = Num.clamp(M.THERM_CROWN_K * Math.max(rollTemp - M.ROLL_T0, 0), 0, M.THERM_CROWN_MAX);
+    const worn = Num.clamp(M.WEAR_CROWN_K * Math.max(wear, 0), 0, M.WEAR_CROWN_MAX);
+    const amp = -2 * (ground + therm - worn) / 1000;              // µm → mm（板厚の 中央 − 端）
+    const out = new Float64Array(zs.length);
+    let m = 0;
+    for (let i = 0; i < zs.length; i++) { const t = 2 * zs[i] / w; out[i] = amp * (1 - t * t); m += out[i]; }
+    m /= zs.length; for (let i = 0; i < zs.length; i++) out[i] -= m;
+    return { prof: out, ground, therm, worn, amp: amp * 1000 };
+  },
+
+  /**
+   * 幅方向の温度分布 [K、零平均]。端は «側面» からも放熱するので冷たい。
+   *
+   * 側面から出ていく熱は単位長さあたり h_e·(T − T∞)·h·t [J/mm]。それが端から
+   * 侵入深さ δ = √(a·t)（a = k/ρcp）の範囲を冷やすので、温度落ちは
+   *     ΔT_edge = h_e·(T − T∞)·t / (ρ·cp·δ)
+   * になる（側面の高さ h は熱量と体積の両方に効いて約分する）。分布は端からの
+   * 距離に対して exp(−d/δ) で減衰させる。
+   */
+  widthChill(zs, h, w, tPass, alloy = Rolling.alloy(), T = 450) {
+    const S = CONFIG.SHAPE;
+    const a = alloy.K / (alloy.RHO * alloy.CP) * 1e6;             // [mm²/s]
+    const t = Math.max(tPass, 0.1);
+    const dpt = Math.max(Math.sqrt(a * t), 1);                    // 侵入深さ [mm]
+    const rc = alloy.RHO * alloy.CP * 1e-9;                       // [J/mm³K]
+    const drop = Num.clamp(S.EDGE_H * 1e-6 * Math.max(T - CONFIG.MATERIAL.T_AMBIENT, 0) * t / (rc * dpt),
+                           0, S.EDGE_DROP_MAX);                   // 端の温度落ち [K]
+    const out = new Float64Array(zs.length);
+    let m = 0;
+    for (let i = 0; i < zs.length; i++) { const d = w / 2 - Math.abs(zs[i]);
+      out[i] = -drop * Math.exp(-d / dpt); m += out[i]; }
+    m /= zs.length; for (let i = 0; i < zs.length; i++) out[i] -= m;
+    return { prof: out, drop, depth: dpt };
+  },
+
+  /** n×n の線形方程式を部分ピボット付きガウス消去で解く（n は 40 程度）。 */
+  solveLin(A, b) {
+    const n = b.length, M = A.map((r, i) => Array.from(r).concat(b[i]));
+    for (let c = 0; c < n; c++) {
+      let piv = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+      if (piv !== c) { const t = M[c]; M[c] = M[piv]; M[piv] = t; }
+      const d = M[c][c]; if (Math.abs(d) < 1e-300) continue;
+      for (let r = 0; r < n; r++) { if (r === c) continue;
+        const f = M[r][c] / d; if (!f) continue;
+        for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+    }
+    const x = new Float64Array(n);
+    for (let i = 0; i < n; i++) x[i] = M[i][n] / (M[i][i] || 1);
+    return x;
+  },
+
+  /**
+   * 板の «幅方向の板厚分布» を解く。
+   *   opt = { forceT, width, hIn, hOut, T, speedMpm, bendT, rollTemp, wear, tPass, alloy }
+   *
+   *     x  = G·p + Hb·F_b + crown            …… たわみ ＋ ロールの形
+   *     p  = p̄ − Q_w·x                       …… 薄いところほど荷重が高い（塑性係数）
+   *  ⇒ (I + Q_w·G)·x = G·p̄ + Hb·F_b + crown  …… n×n の線形方程式 1 本
+   *
+   * x は «平均板厚からのずれ»（零平均）。平均は AGC とミルばねの受け持ち。
+   * Q_w は Rolling.solve を数値微分して取るので、荷重モデルを直せばクラウンも一緒に直る。
+   */
+  crown(opt) {
+    const w = opt.width, al = opt.alloy ?? Rolling.alloy();
+    const hIn = opt.hIn, hOut = Math.max(opt.hOut, 1e-3);
+    const pBar = opt.forceT * 9807 / w;                                   // 平均線荷重 [N/mm]
+    const so = this.stackOps(w, this.contactStiff(pBar));
+    const ns = so.ns, i0 = so.g.i0;
+    const zs = so.z.subarray(i0, i0 + ns);                                // 板の下の格子点
+    // 塑性係数 Q_w = −dP'/dh_out [N/mm/mm]。荷重モデルそのものを数値微分して取る
+    const eps = Math.max(hOut * 0.01, 1e-3), sp = Math.abs(opt.speedMpm ?? 60);
+    const f1 = this.solve(hIn, hOut, w, sp, opt.T, 0, al);
+    const f2 = this.solve(hIn, hOut + eps, w, sp, opt.T, 0, al);
+    const Qw = Math.max((f1.forceTon - f2.forceTon) * 9807 / w / eps, 1e-9);
+    // 幅方向の温度分布 → 変形抵抗の差 → 荷重分布の «外力» 項
+    const wc = this.widthChill(zs, hOut, w, opt.tPass ?? 5, al, opt.T);
+    const sr = Math.max(f1.strainRate || 1, 1e-3);
+    const kf0 = this.flowStress(opt.T, sr, al);
+    const dpT = new Float64Array(ns);
+    for (let i = 0; i < ns; i++)
+      dpT[i] = pBar * (this.flowStress(opt.T + wc.prof[i], sr, al) / Math.max(kf0, 1e-6) - 1);
+    const crown = this.rollCrown(zs, w, opt.rollTemp ?? CONFIG.MILL.ROLL_T0, opt.wear ?? 0);
+    // 右辺 = 平均荷重によるたわみ ＋ 温度差ぶんのたわみ ＋ ベンディング ＋ ロールの形
+    /* G の列は «単位 力» に対する応答なので、線荷重を掛けるときは台形則の重みを掛ける
+     * （Ĝ_ik = G_ik·w_k）。ここを落とすと荷重が 1/w 倍＝たわみが 2 桁小さくなる。 */
+    const rhs = new Float64Array(ns), A = [];
+    for (let i = 0; i < ns; i++) {
+      let sum = 0;
+      for (let k = 0; k < ns; k++) sum += so.G[k][i0 + i] * so.wt[i0 + k] * (pBar + dpT[k]);
+      rhs[i] = sum + so.Hb[i0 + i] * (opt.bendT ?? 0) + crown.prof[i];
+      const r = new Float64Array(ns);
+      for (let k = 0; k < ns; k++) r[k] = (i === k ? 1 : 0) + Qw * so.G[k][i0 + i] * so.wt[i0 + k];
+      A.push(r);
+    }
+    const x0 = this.solveLin(A, rhs);
+    const x = this.detrend(x0, zs, so.wt.subarray(i0, i0 + ns));
+    /* ベンディング 1 t あたりのクラウン変化（閉ループ）。形状制御はこの利得で
+     * «比例クラウンになる曲げ力» を一発で出せる（同じ行列を右辺だけ替えて解く）。 */
+    const rb = new Float64Array(ns);
+    for (let i = 0; i < ns; i++) rb[i] = so.Hb[i0 + i];
+    const xb = this.detrend(this.solveLin(A, rb), zs, so.wt.subarray(i0, i0 + ns));
+    // --- 形状の指標 ---
+    const mid = (ns - 1) >> 1;
+    const crownAbs = (x[mid] - (x[0] + x[ns - 1]) / 2) * 1000;            // µm（中央 − 端）
+    let iEdge = ns - 1;
+    while (iEdge > 0 && w / 2 - zs[iEdge] < CONFIG.SHAPE.EDGE_MM) iEdge--;
+    const edgeDrop = (x[iEdge] - x[ns - 1]) * 1000;                       // µm（端から EDGE_MM 内側 − 端）
+    const flat = this.flatness(x, hOut, opt.xIn, hIn, w, al);
+    const crownIn = opt.xIn ? (opt.xIn[mid] - (opt.xIn[0] + opt.xIn[ns - 1]) / 2) * 1000 : 0;
+    const bendGain = (xb[mid] - (xb[0] + xb[ns - 1]) / 2) * 1000;         // µm/t（負 = クラウンを減らす）
+    return { n: ns, z: zs, wt: so.wt.subarray(i0, i0 + ns), x, Qw, crownAbs, crownRatio: crownAbs / 1000 / hOut,
+             crownInRatio: crownIn / 1000 / hIn, edgeDrop, bendGain,
+             chill: wc, crownSrc: crown, ...flat };
+  },
+
+  /**
+   * 平坦度。**クラウンそのものではなく «クラウン率の変化» が平坦度を決める。**
+   *
+   * 板の各縦繊維の伸びは λ = ln(h_in/h_out)。入側と出側でクラウン率 C/h が同じなら
+   * λ は幅方向に一様になり、板はどれだけクラウンが付いていても «平坦» である
+   * （比例クラウンの原則）。崩れるのは比が変わったときだけ。
+   *
+   * 板は 1 枚なので長さは揃わねばならず、伸びたい量の差がそのまま弾性ひずみになる。
+   *     σ = −E·(λ − λ̄)     …… 伸びたい側が圧縮、伸びたくない側が引張
+   *     I-unit = (λ − λ̄)×10⁵
+   * 圧縮側は座屈しうる。座屈応力は σ_cr = k·π²E/(12(1−ν²))·(h/b)²。
+   *   中伸び（中央が長い）は両端で拘束されるので k = 4、
+   *   耳伸び（端が長い）は自由端なので k = 0.43。
+   *
+   * xIn を渡さなければ «入側は平ら» として扱う（第 1 パスのスラブ）。
+   */
+  flatness(x, hOut, xIn, hIn, w, alloy = Rolling.alloy()) {
+    const n = x.length, E = alloy.E * 1000, nu = 0.33, S = CONFIG.SHAPE;
+    const lam = new Float64Array(n); let m = 0;
+    for (let i = 0; i < n; i++) {
+      const hi = hIn + (xIn ? xIn[i] : 0), ho = hOut + x[i];
+      lam[i] = Math.log(Math.max(hi, 1e-6) / Math.max(ho, 1e-6)); m += lam[i];
+    }
+    m /= n;
+    const sig = new Float64Array(n), iu = new Float64Array(n);
+    let iMax = 0, iMin = 0;
+    for (let i = 0; i < n; i++) { const d = lam[i] - m;
+      iu[i] = d * 1e5; sig[i] = -E * d;
+      if (iu[i] > iu[iMax]) iMax = i; if (iu[i] < iu[iMin]) iMin = i; }
+    const mid = (n - 1) >> 1;
+    const centerLong = iu[mid] > (iu[0] + iu[n - 1]) / 2;
+    const mode = Math.abs(iu[iMax] - iu[iMin]) < S.FLAT_DEAD ? 'FLAT' : centerLong ? 'CENTER' : 'EDGE';
+    // 圧縮側の応力と、その領域の幅から座屈応力を出す
+    const k = mode === 'CENTER' ? 4 : 0.43;
+    const bw = mode === 'CENTER' ? w / 2 : Math.max(S.EDGE_MM * 2, w / 8);
+    const sigCr = k * Math.PI * Math.PI * E / (12 * (1 - nu * nu)) * Math.pow(hOut / bw, 2);
+    const sigC = Math.min(...sig);                                        // いちばん強い圧縮（負）
+    return { lam, sig, iu, iUnit: iu[iMax] - iu[iMin], mode,
+             sigComp: sigC, sigCr, buckle: -sigC > sigCr,
+             modeName: mode === 'FLAT' ? '平坦' : mode === 'CENTER' ? '中伸び' : '耳伸び' };
+  },
+
+  /**
+   * 幅広がり（spread）。厚いパスでは板が幅方向にも広がる。
+   * Helmi–Alexander 型: ln(w₁/w₀) = C·exp(−k·w₀/Ld)·ln(h₀/h₁)
+   * 幅／接触弧長が大きいほど（＝薄い板ほど）広がらない、という性質を式が持つ。
+   */
+  spread(w, hIn, hOut, Ld) {
+    const S = CONFIG.SHAPE;
+    if (!(hIn > hOut) || !(Ld > 0)) return 0;
+    const r = Math.exp(S.SPREAD_C * Math.exp(-S.SPREAD_K * w / Ld) * Math.log(hIn / hOut));
+    return w * (r - 1);
+  },
+
+  /**
+   * 剛体としての «据わり» —— 片側接触（接触は押すだけで引けない）の解。
+   *
+   * 反った板をテーブルに置くと、板は «下面のいちばん低いところ» で支えられる。
+   * 両端が上へ反っていれば支持は中央付近の狭い範囲になり、重心がその範囲の
+   * 外に出れば板は倒れる。これを解くのが次の線形計画である。
+   *
+   *   下面の高さ  b(u)、ローラ位置 u_k、剛体運動 c + θ·u とすると
+   *     食い込まない : c + θ·u_k ≥ −b_k        （接触は押すだけ）
+   *     重心が下がる : min  c + θ·u_cg          （位置エネルギー最小）
+   *
+   * 解は «点 (u_k, −b_k) の上側凸包（＝凹包絡線）を u_cg で評価したもの»。
+   * 包絡線の折れ線の傾きがそのまま板の傾きになる。中央の 1 点でしか支えられて
+   * いなければ傾きは不定＝不安定な釣り合いで、わずかな左右差でどちらかへ倒れる。
+   *
+   *   samples: [{ u, b }]（u 昇順）、uCg: 重心の u
+   *   戻り値: { tilt, lift, contacts, span }（tilt は勾配 [mm/mm]）
+   */
+  restPose(samples, uCg) {
+    const pts = samples.filter(q => Number.isFinite(q.u) && Number.isFinite(q.b))
+                       .map(q => ({ x: q.u, y: -q.b })).sort((a, b) => a.x - b.x);
+    if (pts.length < 2) return { tilt: 0, lift: pts.length ? -pts[0].y : 0, contacts: [], span: 0 };
+    // 上側凸包（単調鎖）。時計回りに残す＝上に凸
+    const hull = [];
+    for (const p of pts) {
+      while (hull.length >= 2) {
+        const a = hull[hull.length - 2], b = hull[hull.length - 1];
+        if ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) < 0) break;  // 右回り＝上凸を保つ
+        hull.pop();
+      }
+      hull.push(p);
+    }
+    // u_cg を含む区間を探す（外なら端の区間）
+    let i = 0;
+    while (i < hull.length - 2 && hull[i + 1].x < uCg) i++;
+    const a = hull[i], b = hull[i + 1];
+    const tilt = (b.y - a.y) / Math.max(b.x - a.x, 1e-9);
+    const lift = a.y - tilt * a.x;                       // c（切片）
+    return { tilt, lift, contacts: hull.map(p => p.x), span: hull[hull.length - 1].x - hull[0].x,
+             seat: b.x - a.x };
+  },
+
   /** テーブル上の端部（スキー）の持ち上がり。s は先端からの距離、ℓ は浮き上がり長。 */
   skiLift(s, kappa, ell) {
     if (kappa <= 0 || s >= ell || ell <= 0) return 0;              // 下反りはテーブルに押さえられて端は浮かない
@@ -2697,6 +3183,13 @@ class SlabState {
     this.cropped = { 1: false, '-1': false };       // 端ごとに «クロップ済みか»（+1: xMax 側 / −1: xMin 側）
     /* 端部欠陥は «その端を最後に平らにしてからの圧下» で育つ。切った瞬間に 0 に戻り、
      * そのあとのパスでまた付いてくる。hCut はその起点の板厚（null なら素材のまま）。 */
+    /* 幅方向の板厚プロファイル（零平均の偏差 [mm]、NW 点）。長手の hProf と同じ役割で、
+     * «そのパスの出側» を次のパスが «入側» として読む。平坦度は板厚そのものではなく
+     * 入側と出側の «クラウン率の変化» で決まるので、これを持たないと平坦度が出せない。 */
+    this.wProf = new Float64Array(CONFIG.SHAPE.NW);
+    this.wShape = null; this._shapeSig = '';   // 直近に解いた幅方向の形状（Rolling.crown の戻り）
+    this.rollWork = 0;                 // 摩耗クラウン用の «仕事»（荷重 × 通板長）の積算
+    this.initialWidth = width; this.spreadTotal = 0;   // 幅広がりの積算
     this.hCut = { 1: null, '-1': null };
     /* ワニ口が育つのは変形が表層に集中する Δ = hMean/Ld > 1 のパスだけ。Δ が 1 を切った
      * 時点の板厚を覚えておき、それより薄い側ではワニ口を伸ばさない（舌だけが伸びる）。 */
@@ -2936,7 +3429,10 @@ class MillState {
     this.motorRpm = 0;
     this.rollAngle = 0; this.tableAngle = 0;
     this.rollTemp = CONFIG.MILL.ROLL_T0;       // ワークロール表面温度 [℃]（板から温まる）
-    this.bendingForce = 0;
+    this.bendingForce = 0;                     // 3D 表現用（0〜1）
+    /* ロールベンディング力 [tonf/対]。形状制御（比例クラウン制御）が動かす。
+     * 実ギャップに対する «圧下» と同じ関係で、狙いは «出側のクラウン率を入側に合わせる» こと。 */
+    this.bendForceT = 0; this.bendCmd = 0;
     this.tableGroup = CONFIG.TABLE.SELECT[CONFIG.TABLE.SELECT.length - 1];   // 駆動するテーブル区間（図面のテーブル選択）
   }
   get passLine() { return CONFIG.MILL.PASS_LINE; }
@@ -3233,10 +3729,15 @@ class RollingLog {
     /* 1 標本に «荷重・速度・板厚・ギャップ・動力・温度・位置» を残す。板厚とギャップを
      * 並べて持つのが要点で、この 2 本を重ねると «荷重でミルがどれだけ開いたか»
      * «板厚制御がどう追い込んだか» がそのまま見える。 */
+    const sh = s.wShape;
     this.series.push({ t: +this.lot.t.toFixed(2), pass: i + 1,
                        f: +(s.rollForce || 0).toFixed(0), v: +Math.abs(m.currentSpeed).toFixed(1),
                        p: +((s.rollPower || 0) / 1000).toFixed(2), h: +s.thickness.toFixed(2),
                        g: +m.gap.toFixed(2), sc: +m.screw.toFixed(2),
+                       // 幅方向の形状（クラウン [µm]・平坦度 [I-unit]・ベンディング力 [t]）
+                       cr: sh && s.rollingActive ? +sh.crownAbs.toFixed(1) : 0,
+                       fl: sh && s.rollingActive ? +sh.iUnit.toFixed(1) : 0,
+                       bd: +m.bendForceT.toFixed(0),
                        T: +s.temperature.toFixed(0), x: Math.round(s.x) });
   }
   /** 表に出す 1 パスぶんの実績（平均は «噛んでいる間» だけ） */
@@ -3271,9 +3772,10 @@ class RollingLog {
        f(r.vMax), f(r.vAvg), f(r.planSpeed, 0), f(r.gap, 2), f(r.gMin, 2), f(r.spring, 2),
        f(r.pMax, 2), f(r.tIn, 0), f(r.tOut, 0), f(r.len / 1000, 2), f(r.sec)].join(','));
     const sHead = ['時刻[s]', 'パス', '荷重[t]', '速度[mpm]', '板厚[mm]', 'ギャップ[mm]',
-                   '圧下位置[mm]', '動力[MW]', '温度[℃]', '位置[mm]'];
+                   '圧下位置[mm]', '動力[MW]', 'クラウン[µm]', '平坦度[I]', 'ベンディング[t]', '温度[℃]', '位置[mm]'];
     const sBody = t.series.filter(p => on(p.pass)).map(p =>
-      [f(p.t, 2), p.pass, p.f, f(p.v), f(p.h, 2), f(p.g, 2), f(p.sc, 2), f(p.p, 2), p.T, p.x].join(','));
+      [f(p.t, 2), p.pass, p.f, f(p.v), f(p.h, 2), f(p.g, 2), f(p.sc, 2), f(p.p, 2),
+       f(p.cr, 1), f(p.fl, 1), f(p.bd, 0), p.T, p.x].join(','));
     const meta = [`# ロット,${L.started.toLocaleString('ja-JP')}`,
                   `# 材質,${L.alloyKey}`,
                   `# 素材,${f(L.thick0, 0)} x ${L.width} x ${L.length} mm（呼び厚 ${L.cast} − 面削 2x${L.scalp}）`,
@@ -3298,6 +3800,10 @@ RollingLog.SERIES = [
   { key: 'v', name: 'ライン速度', unit: 'mpm', axis: 'speed', color: 'var(--hot)',    css: '#d9772b' },
   { key: 'h', name: '板厚（入側）', unit: 'mm', axis: 'len',  color: '#2e9c6b',       css: '#2e9c6b' },
   { key: 'g', name: 'ロールギャップ', unit: 'mm', axis: 'len', color: '#8a63d2',      css: '#8a63d2' },
+  // 幅方向の形状。クラウンと平坦度は «同じ現象の別の見方» なので軸を分けて重ねられるようにする
+  { key: 'cr', name: '板クラウン', unit: 'µm', axis: 'crown', color: '#c2569a',      css: '#c2569a' },
+  { key: 'fl', name: '平坦度',     unit: 'I',  axis: 'flat',  color: '#0d9488',      css: '#0d9488' },
+  { key: 'bd', name: 'ベンディング', unit: 't', axis: 'bend', color: '#a16207',      css: '#a16207' },
 ];
 
 /**
@@ -4214,6 +4720,7 @@ class PhysicsEngine {
     const m = this.mill;
     m.targetGap = Num.clamp(m.targetGap, CONFIG.MILL.GAP_MIN, CONFIG.MILL.GAP_MAX);
     this._agc(dt);
+    this._shapeControl(dt);
     // 主機は定格以上のトルクを出せない。動力が定格を超えるなら速度で頭打ちにする。
     // 実機の駆動系と同じ挙動で、重圧下・低温のパスでは自然に減速する。
     // 主機の駆動包絡線（基底回転数まで定トルク、以上は定出力）で速度を頭打ちにする。
@@ -4222,7 +4729,6 @@ class PhysicsEngine {
     m.motorRpm = Drive.motorRpm(m.currentSpeed, m.wrDia);
     m.currentSpeed = Num.rateTo(m.currentSpeed, m.targetSpeed, CONFIG.PROCESS.ACCEL, dt);
     // ロールベンディングは圧延荷重に追従（形状制御の可視化用）
-    m.bendingForce = Num.approach(m.bendingForce, this.slab.rollForce > 0 ? 1 : 0, 0.35, dt);
   }
 
   /**
@@ -4315,7 +4821,7 @@ class PhysicsEngine {
     s.inBite = s.biteFill > 0;
 
     if (s.inBite && s.thickness > gap + 1e-6 && Math.abs(v) > 1e-6) {
-      if (!s.rollingActive) { s.kOld = s.kNew; s._kAcc = 0; s._kW = 0; s.beginGauge(); }   // 噛み込み開始: 前パスの反りと板厚を退避
+      if (!s.rollingActive) { s.kOld = s.kNew; s._kAcc = 0; s._kW = 0; s.beginGauge(); s._shapeT = -1; }   // 噛み込み開始: 前パスの反りと板厚を退避
       s.rollingActive = true;
       const tension = this.finish.gripped ? this.finish.tension : 0;
       /* いまバイトに入っている «材料そのもの» の状態で解く。板は長手方向に一様ではない:
@@ -4354,6 +4860,21 @@ class PhysicsEngine {
       const passedFrac = (Math.abs(vOut) * dt * gap) / Math.max(s.thickness * s.length, 1);
       const contactTime = res.Ld / Math.max(Math.abs(v), 1e-3);
       this._biteThermal(res.heat, contactTime, gap, passedFrac);
+      /* --- 幅方向の形状（クラウン・平坦度）---------------------------------
+       * 影響係数法は n×n を解くので毎フレームは重い。荷重・板厚・温度が «意味のある量»
+       * 動いたときだけ解き直す（弧が満ちてからの 1 回目で必ず解く）。 */
+      if (s.biteFill > 0.99) {
+        const sig = `${Math.round(res.forceTon / 20)}:${Math.round(gap * 20)}:${Math.round(s.temperature / 5)}:${Math.round(m.rollTemp / 5)}:${Math.round(m.bendForceT / 10)}:${Math.round(s.width / 5)}`;
+        if (sig !== s._shapeSig) {
+          s._shapeSig = sig;
+          s.wShape = Rolling.crown({
+            forceT: res.forceTon, width: s.width, hIn: hLoc, hOut: gap, T: s.temperature,
+            speedMpm: m.currentSpeed, bendT: m.bendForceT, rollTemp: m.rollTemp,
+            wear: s.rollWork, tPass: Rolling.passTime(s.length, m.currentSpeed), alloy: s.alloy,
+            xIn: s.wProf });
+        }
+      }
+      s.rollWork += res.forceTon * Math.abs(vOut) * dt;      // 摩耗クラウン用（荷重 × 通板長）
       // 反りは通過した分の重み付き平均で決まる
       const k = Rolling.curvature(res, hLoc, gap);
       s._kAcc += k * passedFrac; s._kW += passedFrac; s.kNew = s._kAcc / Math.max(s._kW, 1e-9);
@@ -4367,7 +4888,14 @@ class PhysicsEngine {
         /* 確定に使うのは «噛んでいた間の» ギャップ。尻が抜けた瞬間の m.gap は荷重が抜けて
          * ミルの伸びが戻りかけており（さらに圧下は次パスに備えて動き出す）、そのまま
          * 板厚にすると実際より薄く記録される（実測: 10.9 mm のパスが 9.77 mm になった）。 */
+        const hPrev = s.thickness;
         s.thickness = s.hDeliv > 0 ? s.hDeliv : gap;
+        /* 幅方向のプロファイルを «出側» で確定する。次のパスがこれを入側として読み、
+         * クラウン率が変わったぶんだけ平坦度（伸び差）が出る。 */
+        if (s.wShape) { for (let i = 0; i < s.wProf.length && i < s.wShape.x.length; i++) s.wProf[i] = s.wShape.x[i]; }
+        // 幅広がり: 厚いパスでは板が幅方向にも広がる（薄板ではほぼ 0）
+        const dw = Rolling.spread(s.width, hPrev, s.thickness, s.contactLength || Rolling.contactLength(hPrev, s.thickness));
+        if (dw > 0) { s.width += dw; s.spreadTotal = (s.spreadTotal || 0) + dw; }
         s.rollingActive = false; s.endGauge();
       }
       s.xMin += v * dt; s.xMax += v * dt;
@@ -4422,6 +4950,28 @@ class PhysicsEngine {
    * ロールが得た熱が一致する（«板だけ冷えてロールは冷たいまま» という不整合を作らない）。
    * dTavg は «板全体の平均温度» の下がり幅 [K]、rc は板の体積熱容量。
    */
+  /**
+   * 形状制御（比例クラウン制御）。
+   *
+   * 平坦度を決めるのは «クラウンそのもの» ではなく «クラウン率 C/h の変化» なので、
+   * 狙いは «出側のクラウン率を入側のクラウン率に合わせる» ことになる。
+   *     目標クラウン C* = (C_in/h_in)·h_out
+   * ベンディングのクラウン利得 g [µm/t] は影響係数法から閉ループで出ているので、
+   * 必要な曲げ力は 1 回の割り算で決まる（探索も積分器も要らない）。
+   *     F_b ← F_b + (C − C*)/g
+   * 実機のシリンダには速度と上限があるので、指令はレート制限して追わせる。
+   */
+  _shapeControl(dt) {
+    const m = this.mill, s = this.slab, B = CONFIG.MILL.BENDER, S = CONFIG.SHAPE;
+    if (s.wShape && s.rollingActive && Math.abs(s.wShape.bendGain) > 1e-6) {
+      const target = s.wShape.crownInRatio * m.gap * 1000;            // 目標クラウン [µm]
+      // 利得は負（曲げるほどクラウンは減る）。必要な «変化量» は 目標 − 現在
+      m.bendCmd = Num.clamp(m.bendForceT + (target - s.wShape.crownAbs) / s.wShape.bendGain, 0, B.FORCE);
+    } else if (!s.rollingActive) m.bendCmd = 0;
+    m.bendForceT = Num.rateTo(m.bendForceT, m.bendCmd, S.BEND_RATE, dt);
+    m.bendingForce = m.bendForceT / B.FORCE;                          // 3D 表現（シリンダの伸び）
+  }
+
   _rollHeat(dTavg, rc) {
     if (!(dTavg > 0)) return;
     const s = this.slab;
@@ -7557,6 +8107,29 @@ class SlabView {
     }
     return y;
   }
+  /**
+   * 剛体としての «据わり» —— 片側接触の解。
+   *
+   * 反った板をテーブルへ置くと、板は «下面のいちばん低いところ» でしか支えられない。
+   * 両端が上へ反っていれば接地は中央付近の狭い範囲になり、重心がその範囲の外に出れば
+   * 板は倒れる。ここでは下面の形をテーブルローラの位置で拾い、Rolling.restPose
+   * （接触は押すだけ、という不等式条件の下で位置エネルギーを最小にする線形計画）を解く。
+   *
+   * 中央に平らな区間が残っていれば傾きは 0 になるので、通常のパスでは何も起きない。
+   * 効くのは «両端の浮き上がりが板長を食い尽くしたとき» だけで、これが実機で
+   * 反った板が前後どちらかへ «カタン» と傾く現象そのものである。
+   */
+  _restPose(curl, x0, x1, lift, dz) {
+    if (!curl.ends.length) return { tilt: 0, lift: 0 };
+    const F = CONFIG.FLIP, T = CONFIG.TABLE;
+    // 板の下にあるテーブルローラの X（接触しうる点）。ローラが無い区間では支えられない
+    const xs = Layout.rolls().map(r => r.x).filter(v => v >= x0 - 1 && v <= x1 + 1);
+    if (xs.length < 2) return { tilt: 0, lift: 0 };
+    const samples = xs.map(u => ({ u, b: this._curlLift(curl, u) + lift }));
+    // 重心は板の中央（長手方向に一様な板厚として）
+    const pose = Rolling.restPose(samples, (x0 + x1) / 2);
+    return { tilt: pose.tilt, lift: pose.lift, seat: pose.seat, contacts: pose.contacts.length };
+  }
   update(slab, mill, fin) {
     // 巻取中は板の入口 A（3ロール出側）より先は渡り板とコイルに置き換わるので、ここで打ち切る。
     // 尾端が A を過ぎたら板はすべてコイル側にあり、このメッシュは消える。
@@ -7576,7 +8149,8 @@ class SlabView {
     // 形状が変わっていなければ頂点更新も法線再計算も行わない（停止中のコストをゼロに）
     const sig = x0 + ':' + x1 + ':' + slab.thickness + ':' + slab.width + ':'
               + mill.gap + ':' + mill.passLine + ':' + slab.inBite + ':' + slab.dir + ':'
-              + slab.hCut[1] + ':' + slab.hCut[-1] + ':' + slab.hHomo + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig;
+              + slab.hCut[1] + ':' + slab.hCut[-1] + ':' + slab.hHomo + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig
+              + ':' + (slab.wShape ? slab.wShape.crownAbs.toFixed(1) : '-');
     if (sig === this._sig) return;
     this._sig = sig;
     const L = x1 - x0, w = slab.width, P = mill.passLine;
@@ -7604,6 +8178,14 @@ class SlabView {
 
     // 断面の角の丸み（鋳肌のラウンド）。板厚が薄くなるほど自己相似に縮む
     const sec = Sect.prep(hIn, w, slab.edge);
+    // 据わり（剛体の釣り合い）と幅方向の板厚分布
+    const rest = this._restPose(curl, x0, x1, lift, dz);
+    const sh = slab.wShape;
+    const wProf = sh ? (bz) => {                       // bz ∈ [−0.5, 0.5] → 板厚偏差 [mm]
+      const t = Num.clamp(bz * 2, -1, 1), f = (t + 1) / 2 * (sh.n - 1);
+      const j = Math.min(Math.floor(f), sh.n - 2);
+      return Num.lerp(sh.x[j], sh.x[j + 1], f - j);
+    } : null;
     const pos = this.geo.attributes.position, base = this.base, n = pos.count;
     for (let i = 0; i < n; i++) {
       const bx = base.getX(i) + 0.5, by = base.getY(i) + 0.5, bz = base.getZ(i);
@@ -7623,7 +8205,11 @@ class SlabView {
         yl = lift * Num.smoothstep(-2000, 0, sBed);
       }
       yl += this._curlLift(curl, xm);
-      pos.setXYZ(i, u(x), u(P - dip + (q.y * sy + h / 2) + dy + yl), u(q.z + dz));
+      // 剛体としての据わり（片側接触）。中央に平らな接地が残っていれば tilt = 0
+      yl += rest.lift + rest.tilt * xm;
+      // 幅方向の板厚分布（クラウン）。中央と端で板厚が µm オーダー違う
+      const wq = wProf ? wProf(bz) : 0;
+      pos.setXYZ(i, u(x), u(P - dip + ((q.y + by * wq) * sy + h / 2) + dy + yl), u(q.z + dz));
     }
     pos.needsUpdate = true;
     this.geo.computeVertexNormals();
@@ -8878,6 +9464,21 @@ class UIManager {
       $('m-curl-v').textContent = Math.abs(k) > 1e-7 ? (1 / Math.abs(k) / 1000).toFixed(Math.abs(k) > 1e-4 ? 1 : 0) : '–';
       $('m-curl-s').textContent = Math.abs(k) > 1e-7
         ? `${k > 0 ? '上反り' : '下反り'} ／ 端の浮き ${k > 0 ? sp.tip.toFixed(0) : 0} mm ／ 上下温度差 ${(s.tBot - s.tTop).toFixed(1)} ℃`
+        : '平坦';
+    }
+    /* 幅方向の形状。板クラウン（中央 − 端）と平坦度（I-unit）。
+     * 平坦度は «クラウン率の変化» で決まるので、クラウンが大きくても比例していれば平坦。 */
+    {
+      const sh = s.wShape;
+      $('m-crown-v').textContent = sh ? sh.crownAbs.toFixed(0) : '–';
+      $('m-crown-s').textContent = sh
+        ? `率 ${(sh.crownRatio * 100).toFixed(3)} % ／ エッジドロップ ${sh.edgeDrop.toFixed(0)} µm ／ ベンダ ${m.bendForceT.toFixed(0)} t`
+        : '中央 − 端';
+      const fv = $('m-flat-v'), fs = $('m-flat-s');
+      fv.textContent = sh ? sh.iUnit.toFixed(0) : '–';
+      fv.style.color = sh && sh.buckle ? 'var(--warn)' : '';
+      fs.textContent = sh
+        ? `${sh.modeName}${sh.buckle ? '（座屈）' : ''} ／ 圧縮 ${Math.abs(sh.sigComp).toFixed(1)} / 座屈 ${sh.sigCr.toFixed(1)} MPa`
         : '平坦';
     }
     // 実ギャップは圧下位置そのものではない。«圧下位置 ＋ 荷重で伸びたぶん» を並べて出す。
