@@ -1,7 +1,9 @@
-// 画面確認用の撮影（実績ビュワーと計器）
+// 画面で «実際にどう見えるか» を確かめるための撮影。
+//   node vis.mjs          → tools/shots/shape-log.png
+// 圧延の途中（第 8 パス）でロールバイト視点にし、計器と実績ビュワーが読める状態を撮る。
 import fs from 'node:fs'; import path from 'node:path';
-import { openApp, installHelpers } from './harness.mjs';
-const dir = '/tmp/claude-0/-home-user-HotMill/56790db5-93fb-5407-8bb4-eeb2a08ba824/scratchpad/shots';
+import { openApp, installHelpers, __dirname } from './harness.mjs';
+const dir = path.join(__dirname, 'shots');
 fs.mkdirSync(dir, { recursive: true });
 const { browser, page, errors } = await openApp({ viewport: { width: 1600, height: 900 }, quiet: true });
 await installHelpers(page);
