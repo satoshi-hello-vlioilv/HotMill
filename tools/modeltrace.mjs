@@ -175,6 +175,53 @@ const out = await page.evaluate(() => {
     }
   }
 
+  /* ================= 7. 端部欠陥（舌とワニ口） ================= */
+  /* 舌（幅中央が伸びる）とワニ口（表裏が開く）は発生機構が違う。
+   *   舌     —— 幅方向の不均一な広がり。どのパスでも «その端を最後に平らにしてから» 育つ
+   *   ワニ口 —— 表層集中変形（Δ = hMean/Ld > 1）でだけ育つ。薄板では出ない
+   * クロップは «端を平らにする» 工程なので、切った瞬間 0 になり、そのあと舌だけが付き直す。
+   * ここを «切ったら以後ずっと 0» にしていたため、薄い領域で一切計算されていなかった。 */
+  {
+    const has = typeof P.slab.overhangParts === 'function';
+    ok('端部欠陥が «舌» と «ワニ口» に分かれている', has, has ? 'SlabState.overhangParts' : '未実装');
+    if (has) {
+      const dl = R.inhomogeneity(536, 455, 0), dt = R.inhomogeneity(14.3, 10.9, 0);
+      ok('不均一変形の指標 Δ が厚板で 1 超・薄板で 1 未満', dl > 1 && dt < 1,
+         `536→455 で Δ=${dl.toFixed(2)} / 14.3→10.9 で Δ=${dt.toFixed(2)}`);
+
+      A.bus.emit('CMD_RESET');
+      window.__startAuto(false);
+      // 厚板（クロップ前）: 舌もワニ口も付く
+      window.__ff(p => p.slab.thickness < 300 && !p.slab.cropped[1], 120 * 1200);
+      const thick = P.slab.overhangParts(1);
+      ok('厚板（Δ>1）では舌とワニ口が両方つく', thick.tongue > 1 && thick.gator > 1,
+         `舌 ${thick.tongue.toFixed(0)} / ワニ口 ${thick.gator.toFixed(0)} mm`);
+
+      // クロップ直後: 端は平ら
+      window.__ff(p => p.slab.cropped[1] && p.slab.cropped[-1], 120 * 2500);
+      const cut = P.slab.overhangParts(1);
+      ok('クロップ直後の端は平ら（舌もワニ口も 0）', cut.tongue < 1 && cut.gator < 1,
+         `舌 ${cut.tongue.toFixed(1)} / ワニ口 ${cut.gator.toFixed(1)} mm`);
+      const hCut = P.slab.hCut[1];
+      ok('クロップで «端部欠陥の起点» がその時の板厚に更新される', hCut > 0,
+         `起点 ${hCut ? hCut.toFixed(1) : '—'} mm`);
+
+      // クロップ後の薄い領域: 舌は付き直し、ワニ口は付かない
+      window.__ff(p => p.finish.done || !!p.tripped, 120 * 3000);
+      const thin = P.slab.overhangParts(1);
+      ok('クロップ後の薄い領域でも舌が付き直す', thin.tongue > 20,
+         `板厚 ${P.slab.thickness.toFixed(1)} mm で舌 ${thin.tongue.toFixed(0)} mm`);
+      ok('クロップ後の薄い領域ではワニ口が付かない（Δ<1）', thin.gator < 1,
+         `ワニ口 ${thin.gator.toFixed(1)} mm（hHomo ${P.slab.hHomo?.toFixed(1)} mm）`);
+      // 端の最大変位は «幅中央かつ表裏» で 舌 + ワニ口
+      const z = R.endZone(thin.tongue + thin.gator, P.slab.length);
+      const mx = R.endOffset(0, thin.tongue, thin.gator, z, 1, 0);
+      ok('端の最大変位が 舌 + ワニ口 に一致', Math.abs(mx - (thin.tongue + thin.gator)) < 0.01,
+         `${mx.toFixed(1)} mm`);
+      A.bus.emit('CMD_RESET');
+    }
+  }
+
   Res.failed = Res.checks.filter(c => !c.pass).length;
   return Res;
 });

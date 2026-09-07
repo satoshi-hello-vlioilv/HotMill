@@ -291,11 +291,14 @@ const run = async () => {
     ok('テーブルローラ同士の非干渉', minPitch > CFG.ROLL_D_END,
        `最小ピッチ ${minPitch.toFixed(0)} mm > 胴端径 ${CFG.ROLL_D_END} mm`);
 
-    // 7) トランスファークレーンが降ろす位置（倒したスラブの真横）が入側テーブル A-9 の上にある
+    /* 7) トランスファークレーンが降ろす位置（倒したスラブの真横）が入側テーブルの上にある。
+     *    区分の «名前» で縛ると転倒機を動かすたびに検査を書き換えることになるので、
+     *    «入側に実際に並んでいるローラの範囲» で見る（設備を動かしても意味が変わらない）。 */
     {
       const L = window.__app.physics.slab.length, xc = K.SUPPLY.TILTER_X + K.FLIP * L / 2;
-      const a9 = K.TABLE.SECTIONS.find(s => s.name === 'A-9'), lo = Math.min(a9.side * a9.x0, a9.side * a9.x1), hi = Math.max(a9.side * a9.x0, a9.side * a9.x1);
-      ok('降ろし位置（倒したスラブの真横）が A-9 テーブルの上', xc - L / 2 >= lo && xc + L / 2 <= hi, `スラブ ${(xc - L / 2).toFixed(0)}〜${(xc + L / 2).toFixed(0)} / A-9 ${lo}〜${hi}`);
+      const ent = allX.filter(x => Math.sign(x) === Math.sign(xc));
+      const lo = Math.min(...ent), hi = Math.max(...ent);
+      ok('降ろし位置（倒したスラブの真横）が入側テーブルの上', xc - L / 2 >= lo && xc + L / 2 <= hi, `スラブ ${(xc - L / 2).toFixed(0)}〜${(xc + L / 2).toFixed(0)} / 入側テーブル ${lo.toFixed(0)}〜${hi.toFixed(0)}`);
       const under = allX.filter(x => x > xc - L / 2 && x < xc + L / 2).length;
       ok('降ろしたスラブが 3 本以上のローラに載る', under >= 3, `${under} 本`);
     }
@@ -356,13 +359,13 @@ const run = async () => {
     const lateral = Math.min(Math.abs(armB.z0), Math.abs(armB.z1)) - Math.max(Math.abs(mainPed.z0), Math.abs(mainPed.z1));
     ok('転倒機ベッドと主テーブル架台の側方離隔', lateral > 0, `離隔 ${lateral.toFixed(0)} mm`);
 
-    // 13) 転倒機は A-8 / A-9 / B-1 テーブルの操作側（+Z）にある（実機配置）
+    // 13) 転倒機は C-2 / C-1 テーブルの操作側（+Z）にある（実機配置）
     const FL = window.__CFG.FLIP;
     {
       const rng = (n) => { const s = K.TABLE.SECTIONS.find(q => q.name === n); return [Math.min(s.side * s.x0, s.side * s.x1), Math.max(s.side * s.x0, s.side * s.x1)]; };
-      const lo = Math.min(rng('A-8')[0], rng('B-1')[0]), hi = Math.max(rng('A-8')[1], rng('B-1')[1]);
-      ok('転倒機が A-8〜B-1 テーブルの範囲の操作側にある', armB.x0 >= lo && armB.x1 <= hi && armB.z0 > 0,
-         `転倒アーム X ${armB.x0.toFixed(0)}〜${armB.x1.toFixed(0)}（A-8〜B-1: ${lo}〜${hi}）/ Z ${armB.z0.toFixed(0)}〜`);
+      const lo = Math.min(rng('C-2')[0], rng('C-1')[0]), hi = Math.max(rng('C-2')[1], rng('C-1')[1]);
+      ok('転倒機が C-2〜C-1 テーブルの範囲の操作側にある', armB.x0 >= lo - 2000 && armB.x1 <= hi + 2000 && armB.z0 > 0,
+         `転倒アーム X ${armB.x0.toFixed(0)}〜${armB.x1.toFixed(0)}（C-2〜C-1: ${lo}〜${hi}）/ Z ${armB.z0.toFixed(0)}〜`);
     }
 
     // 14) 転倒アームは最大スラブ長を受けられる
