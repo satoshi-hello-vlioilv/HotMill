@@ -116,7 +116,18 @@ const out = await page.evaluate((EPS) => {
   }
 
   /* --- 3. 運転: 先端・後端どちらの屑も ライン下の受け → 傾斜コンベア → 屑箱 と進む --- */
+  // この評価器は «先端と後端の両方を切る» 経路を見るためのもの。既定ロットは
+  // 板が短く先端しか切らないことがあるので、両端を切るロットを明示して据える
+  // （評価器が «たまたまの既定» に依存しないようにする）。
+  const setLot = () => {
+    const sel = document.getElementById('sel-alloy'), len = document.getElementById('rng-init-len');
+    if (sel) sel.value = 'A3003';
+    if (len) len.value = len.max;
+    // UI の変更は 180 ms 遅らせて反映されるので、待たずにその場で効かせる
+    A.bus.emit('CMD_SET_SLAB', A.ui.dims());
+  };
   {
+    setLot();
     window.__startAuto(false);
     const seqs = new Map(), ends = new Map();     // ピースごとの経過（混ぜると順序が読めない）
     let n = 0, minY = 1e9, maxCx = -1e9, minCx = 1e9, bedBack = false, sawDown = false;
@@ -165,6 +176,7 @@ const out = await page.evaluate((EPS) => {
     R.dig = { pen: 0, at: null, stage: null };
     // すでに 3 で運転し終えているので、もう一度最初から «描画つきで» 追う
     A.bus.emit('CMD_RESET');
+    setLot();
     window.__startAuto(false);
     const fixed = [chute, pit, box, FV.cropShear.children.find(o => o.name === '75mmシャー架構')].filter(Boolean);
     const ax = -TL.convRotX, az = -TL.chuteRotZ;  // コンベア／シュートの傾きを打ち消す座標系

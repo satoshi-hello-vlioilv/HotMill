@@ -251,7 +251,15 @@ const out = await page.evaluate(() => {
       spreadPiece = px.length ? Math.max(...px) - Math.min(...px) : 0;
     }
     R.scrap = { spreadBefore: mm(spreadBefore), spreadPiece: mm(spreadPiece) };
-    ok('端材が板端の変形（舌・ワニ口）を保っている', spreadPiece > 0.5 * spreadBefore && spreadBefore > 20, `切断前の先端の広がり ${mm(spreadBefore)} mm / 端材 ${mm(spreadPiece)} mm`);
+    // 端材が持てる «広がり» は、その端材自身の長さまで。張り出しが 1 カットより長ければ
+    // 途中で平らに打ち切られ、残りは次のカットへ持ち越す（設計どおりの挙動）。
+    // したがって «全体の張り出しの半分» ではなく «端材の長さで頭打ちにした値» と比べる。
+    let pieceLen = 0;
+    if (piece) { const b = new T.Box3().setFromObject(piece); pieceLen = (b.max.x - b.min.x) / sc; }
+    const cover = Math.min(spreadBefore, pieceLen);
+    R.scrap.pieceLen = mm(pieceLen);
+    ok('端材が板端の変形（舌・ワニ口）を保っている', spreadPiece > 0.5 * cover && spreadBefore > 20,
+       `切断前の先端の広がり ${mm(spreadBefore)} mm / 端材の広がり ${mm(spreadPiece)} mm（端材の長さ ${mm(pieceLen)} mm）`);
     // 屑の行き先: 先端・後端とも «ラインの下の受け → 傾斜コンベア → 操作側の屑箱» の
     // 1 系統。搬送距離が長い（コンベアだけで十数秒）ので、そのぶん時間を進めて確かめる。
     const minYs = new Map();                                      // 屑が «床下を通った» ことの証拠
