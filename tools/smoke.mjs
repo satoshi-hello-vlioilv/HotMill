@@ -1,12 +1,12 @@
 // 起動 → 自動運転を固定ステップで完走 → 主要な結果を出す（最短の健全性確認）
 import { openApp, installHelpers } from './harness.mjs';
 const target = process.argv[2] ? +process.argv[2] : null, alloy = process.argv[3] && process.argv[3] !== '-' ? process.argv[3] : null;
-const noStrip = process.argv.includes('nostrip');   // 板面クーラント OFF で走らせる
+const noStrip = process.argv.includes('nostrip');   // 板面冷却«なし»で走らせる
 const { browser, page, errors } = await openApp({ viewport: { width: 900, height: 520 }, quiet: false });
 await installHelpers(page);
 const out = await page.evaluate(({ target, alloy, noStrip }) => {
   const A = window.__app, P = A.physics, K = window.__CFG;
-  if (noStrip) { const c = document.getElementById('chk-stripcool'); c.checked = false; c.dispatchEvent(new Event('change')); }
+  if (noStrip) document.querySelector('#seg-strip-cool button[data-mode="NONE"]').click();
   if (alloy) { const s = document.getElementById('sel-alloy'); s.value = alloy; s.dispatchEvent(new Event('change')); }
   if (target) { const r = document.getElementById('rng-target'); r.value = target; r.dispatchEvent(new Event('input')); }
   return new Promise(res => setTimeout(() => {

@@ -27,8 +27,7 @@ const out = await p.evaluate(() => {
       bed:{ x:mm(FV.cropBed.position.x/sc + FV.cropShear.position.x/sc), lift:mm(FV.cropBed.position.y/sc - K.MILL.PASS_LINE) },
       cut:{ i:f.cropIndex, n:f.cropCuts, each:f.cropEach, total:f.cropTotal, need:mm(f.cropNeed) },
       piece:{ n:f.scraps.length, stage:sc0?.stage, x:pm?mm(pm.position.x/sc):null, y:pm?mm(pm.position.y/sc):null,
-              z:pm?mm(pm.position.z/sc):null, len:mm(f.cropLen), rest:f.scrapRest,
-              push:+f.cropPush.toFixed(2), face:mm(FV.cropPusher.position.z/sc) },
+              z:pm?mm(pm.position.z/sc):null, len:mm(f.cropLen), rest:f.scrapRest },
       shearX:mm(S.X) };
   };
 

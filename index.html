@@ -433,7 +433,7 @@ body.sb-collapsed #btn-expand { display:block; }
 
   <div id="panels">
 
-    <details class="sec" open id="sec-material">
+    <details class="sec" id="sec-material">
       <summary><span class="step">1</span> 素材と目標<span class="sum" id="sum-material"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="fld">
@@ -484,9 +484,14 @@ body.sb-collapsed #btn-expand { display:block; }
       </div>
     </details>
 
-    <details class="sec" open id="sec-sched">
+    <details class="sec" id="sec-sched">
       <summary><span class="step">2</span> パススケジュール<span class="sum" id="sum-sched"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
+        <div class="fld">
+          <div class="top"><span class="k">板面冷却</span><span class="v" id="lbl-strip-cool"></span></div>
+          <div class="seg" role="group" aria-label="板面冷却" id="seg-strip-cool"></div>
+          <div class="derived" id="der-strip-cool"></div>
+        </div>
         <table class="sched">
           <thead><tr><th>Pass</th><th>出側厚</th><th>圧下率</th><th>速度</th><th>荷重</th></tr></thead>
           <tbody id="sched-body"></tbody>
@@ -495,7 +500,7 @@ body.sb-collapsed #btn-expand { display:block; }
       </div>
     </details>
 
-    <details class="sec" open id="sec-run">
+    <details class="sec" id="sec-run">
       <summary><span class="step">3</span> 運転<span class="sum" id="sum-run"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="seg" role="group" aria-label="運転モード" style="margin-bottom:11px;">
@@ -554,8 +559,6 @@ body.sb-collapsed #btn-expand { display:block; }
       <div class="body">
         <div class="row"><span class="lbl">ロールクーラント<small>水主体エマルジョン（油分約6%）のロール噴射</small></span>
           <label class="switch"><input type="checkbox" id="chk-coolant" checked><span class="sl"></span></label></div>
-        <div class="row"><span class="lbl">板面クーラント<small>入側 A-5 テーブル・出側サイドガイド上のヘッダから板の上面へ噴射（熱計算に反映）</small></span>
-          <label class="switch"><input type="checkbox" id="chk-stripcool" checked><span class="sl"></span></label></div>
         <div class="row"><span class="lbl">水蒸気<small>エマルジョン（水主体）の蒸発</small></span>
           <label class="switch"><input type="checkbox" id="chk-steam" checked><span class="sl"></span></label></div>
         <div class="row"><span class="lbl">装入アニメーション<small>炉出し→転倒→トランスファークレーン</small></span>
@@ -700,6 +703,19 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.4.0', base: 'd79d7e1', date: '2026-09-07', title: 'メニューは既定で畳む、板面冷却の 3 方式、スケジュール生成の発散を止める', items: [
+      { t: '区分（メニュー）は既定ですべて畳むようにした。畳んでも見出しの要約で状態は分かる', w: 'details.sec / UIManager._summaries' },
+      { t: '板面冷却を «水冷 / 空冷 / なし» の 3 択に。熱計算・噴射の描画・諸元表が同じ 1 式を見る', w: 'MATERIAL.STRIP_COOL / PhysicsEngine.stripFilm' },
+      { t: '冷却の選択はスケジュール表のすぐ上へ置いた（原因を結果より上に置く）', w: 'UIManager._buildStripCool' },
+      { t: '抜熱を全項とも指数緩和にし、合計も «いちばん冷たい受け手» で止めた（実測 −257,177 ℃ → 90 ℃）', w: 'Rolling.passTempChange' },
+      { t: '変形抵抗を材質ごとの漸近値 KF_MAX へ滑らかに頭打ちさせた（30 ℃ の A7075 で 2,450 MPa の発散）', w: 'Rolling.flowStress / ALLOYS[].KF_MAX' },
+      { t: '行き詰まったとき残りを 1 パスへ押し込むのをやめ、噛み込み角・圧下率・荷重の上限を全パスへ効かせた', w: 'buildSchedule.capacity' },
+      { t: '圧下量を決める側と最終表を作る側で別々だった速度・パス時間・荷重の定義を統合（表で 55 % 超過していた）', w: 'vSeed / passSecs / layerOf' },
+      { t: '熱間域を下回るパスは «成立しない» ではなく警告に（硬いだけで圧延自体はできる）', w: 'Rolling.scheduleFeasibility' },
+      { t: '屑がシュートの刃口を離れた直後に水平へ戻り、後半がシュートへ食い込んでいた（34 → 12 mm）', w: 'FinishController PITFALL' },
+      { t: '行コメントが 3 つの初期化を飲み込んでいた（cropEach / cropTotal / cropNeed が未初期化）', w: 'FinishState.reset' },
+      { t: 'パススケジュール生成の評価器を新設（504 通りを総当たり、11 項目）', w: 'tools/schedtrace.mjs' },
+    ] },
     { v: '1.3.0', base: 'e222a85', date: '2026-09-06', title: '既定ロットを A5052・呼び厚 560 mm へ', items: [
       { t: '既定の材質を A5052、呼び厚（鋳造厚）を 560 mm にした', w: 'MATERIAL.ALLOY / SLAB.CAST_DEFAULT' },
       { t: '«既定は選択肢の先頭» という暗黙の決めをやめ、CAST_DEFAULT を明示した', w: 'SLAB.CAST_DEFAULT' },
@@ -1321,17 +1337,21 @@ const CONFIG = {
    *   変形抵抗 kf = C·exp(−b(T − 450))·ε̇^m [MPa]  （C: 450 ℃・ε̇ = 1/s の値）
    *   b: 温度依存性（大きいほど低温で急に硬くなる）、m: ひずみ速度感受性
    *   T_ROLL: 熱間圧延の温度域、T_COIL: 巻取温度の目安
+   *   KF_MAX: 変形抵抗の頭打ち [MPa]。C·exp(−b·ΔT) は熱間域に当てた式なので、そのまま
+   *           低温へ延ばすと指数で発散する（実測: 30 ℃ の A7075 で 2,450 MPa）。実際には
+   *           動的回復が止まったところで室温の変形抵抗（加工硬化後 ≒ 引張強さ）に漸近する。
+   *           その漸近値を材質ごとに置き、flowStress() が滑らかに頭打ちさせる。
    *   end: 端部欠陥（ワニ口・舌）の出やすさ ＝ クロップ長の材質係数
    *   RHO/CP/K: 密度・比熱・熱伝導率、E: 熱間域の縦弾性係数 [GPa]（反りの自重たわみに効く）
    * 数値は熱間圧延域の公表データからの代表値（推定を含む）。 */
   ALLOYS: {
-    A1050: { name: 'A1050  純アルミ',        series: 1000, C: 20, b: 0.0050, m: 0.15, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
-    A3003: { name: 'A3003  Al-Mn（既定）',    series: 3000, C: 32, b: 0.0055, m: 0.13, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
-    A4045: { name: 'A4045  Al-Si（ろう材）',  series: 4000, C: 30, b: 0.0060, m: 0.12, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
-    A5052: { name: 'A5052  Al-2.5Mg',       series: 5000, C: 52, b: 0.0060, m: 0.12, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
-    A5083: { name: 'A5083  Al-4.5Mg',       series: 5000, C: 75, b: 0.0068, m: 0.11, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
-    A6061: { name: 'A6061  Al-Mg-Si',       series: 6000, C: 42, b: 0.0062, m: 0.12, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
-    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    series: 7000, C: 85, b: 0.0080, m: 0.10, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
+    A1050: { name: 'A1050  純アルミ',        series: 1000, C: 20, b: 0.0050, m: 0.15, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
+    A3003: { name: 'A3003  Al-Mn（既定）',    series: 3000, C: 32, b: 0.0055, m: 0.13, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
+    A4045: { name: 'A4045  Al-Si（ろう材）',  series: 4000, C: 30, b: 0.0060, m: 0.12, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
+    A5052: { name: 'A5052  Al-2.5Mg',       series: 5000, C: 52, b: 0.0060, m: 0.12, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
+    A5083: { name: 'A5083  Al-4.5Mg',       series: 5000, C: 75, b: 0.0068, m: 0.11, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
+    A6061: { name: 'A6061  Al-Mg-Si',       series: 6000, C: 42, b: 0.0062, m: 0.12, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
+    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    series: 7000, C: 85, b: 0.0080, m: 0.10, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
   },
 
   MATERIAL: {
@@ -1365,7 +1385,29 @@ const CONFIG = {
       H_NB: 12000, H_FILM: 700,      // 核沸騰 ／ 膜沸騰の熱伝達率 [W/m²K]
       ZONE: 2400,                    // ミル前後の噴射域。板がここを通る時間だけ効く
       WET_TOP: 1.0, WET_BOT: 0.18, WET_SIDE: 1.0,   // 各面の濡れ面積割合
-      GUIDE_TOP: 1.0, ENABLED: true, // 板面クーラント（門型ヘッダ）。ENABLED は表示メニュー連動
+      GUIDE_TOP: 1.0,                // 板面ヘッダが濡らす上面の割合
+    },
+    /* 板面冷却の方式。テーブル上の門型ヘッダ（入側 A-5・出側サイドガイド上、計 4 本）から
+     * 板の上面へ «何を吹くか» を選ぶ。設備としての選択肢なので 3 択にしてある:
+     *   WATER 水冷 —— エマルジョンを噴射する。板面はライデンフロスト点を超えているので
+     *                  膜沸騰になり、熱伝達率は落ち、熱の受け手も液温ではなく蒸気膜の
+     *                  飽和温度になる（H/T は COOLANT と boiling() が決める）。白煙が立つ。
+     *   AIR   空冷 —— 送風（エアブロー）だけ。強制対流なので熱伝達率は水冷の 1/6 ほどだが、
+     *                  受け手が周囲温度そのものなので温度差は大きく取れる。白煙は立たない。
+     *   NONE  なし —— ヘッダを止める。放射・自然対流・テーブルローラ接触だけが残る。
+     * 熱計算（予測 Rolling.passTempChange / 運転 PhysicsEngine._thermal）・噴射の描画・
+     * 水蒸気・諸元表は、すべて PhysicsEngine.stripFilm() を通してこの 1 か所を見る。 */
+    STRIP_COOL: {
+      MODE: 'WATER',
+      MODES: {
+        WATER: { key: 'WATER', name: '水冷', icon: 'fa-droplet', wet: true, spray: 'DROP',
+                 desc: 'エマルジョンを板の上面へ噴射します。膜沸騰域なので熱の受け手は蒸気膜（105 ℃）で、抜熱がいちばん大きい方式です。' },
+        AIR:   { key: 'AIR',   name: '空冷', icon: 'fa-wind',    H: 120, spray: 'AIR',
+                 desc: 'クーラントを使わず送風だけで冷やします。熱伝達率は水冷の 1/6 ほどで、板面は水冷より高温のまま進みます。' },
+        NONE:  { key: 'NONE',  name: 'なし', icon: 'fa-ban',     H: 0,   spray: null,
+                 desc: 'ヘッダを止めます。放射・自然対流・テーブルローラへの接触だけが残り、板はほとんど冷えません。' },
+      },
+      get mode() { return CONFIG.MATERIAL.STRIP_COOL.MODES[CONFIG.MATERIAL.STRIP_COOL.MODE]; },
     },
     /* テーブルローラとの接触による下面の抜熱。
      * ローラは胴端 Φ281.6 → 中央 Φ219.6 の «鼓の逆» 形なので、平らな板は自分の板幅の位置で
@@ -1387,7 +1429,10 @@ const CONFIG = {
    * 自重によるたわみ: テーブル上では端部が浮き上がり長 ℓ = √(2·EI·κ/q) だけ持ち上がり
    * （先端高さ κℓ²/4）、ロールから出た直後の先端は片持ち梁として上反り→自重で垂れる。 */
   CURL: { GAIN: 0.04 },
-  PROCESS: { MU: 0.25, TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.70, LAYER_LOAD_K: 1.25,
+  /* LOAD_MARGIN: スケジュールを組むときに使う «常用最大に対する余裕»。表層硬化ぶん
+   * （LAYER_LOAD_K）は予測荷重の側に掛けてあるので、ここはモデルの不確かさだけを見る。
+   * LAYER_LOAD_K: 表層が冷えて層平均の変形抵抗が上がるぶん。厚板ほど残る（薄板は伝導で均る）。 */
+  PROCESS: { MU: 0.25, TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.88, LAYER_LOAD_K: 1.25,
              ACCEL: 110, BITE_ANGLE_MAX: 0.42, PASS_TIME_MAX: 150 },  // mpm/s, rad(24°), s
 
   // パススケジュールは板厚・板幅から Rolling.buildSchedule() が生成する（初期値は空）
@@ -1630,9 +1675,18 @@ const Drive = {
 const Rolling = {
   /** 選択中の材質 */
   alloy(key = CONFIG.MATERIAL.ALLOY) { return CONFIG.ALLOYS[key] || CONFIG.ALLOYS[CONFIG.MATERIAL.ALLOY]; },
-  /** 変形抵抗 [MPa]。温度が低いほど、ひずみ速度が高いほど大きい。温度依存性は材質で異なる。 */
+  /**
+   * 変形抵抗 [MPa]。温度が低いほど、ひずみ速度が高いほど大きい。温度依存性は材質で異なる。
+   * 熱間域の実験式 C·exp(−b·(T−TREF))·ε̇^m をそのまま低温へ延ばすと指数で発散するので、
+   * 材質ごとの漸近値 KF_MAX へ «滑らかな最小値»（p ノルム, p=4）で頭打ちさせる。
+   * 熱間域（kf ≦ 0.4·KF_MAX）では補正が 0.5 % 未満で、既存の荷重計算を動かさない。
+   */
   flowStress(T, strainRate, alloy = Rolling.alloy()) {
-    return alloy.C * Math.exp(-alloy.b * (T - CONFIG.MATERIAL.TREF)) * Math.pow(Math.max(strainRate, 0.01), alloy.m);
+    const kf = alloy.C * Math.exp(-alloy.b * (T - CONFIG.MATERIAL.TREF)) * Math.pow(Math.max(strainRate, 0.01), alloy.m);
+    const cap = alloy.KF_MAX;
+    if (!(cap > 0)) return kf;
+    const r = kf / cap;
+    return kf / Math.pow(1 + r * r * r * r, 0.25);
   },
   /** 材料温度の下限 [℃]。圧延中は熱間域の下限、巻取中は巻取温度を基準にする。 */
   tempFloor(finishing, alloy = Rolling.alloy()) {
@@ -1808,28 +1862,38 @@ const Rolling = {
     const M = CONFIG.MATERIAL, CO = M.COOLANT, TT = M.TABLE_TOUCH, rc = alloy.RHO * alloy.CP;
     const r = Rolling.solve(hIn, hOut, width, speedMpm, T, 0, alloy);
     const v = Math.max(Math.abs(speedMpm) / 60 * 1000, 1);          // mm/s
-    const tc = r.Ld / v;
-    const x = 2 * M.H_ROLL * tc / (rc * (hOut / 1000));
-    const chill = (T - M.T_ROLL) * (1 - Math.exp(-x));
     // パス中の板は入側厚の部分と出側厚の部分が混在する。表面からの放熱に効く実効板厚は
     // 体積 ÷ 平均長さ ＝ 2·hOut/(1 + hOut/hIn)（運転時の hEff と同じ考え方）
     const hEff = 2 * hOut / (1 + hOut / hIn) / 1000;
-    // クーラント: 噴射域 COOLANT.ZONE を通過する時間だけ効く。板面は膜沸騰域なので、
-    // 熱伝達率も «熱の受け手温度» も PhysicsEngine.boiling() から取る（運転時と同じ前提）。
+    /* 抜熱はすべて «集中熱容量の指数緩和» で書く —— drop(受け手温度, hA/(ρc·h) の積算) は
+     * (T − T_sink)·(1 − e^−x) を返し、どれだけ長く冷やしても受け手温度を通り越さない。
+     * 旧版は «hA·ΔT·時間 / ρc·h» という 1 次（陽解法）の形だったため、パス時間が長いと
+     * 1 パスで受け手温度を大きく下回り、変形抵抗が発散した（実測: 予測 −257,177 ℃・荷重 ∞）。
+     * 熱力学第二法則に反する値がスケジュール生成へ入り込まないよう、式の形で封じる。 */
+    const drop = (Tsink, x) => (T - Tsink) * (1 - Math.exp(-Math.max(x, 0)));
+    // ロール抜熱: ロールバイトを通る接触時間 Ld/v のあいだだけ、両面がロールに抱かれる
+    const chill = drop(M.T_ROLL, 2 * M.H_ROLL * (r.Ld / v) / (rc * (hOut / 1000)));
+    // クーラント: 噴射域を通過する時間だけ効く。板面は膜沸騰域なので、熱伝達率も
+    // «熱の受け手温度» も PhysicsEngine.boiling() から取る（運転時と同じ前提）。
     // 濡れ面積は面ごとに違い、側面は板厚 / 板幅の比で上下面と同じ «面» 換算にする。
     const bo = PhysicsEngine.boiling(T);
-    const gz = CO.ENABLED ? 4 * CONFIG.TABLE.GUIDE.HEADER.ZONE : 0;
-    const wet = (CO.WET_TOP + CO.WET_BOT) * CO.ZONE + CO.GUIDE_TOP * gz
+    const wet = (CO.WET_TOP + CO.WET_BOT) * CO.ZONE
               + CO.WET_SIDE * CO.ZONE * 2 * hEff * 1000 / width;      // 側面（幅方向に一様）
-    const cool = bo.h * wet * (T - bo.T) / v / (rc * hEff);
+    const cool = drop(bo.T, bo.h * wet / v / (rc * hEff));
+    // 板面冷却（門型ヘッダ）: 冷却方式（水冷 / 空冷 / なし）で媒体そのものが変わる
+    const sf = PhysicsEngine.stripFilm(T);
+    const gz = 4 * CONFIG.TABLE.GUIDE.HEADER.ZONE;
+    const guide = sf.h > 0 ? drop(sf.T, sf.h * CO.GUIDE_TOP * gz / v / (rc * hEff)) : 0;
     // テーブルローラとの接触（下面のみ、両エッジ寄りの 2 本の線）。パス中ずっと効く。
-    const touch = TT.H * Math.min(1, 2 * TT.BAND / width) * Math.min(1, TT.ARC / TT.PITCH)
-                * (T - TT.T) * passTime / (rc * hEff);
-    // パス時間 ≒ 材長 / 速度。板厚が薄いほど表面放熱で冷えやすい。
+    const touch = drop(TT.T, TT.H * Math.min(1, 2 * TT.BAND / width) * Math.min(1, TT.ARC / TT.PITCH)
+                             * passTime / (rc * hEff));
+    // 表面放熱。放射は 4 乗則なので、その場の温度差から «見かけの熱伝達率» に直して同じ形に載せる。
     const Tk = T + 273.15, Ak = M.T_AMBIENT + 273.15;
-    const q = M.EMISSIVITY * 5.67e-8 * (Tk ** 4 - Ak ** 4) + M.H_AIR * (T - M.T_AMBIENT);
-    const surface = 2 * q * passTime / (rc * hEff);
-    return r.heat - chill - cool - touch - surface;
+    const hRad = M.EMISSIVITY * 5.67e-8 * (Tk * Tk + Ak * Ak) * (Tk + Ak);
+    const surface = drop(M.T_AMBIENT, 2 * (hRad + M.H_AIR) * passTime / (rc * hEff));
+    // 受け手が複数あるので、合計が «いちばん冷たい受け手» を通り越さないところで止める
+    const floor = Math.min(M.T_AMBIENT, M.T_ROLL, TT.T, bo.T, sf.h > 0 ? sf.T : Infinity);
+    return Math.max(r.heat - chill - cool - guide - touch - surface, Math.min(0, floor - T));
   },
 
   /**
@@ -1844,8 +1908,8 @@ const Rolling = {
     const M = CONFIG.MILL, P = CONFIG.PROCESS, R = M.WR_D / 2;
     const dBite = 2 * R * (1 - Math.cos(P.BITE_ANGLE_MAX));
     const vMax = Drive.maxSpeed();
-    // 荷重の余裕: 運転時は表層が冷えて変形抵抗が層平均で上がるため、集中定数の予測より
-    // 実荷重が最大 3 割ほど高くなる。常用最大の 70 % で組めば実荷重が常用最大を超えない。
+    // 荷重の余裕: 表層が冷えて変形抵抗が層平均で上がるぶんは layerOf() で «予測荷重そのもの» に
+    // 織り込むので、ここの余裕は «モデルの不確かさ» だけを見る（常用最大の LOAD_MARGIN まで）。
     const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * 0.84;
     // 圧延が進むと材料温度が下がり変形抵抗が上がる。生成時にもその推移を織り込む。
     const drafts = [], temps = [];
@@ -1855,9 +1919,18 @@ const Rolling = {
     const sideUsable = (dir) => (dir > 0 ? Math.abs(CONFIG.TABLE.X_MAX) : Math.abs(CONFIG.TABLE.X_MIN))
                                 - CONFIG.SAFE_CLEAR - 4000;
     let coilPass = -1;
+    /* 速度の見当。«圧下量を決める側» と «最終表を作る側» が別々の見当を持つと、同じパスを
+     * 違う速度＝違うパス時間＝違う温度で評価してしまい、選んだときは荷重上限内だったパスが
+     * 表では上限を大きく超える（実測で 55 % 超過）。板厚だけの関数にして 1 か所にまとめる。 */
+    const vSeed = (hh) => Math.round(Num.lerp(55, vMax, Num.clamp((h0 - hh) / Math.max(h0 - hTarget, 1e-6), 0, 1)) / 5) * 5;
+    // 表層硬化ぶんの係数。表層の冷えは厚板ほど残る（薄板は伝導で均される）ので板厚で効かせる。
+    const layerOf = (hOut) => 1 + (P.LAYER_LOAD_K - 1) * Num.clamp((hOut - 10) / 50, 0, 1);
+    // パス時間 ＝ 材長 / 速度。75 mm シャーをまたぐパスだけ先端切断の往復ぶんを足す。
+    const passSecs = (hIn2, hOut, v) => Rolling.passTime(L0 * h0 / hOut, v)
+      + (hIn2 > CONFIG.CROP_SHEAR.MAX_TH && hOut <= CONFIG.CROP_SHEAR.MAX_TH ? 150 : 0);
     while (h > hTarget + 0.5 && drafts.length < 30) {
       const idx = drafts.length, dir = CONFIG.FLIP * (idx % 2 === 0 ? 1 : -1);
-      const vRef = Num.lerp(60, vMax, Num.clamp(1 - (h - hTarget) / (h0 - hTarget), 0, 1));
+      const vRef = vSeed(h);
       const capRatio = coil ? 0.50 : 0.40;                     // 張力をかける巻取パスは大圧下できる
       const dFin = h - hTarget;
       // 荷重は «このパスで実際に出せる速度» で通したときの «パスの終わり» の温度で見る。
@@ -1865,20 +1938,30 @@ const Rolling = {
       // 参照速度で組むと、薄板の後段（特に巻取パス）で実荷重が上限を超える。
       const vFor = (dd) => { let v = vRef; while (v > 10 && Rolling.solve(h, h - dd, width, v, T, 0, al).powerKW > pLimit) v -= 5; return v; };
       const Tend = (dd) => { const v = vFor(dd);
-        return Math.min(T, T + Rolling.passTempChange(h, h - dd, v, T, Rolling.passTime(L0 * h0 / (h - dd), v), al)); };
-      const forceAt = (dd) => Rolling.solve(h, h - dd, width, vFor(dd), Tend(dd), 0, al).forceTon;
-      let d;
-      if (dFin <= Math.min(dBite, h * capRatio) && forceAt(dFin) <= fLimit) { d = dFin; if (coil) coilPass = idx; }
-      else {
-        d = Math.min(dBite, h * 0.40, dFin);
-        if (forceAt(d) > fLimit) {
-          let lo = 1, hi = d;                                  // 荷重上限に収まる圧下量を二分探索
+        return Math.min(T, T + Rolling.passTempChange(h, h - dd, v, T, passSecs(h, h - dd, v), al)); };
+      const forceAt = (dd) => Rolling.solve(h, h - dd, width, vFor(dd), Tend(dd), 0, al).forceTon * layerOf(h - dd);
+      /* このパスで «設備が実際に出せる» 最大圧下量。噛み込み角・圧下率・荷重の 3 つで律速する。
+       * 材料やテーブルの都合ではなく «ミルの能力» なので、どのパスでも例外なく効く。
+       * ここを通さない圧下量を 1 パスでも作ると、そのパスの加工発熱と荷重が非物理な値に
+       * なる（実測: 26.9 → 4.1 mm を 1 パスに押し込んだとき +1,247 K・125,835 t）。 */
+      const capacity = () => {
+        let c = Math.min(dBite, h * capRatio, dFin);
+        if (c <= 0) return 0;
+        if (forceAt(c) > fLimit) {
+          let lo = 0, hi = c;                                  // 荷重上限に収まる圧下量を二分探索
           for (let k = 0; k < 22; k++) {
             const mid = (lo + hi) / 2;
             if (forceAt(mid) > fLimit) hi = mid; else lo = mid;
           }
-          d = lo;
+          c = lo;
         }
+        return c;
+      };
+      const cap = capacity();
+      let d;
+      if (dFin <= cap) { d = dFin; if (coil) coilPass = idx; }
+      else {
+        d = cap;
         const hMin = L0 * h0 / sideUsable(dir);                // これ以上薄くするとテーブルに載らない
         d = Math.min(d, h - hMin);
         // 各パスは所定時間内に通し切る必要がある。そのために必要な速度で定格動力を
@@ -1889,17 +1972,19 @@ const Rolling = {
           if (Rolling.solve(h, hOut2, width, vNeed, T, 0, al).powerKW <= pLimit) break;
           d *= 0.85;
         }
-        if (d < 1) {                                           // 行き詰まり → 残りを最終パスで巻き取る
-          if (coil) { temps.push(T); drafts.push(dFin); coilPass = drafts.length - 1; }
+        if (d < 1) {
+          /* 行き詰まり —— 板が伸びてテーブルに載らなくなった。コイルなら最後の 1 パスだけは
+           * 巻取機へ巻き取るのでテーブル制約から外れるが、噛み込み角と荷重の制約からは
+           * 外れない。出せる最大圧下でもう 1 パスだけ通し、目標へ届かなければ «届かない»
+           * ままにする（届いたことにして 1 パスへ押し込むと、上の非物理な値が出る）。 */
+          if (coil && cap >= 1) { temps.push(T); drafts.push(cap); coilPass = drafts.length - 1; }
           break;
         }
       }
       temps.push(T); drafts.push(d);
-      let extra = 0;
-      if (h > CONFIG.CROP_SHEAR.MAX_TH && (h - d) <= CONFIG.CROP_SHEAR.MAX_TH)
-        extra = 150;                                          // 75 mm シャーへの往復ぶん
-      T += Rolling.passTempChange(h, h - d, vRef, T,
-             Rolling.passTime(L0 * h0 / (h - d), vRef) + extra, al);
+      // 温度の積み上げも «そのパスで実際に出す速度» で行う（荷重を見たときと同じ前提）
+      const vUse = vFor(d);
+      T += Rolling.passTempChange(h, h - d, vUse, T, passSecs(h, h - d, vUse), al);
       h -= d;
       if (coilPass === idx) break;
     }
@@ -1909,10 +1994,9 @@ const Rolling = {
       temps.splice(i, 0, temps[i]);
       if (coilPass >= i) coilPass++;
     }
-    const n = drafts.length || 1;
     // 速度は質量流に合わせて上げ、主機動力の定格で頭打ちにする。ただし温度は選んだ速度に
     // 依存する（低速ほどロールに熱を奪われる）ので、速度→温度→速度 を反復して収束させる。
-    let speeds = drafts.map((d, i) => Math.round(Num.lerp(55, vMax, n > 1 ? i / (n - 1) : 1) / 5) * 5);
+    let speeds = (() => { let hh = h0; return drafts.map((d) => { const v = vSeed(hh); hh -= d; return v; }); })();
     const forces = [], tEnds = [];
     for (let it = 0; it < 5; it++) {
       let hh = h0, TT = temp;
@@ -1922,14 +2006,12 @@ const Rolling = {
         let v = speeds[i];
         while (v > 10 && Rolling.solve(hh, hOut, width, v, TT, 0, al).powerKW > pLimit) v -= 5;
         const T0 = TT;
-        TT += Rolling.passTempChange(hh, hOut, v, TT, Rolling.passTime(L0 * h0 / hOut, v), al);
-        // 予測荷重: パス終端温度で見た荷重に、表層硬化ぶんを掛ける。表層の冷えは厚板ほど
-        // 残る（薄板は伝導で均される）ので、係数は板厚 10 mm で 1.0、60 mm 以上で LAYER_LOAD_K。
-        // 巻取パスは前方張力で荷重が下がる（運転時と同じ式）
+        TT += Rolling.passTempChange(hh, hOut, v, TT, passSecs(hh, hOut, v), al);
+        // 予測荷重: パス終端温度で見た荷重に表層硬化ぶん layerOf() を掛ける（圧下量を
+        // 決めるときと同じ定義）。巻取パスは前方張力で荷重が下がる（運転時と同じ式）。
         const isCoilPass = coil && i === (coilPass >= 0 ? coilPass : drafts.length - 1);
         const tens = isCoilPass ? Rolling.coilTension(hOut, width) : 0;
-        const layerK = 1 + (P.LAYER_LOAD_K - 1) * Num.clamp((hOut - 10) / 50, 0, 1);
-        forces.push(Rolling.solve(hh, hOut, width, v, Math.min(T0, TT), tens, al).forceTon * layerK);
+        forces.push(Rolling.solve(hh, hOut, width, v, Math.min(T0, TT), tens, al).forceTon * layerOf(hOut));
         tEnds.push(TT);
         hh = hOut;
         return v;
@@ -1948,8 +2030,11 @@ const Rolling = {
     return out;
   },
   /**
-   * スケジュールの成立判定。予測荷重が常用最大を超える、または最終パスの終端温度が
-   * 材質の下限を割る場合は «このラインでは成立しない» と判定する（実機なら過負荷停止する条件）。
+   * スケジュールの成立判定。«成立しない» と言い切るのは設備が壊れる／止まる条件だけにする。
+   *   ・予測荷重が非常最大を超える → 過負荷で止まるので成立しない（reasons）
+   *   ・終端温度が熱間域の下限を割る → 圧延はできる（硬いだけ）ので警告に留める（notes）
+   * 低温は «品質の問題» であって «設備の限界» ではない。運転を止めるのではなく、
+   * どのパスがどれだけ下回るかを示して判断を委ねる。
    */
   scheduleFeasibility(sch, alloy = Rolling.alloy(), coil = true) {
     const M = CONFIG.MILL, maxF = Math.max(0, ...sch.map(q => q.force || 0));
@@ -1964,9 +2049,12 @@ const Rolling = {
     } else if (maxF > M.RATED_FORCE_T * 0.9) {                        // 常用最大に余裕が無い
       notes.push(`予測荷重 ${fmt(maxF)} は常用最大 ${M.RATED_FORCE_T.toLocaleString()} t に対して余裕がありません`);
     }
-    if (tEnd < floor - 30) reasons.push(`最終パスの終端温度 ${tEnd} ℃ が下限 ${floor} ℃ を大きく割ります`);
+    // 熱間域を割るパスは «警告» にする（運転はできる）。どのパスから割るかまで示す。
+    const hot = alloy.T_ROLL[0], below = sch.filter(q => q.tEnd < hot);
+    if (tEnd < floor - 30) notes.push(`最終パスの終端温度 ${tEnd} ℃ が下限 ${floor} ℃ を大きく割ります（変形抵抗が上がり、耳割れの恐れがあります）`);
     else if (tEnd < floor) notes.push(`最終パスの終端温度 ${tEnd} ℃ が下限 ${floor} ℃ をわずかに割ります`);
-    return { ok: reasons.length === 0, maxF, tEnd, reasons, notes };
+    else if (below.length) notes.push(`第 ${below[0].pass} パス以降が熱間域の下限 ${hot} ℃ を下回ります`);
+    return { ok: reasons.length === 0, maxF, tEnd, cold: below.length, reasons, notes };
   },
 
   /**
@@ -2155,7 +2243,8 @@ class FinishState {
     this.cropEnd = 0;                               // いま切っている端（+1: xMax 側 / −1: xMin 側）
     this.cropEndsDone = { 1: false, '-1': false };  // 端ごとの完了
     this.cropBlade = 0;        // 下台の昇降 0:待機（上面＝パスライン） → 1:上死点
-    this.cropCuts = 0; this.cropIndex = 0; this.cropCutsAll = 0;   // cropCutsAll: 先端＋後端の総カット数 this.cropEach = 0; this.cropTotal = 0; this.cropNeed = 0;
+    this.cropCuts = 0; this.cropIndex = 0; this.cropCutsAll = 0;   // cropCutsAll: 先端＋後端の総カット数
+    this.cropEach = 0; this.cropTotal = 0; this.cropNeed = 0;      // 1 カット長 ／ 合計 ／ 欠陥長
     this.cropForceT = 0;       // その切断で要した剪断力 [tonf]
     this.cropLen = 0; this.cropSound = 0; this.cropTh = 0;
     // 切り落とした屑。切断時の変形形状（舌・ワニ口）を保ったまま、ラインの下の受け →
@@ -2839,7 +2928,10 @@ class FinishController {
           else sc.x += CONFIG.FLIP * -sc.vx * dt;
           // 落ちながらコンベアの傾きへ姿勢を合わせる。板巾ぶん（最大 2.2 m）だけ Z 方向に
           // 広がっているので、水平のまま落とすと «上手側の縁» がデッキへ先に食い込む。
-          sc.rotZ = Num.approach(sc.rotZ, 0, 0.2, dt);
+          // ただし «こけた» 直後はまだ後半がシュートの刃口の上にあり、そこで水平へ戻すと
+          // 後半が持ち上がってシュートへ食い込む（実測 34 mm）。刃口から自分の半長ぶん
+          // 落ちて «回してももう届かない» ところまで来てから、長手の姿勢を戻す。
+          if (sc.y < T.CHUTE.Y_LO - sc.len / 2) sc.rotZ = Num.approach(sc.rotZ, 0, 0.2, dt);
           sc.rot = Num.approach(sc.rot, Scrap.convRotX, 0.2, dt);
           const land = Scrap.convY(sc.z);
           if (sc.y <= land) {
@@ -3230,7 +3322,7 @@ class PhysicsEngine {
     this.bus = bus;
     this.slab = new SlabState(); this.mill = new MillState();
     this.supply = new SupplyState(); this.finish = new FinishState();
-    this.env = { coolant: true, steam: true, stripCool: true };
+    this.env = { coolant: true, steam: true };
     this.millCtrl   = new MillController(bus, this.mill, this.slab);
     this.supplyCtrl = new SupplyController(bus, this.supply);
     this.finishCtrl = new FinishController(bus, this.finish, this.slab, this.mill);
@@ -3240,8 +3332,9 @@ class PhysicsEngine {
     this._acc = 0;
     bus.on('CMD_RESET', () => this.reset());
     bus.on('CMD_SET_SLAB', (d) => { this._pending = d; this.reset(); });
-    bus.on('CMD_SET_ENV', (d) => { Object.assign(this.env, d);
-      if (d.stripCool !== undefined) CONFIG.MATERIAL.COOLANT.ENABLED = !!d.stripCool; });   // スケジュール予測と運転で同じ前提を見る
+    bus.on('CMD_SET_ENV', (d) => { Object.assign(this.env, d); });
+    // 板面冷却の方式。スケジュール予測と運転が同じ前提を見るよう CONFIG を直接切り替える
+    bus.on('CMD_SET_STRIP_COOL', (k) => { if (CONFIG.MATERIAL.STRIP_COOL.MODES[k]) CONFIG.MATERIAL.STRIP_COOL.MODE = k; });
     bus.on('CMD_SET_SUPPLY_ANIM', (v) => { this.supply.enabled = v; });
     bus.on('CMD_PAUSE', (v) => { this.paused = v; });
     bus.on('CMD_STOP_LINE', () => { this.mill.targetSpeed = 0; });
@@ -3422,6 +3515,18 @@ class PhysicsEngine {
   }
 
   /**
+   * 板面冷却（門型ヘッダ）の熱伝達率と «熱の受け手温度»。冷却方式で媒体そのものが変わる:
+   * 水冷は膜沸騰（boiling() が板面温度から決める）、空冷は周囲温度への強制対流、なしは 0。
+   * 予測（Rolling.passTempChange）と運転（_thermal）と描画が同じ 1 式を見るための入口。
+   */
+  static stripFilm(Ts) {
+    const M = CONFIG.MATERIAL, m = M.STRIP_COOL.mode;
+    if (!m || m.H === 0) return { h: 0, T: M.T_AMBIENT, mode: m };
+    if (m.wet) { const bo = PhysicsEngine.boiling(Ts); return { h: bo.h, T: bo.T, mode: m }; }
+    return { h: m.H, T: M.T_AMBIENT, mode: m };
+  }
+
+  /**
    * テーブルローラ接触による下面の «見かけの» 熱伝達率 [W/m²K]。
    * ローラは鼓の逆形なので接触は板の両エッジ寄りの 2 本の線だけ。面積割合は
    * （幅方向: 2·BAND / 板幅）×（長さ方向: 接触弧 ARC / ローラピッチ）で薄める。
@@ -3453,9 +3558,10 @@ class PhysicsEngine {
     const surf = (j, top) => {
       const Ts = T[j], hr = hRad(Ts) + M.H_AIR;
       let hs = hr, ht = hr * Ta;
-      const wet = (frac) => { if (frac <= 0) return; const bo = PhysicsEngine.boiling(Ts); hs += bo.h * frac; ht += bo.h * frac * bo.T; };
+      const add = (h, Tenv, frac) => { if (frac <= 0 || h <= 0) return; hs += h * frac; ht += h * frac * Tenv; };
+      const wet = (frac) => { const bo = PhysicsEngine.boiling(Ts); add(bo.h, bo.T, frac); };
       wet(dil * (top ? CO.WET_TOP : CO.WET_BOT));
-      if (top) wet(gFrac * CO.GUIDE_TOP);
+      if (top) { const sf = PhysicsEngine.stripFilm(Ts); add(sf.h, sf.T, gFrac * CO.GUIDE_TOP); }
       else { hs += touchH; ht += touchH * M.TABLE_TOUCH.T; }
       return { hEff: hs, Tenv: ht / hs };
     };
@@ -3482,7 +3588,7 @@ class PhysicsEngine {
   /** 板面クーラントの有効割合: 板がヘッダ（4 本）の冷却域の下を通過している長さ ÷ 板長 */
   get guideCoolFrac() {
     const s = this.slab, M = CONFIG.MATERIAL, HD = CONFIG.TABLE.GUIDE.HEADER;
-    if (!(this.env.stripCool && M.COOLANT.ENABLED && s.onLine && Math.abs(this.mill.currentSpeed) > 3)) return 0;
+    if (!(M.STRIP_COOL.MODE !== 'NONE' && s.onLine && Math.abs(this.mill.currentSpeed) > 3)) return 0;
     let cover = 0;
     for (const hx of Layout.coolHeaderXs())
       cover += Math.max(0, Math.min(hx + HD.ZONE / 2, s.xMax) - Math.max(hx - HD.ZONE / 2, s.xMin));
@@ -6436,10 +6542,14 @@ class SprayView {
     this.steam = new ParticleField(scene, { count: 300, map: Sprite.puff(),
       color: 0xffffff, color2: 0xd7e2ea, opacity: 0.62,
       buoy: 2000, drag: 0.95, swirl: 620, grow: 2.6, fadeIn: 0.22 });  // 終端上昇速度 2.1 m/s
-    // 板面クーラント: サイドガイド上のヘッダから板の上面へ落とす液滴。床＝板の上面
+    // 板面冷却（水冷）: ヘッダから板の上面へ落とす液滴。床＝板の上面
     this.strip = new ParticleField(scene, { count: 600, map: Sprite.drop(),
       color: C.COOLANT, color2: 0xbed3e0, opacity: 0.50,
       buoy: -9810, drag: 0.45, grow: 1.3, fadeIn: 0.05 });
+    // 板面冷却（空冷）: 同じヘッダからの送風。液滴ではないので «薄く広がって消える塊» で描く
+    this.stripAir = new ParticleField(scene, { count: 320, map: Sprite.puff(),
+      color: 0xe7eef4, color2: 0xc6d3dc, opacity: 0.14,
+      buoy: -900, drag: 2.4, grow: 2.4, fadeIn: 0.12 });
     this.density = 1;
     this._acc = { coolant: 0, steam: 0, strip: 0 };
   }
@@ -6470,18 +6580,25 @@ class SprayView {
     }
     this.coolant.update(dt, mill.passLine - 800);
 
-    // 板面クーラント: 板がヘッダの下を通過している間だけ、そのヘッダから噴射する
-    if (env.stripCool && CONFIG.MATERIAL.COOLANT.ENABLED && running) {
+    // 板面冷却: 板がヘッダの下を通過している間だけ、そのヘッダから吹く。
+    // 何を吹くかは冷却方式そのもの（水冷＝液滴 / 空冷＝送風 / なし＝吹かない）。
+    const sc = CONFIG.MATERIAL.STRIP_COOL.mode, wet = sc.spray === 'DROP';
+    if (sc.spray && running) {
       const H = CONFIG.TABLE.GUIDE.HEADER, T = CONFIG.TABLE;
       const active = Layout.coolHeaderXs()
         .filter(hx => slab.xMax > hx - H.ZONE && slab.xMin < hx + H.ZONE);
-      if (active.length) this._emit('strip', 140 * active.length, dt, 20, r => {
+      if (active.length) this._emit('strip', (wet ? 140 : 60) * active.length, dt, 20, r => {
         const hx = active[Math.floor(r() * active.length)];
-        this.strip.spawn(hx + (r() - .5) * 160, mill.passLine + H.Y - H.D / 2 - 120, (r() - .5) * T.BARREL,
-          (r() - .5) * 320, -2200 - r() * 900, (r() - .5) * 320, 0.32 + r() * 0.25, 60 + r() * 60);
+        const x = hx + (r() - .5) * 160, y = mill.passLine + H.Y - H.D / 2 - 120, z = (r() - .5) * T.BARREL;
+        if (wet) this.strip.spawn(x, y, z, (r() - .5) * 320, -2200 - r() * 900, (r() - .5) * 320,
+                                  0.32 + r() * 0.25, 60 + r() * 60);
+        else this.stripAir.spawn(x, y, z, (r() - .5) * 500, -1500 - r() * 700, (r() - .5) * 500,
+                                 0.5 + r() * 0.4, 420 + r() * 320);
       });
     }
-    this.strip.update(dt, mill.passLine + (slab.inBite ? mill.gap : slab.thickness));
+    const stripFloor = mill.passLine + (slab.inBite ? mill.gap : slab.thickness);
+    this.strip.update(dt, stripFloor);
+    this.stripAir.update(dt, stripFloor);
 
     // 水蒸気の発生量は «水がどれだけ蒸発できるか» で決まるので、材料温度に効かせる。
     // 熱いパスほど白煙が立ち、仕上げの低温パスでは薄くなる（実機の見え方と同じ）。
@@ -6503,7 +6620,11 @@ class SprayView {
     }
     this.steam.update(dt);
   }
-  clear(which) { if (which === 'coolant') this.coolant.clear(); else if (which === 'strip') this.strip.clear(); else this.steam.clear(); }
+  clear(which) {
+    if (which === 'coolant') this.coolant.clear();
+    else if (which === 'strip') { this.strip.clear(); this.stripAir.clear(); }
+    else this.steam.clear();
+  }
 }
 
 /** 3D上の設備ラベル（DOMを投影。ジオメトリを増やさない） */
@@ -6798,7 +6919,7 @@ class UIManager {
     this.timeScale = 1; this.passIndex = -1; this.cutaway = 'half'; this.labelsOn = true; this.zonesOn = false; this.quality = 'std';
     this._acc = 0;
     this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
-    this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildCutScope();
+    this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildStripCool(); this._buildCutScope();
     this._buildVersion();
     this._bind(); this._listen();
     this.dims(); this._rollState(); this.renderSchedule(); this._banner('idle'); this._summaries();
@@ -6907,11 +7028,13 @@ class UIManager {
       const th = d.cast - 2 * d.scalp;
       set('sum-material', `${d.alloy} ${th}×${d.width}×${d.length} → ${d.target} mm ${d.mode === 'COIL' ? 'コイル' : '板材'}`);
       const sch = this.previewSchedule || K.SCHEDULE, maxF = Math.max(0, ...sch.map(q => q.force || 0));
-      set('sum-sched', this.passIndex >= 0 ? `第 ${this.passIndex + 1} / ${K.SCHEDULE.length} パス` : `${sch.length} パス ・ 最大 ${Math.round(maxF).toLocaleString()} t（予測）`);
+      const cool = K.MATERIAL.STRIP_COOL.mode.name;
+      set('sum-sched', this.passIndex >= 0 ? `第 ${this.passIndex + 1} / ${K.SCHEDULE.length} パス ・ ${cool}`
+                                           : `${sch.length} パス ・ ${Math.round(maxF).toLocaleString()} t ・ ${cool}`);
     }
     set('sum-run', `${$('mode-auto').getAttribute('aria-pressed') === 'true' ? '自動' : '手動'} ・ ${this.timeScale.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}×`);
     set('sum-view', `${{ solid: '実体', half: '半断面', xray: '透視' }[this.cutaway]} ・ ${{ high: '高', std: '標準', lite: '軽量' }[this.quality]}`);
-    const env = [['chk-coolant', 'ロール'], ['chk-stripcool', '板面'], ['chk-steam', '水蒸気'], ['chk-supply-anim', '装入']]
+    const env = [['chk-coolant', 'ロール'], ['chk-steam', '水蒸気'], ['chk-supply-anim', '装入']]
       .filter(([id]) => $(id)?.checked).map(([, n]) => n);
     set('sum-env', env.length ? env.join('・') : 'すべて OFF');
     set('sum-spec', $('lbl-roll')?.textContent ? `ロール ${$('lbl-roll').textContent}` : '');
@@ -7039,6 +7162,29 @@ class UIManager {
       host.appendChild(b); return b;
     });
   }
+  /**
+   * 板面冷却の方式（水冷 / 空冷 / なし）。冷却は «パススケジュールを決める運転条件» なので、
+   * 結果（パス表）のすぐ上に置く —— 原因が結果より上にある並びにして、探させない。
+   * 選ぶと予測温度も荷重も変わるので、その場でスケジュールを作り直す。
+   */
+  _buildStripCool() {
+    const SC = CONFIG.MATERIAL.STRIP_COOL, host = $('seg-strip-cool');
+    this.coolBtns = Object.values(SC.MODES).map((m) => {
+      const b = document.createElement('button');
+      b.innerHTML = `<i class="fa-solid ${m.icon}"></i> ${m.name}`;
+      b.dataset.mode = m.key;
+      b.onclick = () => { this.bus.emit('CMD_SET_STRIP_COOL', m.key); this._syncStripCool(); this._slabChanged(); };
+      host.appendChild(b); return b;
+    });
+    this._syncStripCool();
+  }
+  /** 選択の見え方と説明を状態から作る（表示と真実を 1 か所に保つ）。 */
+  _syncStripCool() {
+    const SC = CONFIG.MATERIAL.STRIP_COOL, m = SC.mode;
+    (this.coolBtns || []).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === SC.MODE)));
+    $('lbl-strip-cool').textContent = m.name;
+    $('der-strip-cool').textContent = m.desc;
+  }
   /** 材質セレクタ。選ぶと炉出し温度の範囲もその合金の熱間域に合わせる（範囲外の温度を選ばせない）。 */
   _buildAlloys() {
     const sel = $('sel-alloy');
@@ -7098,7 +7244,7 @@ class UIManager {
       ['30 mm シャー', `ミル中心から ${Math.abs(CONFIG.SHEAR30.X).toLocaleString()} mm（J-3 の先）／ 板厚 ${CONFIG.SHEAR30.MAX_TH} mm 以下を定尺 ${CONFIG.PILER.SHEET_L / 1000} m に切り分け`],
       ['パイラー', `ミル中心から ${(Math.min(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)}〜${(Math.max(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)} m ／ 開閉アーム式・リフトテーブル付`],
       ['装入設備', `転倒機 ミル中心から ${(Math.abs(CONFIG.SUPPLY.TILTER_X) / 1000).toFixed(1)} m（A-9 / A-8 の操作側）／ トランスファークレーンで横移動`],
-      ['板面クーラント', `入側 A-5 テーブル中央 ／ 出側 サイドガイド上 各 2 本（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 膜沸騰域の熱伝達率 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）`],
+      ['板面冷却ヘッダ', `入側 A-5 テーブル中央 ／ 出側 サイドガイド上 各 2 本（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 水冷 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（膜沸騰・ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）・空冷 ${CONFIG.MATERIAL.STRIP_COOL.MODES.AIR.H} W/m²K（強制対流）`],
       ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
     ];
     $('spec-body').innerHTML = rows.map(([k, v]) =>
@@ -7186,7 +7332,7 @@ class UIManager {
       const T2 = CONFIG.TRIMMER, warn = [], note = [];
       if (Math.abs(reached - d.target) > 0.6) warn.push(`テーブル長の制約で ${reached.toFixed(1)} mm までしか到達できません（この板厚はコイルでなければ作れません）`);
       if (!feas.ok) warn.push(`このラインでは成立しません: ${feas.reasons.join('、')}（運転すると過負荷停止します）`);
-      else feas.notes.forEach(t => note.push(t));
+      feas.notes.forEach(t => note.push(t));
       const divider = FinishState.divider(d.target), sheets = Math.ceil(outLen / CONFIG.PILER.SHEET_L);
       $('der-target').textContent = coil
         ? `${sch.length} パスで ${d.target} mm まで圧延し、最終パスで巻取機へ巻き取ります（コイル可能厚 ${CONFIG.COILER.TH_MIN}〜${CONFIG.COILER.TH_MAX} mm）。`
@@ -7231,8 +7377,6 @@ class UIManager {
     for (const [id, q] of [['q-high', 'high'], ['q-std', 'std'], ['q-lite', 'lite']])
       on(id, 'click', () => this.setQuality(q));
     on('chk-coolant', 'change', e => { this.bus.emit('CMD_SET_ENV', { coolant: e.target.checked }); this._summaries(); });
-    // 板面クーラントは熱計算に入るので、待機中ならスケジュール予測も作り直す
-    on('chk-stripcool', 'change', e => { this.bus.emit('CMD_SET_ENV', { stripCool: e.target.checked }); this._slabChanged(); });
     on('chk-steam',   'change', e => { this.bus.emit('CMD_SET_ENV', { steam: e.target.checked }); this._summaries(); });
     on('chk-supply-anim', 'change', e => { this.bus.emit('CMD_SET_SUPPLY_ANIM', e.target.checked); this._summaries(); });
 
