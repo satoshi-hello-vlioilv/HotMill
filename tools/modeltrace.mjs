@@ -222,6 +222,29 @@ const out = await page.evaluate(() => {
     }
   }
 
+  /* ---------- スプリングバック（除荷で戻る曲率）---------- */
+  {
+    const al = K.ALLOYS.A5052, E = al.E * 1000, h = 130, kf = 60;
+    const kE = 2 * kf / (E * h);                       // 降伏開始曲率
+    ok('弾性域（κ ≤ κe）では反りが残らない', R.springback(kE * 0.999, h, kf, al) === 0,
+       `κ/κe = 0.999 → 残る曲率 ${R.springback(kE * 0.999, h, kf, al)}`);
+    const rr = [1.5, 2, 4, 8, 20];
+    const rs = rr.map(r => R.springback(kE * r, h, kf, al) / kE);
+    ok('κe をわずかに超えたところで連続に立ち上がる',
+       R.springback(kE * 1.001, h, kf, al) >= 0 && R.springback(kE * 1.001, h, kf, al) < kE * 0.01,
+       `κ/κe = 1.001 → ${(R.springback(kE * 1.001, h, kf, al) / kE).toExponential(2)} κe`);
+    ok('残る曲率は与えた曲率に対して単調に増える', rs.every((v, i) => i === 0 || v > rs[i - 1]),
+       rs.map((v, i) => `${rr[i]}→${v.toFixed(2)}`).join(' '));
+    ok('残る曲率が与えた曲率を超えない', rr.every((r, i) => rs[i] < r),
+       `最大 ${Math.max(...rs.map((v, i) => v / rr[i])).toFixed(3)} 倍`);
+    ok('大きく曲げたときの戻り量が 1.5·κe に飽和する', Math.abs(20 - rs[4] - 1.5) < 0.01,
+       `戻り ${(20 - rs[4]).toFixed(4)} κe（理論 1.5）`);
+    ok('板が厚いほど戻る曲率が小さい（κe ∝ 1/h）',
+       R.springback(3e-5, 300, kf, al) > R.springback(3e-5, 100, kf, al),
+       `h=300: ${R.springback(3e-5, 300, kf, al).toExponential(2)} / h=100: ${R.springback(3e-5, 100, kf, al).toExponential(2)}`);
+    ok('符号が保たれる', R.springback(-kE * 4, h, kf, al) === -R.springback(kE * 4, h, kf, al), '正負で対称');
+  }
+
   Res.failed = Res.checks.filter(c => !c.pass).length;
   return Res;
 });

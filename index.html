@@ -809,6 +809,19 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.11.0', base: '72d6901', date: '2026-09-08', title: 'スプリングバックと蛇行（キャンバー・差荷重制御）—— 形状の残り 2 項目', items: [
+      { t: 'スプリングバックを実装。弾完全塑性の断面のモーメント–曲率から «除荷で戻る曲率» を厳密に出す', w: 'Rolling.springback' },
+      { t: '実測で κ/κe が 1 を超えるのは中盤の厚いパスだけ。薄いパスの反りは弾性で全部戻る（実機と同じ向き）', w: 'tools/curlmeas.mjs' },
+      { t: 'CURL.GAIN を «バイト内の曲率の係数» に定義し直した（残る反りの係数ではない）', w: 'CONFIG.CURL' },
+      { t: '蛇行を実装。ギャップの左右差（くさび）→ 両耳の伸びの差 → 平面内の曲がり → 横行', w: 'Rolling.gapWedge / camber' },
+      { t: '横にずれるほど荷重の合力が中心から外れてくさびが増える «正の帰還» まで入れた（蛇行が止まらない理由）', w: 'Rolling.gapWedge' },
+      { t: '差荷重制御（自動レベリング）を実装。圧下を傾けてくさびを打ち消す。平均キャンバーが 330 分の 1 に', w: 'PhysicsEngine._levelControl' },
+      { t: 'サイドガイドが蛇行を押し戻す側の設備として働くようにした（接触時間 328.9 s → 8.0 s）', w: 'PhysicsEngine._guides' },
+      { t: '3D で板が横へずれ、平面内に曲がって走るようにした（テーブル胴の外へは出ない）', w: 'SlabView.update' },
+      { t: '実績ビュワーとログに «横ずれ» を足した', w: 'RollingLog.SERIES' },
+      { t: '蛇行の検査を評価器に新設（16 項目）。制御の有無で比べる', w: 'tools/cambertrace.mjs' },
+      { t: 'スプリングバックの検査を評価器に追加（7 項目）', w: 'tools/modeltrace.mjs' },
+    ] },
     { v: '1.10.0', base: '52f6a07', date: '2026-09-08', title: 'ロールの実仕様（研削クラウン・硬度・粗度・保有組数）と現品管理', items: [
       { t: '研削クラウンを実仕様にした（WR +150 / BUR −50 µm）。合わせて «径差» という研削仕様どおりの単位に直し、板厚への係数を 2 から 1 にした', w: 'MILL.WR_CROWN / Rolling.rollCrown' },
       { t: '実仕様を入れた結果、全パスでクラウン率 ±0.009 %・I-unit 0.5〜24 に収まった（推定値 95 µm より良い）', w: 'tools/shaperun.mjs' },
@@ -1089,6 +1102,16 @@ const CONFIG = {
       CAMPAIGN: 2.4e10,                    // 1 組の寿命 [t·mm]（荷重 × 通板長の積算）
       GRIND_WR: 3, GRIND_BR: 5,            // 1 回の研削で落とす直径 [mm]
     },
+    /* ミルのゼロ点合わせ（レベリング）の誤差 [mm]。OS 側 − DS 側のギャップ差で、
+     * 実機でも完全にはゼロにできない。これが «板が真っ直ぐ走らない» 種になる。 */
+    LEVEL_ERR: 0.02,
+    /* 差荷重制御（自動レベリング）。実機は OS / DS のロードセルを別々に読み、
+     * 荷重差が出ないように圧下を «傾ける»。荷重差はギャップの左右差から出るので、
+     * これを詰めることが そのまま «板を真っ直ぐ走らせる» ことになる。
+     *   KP   …… くさび [mm] に対する傾き指令の比例ゲイン
+     *   RATE …… 圧下の傾きを動かせる速さ [mm/s]
+     *   MAX  …… 傾きの可動範囲 [mm]（片側の圧下だけを動かせる量には限りがある） */
+    LEVEL: { KP: 0.9, RATE: 0.05, MAX: 0.5 },
     /* 摩擦係数へのロール粗度の効き。μ ∝ (Ra/Ra_ref)^MU_RA_K。
      * 研削したて（0.60）で −7 %、交換直前（1.10）で +7 % ほど動く。 */
     MU_RA_REF: 0.85, MU_RA_K: 0.25,
@@ -1815,7 +1838,15 @@ const CONFIG = {
    *   κ = GAIN · (kf_top − kf_bot)/kf_mean · ln(h_in/h_out) / h_out   [1/mm]（+ は上反り）
    * 自重によるたわみ: テーブル上では端部が浮き上がり長 ℓ = √(2·EI·κ/q) だけ持ち上がり
    * （先端高さ κℓ²/4）、ロールから出た直後の先端は片持ち梁として上反り→自重で垂れる。 */
-  CURL: { GAIN: 0.04 },
+  /* 反り —— 上下非対称（変形抵抗の差）が «バイトの中で» 付ける曲率の係数。
+   * κ_bite = GAIN·(Δkf/kf)·ln(h_in/h_out)/h_out。上下の硬さの差に比例して長手ひずみに
+   * 差が付き、その差を板厚で割ったものが曲率になる、という素直な形。
+   * 出口で荷重が抜けると弾性ぶんは戻る（Rolling.springback）ので、画面に出る «残る反り» は
+   * これより小さい。GAIN はバイト内の曲率の係数であって、残る反りの係数ではない。
+   * 値は «残る反りがいちばん強いパスが従来の較正どおりになる» ように合わせた（＝実測較正）。
+   * 上下ひずみ差の理論上限は Δkf/kf そのもの（GAIN = 1）だが、板の上下は繋がっていて
+   * せん断で拘束し合うので実際はその 1 割弱に留まる。 */
+  CURL: { GAIN: 0.08 },
   /* LOAD_MARGIN: スケジュールを組むときに使う «常用最大に対する余裕»（モデルの不確かさぶん）。
    * 予測と実績を全パスで突き合わせた結果、実測 ÷ 予測 ＝ 0.73〜0.94（平均 0.86）で
    * 予測が保守側。«予測（＝パス最大）が常用最大の 95 % 以内» で組めば、実測は
@@ -2392,6 +2423,35 @@ const Rolling = {
     return CONFIG.CURL.GAIN * (res.kfTop - res.kfBot) / res.kf * Math.log(hIn / hOut) / hOut;
   },
   /**
+   * スプリングバック（除荷で戻る曲率）。
+   *
+   * ロールバイトの中で板に付いた曲率 κ は、そのまま形として残るわけではない。
+   * 出口で荷重が抜けると «弾性のぶんだけ» 戻り、残るのは塑性変形した分だけである。
+   * 断面を弾完全塑性の長方形と見ると、モーメント–曲率の関係は厳密に書ける:
+   *
+   *     κ_e = 2σ_y/(E·h)                 …… 表面が降伏し始める曲率
+   *     M   = M_p·(1 − (1/3)(κ_e/κ)²)    …… κ ≥ κ_e（M_p = σ_y·b·h²/4 は全塑性モーメント）
+   *     Δκ  = M/(E·I)                    …… 除荷は弾性なので、この曲率だけ戻る
+   *     κ_perm = κ − Δκ
+   *
+   * κ ≤ κ_e なら断面はまだ弾性なので **すべて戻って形は残らない**。
+   * κ ≫ κ_e では Δκ → 3σ_y/(E·h) = 1.5·κ_e に飽和する（＝厚い板ほど戻り量が小さい）。
+   *
+   * 実測（既定ロット）では κ/κ_e が 第 4〜6 パスだけ 1 を超え、それ以外は 1 未満だった。
+   * つまり «残る反り» を作っているのは中盤の厚いパスで、薄いパスは弾性で戻る ——
+   * 実機で «厚板パスで頭が跳ね上がり、薄板パスは平らに走る» のと同じ向きになる。
+   */
+  springback(kappa, h, kf, alloy = Rolling.alloy()) {
+    const k = Math.abs(kappa);
+    if (!(k > 0) || !(h > 0) || !(kf > 0)) return 0;
+    const E = alloy.E * 1000;                       // [MPa]
+    const kE = 2 * kf / (E * h);                    // 降伏開始曲率
+    if (k <= kE) return 0;                          // まだ弾性 ── 全部戻る
+    const mRatio = 1 - (kE / k) * (kE / k) / 3;     // M / M_p
+    const dk = mRatio * 1.5 * kE;                   // Δκ = M/(EI)、M_p/(EI) = 1.5·κ_e
+    return Math.sign(kappa) * Math.max(k - dk, 0);
+  },
+  /**
    * 反りの自重との釣り合い。EI = E·w·h³/12 [N·mm²]、q = ρ·g·h·w [N/mm]。
    *   liftOff: テーブル上で端が浮き上がる長さ ℓ = √(2·EI·κ/q)、先端高さ κℓ²/4
    *   touch:   ロールから出た片持ちの先端がテーブルに着く自由長 √2·ℓ
@@ -2775,6 +2835,48 @@ const Rolling = {
     return { lam, sig, iu, iUnit: iu[iMax] - iu[iMin], mode,
              sigComp: sigC, sigCr, buckle: -sigC > sigCr,
              modeName: mode === 'FLAT' ? '平坦' : mode === 'CENTER' ? '中伸び' : '耳伸び' };
+  },
+
+  /**
+   * ロールギャップの «左右差（くさび）» [mm]。OS 側 − DS 側。
+   *
+   * くさびは 2 つから出る。
+   *   ① ミルのゼロ点合わせの誤差（LEVEL_ERR）── 常にある一定のずれ
+   *   ② 板がミル中心から e だけ横にずれていること ── 荷重の合力が中心から外れ、
+   *      ロール系が «傾いて» ギャップに左右差が付く
+   * ②が効くと «ずれ → くさび → 曲がり → もっとずれ» という正のフィードバックになり、
+   * これが実機の蛇行そのものである。サイドガイドがこの輪を断ち切る。
+   *
+   * 傾きは BUR の軸受間（S）を単純支持梁と見て、合力が S/2 + e にあるときの
+   * 板の両端（S/2 ± w/2）のたわみ差として出す（上下 2 本ぶんで 2 倍）。
+   * tilt は差荷重制御が入れた «圧下の傾き» で、くさびを打ち消す向きに効く。
+   */
+  gapWedge(forceT, w, offset, tilt = 0) {
+    const M = CONFIG.MILL, S = M.BR_BEARING_SPAN;
+    const E = M.ROLL_E * 1000, G = E / (2 * (1 + M.ROLL_NU));
+    const I = Math.PI * (Math.pow(M.WR_D, 4) + Math.pow(M.BR_D, 4)) / 64;
+    const As = 0.9 * Math.PI * (M.WR_D * M.WR_D + M.BR_D * M.BR_D) / 4;
+    const P = forceT * 9807, a = Num.clamp(S / 2 + offset, 1, S - 1), b = S - a;
+    const d = (x) => {                                    // 単純支持梁のたわみ（曲げ＋せん断）
+      if (x <= a) return b * x * (S * S - b * b - x * x) / (6 * S * E * I) + b * x / (S * G * As);
+      const xp = S - x, bp = a;
+      return bp * xp * (S * S - bp * bp - xp * xp) / (6 * S * E * I) + bp * xp / (S * G * As);
+    };
+    return 2 * (d(S / 2 + w / 2) - d(S / 2 - w / 2)) * P + M.LEVEL_ERR - tilt;
+  },
+
+  /**
+   * キャンバー（平面内の曲がり）の曲率 [1/mm]。
+   *
+   * ギャップに左右差 Δh があると、薄い側がよく伸びる。両耳の伸びの差を板幅で割ったものが
+   * 平面内の曲率になる。
+   *     ε_i = ln(h_in/h_out,i)、  κ_c = (ε_OS − ε_DS)/w
+   * 板は伸びの大きい側を外にして曲がる（＝薄い側が外）。
+   */
+  camber(hIn, hOut, wedge, w) {
+    if (!(hIn > hOut) || !(w > 0)) return 0;
+    const hOs = Math.max(hOut + wedge / 2, 1e-3), hDs = Math.max(hOut - wedge / 2, 1e-3);
+    return (Math.log(hIn / hOs) - Math.log(hIn / hDs)) / w;
   },
 
   /**
@@ -3237,6 +3339,10 @@ class SlabState {
     /* 幅方向の板厚プロファイル（零平均の偏差 [mm]、NW 点）。長手の hProf と同じ役割で、
      * «そのパスの出側» を次のパスが «入側» として読む。平坦度は板厚そのものではなく
      * 入側と出側の «クラウン率の変化» で決まるので、これを持たないと平坦度が出せない。 */
+    /* 蛇行（横行）の状態。zOff はミル中心からの板中心の横ずれ [mm]、yaw は平面内の
+     * 向き [rad]、camber は平面内の曲率 [1/mm]。ギャップの左右差で板が曲がり、
+     * 曲がったぶん横へ走り、横へずれるとギャップの左右差がさらに増える（正の帰還）。 */
+    this.zOff = 0; this.yaw = 0; this.camber = 0; this.camberVis = 0; this.wedge = 0; this.guideHit = 0;
     this.wProf = new Float64Array(CONFIG.SHAPE.NW);
     this.wShape = null; this._shapeSig = '';   // 直近に解いた幅方向の形状（Rolling.crown の戻り）
     this.rollWork = 0;                 // 摩耗クラウン用の «仕事»（荷重 × 通板長）の積算
@@ -3546,6 +3652,8 @@ class MillState {
     /* ロールベンディング力 [tonf/対]。形状制御（比例クラウン制御）が動かす。
      * 実ギャップに対する «圧下» と同じ関係で、狙いは «出側のクラウン率を入側に合わせる» こと。 */
     this.bendForceT = 0; this.bendCmd = 0;
+    /* 圧下の傾き [mm]（OS − DS）。差荷重制御が動かして «くさび» を打ち消す。 */
+    this.tilt = 0; this.tiltCmd = 0;
     this.tableGroup = CONFIG.TABLE.SELECT[CONFIG.TABLE.SELECT.length - 1];   // 駆動するテーブル区間（図面のテーブル選択）
   }
   get passLine() { return CONFIG.MILL.PASS_LINE; }
@@ -3850,7 +3958,7 @@ class RollingLog {
                        // 幅方向の形状（クラウン [µm]・平坦度 [I-unit]・ベンディング力 [t]）
                        cr: sh && s.rollingActive ? +sh.crownAbs.toFixed(1) : 0,
                        fl: sh && s.rollingActive ? +sh.iUnit.toFixed(1) : 0,
-                       bd: +m.bendForceT.toFixed(0),
+                       bd: +m.bendForceT.toFixed(0), zo: +(s.zOff || 0).toFixed(2),
                        T: +s.temperature.toFixed(0), x: Math.round(s.x) });
   }
   /** 表に出す 1 パスぶんの実績（平均は «噛んでいる間» だけ） */
@@ -3885,10 +3993,10 @@ class RollingLog {
        f(r.vMax), f(r.vAvg), f(r.planSpeed, 0), f(r.gap, 2), f(r.gMin, 2), f(r.spring, 2),
        f(r.pMax, 2), f(r.tIn, 0), f(r.tOut, 0), f(r.len / 1000, 2), f(r.sec)].join(','));
     const sHead = ['時刻[s]', 'パス', '荷重[t]', '速度[mpm]', '板厚[mm]', 'ギャップ[mm]',
-                   '圧下位置[mm]', '動力[MW]', 'クラウン[µm]', '平坦度[I]', 'ベンディング[t]', '温度[℃]', '位置[mm]'];
+                   '圧下位置[mm]', '動力[MW]', 'クラウン[µm]', '平坦度[I]', 'ベンディング[t]', '横ずれ[mm]', '温度[℃]', '位置[mm]'];
     const sBody = t.series.filter(p => on(p.pass)).map(p =>
       [f(p.t, 2), p.pass, p.f, f(p.v), f(p.h, 2), f(p.g, 2), f(p.sc, 2), f(p.p, 2),
-       f(p.cr, 1), f(p.fl, 1), f(p.bd, 0), p.T, p.x].join(','));
+       f(p.cr, 1), f(p.fl, 1), f(p.bd, 0), f(p.zo, 2), p.T, p.x].join(','));
     const meta = [`# ロット,${L.started.toLocaleString('ja-JP')}`,
                   `# 材質,${L.alloyKey}`,
                   `# 素材,${f(L.thick0, 0)} x ${L.width} x ${L.length} mm（呼び厚 ${L.cast} − 面削 2x${L.scalp}）`,
@@ -3917,6 +4025,8 @@ RollingLog.SERIES = [
   { key: 'cr', name: '板クラウン', unit: 'µm', axis: 'crown', color: '#c2569a',      css: '#c2569a' },
   { key: 'fl', name: '平坦度',     unit: 'I',  axis: 'flat',  color: '#0d9488',      css: '#0d9488' },
   { key: 'bd', name: 'ベンディング', unit: 't', axis: 'bend', color: '#a16207',      css: '#a16207' },
+  // 蛇行。横ずれ（板中心のミル中心からのずれ）は «真っ直ぐ走っているか» の一次指標
+  { key: 'zo', name: '横ずれ',     unit: 'mm', axis: 'zoff', color: '#b45309',      css: '#b45309' },
 ];
 
 /**
@@ -4832,6 +4942,7 @@ class PhysicsEngine {
     m.targetGap = Num.clamp(m.targetGap, CONFIG.MILL.GAP_MIN, CONFIG.MILL.GAP_MAX);
     this._agc(dt);
     this._shapeControl(dt);
+    this._levelControl(dt);
     this._rollShop(dt);
     // 主機は定格以上のトルクを出せない。動力が定格を超えるなら速度で頭打ちにする。
     // 実機の駆動系と同じ挙動で、重圧下・低温のパスでは自然に減速する。
@@ -4987,8 +5098,25 @@ class PhysicsEngine {
         }
       }
       s.rollWork += res.forceTon * Math.abs(vOut) * dt;      // 摩耗クラウン用（荷重 × 通板長）
+      /* --- 蛇行（キャンバーと横行）---------------------------------------
+       * ギャップの左右差 → 両耳の伸びの差 → 平面内の曲がり（キャンバー）→ 横行。
+       * 進んだ長さ dL に対して  dψ = κ_c·dL、dz = ψ·dL  を積む（平面内の梁と同じ）。
+       * 横にずれるほど荷重の合力が中心から外れてギャップの左右差が増えるので、
+       * サイドガイドが無ければ発散する ── 実機で蛇行が «一度始まると止まらない» 理由。 */
+      s.wedge = Rolling.gapWedge(res.forceTon, s.width, s.zOff, m.tilt);
+      s.camber = Rolling.camber(hLoc, gap, s.wedge, s.width);
+      const dL = Math.abs(vOut) * dt;
+      s.yaw += s.camber * dL;
+      s.zOff += s.yaw * dL;
+      /* 描画は «いま出てきている部分の曲がり» を見せたいので、瞬時値ではなく時定数付きで
+       * なました値を使う（噛み込みの一瞬だけ大きく出る過渡で板全体が曲がって見えるのを防ぐ）。 */
+      s.camberVis = Num.approach(s.camberVis ?? 0, s.camber, 2.0, dt);
       // 反りは通過した分の重み付き平均で決まる
-      const k = Rolling.curvature(res, hLoc, gap);
+      /* バイトの中で付いた曲率から «除荷で戻る弾性ぶん» を引き、残る反りだけを積む。
+       * 引かないと薄いパスにも消えない反りが残り、実機と逆の見え方になる。 */
+      const kBite = Rolling.curvature(res, hLoc, gap);
+      const k = Rolling.springback(kBite, gap, res.kf, s.alloy);
+      s.kBite = kBite;
       s._kAcc += k * passedFrac; s._kW += passedFrac; s.kNew = s._kAcc / Math.max(s._kW, 1e-9);
       s.biteOk = res.biteOk;
       s.forwardSlip = res.forwardSlip;
@@ -5030,6 +5158,15 @@ class PhysicsEngine {
     const near = s.xMax > gx - G.LEN / 2 && s.xMin < gx + G.LEN / 2;
     const target = (near && Math.abs(m.currentSpeed) > 5) ? s.width + 20 : s.width + G.OPEN_MARGIN;
     m.guideGap = Num.rateTo(m.guideGap, target, G.RATE, dt);
+    /* サイドガイドは蛇行を «押し戻す» 側の設備でもある。開口の半分から板幅の半分を
+     * 引いたぶんまでしか横へ行けず、当たったらそこで止まって向きも戻される
+     * （当たり続けると耳が擦れるので、実機でも当てっぱなしにはしない）。 */
+    const room = Math.max(m.guideGap / 2 - s.width / 2, 0);
+    if (Math.abs(s.zOff) > room) {
+      s.zOff = Math.sign(s.zOff) * room;
+      if (Math.sign(s.yaw) === Math.sign(s.zOff)) s.yaw = 0;   // ガイドに当たって向きが戻る
+      s.guideHit = Math.min(s.guideHit + dt, 1e6);
+    }
   }
 
   /**
@@ -5097,6 +5234,24 @@ class PhysicsEngine {
         text: `ロール組替え: WR ${wr} → ${this.rolls.wrSet.no} 組（Φ${this.rolls.wrSet.dia.toFixed(0)}）`
             + ` ／ BUR ${br} → ${this.rolls.brSet.no} 組（Φ${this.rolls.brSet.dia.toFixed(0)}）`, kind: 'info' });
     }
+  }
+
+  /**
+   * 差荷重制御（自動レベリング）。
+   *
+   * ロールギャップに左右差（くさび）があると、板は薄い側がよく伸びて平面内に曲がり、
+   * 曲がったぶん横へ走る。横へ走ると荷重の合力が中心から外れてくさびがさらに増えるので、
+   * 放っておくと発散する ── 実機の蛇行そのもの。
+   *
+   * 実機は OS / DS のロードセルを別々に読み、荷重差が出ないよう圧下を傾けて打ち消す。
+   * ここでも同じく «いま出ているくさび» を比例制御で詰める（可動範囲とレートは実機なり）。
+   */
+  _levelControl(dt) {
+    const m = this.mill, s = this.slab, L = CONFIG.MILL.LEVEL;
+    if (s.rollingActive && s.biteFill > 0.99)
+      m.tiltCmd = Num.clamp(m.tilt + L.KP * s.wedge, -L.MAX, L.MAX);
+    else if (!s.rollingActive) m.tiltCmd = 0;
+    m.tilt = Num.rateTo(m.tilt, m.tiltCmd, L.RATE, dt);
   }
 
   _shapeControl(dt) {
@@ -8278,6 +8433,8 @@ class SlabView {
       if (F > 0) { if (x1 > ax) { x1 = ax; clipHead = true; } } else if (x0 < ax) { x0 = ax; clipHead = true; }
     }
     const dz = fin ? fin.plateZ : 0, dy = fin ? fin.plateY : 0;
+    // 蛇行: 板中心の横ずれと平面内の曲がり（キャンバー）。バイトを基準に前後へ効く
+    const zOff = slab.zOff || 0, camb = slab.camberVis || 0;
     // 75 mm シャーの下台が上がっているあいだ、下台に載っている先端側の板は一緒に持ち上がる
     const CS = CONFIG.CROP_SHEAR, lift = fin ? fin.cropBlade * (CS.UPPER_CLR + CS.OVERTRAVEL) : 0;
     this.mesh.visible = slab.onLine && x1 - x0 > 1;
@@ -8288,7 +8445,8 @@ class SlabView {
     const sig = x0 + ':' + x1 + ':' + slab.thickness + ':' + slab.width + ':'
               + mill.gap + ':' + mill.passLine + ':' + slab.inBite + ':' + slab.dir + ':'
               + slab.hCut[1] + ':' + slab.hCut[-1] + ':' + slab.hHomo + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig
-              + ':' + (slab.wShape ? slab.wShape.crownAbs.toFixed(1) : '-');
+              + ':' + (slab.wShape ? slab.wShape.crownAbs.toFixed(1) : '-')
+              + ':' + (slab.zOff || 0).toFixed(1) + ':' + (slab.camberVis || 0).toExponential(3);
     if (sig === this._sig) return;
     this._sig = sig;
     const L = x1 - x0, w = slab.width, P = mill.passLine;
@@ -8347,7 +8505,13 @@ class SlabView {
       yl += rest.lift + rest.tilt * xm;
       // 幅方向の板厚分布（クラウン）。中央と端で板厚が µm オーダー違う
       const wq = wProf ? wProf(bz) : 0;
-      pos.setXYZ(i, u(x), u(P - dip + ((q.y + by * wq) * sy + h / 2) + dy + yl), u(q.z + dz));
+      /* 平面内の曲がり: バイト（x = 0）からの距離の 2 乗で横へ外れる（曲率 κ_c の円弧）。
+       * すでに圧延を終えた側だけが曲がっているので、出側にだけ効かせる。 */
+      const dOut = slab.dir > 0 ? Math.max(xm, 0) : Math.min(xm, 0);
+      // 板はテーブルの胴の外へは出られない（出たら落ちる）ので、そこで頭打ちにする
+      const zLim = CONFIG.TABLE.BARREL / 2 - w / 2;
+      const zc = Num.clamp(zOff + camb * dOut * dOut / 2, -zLim, zLim);
+      pos.setXYZ(i, u(x), u(P - dip + ((q.y + by * wq) * sy + h / 2) + dy + yl), u(q.z + zc + dz));
     }
     pos.needsUpdate = true;
     this.geo.computeVertexNormals();
