@@ -199,7 +199,7 @@ const out = await page.evaluate(() => {
          `門型 ${st.map(Math.round).join(' / ')} mm ／ サイドガイド ±${K.TABLE.GUIDE.X} mm`);
       ok('入側と出側にそれぞれ 1 基ずつある', st.filter(x => x > 0).length === 1 && st.filter(x => x < 0).length === 1,
          `入側 ${st.filter(x => x > 0).map(Math.round).join('')} / 出側 ${st.filter(x => x < 0).map(Math.round).join('')} mm`);
-      const hx = L.coolHeaderXs(), gx = [];
+      const hx = L.coolStations(true), gx = [];      // ヘッダは 1 ステーションに OS / DS の 2 本（X は同じ）
       gv.headers.mesh.updateWorldMatrix(true, false);
       const m4 = new T.Matrix4();
       for (let i = 0; i < gv.headers.mesh.count; i++) {
@@ -207,8 +207,8 @@ const out = await page.evaluate(() => {
         gx.push(m4.elements[12] / sc);
       }
       const worst = Math.max(...hx.map(x => Math.min(...gx.map(g => Math.abs(g - x)))));
-      ok('描画したヘッダの位置と熱計算が見る位置が一致', hx.length === gx.length && worst < 1,
-         `${hx.length} 本 / 最大のずれ ${worst.toFixed(1)} mm`);
+      ok('描画したヘッダの位置と熱計算が見る位置が一致', hx.length * 2 === gx.length && worst < 1,
+         `${gx.length} 本 / 最大のずれ ${worst.toFixed(1)} mm`);
 
       /* «移したのに見えない» を二度と起こさないための 3 点。設備として立っていること、
        * 断面表示の扱いが «ミルからの距離» の規則どおりであること、そして
