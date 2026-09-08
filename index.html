@@ -825,6 +825,24 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.13.0', base: '580e7cf', date: '2026-09-08', title: '物理実装の «検算» —— 蛇行の符号・体積保存・構成式・塑性係数・加工発熱', items: [
+      // --- 検算で見つかった «向きと保存» の誤り ---
+      { t: 'キャンバーの符号が逆で、蛇行が «自己求心» になっていた。板は短い耳を内側にして曲がるので、ずれは同じ側へ増幅する', w: 'Rolling.camber' },
+      { t: '実測: 初期ずれ +10 mm を 30 km 走らせると −6.4 mm（直す前＝戻る）→ +48.7 mm（直したあと＝増幅する）', w: 'tools/cambertrace.mjs' },
+      { t: '噛み込み・尻抜けの途中も «全圧下ぶん» 伸ばしていて体積が増えていた（1 パス 1.3 %・ロット 7.6 %）', w: 'PhysicsEngine._dynamics' },
+      { t: '接触弧の埋まり具合で圧下率そのものを重み付けするようにした（誤差 0.00〜0.25 %／最終の板長 104.8 → 97.1 m）', w: 'PhysicsEngine._dynamics' },
+      // --- 精度の «取りこぼし» ---
+      { t: '変形抵抗の室温上限が常用域まではみ出し、熱間域のまん中で式を最大 9.4 % 削っていた（p ノルムの角が丸すぎた）', w: 'Rolling.KF_CAP_P' },
+      { t: '上限は外せない（熱間域に当てた式の室温外挿は 1.7〜6.1 倍ずれる）ので、角を立てて熱間域から手を引かせた（削り 0.38 %）', w: 'Rolling.flowStress' },
+      { t: '上限を引き上げた結果、後段の低温パスが正しく硬くなり荷重上限でスケジュールが変わった（最終 12.05 → 12.94 mm）', w: 'Rolling.buildSchedule' },
+      { t: 'クラウンの式そのものは不変。同じ入力ならクラウンは 0.03 µm 以内・ベンディング利得は 4 桁目まで一致する', w: 'Rolling.crown' },
+      { t: '塑性係数 Q を AGC とクラウンで統一。AGC 側は F/(2Δh)·1.5 の当て推量で、利得（Q² で効く）が 1.67〜0.76 倍ずれていた', w: 'Rolling.plasticCoef' },
+      { t: '加工発熱を «その材料点» へ配るようにした。頭は厚くて圧下が大きく、端は冷えていて硬い —— どちらも発熱を増やす', w: 'SlabState.writeHeat' },
+      { t: '加工発熱が端部の冷えを暖め返すので、長手の温度偏差はむしろ小さくなる（59.1 → 45.5 K）', w: 'tools/precisetrace.mjs' },
+      { t: '巻取パスでは材料座標が行きつ戻りつするため、1 パスに 1 回だけ積むよう覆った範囲を覚えるようにした', w: 'SlabState.writeHeat' },
+      { t: '検算の評価器を新設（11 項目）。上限・塑性係数・加工発熱をそれぞれ独立に解き直して照合する', w: 'tools/precisetrace.mjs' },
+      { t: '体積保存の検査を評価器に追加（2 項目）', w: 'tools/modeltrace.mjs' },
+    ] },
     { v: '1.12.0', base: '1974c5f', date: '2026-09-08', title: '板反り対策の «見える化» —— パスライン調整と入側／出側冷却の個別 ON/OFF', items: [
       { t: 'パスライン調整（WR）を運転で動かせるようにした。ロールの組をテーブルに対して ±60 mm 上下させる', w: 'MillState.plOffset' },
       { t: 'パスライン調整が板に与える曲率を実装（κ = 3δ/L²、L は最初のテーブルローラまでの自由長）', w: 'Rolling.passLineCurl' },
@@ -841,11 +859,11 @@ const VERSION = {
       { t: 'CURL.GAIN を «バイト内の曲率の係数» に定義し直した（残る反りの係数ではない）', w: 'CONFIG.CURL' },
       { t: '蛇行を実装。ギャップの左右差（くさび）→ 両耳の伸びの差 → 平面内の曲がり → 横行', w: 'Rolling.gapWedge / camber' },
       { t: '横にずれるほど荷重の合力が中心から外れてくさびが増える «正の帰還» まで入れた（蛇行が止まらない理由）', w: 'Rolling.gapWedge' },
-      { t: '差荷重制御（自動レベリング）を実装。圧下を傾けてくさびを打ち消す。平均キャンバーが 330 分の 1 に', w: 'PhysicsEngine._levelControl' },
-      { t: 'サイドガイドが蛇行を押し戻す側の設備として働くようにした（接触時間 328.9 s → 8.0 s）', w: 'PhysicsEngine._guides' },
+      { t: '差荷重制御（自動レベリング）を実装。圧下を傾けてくさびを打ち消す。平均キャンバーが 178 分の 1 に', w: 'PhysicsEngine._levelControl' },
+      { t: 'サイドガイドが蛇行を押し戻す側の設備として働くようにした（接触時間 288.3 s → 1.9 s）', w: 'PhysicsEngine._guides' },
       { t: '3D で板が横へずれ、平面内に曲がって走るようにした（テーブル胴の外へは出ない）', w: 'SlabView.update' },
       { t: '実績ビュワーとログに «横ずれ» を足した', w: 'RollingLog.SERIES' },
-      { t: '蛇行の検査を評価器に新設（16 項目）。制御の有無で比べる', w: 'tools/cambertrace.mjs' },
+      { t: '蛇行の検査を評価器に新設（17 項目）。制御の有無で比べる', w: 'tools/cambertrace.mjs' },
       { t: 'スプリングバックの検査を評価器に追加（7 項目）', w: 'tools/modeltrace.mjs' },
     ] },
     { v: '1.10.0', base: '52f6a07', date: '2026-09-08', title: 'ロールの実仕様（研削クラウン・硬度・粗度・保有組数）と現品管理', items: [
@@ -950,7 +968,7 @@ const VERSION = {
       { t: '板面冷却を «水冷 / 空冷 / なし» の 3 択に。熱計算・噴射の描画・諸元表が同じ 1 式を見る', w: 'MATERIAL.STRIP_COOL / PhysicsEngine.stripFilm' },
       { t: '冷却の選択はスケジュール表のすぐ上へ置いた（原因を結果より上に置く）', w: 'UIManager._buildStripCool' },
       { t: '抜熱を全項とも指数緩和にし、合計も «いちばん冷たい受け手» で止めた（実測 −257,177 ℃ → 90 ℃）', w: 'Rolling.passTempChange' },
-      { t: '変形抵抗を材質ごとの漸近値 KF_MAX へ滑らかに頭打ちさせた（30 ℃ の A7075 で 2,450 MPa の発散）', w: 'Rolling.flowStress / ALLOYS[].KF_MAX' },
+      { t: '変形抵抗を材質ごとの室温値 KF_MAX で頭打ちさせた（30 ℃ の A7075 で 2,450 MPa の発散）', w: 'Rolling.flowStress / ALLOYS[].KF_MAX' },
       { t: '行き詰まったとき残りを 1 パスへ押し込むのをやめ、噛み込み角・圧下率・荷重の上限を全パスへ効かせた', w: 'buildSchedule.capacity' },
       { t: '圧下量を決める側と最終表を作る側で別々だった速度・パス時間・荷重の定義を統合（表で 55 % 超過していた）', w: 'vSeed / passSecs' },
       { t: '熱間域を下回るパスは «成立しない» ではなく警告に（硬いだけで圧延自体はできる）', w: 'Rolling.scheduleFeasibility' },
@@ -1750,10 +1768,11 @@ const CONFIG = {
    *          物理的に妥当か» を照合するための目安として持つ（計算に直接は使わない。
    *          実際の Q と α は、この材質の熱間実験式 C/b/m を最もよく再現する組として
    *          Rolling.stParams が数値的に決める）
-   *   KF_MAX: 変形抵抗の頭打ち [MPa]。C·exp(−b·ΔT) は熱間域に当てた式なので、そのまま
-   *           低温へ延ばすと指数で発散する（実測: 30 ℃ の A7075 で 2,450 MPa）。実際には
-   *           動的回復が止まったところで室温の変形抵抗（加工硬化後 ≒ 引張強さ）に漸近する。
-   *           その漸近値を材質ごとに置き、flowStress() が滑らかに頭打ちさせる。
+   *   KF_MAX: 室温の変形抵抗 [MPa]（加工硬化後 ≒ 引張強さ）。熱間域に当てた構成式を
+   *           そのまま室温まで外挿すると、動的回復が止まって変形機構が変わるぶんを
+   *           取りこぼして 1.7〜6.1 倍になる（実測: 25 ℃ の A6061 で 1,997 MPa）。
+   *           その «行き先» を材質ごとに置き、flowStress() が上限として効かせる。
+   *           熱間域には手を出さない角度で効かせている（Rolling.KF_CAP_P を参照）。
    *   end: 端部欠陥（ワニ口・舌）の出やすさ ＝ クロップ長の材質係数
    *   RHO/CP/K: 密度・比熱・熱伝導率、E: 熱間域の縦弾性係数 [GPa]（反りの自重たわみに効く）
    * 数値は熱間圧延域の公表データからの代表値（推定を含む）。 */
@@ -2281,8 +2300,8 @@ const Rolling = {
    * これで熱間域は従来の実験式とほぼ一致し、較正をやり直さずに済む。各定数の出どころ:
    *   n = 1/m       —— ひずみ速度感受性の逆数（べき乗則の指数）
    *   Q = n·b·R·T²  —— 従来式の温度勾配 b を、アレニウス形の活性化エネルギーへ読み替えたもの
-   *   α            —— 室温（T_COLD）で KF_MAX になるよう数値的に解く。高 Z 側の
-   *                    «どこから対数的に寝るか» を決める定数で、物理的には «指数則への遷移応力»
+   *   α            —— 高 Z 側の «どこから対数的に寝るか» を決める定数で、物理的には
+   *                    «べき乗則から指数則へ移る応力» の逆数。Q と一緒に熱間域へ当てはめる
    * 材質ごとに 1 度だけ解いて alloy に載せる。
    */
   T_COLD: 25,
@@ -2331,6 +2350,20 @@ const Rolling = {
     return alloy._st;
   },
   /**
+   * 室温の上限を «どれだけ角を立てて» 効かせるか（p ノルムの p）。
+   *
+   * 上限そのものは物理の言明で、外せない —— 単一の (Q, α) では室温まで外挿できないからだ。
+   * 実測すると、熱間域に合わせた組で 25 ℃ を外挿した値は室温の変形抵抗の 1.7〜6.1 倍
+   * （A6061 で 1,997 MPa／KF_MAX 330）になる。逆に室温を合わせに行くと熱間域の誤差が
+   * 5〜6 % から 25〜50 % へ崩れる（実測）。«熱間の式で室温は語れない» ということ。
+   *
+   * 問題は上限の «有無» ではなく «角の丸さ» だった。p = 4 の丸い最小値は上限のはるか手前から
+   * 効き始め、常用域のまん中で式を最大 9.4 % 削っていた（A7075 300 ℃・300 s⁻¹ で
+   * 476 → 431 MPa）。p を上げると立ち上がりが急になり、室温は KF_MAX ちょうどに載せたまま
+   * 熱間域から手を引く。p = 20 で熱間域の最大の削りは 0.38 %、実際の圧延中は 0.1 % 未満。
+   */
+  KF_CAP_P: 20,
+  /**
    * 変形抵抗 [MPa]。Sellars–Tegart の双曲線正弦則（上の stParams を参照）。
    * 温度が低いほど、ひずみ速度が高いほど大きく、低温側では指数則へ移って
    * 室温の変形抵抗（KF_MAX）へ漸近する。
@@ -2342,11 +2375,41 @@ const Rolling = {
     const kf = Math.asinh(X) / st.alpha;
     /* 双曲線正弦則は高 Z 側で対数的に寝るので、それ自体が発散を防ぐ。ただし単一の Q で
      * 室温まで外挿できる保証は無い（変形機構が変わる）ので、室温の変形抵抗 KF_MAX を
-     * 上限として «滑らかな最小値»（p ノルム, p=4）で押さえる。熱間域では効かない。 */
-    const cap = alloy.KF_MAX;
+     * 上限として «滑らかな最小値»（p ノルム）で押さえる。p は KF_CAP_P を参照。 */
+    const cap = alloy.KF_MAX, p = Rolling.KF_CAP_P;
     if (!(cap > 0)) return kf;
-    const r = kf / cap;
-    return kf / Math.pow(1 + r * r * r * r, 0.25);
+    return kf / Math.pow(1 + Math.pow(kf / cap, p), 1 / p);
+  },
+  /**
+   * 塑性係数 Q = −dF/dh_out [t/mm]。«板を 1 mm 薄くすると荷重が何 t 増えるか»。
+   *
+   * ミルばねと組んで «入側が δ 厚いと出側は δ·Q/(M+Q) 動く» を決める量で、
+   *   ・AGC のフィードフォワード（利得が Q² で効く）
+   *   ・幅方向のたわみ（クラウン。薄いところほど荷重が高い、の «ほど» がこれ）
+   * の両方が同じものを見ている。別々に持つと片方だけが荷重モデルの修正から取り残される。
+   *
+   * 解析式は無い（変形抵抗・摩擦丘・ロールの扁平がすべて hOut に依る）ので、荷重モデル
+   * そのものを数値微分して取る。こうすれば荷重モデルを直せば Q も一緒に直る。
+   * 以前 AGC 側が使っていた当て推量 F/(2Δh)·1.5 は、厚板パスで +30 %、薄板パスで −18 %
+   * ずれていて、フィードフォワードの利得（Q² で効く）は 1.67〜0.76 倍になっていた（実測）。
+   *
+   * Rolling.solve は反復するので、圧延中に毎フレーム 2 回呼ぶと重い。板厚・温度・速度が
+   * «意味のある量» 動くまでは前の値を使い回す（クラウン側の再計算判定と同じ考え方）。
+   */
+  _qMemo: { key: '', Q: 0, ref: null },
+  plasticCoef(hIn, hOut, width, speedMpm, T, alloy = Rolling.alloy(), ra = null) {
+    const h = Math.max(hOut, 1e-3), sp = Math.abs(speedMpm) || 60;
+    const Tm = Array.isArray(T) || ArrayBuffer.isView(T) ? T[T.length >> 1] : T;
+    const key = `${alloy.name}:${Math.round(hIn * 20)}:${Math.round(h * 50)}:${Math.round(width / 5)}`
+              + `:${Math.round(sp / 5)}:${Math.round(Tm / 5)}:${ra ? Math.round(ra * 20) : 0}`;
+    const memo = Rolling._qMemo;
+    if (memo.key === key) return memo;
+    const eps = Math.max(h * 0.01, 1e-3);
+    const ref = this.solve(hIn, h, width, sp, Tm, 0, alloy, ra);
+    const up = this.solve(hIn, h + eps, width, sp, Tm, 0, alloy, ra);
+    memo.key = key; memo.ref = ref;
+    memo.Q = Math.max((ref.forceTon - up.forceTon) / eps, 1e-6);      // t/mm
+    return memo;
   },
   /** 材料温度の下限 [℃]。圧延中は熱間域の下限、巻取中は巻取温度を基準にする。 */
   tempFloor(finishing, alloy = Rolling.alloy()) {
@@ -2823,11 +2886,10 @@ const Rolling = {
     const so = this.stackOps(w, this.contactStiff(pBar));
     const ns = so.ns, i0 = so.g.i0;
     const zs = so.z.subarray(i0, i0 + ns);                                // 板の下の格子点
-    // 塑性係数 Q_w = −dP'/dh_out [N/mm/mm]。荷重モデルそのものを数値微分して取る
-    const eps = Math.max(hOut * 0.01, 1e-3), sp = Math.abs(opt.speedMpm ?? 60);
-    const f1 = this.solve(hIn, hOut, w, sp, opt.T, 0, al);
-    const f2 = this.solve(hIn, hOut + eps, w, sp, opt.T, 0, al);
-    const Qw = Math.max((f1.forceTon - f2.forceTon) * 9807 / w / eps, 1e-9);
+    /* 塑性係数 Q_w = −dP'/dh_out [N/mm/mm]。AGC と同じ Rolling.plasticCoef から取る
+     * （あちらは板幅ぜんぶで [t/mm]、こちらは単位幅あたり [N/mm/mm]）。 */
+    const q = this.plasticCoef(hIn, hOut, w, opt.speedMpm ?? 60, opt.T, al);
+    const f1 = q.ref, Qw = Math.max(q.Q * 9807 / w, 1e-9);
     // 幅方向の温度分布 → 変形抵抗の差 → 荷重分布の «外力» 項
     const wc = this.widthChill(zs, hOut, w, opt.tPass ?? 5, al, opt.T);
     const sr = Math.max(f1.strainRate || 1, 1e-3);
@@ -2950,7 +3012,14 @@ const Rolling = {
   camber(hIn, hOut, wedge, w) {
     if (!(hIn > hOut) || !(w > 0)) return 0;
     const hOs = Math.max(hOut + wedge / 2, 1e-3), hDs = Math.max(hOut - wedge / 2, 1e-3);
-    return (Math.log(hIn / hOs) - Math.log(hIn / hDs)) / w;
+    /* 符号: 板は «短い耳を内側にして» 曲がる。進路の曲率を κ（正 = +z 側へ曲がる）、
+     * 幅方向の位置を ζ（正 = +z ＝ 操作側）とすると、曲率半径 R = 1/κ の円弧の上では
+     * ζ の繊維の半径が R − ζ になるので、その伸びは ε(ζ) = ε̄ − κ·ζ。したがって
+     *     κ = −(ε_OS − ε_DS)/w
+     * である。OS のギャップが広い（OS が厚い＝伸びない＝短い）とき κ > 0 ＝ OS 側へ曲がり、
+     * 曲がったぶん OS 側へ寄る → 荷重の合力がさらに OS へ外れる → くさびが増える、
+     * という «自己増幅» になる。これが実機で蛇行が一度始まると止まらない理由。 */
+    return -(Math.log(hIn / hOs) - Math.log(hIn / hDs)) / w;
   },
 
   /**
@@ -3447,6 +3516,7 @@ class SlabState {
     this.resetEndChill();
     this._dTmp = new Float64Array(SlabState.NPROF);
     this._wLo = SlabState.NPROF; this._wHi = -1;      // このパスで書けた範囲
+    this._qLo = 2; this._qHi = -1;                    // 加工発熱を積み終えた範囲（材料座標）
     this._Tloc = new Float64Array(CONFIG.MATERIAL.LAYERS);
     this._uPrev = null;
   }
@@ -3530,8 +3600,48 @@ class SlabState {
     if (a < this._wLo) this._wLo = a;
     if (b > this._wHi) this._wHi = b;
   }
+  /**
+   * u0→u1 の区間へ «その材料点が受けた加工発熱» [K] を積む。
+   *
+   * 加工発熱は板全体に一様には入らない。頭は AGC がまだ収束しておらず厚いので圧下が
+   * 大きく、端部は冷えていて変形抵抗が高い —— どちらも発熱を増やす向きに効く。
+   * 板全体の «平均» は板厚方向の層モデル（_biteThermal）がすでに持っているので、
+   * ここは平均を引いた «分布» だけを受け持つ（この配列の約束）。
+   *
+   * 刻み幅に依らないよう、セルへは «そのセルが通過した割合» を重みに積む。区間の幅で
+   * 割らずにセルを丸めて足すと、刻みが細かいときに同じセルへ何度も足してしまう。
+   * 端のセルは受け持ちが半分なので、その半分で割り戻して 1 パスでちょうど 1 回ぶんにする。
+   */
+  writeHeat(u0, u1, dT) {
+    if (!(dT > 0)) return;
+    const N = SlabState.NPROF, D = this.dTProf;
+    let a = Num.clamp(Math.min(u0, u1), 0, 1), b = Num.clamp(Math.max(u0, u1), 0, 1);
+    /* 1 つの材料点がロールバイトを通るのは 1 パスに 1 回だけ。ところが巻取パスでは
+     * 板の一部がリールに載っていて、材料座標を «体積の比» で割り出す uBite が
+     * 行きつ戻りつする（実測: 最終パスで材料座標を 1.84 周ぶん進んだ）。そのまま積むと
+     * 同じ材料点へ何度も発熱が入り、長手の偏差が 228 K まで膨らむ。
+     * 積み終えた範囲を覚えておき、«まだ通っていない側» だけへ積む。 */
+    if (this._qHi >= this._qLo) {
+      if (a < this._qLo) b = Math.min(b, this._qLo);        // 手前へ伸びるぶん
+      else if (b > this._qHi) a = Math.max(a, this._qHi);   // 先へ伸びるぶん
+      else return;                                          // 既に積んだ範囲の中
+    }
+    if (!(b > a)) { this._qLo = Math.min(this._qLo, a); this._qHi = Math.max(this._qHi, b); return; }
+    this._qLo = Math.min(this._qLo, a); this._qHi = Math.max(this._qHi, b);
+    const p0 = a * (N - 1), p1 = b * (N - 1);
+    const i0 = Math.max(Math.floor(p0 - 0.5), 0), i1 = Math.min(Math.ceil(p1 + 0.5), N - 1);
+    for (let i = i0; i <= i1; i++) {
+      const ov = Math.min(p1, i + 0.5) - Math.max(p0, i - 0.5);
+      if (ov > 0) D[i] += dT * ov / ((i === 0 || i === N - 1) ? 0.5 : 1);
+    }
+    SlabState.zeroMean(D);            // 平均は層モデルの持ち分。ここは «分布» だけ
+  }
   /** パスの始まり: 出側バッファを入側の写しから始める（通らなかった所は前の値が残る） */
-  beginGauge() { this._hNext.set(this.hProf); this._uPrev = null; this._wLo = SlabState.NPROF; this._wHi = -1; }
+  beginGauge() {
+    this._hNext.set(this.hProf); this._uPrev = null;
+    this._wLo = SlabState.NPROF; this._wHi = -1;
+    this._qLo = 2; this._qHi = -1;                  // 加工発熱を積み終えた材料座標の範囲
+  }
   /**
    * パスの終わり: 出側バッファを入側へ移す（次のパスがこれを読む）。
    * 両端の 1〜2 セルは «弧が満ちる前／抜けたあと» に当たって書き込まれないことがある。
@@ -5066,8 +5176,11 @@ class PhysicsEngine {
       const nom = m.passIndex > 0 ? (CONFIG.SCHEDULE[m.passIndex - 1]?.gap ?? s.hBite) : s.initialThickness;
       const lead = Math.abs(m.currentSpeed) / 60 * 1000 * G.TAU;    // 圧下が動くあいだに進む距離
       const hAhead = s.hAt(s.uAhead(m.gap, lead));
-      const dh = Math.max(s.hBite - m.gap, 1e-3);
-      const Qp = Math.max(s.rollForce / (2 * dh) * 1.5, 1);        // 材料の塑性剛性 Q [t/mm]
+      /* 材料の塑性剛性 Q [t/mm]。荷重モデルを数値微分して取る（クラウン側と同じ 1 か所）。
+       * 当て推量 F/(2Δh)·1.5 だと厚板パスで +30 %／薄板パスで −18 % ずれ、利得は Q² で
+       * 効くので 1.67〜0.76 倍になっていた（実測）。 */
+      const Qp = Rolling.plasticCoef(s.hBite, m.gap, s.width, m.currentSpeed,
+                                     s.temperature, s.alloy, m.wrRa).Q;
       /* 入側が δ 厚くなると出側は δ·Q/(M+Q) 動く。これを完全に消すのに必要な圧下は δ·Q/M。
        * ただし荷重 FB（ゲージメータ）は荷重の増分を通じて既に δ·Q/(M+Q) ぶん動いているので、
        * フィードフォワードが受け持つのは «その差» ＝ δ·Q²/(M·(M+Q)) だけ。
@@ -5150,11 +5263,17 @@ class PhysicsEngine {
        * 出側の材料はロールより速く出る（中立点より出側では材料が先行する）ので、
        * ロール周速をそのまま出側速度にすると板の伸びが 2〜8 % 足りなくなる。 */
       const vOut = v * (1 + res.forwardSlip);
-      const r = gap / hLoc;
+      /* 入側と出側の速度比。噛み込み・尻抜けの途中は接触弧が «埋まりきっていない» ので、
+       * まだ全圧下ぶんの伸びは付いていない。ここを常に全圧下（r = gap/h_in）で伸ばしていたため、
+       * 弧の長さぶん（Ld·(1−r)）が毎パス余計に伸び、体積が 1 パスあたり 1.3 %・
+       * ロット合計で 7 % 増えていた（実測）。埋まり具合で圧下率そのものを重み付けする。 */
+      const r = 1 - (1 - gap / hLoc) * fill;
       if (vOut > 0) { s.xMax += vOut * dt; s.xMin += vOut * r * dt; }
       else          { s.xMin += vOut * dt; s.xMax += vOut * r * dt; }
-      // 出ていった材料の «実際の板厚» を材料座標へ書き戻す（次のパスがこれを読む）
-      s.writeGauge(s._uPrev === null ? u : s._uPrev, u, gap);
+      // 出ていった材料の «実際の板厚» と «そこで出た加工発熱» を材料座標へ書き戻す
+      const uFrom = s._uPrev === null ? u : s._uPrev;
+      s.writeGauge(uFrom, u, gap);
+      s.writeHeat(uFrom, u, res.heat);
       s._uPrev = u;
       // 出ていく板厚は «弧が満ちている間の» 実ギャップ。尻抜けで弧が空きかけると
       // 荷重が落ちてミルの伸びが戻るので、その区間を混ぜると薄く記録される。
@@ -5279,11 +5398,6 @@ class PhysicsEngine {
   }
 
   /**
-   * 板から奪った熱をロール表層へ入れる。エネルギーで受け渡すので、板が失った熱と
-   * ロールが得た熱が一致する（«板だけ冷えてロールは冷たいまま» という不整合を作らない）。
-   * dTavg は «板全体の平均温度» の下がり幅 [K]、rc は板の体積熱容量。
-   */
-  /**
    * 形状制御（比例クラウン制御）。
    *
    * 平坦度を決めるのは «クラウンそのもの» ではなく «クラウン率 C/h の変化» なので、
@@ -5349,6 +5463,11 @@ class PhysicsEngine {
     m.bendingForce = m.bendForceT / B.FORCE;                          // 3D 表現（シリンダの伸び）
   }
 
+  /**
+   * 板から奪った熱をロール表層へ入れる。エネルギーで受け渡すので、板が失った熱と
+   * ロールが得た熱が一致する（«板だけ冷えてロールは冷たいまま» という不整合を作らない）。
+   * dTavg は «板全体の平均温度» の下がり幅 [K]、rc は板の体積熱容量。
+   */
   _rollHeat(dTavg, rc) {
     if (!(dTavg > 0)) return;
     const s = this.slab;

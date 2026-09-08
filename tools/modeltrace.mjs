@@ -10,7 +10,7 @@ const TARGET = process.argv[2] || DEFAULT_TARGET;
 const { browser, page } = await openApp({ target: TARGET, viewport: { width: 900, height: 520 }, quiet: true });
 await installHelpers(page);
 
-const out = await page.evaluate(() => {
+const out = await page.evaluate(async () => {
   const A = window.__app, P = A.physics, K = window.__CFG, R = window.__ROLL;
   const Res = { checks: [] }, ok = (n, p, d = '') => Res.checks.push({ name: n, pass: !!p, detail: d });
   const al = K.ALLOYS.A5052, W = 1500;
@@ -243,6 +243,33 @@ const out = await page.evaluate(() => {
        R.springback(3e-5, 300, kf, al) > R.springback(3e-5, 100, kf, al),
        `h=300: ${R.springback(3e-5, 300, kf, al).toExponential(2)} / h=100: ${R.springback(3e-5, 100, kf, al).toExponential(2)}`);
     ok('符号が保たれる', R.springback(-kE * 4, h, kf, al) === -R.springback(kE * 4, h, kf, al), '正負で対称');
+  }
+
+  /* ---------- 圧延の «体積保存»（クロップ前）----------
+   * 板は塑性変形するだけなので体積は変わらない。噛み込み・尻抜けの途中で
+   * 全圧下ぶん伸ばしていると、接触弧の長さぶん（Ld·(1−r)）が毎パス余計に伸びる。 */
+  {
+    A.bus.emit('CMD_RESET');
+    await new Promise(r => setTimeout(r, 300));
+    window.__startAuto(false);
+    const rec = []; let last = -1, v0 = null, stop = false;
+    window.__ff((p) => {
+      const s = p.slab, m = p.mill;
+      if (m.passIndex !== last) {
+        last = m.passIndex;
+        const V = s.thickness * s.width * s.length;
+        if (v0 === null) v0 = V; else rec.push({ pass: m.passIndex + 1, err: V / v0 - 1 });
+      }
+      if (p.finish.scraps.length) stop = true;      // クロップが始まったら打ち切る
+      return stop || p.finish.done || !!p.tripped;
+    }, 120 * 3000, 0);
+    const worst = rec.reduce((a, b) => (Math.abs(b.err) > Math.abs(a.err) ? b : a), { pass: 0, err: 0 });
+    ok('圧延で体積が保存する（クロップ前、1 % 以内）', Math.abs(worst.err) < 0.01,
+       `最大のずれ ${(worst.err * 100).toFixed(2)} %（第 ${worst.pass} パス）／ ${rec.length} パス`);
+    ok('体積のずれがパスごとに積み上がらない（1 パスあたり 0.2 % 以内）',
+       rec.every((q, i) => Math.abs(q.err - (i ? rec[i - 1].err : 0)) < 0.002),
+       rec.map(q => (q.err * 100).toFixed(2)).join(' / ') + ' %');
+    A.bus.emit('CMD_RESET');
   }
 
   Res.failed = Res.checks.filter(c => !c.pass).length;

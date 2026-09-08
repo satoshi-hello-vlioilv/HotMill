@@ -30,6 +30,21 @@ const out = await page.evaluate(() => {
      Math.abs(R.camber(60, 30, 0.05, w)) > Math.abs(kc),
      `45 mm: ${Math.abs(kc).toExponential(2)} → 30 mm: ${Math.abs(R.camber(60, 30, 0.05, w)).toExponential(2)}`);
 
+  /* 2b) 蛇行の «帰還の向き»。板が横にずれると荷重の合力が外れてくさびが増え、
+   *     くさびは板をさらに同じ側へ曲げる —— 自己増幅でなければ実機と逆になる。 */
+  {
+    const save = K.MILL.LEVEL_ERR;
+    K.MILL.LEVEL_ERR = 0;
+    let z = 10, psi = 0;                       // 初期ずれ +10 mm、ゼロ点誤差も制御も無し
+    for (let i = 0; i < 30; i++) {
+      const wg = R.gapWedge(2500, w, z, 0);
+      psi += R.camber(60, 45, wg, w) * 1000; z += psi * 1000;
+    }
+    K.MILL.LEVEL_ERR = save;
+    ok('蛇行の帰還が自己増幅（実機どおり。放っておくと止まらない）', z > 10,
+       `初期 +10 mm → 30 km 走って ${z.toFixed(1)} mm（同じ側へ増幅）`);
+  }
+
   /* 3) 通しで走らせる。差荷重制御（自動レベリング）を «入れた／切った» で比べ、
    *    制御が蛇行をどれだけ抑えているかを実測する。 */
   const run = (kp) => new Promise(r => {
