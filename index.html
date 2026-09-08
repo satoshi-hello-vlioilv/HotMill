@@ -660,6 +660,9 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
           <div class="derived" id="der-roll"></div>
         </div>
         <table class="sched"><tbody id="spec-body"></tbody></table>
+        <div class="top" style="margin-top:12px;"><span class="k">ロール現品（組管理）</span><span class="v" id="lbl-shop"></span></div>
+        <table class="sched"><thead><tr><th>種別</th><th>組</th><th>径 mm</th><th>粗度 µmRa</th><th>研削</th><th>寿命</th></tr></thead><tbody id="shop-body"></tbody></table>
+        <div class="derived" id="shop-note" style="margin-top:6px;"></div>
         <div class="top" style="margin-top:12px;"><span class="k">テーブル区分（図面）</span></div>
         <table class="sched"><thead><tr><th>区分</th><th>範囲 m</th><th>本数</th><th>ピッチ</th><th>選択</th></tr></thead><tbody id="table-body"></tbody></table>
         <div class="derived" id="table-note" style="margin-top:6px;"></div>
@@ -806,6 +809,17 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.10.0', base: '52f6a07', date: '2026-09-08', title: 'ロールの実仕様（研削クラウン・硬度・粗度・保有組数）と現品管理', items: [
+      { t: '研削クラウンを実仕様にした（WR +150 / BUR −50 µm）。合わせて «径差» という研削仕様どおりの単位に直し、板厚への係数を 2 から 1 にした', w: 'MILL.WR_CROWN / Rolling.rollCrown' },
+      { t: '実仕様を入れた結果、全パスでクラウン率 ±0.009 %・I-unit 0.5〜24 に収まった（推定値 95 µm より良い）', w: 'tools/shaperun.mjs' },
+      { t: 'メーカー・硬度・粗度・保有組数（WR 関東特殊鋼 7 組 / BUR 日本製鋼 2 組）を諸元に載せた', w: 'MILL.WR_MAKER ほか' },
+      { t: 'ロールを «組» で管理するようにした。使った仕事（荷重 × 通板長）が寿命に達すると組替えして研削へ回す', w: 'RollShop' },
+      { t: '研削のたびに直径が落ち、最小径を割ったら新品に入れ替わる（WR 3 mm / BUR 5 mm ずつ）', w: 'RollShop.change' },
+      { t: '表面粗度を実装。WR は熱疲労で 0.60 → 1.10 へ荒れ、BUR はロール間接触で 0.60 → 0.20 へ磨かれる', w: 'ROLL_SHOP.RA_NEW / RA_END' },
+      { t: 'ワークロールの粗度を摩擦係数に効かせた（μ ∝ (Ra/0.85)^0.25、仕様の範囲で ±7 %）', w: 'Rolling.friction' },
+      { t: '諸元パネルにロール現品の一覧（組・径・粗度・研削回数・寿命バー）を出した', w: 'UIManager._renderShop' },
+      { t: 'ロール現品管理の検査を評価器に新設（20 項目）', w: 'tools/rollshoptrace.mjs' },
+    ] },
     { v: '1.9.0', base: '69eda2d', date: '2026-09-07', title: '幅方向の形状 —— 影響係数法によるクラウン・平坦度・形状制御・据わり', items: [
       { t: 'ロールたわみを影響係数法で解いた。WR は自由端梁、BUR は軸受間の単純支持梁、両者は線接触でつぶれる連立', w: 'Rolling.stackOps' },
       { t: '«たわみ → 板厚分布 → 荷重分布 → たわみ» の陰的関係を、塑性係数 Q_w を数値微分して 1 本の線形方程式にした', w: 'Rolling.crown' },
@@ -816,7 +830,7 @@ const VERSION = {
       { t: '幅方向の温度分布（端の冷え）を «側面からの放熱 ÷ 冷える体積» で出し、変形抵抗の差として荷重分布に効かせた', w: 'Rolling.widthChill' },
       { t: '幅広がり（Helmi–Alexander 型）を実装。厚いパスで数 mm 広がり、薄いパスではほぼ 0', w: 'Rolling.spread' },
       { t: '剛体としての «据わり»（片側接触）を線形計画で解いた。両端が反って接地が狭まると板は重心側へ倒れる', w: 'Rolling.restPose' },
-      { t: 'ワークロールの研削クラウンを 95 µm（中凸）にした。0 のままだと荷重クラウンが取り切れずクラウン率が 2 % を超える', w: 'MILL.WR_CROWN' },
+      { t: 'ワークロールの研削クラウンを正の値（中凸）にした。0 のままだと荷重クラウンが取り切れずクラウン率が 2 % を超える', w: 'MILL.WR_CROWN' },
       { t: '計器に «板形状（幅）» を 1 枚足した。主値は判断に使う平坦度と判定、副値に原因のクラウン・エッジ・ベンダ力', w: '#m-flat / #m-crown-s' },
       { t: '計器が 2 行に折り返さないよう、幅が足りないときはまず文字を詰めてから折り返す段取りにした', w: '@media (max-width:1760px)' },
       { t: '実績ビュワーにクラウン・平坦度・ベンディングの 3 系列を足した（CSV にも同じ列が入る）', w: 'RollingLog.SERIES' },
@@ -1004,9 +1018,17 @@ const CONFIG = {
     PASS_LINE:      900,             // 床からパスライン(下ワークロール上面)まで ※推定値
     // ロールは研削のたびに径が小さくなる。新品径と最小径（研削限度）の差は
     // パスライン調整ウェッジが吸収し、パスライン高さは一定に保たれる。
-    WR_D:           930,  WR_D_MIN:  885,   // ワークロール Φ930 × 2500L
-    BR_D:          1430,  BR_D_MIN: 1350,   // バックアップロール Φ1430 × 2450L
-    BR_HARDNESS: '45〜50 HS', BR_ROUGHNESS: '0.60〜0.20 μmRa', BR_CROWN: -50,  // μm（凹クラウン）
+    WR_D:           930,  WR_D_MIN:  885,   // ワークロール Φ930 × 2500L（関東特殊鋼）
+    BR_D:          1430,  BR_D_MIN: 1350,   // バックアップロール Φ1430 × 2450L（日本製鋼）
+    WR_MAKER: '関東特殊鋼', BR_MAKER: '日本製鋼',
+    WR_HARDNESS: '60〜70 HS', WR_ROUGHNESS: '0.60〜1.10 μmRa',
+    BR_HARDNESS: '45〜50 HS', BR_ROUGHNESS: '0.60〜0.20 μmRa',
+    /* 研削クラウン [µm]。ロールの «直径» の 中央 − 端（＝ 径差。研削仕様の書き方に合わせる）。
+     * 正 = 中凸。ワークロール +150 / バックアップロール −50（凹）は実機の研削仕様。
+     * ギャップへの効きは «上下 1 組で径差そのぶん» なので、板厚分布への寄与は −(WR + BUR)
+     * ＝ −100 µm になる（Rolling.rollCrown）。荷重で開くぶん（この線では +150〜230 µm）を
+     * ワークロールの中凸で先回りして埋める、という実機の考え方がそのまま形になっている。 */
+    WR_CROWN: 150, BR_CROWN: -50,
     BARREL:        2500,             // ワークロール胴長
     BR_BARREL:     2450,             // バックアップロール胴長
     WR_NECK_D:      520,  BR_NECK_D: 850,
@@ -1050,6 +1072,26 @@ const CONFIG = {
      * 熱容量は «ワークロール 2 本の胴» で取る。表層だけを容器にすると 1 パスで 200 K も
      * 上がってしまい非物理（実際には表面は 1 回転ごとにクーラントで冷やされ、
      * 平均レベルを決めているのはロール本体と冷却の釣り合い）。 */
+    /* ロール管理（現品管理）。ロールは «組» で管理され、使ったら外して研削し、次の組を入れる。
+     * WR 7 組 / BUR 2 組という保有数は «研削に出ている間もラインを止めない» ために要る数で、
+     * WR のほうが痛みが早いぶん組数が多い。
+     *
+     *   粗度 [µmRa] の仕様は «研削したて 〜 交換時» の向きに読む。
+     *     WR  0.60 → 1.10 …… 熱疲労とヒートクラックで «荒れて» いく（噛み込みには有利）
+     *     BUR 0.60 → 0.20 …… ロール間接触で «磨かれて» いく
+     *   ワークロールの粗度は摩擦係数に効く（荒いほど μ が高い）ので、
+     *   同じスケジュールでも «研削直後の組» と «交換直前の組» で荷重が変わる。
+     *
+     *   1 組で圧延できる量は «荷重 × 通板長» の積算（＝ロールが受けた仕事）で見る。 */
+    ROLL_SHOP: {
+      WR: { SETS: 7, RA_NEW: 0.60, RA_END: 1.10 },
+      BR: { SETS: 2, RA_NEW: 0.60, RA_END: 0.20 },
+      CAMPAIGN: 2.4e10,                    // 1 組の寿命 [t·mm]（荷重 × 通板長の積算）
+      GRIND_WR: 3, GRIND_BR: 5,            // 1 回の研削で落とす直径 [mm]
+    },
+    /* 摩擦係数へのロール粗度の効き。μ ∝ (Ra/Ra_ref)^MU_RA_K。
+     * 研削したて（0.60）で −7 %、交換直前（1.10）で +7 % ほど動く。 */
+    MU_RA_REF: 0.85, MU_RA_K: 0.25,
     ROLL_T0: 60,                           // クーラントと釣り合う待機温度 [℃]
     ROLL_RC: 3.6e6,                        // 鍛鋼の体積熱容量 [J/m³K]
     ROLL_TAU: 45,                          // クーラントで待機温度へ戻る時定数 [s]
@@ -1068,20 +1110,14 @@ const CONFIG = {
      * 陰的関係が n×n の線形方程式 1 本になる（Rolling.crown）。 */
     BR_BEARING_SPAN: 3600,                 // BUR 軸受中心間距離 [mm]（胴 2,450 ＋ 首・チョック）
     BEND_ARM: 175,                         // ベンディング力の作用点（軸受中心から外側）[mm]
-    /* ワークロールの研削クラウン [µm]（半径の 中央 − 端。正 = 中凸）。
-     * 実機は «荷重でギャップが中央に開くぶん» をあらかじめ埋めるために正のクラウンで
-     * 研削する。ここを 0 にすると、荷重クラウン（この線では 150〜230 µm）がそのまま
-     * 板に出てベンディングだけでは取り切れず、薄いパスでクラウン率が 2 % を超える。 */
-    WR_CROWN: 95,
-    // BR_CROWN（図面の −50 µm ＝ 凹クラウン）は BUR の研削クラウン。合わせて «無負荷ギャップの形» を作る
     /* 熱クラウン。ロール胴は板から熱をもらって膨らむが、中央ほど熱く端ほど冷たいので
      * 中凸になる。ΔD = 2·α·R·ΔT で、α = 12e-6、R = 465 mm、中央と端の温度差が
      * ロール平均温度の上昇に比例すると見て µm/K に丸める。 */
-    THERM_CROWN_K: 0.8,                    // 熱クラウン [µm/K]（ロール温度の待機温度からの上昇）
+    THERM_CROWN_K: 1.6,                    // 熱クラウン [µm/K・径差]（ロール温度の待機温度からの上昇）
     THERM_CROWN_MAX: 180,                  // 熱クラウンの上限 [µm]
     /* 摩耗クラウン。板が通る幅だけロールが減る（箱形の摩耗）。中央の減りが大きいので
      * 負のクラウンとして効く。圧延した «通板長 × 荷重» に比例させる。 */
-    WEAR_CROWN_K: 6e-11,                   // 摩耗クラウン [µm /(t·mm)]
+    WEAR_CROWN_K: 1.2e-10,                 // 摩耗クラウン [µm・径差 /(t·mm)]
     WEAR_CROWN_MAX: 120,                   // 摩耗クラウンの上限 [µm]
     FLAT_MAX: 4.0,                         // 扁平半径の上限（R'/R）。これ以上は圧延不能域
     /* 荷重に対する伸びの応答時定数 [s]。スタンドは «ばね» なので伸びは荷重にほぼ即応する
@@ -2266,10 +2302,14 @@ const Rolling = {
    * 既存の較正（μ = 0.25）を基準として保ったまま状態依存だけを足せる。
    * μ は摩擦丘 Qp に指数で効くので、接触弧が板厚より長い薄板パスで特に大きく効く。
    */
-  friction(T, speedMpm) {
-    const P = CONFIG.PROCESS, v = Math.max(Math.abs(speedMpm), 1);
+  friction(T, speedMpm, ra = null) {
+    const P = CONFIG.PROCESS, M = CONFIG.MILL, v = Math.max(Math.abs(speedMpm), 1);
+    /* ロール表面の粗さも摩擦に効く。研削したてのワークロールは荒く（噛み込みが良く）、
+     * 使い込むと熱疲労でさらに荒れる。μ ∝ (Ra/Ra_ref)^k で、仕様の 0.60〜1.10 µmRa の
+     * 範囲で ±7 % ほど動く。ra を渡さなければ基準粗度＝効果なし。 */
+    const kr = ra ? Math.pow(Math.max(ra, 0.05) / M.MU_RA_REF, M.MU_RA_K) : 1;
     const mu = P.MU * Math.exp(-P.MU_KT * (T - CONFIG.MATERIAL.TREF))
-                    * Math.pow(P.MU_VREF / v, P.MU_KV);
+                    * Math.pow(P.MU_VREF / v, P.MU_KV) * kr;
     return Num.clamp(mu, P.MU_MIN, P.MU_MAX);
   },
   /**
@@ -2299,7 +2339,7 @@ const Rolling = {
    * temp は板の平均温度（数値）か、板厚方向の層温度（配列: 上面 → 下面）。層温度を渡すと
    * 変形抵抗は層ごとの値の平均になり（冷えた表層は硬い）、上下面の差 kfTop/kfBot も返す。
    */
-  solve(hIn, hOut, width, speedMpm, temp, tensionMPa = 0, alloy = Rolling.alloy()) {
+  solve(hIn, hOut, width, speedMpm, temp, tensionMPa = 0, alloy = Rolling.alloy(), ra = null) {
     const dh = hIn - hOut;
     if (dh <= 0 || width <= 0)
       return { force: 0, forceTon: 0, torque: 0, power: 0, powerKW: 0, Ld: 0, kf: 0, pm: 0,
@@ -2308,7 +2348,7 @@ const Rolling = {
     const hMean = (hIn + hOut) / 2;
     const v = Math.abs(speedMpm) / 60 * 1000;                       // mm/s
     const strain = Math.log(hIn / hOut);
-    const mu = Rolling.friction(typeof temp === 'number' ? temp : temp[(temp.length - 1) >> 1], speedMpm);
+    const mu = Rolling.friction(typeof temp === 'number' ? temp : temp[(temp.length - 1) >> 1], speedMpm, ra);
     /* ロールの弾性扁平は «荷重 → 扁平 → 接触弧 → 荷重» の陰的な関係なので、
      * 接触弧長を不動点反復で解く（緩和つき。3〜6 回で 1e-5 に落ちる）。
      * 1 回目（＝剛体ロール）の荷重も残しておき、扁平がどれだけ効いたかを見えるようにする。 */
@@ -2570,18 +2610,19 @@ const Rolling = {
    */
   rollCrown(zs, w, rollTemp, wear) {
     const M = CONFIG.MILL;
-    /* 符号の約束: 研削・熱・摩耗のクラウンはすべて «ロール半径の 中央 − 端»（正 = 中凸）。
-     * 中凸のロールはギャップを中央で «閉じる» ので、板厚の分布への寄与は符号が反転し、
-     * 上下 2 本ぶんで 2 倍になる。
-     *   ・WR が中凸  → ギャップが中央で狭くなる（板が薄くなる）
-     *   ・BUR が中凸 → WR を中央でより押し下げる → 同じくギャップが狭くなる
-     *   ・熱クラウンは中央が熱くて膨らむので中凸 ＝ クラウンを «減らす»
-     *   ・摩耗は板の通る中央が減るので中凹 ＝ クラウンを «増やす»
+    /* 符号と単位の約束: クラウンはすべて «ロール直径の 中央 − 端»（＝径差。研削仕様と同じ
+     * 書き方。正 = 中凸）で持つ。中凸のロールはギャップを中央で «閉じる» ので、
+     * 板厚分布への寄与は符号が反転する。
+     *   ・上ロールが径差 C だけ中凸 → その下面は中央で C/2 だけ板に近づく
+     *   ・下ロールも同じだけ近づく  → ギャップは合わせて C 狭くなる
+     * つまり «上下 1 組で径差そのぶん»、係数は 2 ではなく 1 になる。
+     *   ・熱クラウンは中央が熱くて膨らむので中凸 ＝ 板クラウンを «減らす»
+     *   ・摩耗は板の通る中央が減るので中凹 ＝ 板クラウンを «増やす»
      * 実機で «熱クラウンで平坦度が崩れる／摩耗で中伸びが出る» のはこの向きによる。 */
-    const ground = M.WR_CROWN + M.BR_CROWN;                       // 研削クラウン（µm、上下 1 組ぶん）
+    const ground = M.WR_CROWN + M.BR_CROWN;                       // 研削クラウン（µm、径差の和）
     const therm = Num.clamp(M.THERM_CROWN_K * Math.max(rollTemp - M.ROLL_T0, 0), 0, M.THERM_CROWN_MAX);
     const worn = Num.clamp(M.WEAR_CROWN_K * Math.max(wear, 0), 0, M.WEAR_CROWN_MAX);
-    const amp = -2 * (ground + therm - worn) / 1000;              // µm → mm（板厚の 中央 − 端）
+    const amp = -(ground + therm - worn) / 1000;                  // µm → mm（板厚の 中央 − 端）
     const out = new Float64Array(zs.length);
     let m = 0;
     for (let i = 0; i < zs.length; i++) { const t = 2 * zs[i] / w; out[i] = amp * (1 - t * t); m += out[i]; }
@@ -3418,6 +3459,67 @@ class SlabState {
   }
 }
 
+/**
+ * ロール現品管理 —— «組» で持ち、使ったら外して研削し、次の組を入れる。
+ *
+ * 実機のロールは 1 組を使い続けるのではなく、保有数（WR 7 組 / BUR 2 組）の中で回します。
+ * 研削のたびに直径が落ち、最小径まで来たら廃却して新品に入れ替わる。この «組ごとに
+ * 履歴が違う» ことが、同じスケジュールでも日によって荷重が違う理由のひとつになります。
+ *
+ *   dia   …… いまの直径 [mm]（新品径 → 最小径）
+ *   ra    …… 表面粗度 [µmRa]。研削したては RA_NEW、使うほど RA_END へ寄る
+ *             （WR は熱疲労で荒れ、BUR はロール間接触で磨かれる ── 向きが逆）
+ *   work  …… 研削してからの «仕事»（荷重 × 通板長 [t·mm]）。寿命 CAMPAIGN で交換
+ *
+ * 真実はここ 1 か所で、ミルの現在径（MillState.wrDia / brDia）も摩擦に効く粗度も
+ * 諸元パネルの表示も、すべてこの状態から取ります。
+ */
+class RollShop {
+  constructor() { this.reset(0); }
+  /** t = 0: 全組が新品 / 1: 全組が研削限度。組ごとに履歴を散らして «現場の在庫» にする。 */
+  reset(t = 0) {
+    const M = CONFIG.MILL, S = M.ROLL_SHOP;
+    const mk = (n, d0, dMin, cfg) => Array.from({ length: n }, (_, i) => {
+      // 組ごとに «寿命のどのあたりか» をずらす（1 組目がいちばん新しい）
+      const f = Num.clamp(t + (i / Math.max(n - 1, 1)) * (1 - t) * 0.85, 0, 1);
+      return { no: i + 1, dia: Num.lerp(d0, dMin, f), ra: cfg.RA_NEW, work: 0, grinds: Math.round(f * 12) };
+    });
+    this.wr = mk(S.WR.SETS, M.WR_D, M.WR_D_MIN, S.WR);
+    this.br = mk(S.BR.SETS, M.BR_D, M.BR_D_MIN, S.BR);
+    this.iWr = 0; this.iBr = 0; this.changes = 0;
+  }
+  get wrSet() { return this.wr[this.iWr]; }
+  get brSet() { return this.br[this.iBr]; }
+  /** 圧延した «仕事» を組み込む。粗度は寿命の進みに応じて RA_NEW → RA_END へ寄る。 */
+  advance(work) {
+    const S = CONFIG.MILL.ROLL_SHOP;
+    for (const [set, cfg] of [[this.wrSet, S.WR], [this.brSet, S.BR]]) {
+      set.work += work;
+      const f = Num.clamp(set.work / S.CAMPAIGN, 0, 1);
+      set.ra = Num.lerp(cfg.RA_NEW, cfg.RA_END, f);
+    }
+  }
+  /** 交換が要るか（どちらかの組が寿命に達したか） */
+  get needChange() {
+    const C = CONFIG.MILL.ROLL_SHOP.CAMPAIGN;
+    return this.wrSet.work >= C || this.brSet.work >= C;
+  }
+  /** 使った組を外して研削し、いちばん «仕事の少ない» 組を入れる。 */
+  change() {
+    const M = CONFIG.MILL, S = M.ROLL_SHOP;
+    const grind = (set, cfg, per, d0, dMin) => {
+      set.dia -= per; set.work = 0; set.ra = cfg.RA_NEW; set.grinds++;
+      if (set.dia < dMin) { set.dia = d0; set.grinds = 0; set.renewed = (set.renewed || 0) + 1; }  // 廃却 → 新品
+    };
+    const pick = (arr, cur) => { let k = cur;
+      for (let i = 0; i < arr.length; i++) if (arr[i].work < arr[k].work && i !== cur) k = i;
+      return k === cur ? (cur + 1) % arr.length : k; };
+    if (this.wrSet.work >= S.CAMPAIGN) { grind(this.wrSet, S.WR, S.GRIND_WR, M.WR_D, M.WR_D_MIN); this.iWr = pick(this.wr, this.iWr); }
+    if (this.brSet.work >= S.CAMPAIGN) { grind(this.brSet, S.BR, S.GRIND_BR, M.BR_D, M.BR_D_MIN); this.iBr = pick(this.br, this.iBr); }
+    this.changes++;
+  }
+}
+
 class MillState {
   constructor() {
     /* ギャップまわりは 3 つを分けて持つ。実機で «設定した値» と «実際に開いている値» が
@@ -3434,7 +3536,8 @@ class MillState {
     this.currentSpeed = 0; this.targetSpeed = 0;
     this.mode = 'AUTO'; this.passIndex = -1; this.passPhase = 'IDLE';
     this.guideGap = 2600;
-    this.wrDia = CONFIG.MILL.WR_D; this.brDia = CONFIG.MILL.BR_D;  // 研削による現在径
+    this.wrDia = CONFIG.MILL.WR_D; this.brDia = CONFIG.MILL.BR_D;  // 研削による現在径（RollShop が入れる）
+    this.wrRa = CONFIG.MILL.ROLL_SHOP.WR.RA_NEW; this.brRa = CONFIG.MILL.ROLL_SHOP.BR.RA_NEW;   // 表面粗度 [µmRa]
     this.powerCap = 161;                       // 駆動包絡線から決まる速度上限
     this.motorRpm = 0;
     this.rollAngle = 0; this.tableAngle = 0;
@@ -4629,7 +4732,7 @@ const PHYS_DT = 1 / 120, MAX_SUBSTEPS = 16;
 class PhysicsEngine {
   constructor(bus) {
     this.bus = bus;
-    this.slab = new SlabState(); this.mill = new MillState();
+    this.slab = new SlabState(); this.mill = new MillState(); this.rolls = new RollShop();
     this.supply = new SupplyState(); this.finish = new FinishState();
     this.env = { coolant: true, steam: true };
     this.millCtrl   = new MillController(bus, this.mill, this.slab);
@@ -4647,11 +4750,9 @@ class PhysicsEngine {
     bus.on('CMD_SET_SUPPLY_ANIM', (v) => { this.supply.enabled = v; });
     bus.on('CMD_PAUSE', (v) => { this.paused = v; });
     bus.on('CMD_STOP_LINE', () => { this.mill.targetSpeed = 0; });
-    bus.on('CMD_SET_ROLLS', (t) => {                 // t=0:新品径 / t=1:研削限度
-      const M = CONFIG.MILL;
-      this.mill.wrDia = Num.lerp(M.WR_D, M.WR_D_MIN, t);
-      this.mill.brDia = Num.lerp(M.BR_D, M.BR_D_MIN, t);
-    });
+    /* t=0: 在庫が全部新品 / t=1: 全部研削限度。組ごとに履歴を散らして在庫を作り直し、
+     * ミルの現在径は «いま入っている組» から取る（真実は RollShop 1 か所）。 */
+    bus.on('CMD_SET_ROLLS', (t) => { this.rolls.reset(t); this._mountRolls(); });
     bus.on('CMD_START_SUPPLY', () => { if (this.supply.enabled) this.slab.onLine = false; });
     // 圧延実績のロットはここで始まる（素材と目標が確定した時点＝運転開始）
     bus.on('CMD_START_AUTO', () => {
@@ -4731,6 +4832,7 @@ class PhysicsEngine {
     m.targetGap = Num.clamp(m.targetGap, CONFIG.MILL.GAP_MIN, CONFIG.MILL.GAP_MAX);
     this._agc(dt);
     this._shapeControl(dt);
+    this._rollShop(dt);
     // 主機は定格以上のトルクを出せない。動力が定格を超えるなら速度で頭打ちにする。
     // 実機の駆動系と同じ挙動で、重圧下・低温のパスでは自然に減速する。
     // 主機の駆動包絡線（基底回転数まで定トルク、以上は定出力）で速度を頭打ちにする。
@@ -4846,7 +4948,7 @@ class PhysicsEngine {
       const Tl = s._Tloc;
       for (let j = 0; j < Tl.length; j++) Tl[j] = s.T[j] + dTloc;
       // 変形抵抗は層温度から（冷えた表層が硬い）。上下面の差が反りを生む
-      const res = Rolling.solve(hLoc, gap, s.width, m.currentSpeed, Tl, tension, s.alloy);
+      const res = Rolling.solve(hLoc, gap, s.width, m.currentSpeed, Tl, tension, s.alloy, m.wrRa);
       // 弧が埋まっている割合だけ荷重・トルク・動力が立つ（投影接触長に比例）
       const fill = s.biteFill;
       res.forceTon *= fill; res.torque *= fill; res.powerKW *= fill;
@@ -4971,6 +5073,32 @@ class PhysicsEngine {
    *     F_b ← F_b + (C − C*)/g
    * 実機のシリンダには速度と上限があるので、指令はレート制限して追わせる。
    */
+  /** いま入っている組の直径をミルへ反映する（形状・駆動・描画がこれを見る）。 */
+  _mountRolls() {
+    this.mill.wrDia = this.rolls.wrSet.dia;
+    this.mill.brDia = this.rolls.brSet.dia;
+    this.mill.wrRa = this.rolls.wrSet.ra;
+    this.mill.brRa = this.rolls.brSet.ra;
+  }
+
+  /**
+   * ロールの現品管理。圧延した «仕事»（荷重 × 通板長）を組に積み、寿命に達したら
+   * ラインが止まっているあいだに組替えする（実機と同じく圧延中には替えない）。
+   */
+  _rollShop(dt) {
+    const s = this.slab, m = this.mill;
+    if (s.rollingActive && s.rollForce > 0)
+      this.rolls.advance(s.rollForce * Math.abs(m.currentSpeed) / 60 * 1000 * dt);
+    this._mountRolls();
+    if (this.rolls.needChange && !s.rollingActive && Math.abs(m.currentSpeed) < 1 && m.passIndex < 0) {
+      const wr = this.rolls.wrSet.no, br = this.rolls.brSet.no;
+      this.rolls.change(); this._mountRolls();
+      this.bus.emit('SYS_MESSAGE', {
+        text: `ロール組替え: WR ${wr} → ${this.rolls.wrSet.no} 組（Φ${this.rolls.wrSet.dia.toFixed(0)}）`
+            + ` ／ BUR ${br} → ${this.rolls.brSet.no} 組（Φ${this.rolls.brSet.dia.toFixed(0)}）`, kind: 'info' });
+    }
+  }
+
   _shapeControl(dt) {
     const m = this.mill, s = this.slab, B = CONFIG.MILL.BENDER, S = CONFIG.SHAPE;
     if (s.wShape && s.rollingActive && Math.abs(s.wShape.bendGain) > 1e-6) {
@@ -9154,9 +9282,11 @@ class UIManager {
     const ext = F > 0 ? Math.abs(T.X_MAX) : Math.abs(T.X_MIN);
     const rows = [
       ['形式', '4段可逆式熱間圧延機'],
-      ['ワークロール', `Φ${M.WR_D} × ${M.BARREL} mm（最小 Φ${M.WR_D_MIN}）`],
-      ['バックアップロール', `Φ${M.BR_D} × ${M.BR_BARREL} mm（最小 Φ${M.BR_D_MIN}）`],
-      ['BUR 硬度 / 粗度', `${M.BR_HARDNESS} / ${M.BR_ROUGHNESS}`],
+      ['ワークロール', `Φ${M.WR_D} × ${M.BARREL} mm（最小 Φ${M.WR_D_MIN}）／ ${M.WR_MAKER} ${M.ROLL_SHOP.WR.SETS} 組`],
+      ['WR 硬度 / 粗度 / クラウン', `${M.WR_HARDNESS} ／ ${M.WR_ROUGHNESS} ／ ${M.WR_CROWN > 0 ? '+' : ''}${M.WR_CROWN} µm`],
+      ['バックアップロール', `Φ${M.BR_D} × ${M.BR_BARREL} mm（最小 Φ${M.BR_D_MIN}）／ ${M.BR_MAKER} ${M.ROLL_SHOP.BR.SETS} 組`],
+      ['BUR 硬度 / 粗度 / クラウン', `${M.BR_HARDNESS} ／ ${M.BR_ROUGHNESS} ／ ${M.BR_CROWN > 0 ? '+' : ''}${M.BR_CROWN} µm`],
+      ['ロールベンディング', `最大 ${M.BENDER.FORCE} t/対（クラウン利得 約 0.7 µm/t）`],
       ['主電動機', '1,900 kW × 2 台（直流）'],
       ['回転数 / 減速比', `0 / ${CONFIG.DRIVE.RPM_BASE} / ${CONFIG.DRIVE.RPM_MAX} rpm ／ ${CONFIG.DRIVE.GEAR}:1`],
       ['最大圧延速度', `${Drive.maxSpeed().toFixed(0)} mpm <span style="color:var(--ink-3)">(= π·D·${CONFIG.DRIVE.RPM_MAX}/${CONFIG.DRIVE.GEAR})</span>`],
@@ -9180,12 +9310,39 @@ class UIManager {
       ['75 mm シャー', `ミル中心から ${Math.abs(CS.X).toLocaleString()} mm（${CS.ZONE[0] / 1000}〜${CS.ZONE[1] / 1000} m 区間）／ 端材はコンベアでパレットへ`],
       ['30 mm シャー', `ミル中心から ${Math.abs(CONFIG.SHEAR30.X).toLocaleString()} mm（J-3 の先）／ 板厚 ${CONFIG.SHEAR30.MAX_TH} mm 以下を定尺 ${CONFIG.PILER.SHEET_L / 1000} m に切り分け`],
       ['パイラー', `ミル中心から ${(Math.min(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)}〜${(Math.max(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)} m ／ 開閉アーム式・リフトテーブル付`],
-      ['装入設備', `転倒機 ミル中心から ${(Math.abs(CONFIG.SUPPLY.TILTER_X) / 1000).toFixed(1)} m（A-9 / A-8 の操作側）／ トランスファークレーンで横移動`],
+      ['装入設備', `転倒機 ミル中心から ${(Math.abs(CONFIG.SUPPLY.TILTER_X) / 1000).toFixed(1)} m（C-2 / C-1 の操作側）／ トランスファークレーンで横移動`],
+      ['ピット炉', `${CONFIG.FURNACE.N} 基（A-4〜A-1 の操作側）／ 材質ごとに炉を分ける（8・9 番は予備）`],
       ['板面冷却ヘッダ', `入側・出側とも サイドガイド上 各 2 本（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 水冷 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（膜沸騰・ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）・空冷 ${CONFIG.MATERIAL.STRIP_COOL.MODES.AIR.H} W/m²K（強制対流）`],
       ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
     ];
     $('spec-body').innerHTML = rows.map(([k, v]) =>
       `<tr><td style="text-align:left;color:var(--ink-3)">${k}</td><td style="font-weight:700;color:var(--ink-1)">${v}</td></tr>`).join('');
+    this._renderShop();
+  }
+
+  /**
+   * ロール現品（組管理）の一覧。«いま入っている組» を強調し、寿命の進みをバーで出す。
+   * 現場の «次はどの組か» がひと目で分かることが目的なので、順番ではなく状態で読ませる。
+   */
+  _renderShop() {
+    const sh = this._shop; if (!sh) return;
+    const S = CONFIG.MILL.ROLL_SHOP, host = $('shop-body'); if (!host) return;
+    const line = (kind, set, cur) => {
+      const f = Num.clamp(set.work / S.CAMPAIGN, 0, 1);
+      const bar = `<span style="display:inline-block;width:46px;height:6px;border-radius:3px;background:var(--line);vertical-align:middle">`
+        + `<span style="display:block;width:${(f * 100).toFixed(0)}%;height:100%;border-radius:3px;background:${f > 0.9 ? 'var(--crit)' : f > 0.7 ? 'var(--warn)' : 'var(--accent)'}"></span></span>`;
+      return `<tr${cur ? ' style="background:var(--s-2);font-weight:700"' : ''}>`
+        + `<td style="text-align:left">${kind}${cur ? ' <b>●</b>' : ''}</td><td>${set.no}</td>`
+        + `<td>${set.dia.toFixed(0)}</td><td>${set.ra.toFixed(2)}</td><td>${set.grinds}</td><td>${bar}</td></tr>`;
+    };
+    host.innerHTML = sh.wr.map((q, i) => line('WR', q, i === sh.iWr)).join('')
+                   + sh.br.map((q, i) => line('BUR', q, i === sh.iBr)).join('');
+    $('lbl-shop').textContent = `WR ${sh.wrSet.no} 組 ／ BUR ${sh.brSet.no} 組`;
+    $('shop-note').innerHTML =
+      `● が使用中の組。使った «仕事»（荷重 × 通板長）が寿命に達すると、ラインが止まっているあいだに組替えして研削へ回します`
+      + `（研削で WR は ${S.GRIND_WR} mm、BUR は ${S.GRIND_BR} mm 細くなり、最小径を割ったら新品に入れ替わります）。`
+      + `研削したての粗度は ${S.WR.RA_NEW} µmRa で、WR は熱疲労で ${S.WR.RA_END} まで荒れ、BUR はロール間接触で ${S.BR.RA_END} まで磨かれます。`
+      + `ワークロールの粗度は摩擦係数に効くので、同じスケジュールでも組によって荷重が変わります。`;
   }
 
   /* ---- 入力の結線 ---- */
@@ -9224,8 +9381,9 @@ class UIManager {
       const lift = (M.WR_D - wr) / 2 + (M.BR_D - br) / 2;
       $('lbl-roll').textContent = t === 0 ? '新品' : t >= 1 ? '研削限度' : `研削 ${(t * 100).toFixed(0)} %`;
       $('der-roll').innerHTML =
-        `WR Φ${wr.toFixed(0)} ／ BUR Φ${br.toFixed(0)}<br>` +
-        `減径ぶん <b>${lift.toFixed(1)} mm</b> をパスライン調整ウェッジが持ち上げ、パスラインは ${M.PASS_LINE} mm で一定に保たれます。`;
+        `いま入っている組 WR Φ${wr.toFixed(0)} ／ BUR Φ${br.toFixed(0)}<br>` +
+        `減径ぶん <b>${lift.toFixed(1)} mm</b> をパスライン調整ウェッジが持ち上げ、パスラインは ${M.PASS_LINE} mm で一定に保たれます。` +
+        `在庫の残りの組は «それぞれ研削の回数が違う» 状態で並びます（下の一覧）。`;
       this.bus.emit('CMD_SET_ROLLS', t); this._summaries();
     };
     on('rng-roll', 'input', rollState);
@@ -9449,6 +9607,11 @@ class UIManager {
   onState(p) {
     this._acc = (this._acc || 0) + 1;
     const s = p.slab, m = p.mill;
+    /* ロール現品の一覧は «組替えが起きたとき» だけ描き直す（毎フレーム DOM を書くと重い）。
+     * UIManager は PhysicsEngine より先に作られるので、状態はここで受け取って持つ。 */
+    if (p.rolls) { this._shop = p.rolls;
+      const sig = `${p.rolls.changes}:${p.rolls.iWr}:${p.rolls.iBr}:${Math.round(p.rolls.wrSet.work / 2e8)}`;
+      if (sig !== this._shopSig) { this._shopSig = sig; this._renderShop(); } }
     this._lastThickness = s.thickness;
     if (m.passIndex >= 0 && s.rollForce > 0)
       this.peak[m.passIndex] = Math.max(this.peak[m.passIndex] ?? 0, s.rollForce);
