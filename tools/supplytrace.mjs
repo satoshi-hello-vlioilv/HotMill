@@ -18,8 +18,9 @@ const out = await page.evaluate((EPS) => {
   const add = (o) => { if (!o) return; if (Array.isArray(o)) return o.forEach(add);
                        if (o.mesh) return add(o.mesh); o.traverse ? o.traverse(x => allow.add(x)) : allow.add(o); };
   // 吊具のクランプは «板厚面を掴む» のが役目なので、当たってよい側に置く
-  add(SV.slab); add(SV.ropes); add(SV.hookBeam); add(SV.clampArms); add(SV.ropesT); add(SV.beamT);
-  for (const t of SV.tongs) add(t.g);
+  add(SV.slab); add(SV.ropesT); add(SV.beamT);
+  add(SV.pitTong.g);                                            // スタッカークレーンのトング
+  for (const t of SV.tongs) add(t.rig.g);                       // トランスファークレーンのトング
   add(SV.bedRolls.inst.mesh); add(SV.runoutRolls.inst.mesh);   // 板が載る側なので当たってよい
   const meshes = [];
   SV.group.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && !allow.has(o)) meshes.push(o); });

@@ -28,7 +28,7 @@ const out = await page.evaluate((EPS) => {
   for (const st of W.guideView.stations) for (const g of st.sides) add(g);
   const F = W.finishView;
   for (const k of ['knives', 'lowerRolls', 'upperRoll', 'mandrel', 'coil', 'bridge', 'cropRam', 'cropBed', 'cropPiece', 'cropKnife',
-                   'car', 'belt',
+                   'car', 'carBogie', 'carRods', 'chain', 'belt',
                    'holdRoll', 'holdArm', 'holdCyl', 'knifeShafts', 'cropHold', 'cropPusher', 'segments', 'strip', 'plate',
                    'convFlights', 'pieceHost', 's30Ram', 's30Hold', 'pilerLift', 'pilerCol'])
     add(F[k]);
@@ -36,9 +36,11 @@ const out = await page.evaluate((EPS) => {
   for (const w of (F.wrapRolls ?? [])) { add(w.roll); add(w.arms); }   // ベルトラッパー（揺動する）
   add(F.cradle); add(F.wrapRods); add(F.wrapCyls);                     // ラッパーのキャリッジ・ロッド・シリンダー（動く）
   const S = W.supplyView;
-  for (const k of ['tilterArm', 'trolley', 'hookBeam', 'ropes', 'clampArms', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT'])
+  for (const k of ['tilterArm', 'trolley', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT',
+                   'mastSleeve', 'mastCol', 'mastHead', 'cab', 'cabGlass'])   // スタッカークレーンの吊具・運転室
     add(S[k]);
-  for (const t of S.tongs) add(t.g);                       // トングはマスト・アーム・ロッドの入れ子
+  add(S.pitTong.g);                                        // スタッカークレーンのトング
+  for (const t of (S.tongs ?? [])) add(t.rig.g);           // トランスファークレーンのトング
   add(S.bedRolls.inst.mesh); add(S.runoutRolls.inst.mesh); // 転倒機ベッド／受取テーブルのローラ（回る）
   W.scene.traverse(o => { if (o.isPoints || o.userData.telescoping) moving.add(o); });
 
