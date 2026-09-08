@@ -30,23 +30,24 @@ const out = await page.evaluate(() => {
 
   /* ---------- 板面冷却の入側 / 出側 ---------- */
   const SC = K.MATERIAL.STRIP_COOL;
-  const nAll = L.coolHeaderXsAll().length;
+  // ヘッダは 1 ステーションに OS / DS の 2 本。ON/OFF はステーション単位（Layout.coolStations(true)）
+  const nAll = L.coolStations().length, LEN = K.TABLE.GUIDE.HEADER.LEN;
   SC.ENTRY = true; SC.EXIT = true;
-  ok('両方 ON なら全ヘッダが効く', L.coolHeaderXs().length === nAll, `${L.coolHeaderXs().length} / ${nAll} 本`);
+  ok('両方 ON なら全ヘッダが効く', L.coolHeaderCount() === nAll * 2, `${L.coolHeaderCount()} / ${nAll * 2} 本`);
   SC.ENTRY = false;
   ok('入側を切ると入側のヘッダだけ止まる',
-     L.coolHeaderXs().length === nAll / 2 && L.coolHeaderXs().every(x => x < 0),
-     `${L.coolHeaderXs().length} 本（すべて出側）`);
+     L.coolStations(true).length === nAll / 2 && L.coolStations(true).every(x => x < 0),
+     `${L.coolHeaderCount()} 本（すべて出側）`);
   SC.ENTRY = true; SC.EXIT = false;
   ok('出側を切ると出側のヘッダだけ止まる',
-     L.coolHeaderXs().length === nAll / 2 && L.coolHeaderXs().every(x => x > 0),
-     `${L.coolHeaderXs().length} 本（すべて入側）`);
+     L.coolStations(true).length === nAll / 2 && L.coolStations(true).every(x => x > 0),
+     `${L.coolHeaderCount()} 本（すべて入側）`);
   SC.ENTRY = false; SC.EXIT = false;
-  ok('両方切るとヘッダは効かない', L.coolHeaderXs().length === 0, '0 本');
-  ok('設備そのものは消えない（ON/OFF は運転の話）', L.coolHeaderXsAll().length === nAll, `${nAll} 本のまま`);
-  ok('スケジュール予測も同じ本数を見る', R.activeHeaders(1e9) === 0, `有効 ${R.activeHeaders(1e9)} 本`);
+  ok('両方切るとヘッダは効かない', L.coolHeaderCount() === 0, '0 本');
+  ok('設備そのものは消えない（ON/OFF は運転の話）', L.coolHeaderCount(false) === nAll * 2, `${nAll * 2} 本のまま`);
+  ok('スケジュール予測も同じ冷却域を見る', R.activeCoolLength(1e9) === 0, `有効 ${R.activeCoolLength(1e9)} mm`);
   SC.ENTRY = true; SC.EXIT = true;
-  ok('戻すと元どおり', R.activeHeaders(1e9) === nAll, `${R.activeHeaders(1e9)} 本`);
+  ok('戻すと元どおり', R.activeCoolLength(1e9) === nAll * LEN, `${R.activeCoolLength(1e9)} mm`);
 
   /* ---------- 通し運転で «効果» を測る ---------- */
   const run = (pl, entry, exit) => new Promise(r => {

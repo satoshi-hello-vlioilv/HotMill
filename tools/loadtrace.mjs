@@ -62,7 +62,7 @@ const out = await page.evaluate(() => {
     if (s.inBite && i >= 0) {
       if (!cur || cur.pass !== i + 1) { finish(); cur = { pass: i + 1, gap: K.SCHEDULE[i]?.gap ?? 0, len: s.length }; }
       const gap = m.gap, hIn = s.thickness;
-      rec.push({ t: +t.toFixed(3), f: s.rollForce, fill: s.biteFill, gap, v: Math.abs(m.currentSpeed),
+      rec.push({ t: +t.toFixed(3), f: m.forceMeas ?? s.rollForce, fill: s.biteFill, gap, v: Math.abs(m.currentSpeed),
                  dHead: (s.dir > 0 ? s.xMax : -s.xMin) * gap / Math.max(hIn, 1e-6),
                  dTail: s.dir > 0 ? -s.xMin : s.xMax });
       const D = s.dTProf, N = D.length;

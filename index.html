@@ -26,6 +26,7 @@
   --hot:#c2410c;
   --r-s:6px; --r-m:10px; --r-l:16px;
   --sb-full:372px;    /* サイドバーそのものの幅 */
+  --metrics-h:96px;   /* 計器バーの高さ（状態行はこの上に載る） */
   --sb-w:var(--sb-full); /* 画面がサイドバーに空ける幅（たたむと 0 になる） */
   --shadow-1:0 1px 2px rgba(18,25,29,.06), 0 2px 8px rgba(18,25,29,.05);
   --shadow-2:0 8px 28px rgba(18,25,29,.10);
@@ -209,18 +210,47 @@ canvas { display:block; }
   border-top:1px solid var(--line); font-size:10.5px; color:var(--ink-3); }
 #dlg-ver footer b { color:var(--ink-2); font-family:ui-monospace,Consolas,monospace; margin-right:4px; }
 
-/* 現在状態バナー: 「今どうなっていて、次に何をするか」を常に1か所に出す */
+/* ---------- 状態行（メニューから分離したメッセージ置き場） ----------
+   「今どうなっていて、次に何をするか」は運転中ずっと読むものなので、計器のすぐ上に
+   1 行で置く。高さは固定: 文が長くなっても他の要素（ボタン・計器）は動かない。
+   左＝持続する状態、右＝一時的な通知（トースト）と描画統計。色は状態色と 1 対 1。 */
 #status-banner {
-  flex:none; padding:11px 16px; display:flex; gap:11px; align-items:flex-start;
-  background:var(--accent-soft); border-bottom:1px solid var(--line);
+  position:fixed; left:calc(var(--sb-w) + 16px); right:16px; bottom:calc(16px + var(--metrics-h) + 8px);
+  height:36px; z-index:10; display:flex; align-items:center; gap:10px; padding:0 10px 0 8px;
+  background:rgba(255,255,255,.90); backdrop-filter:blur(10px); border:1px solid var(--line);
+  border-radius:var(--r-m); box-shadow:var(--shadow-1); pointer-events:none;
 }
-#status-banner .ic { width:26px; height:26px; border-radius:50%; flex:none; display:grid; place-items:center;
-  background:var(--accent); color:#fff; font-size:12px; }
-#status-banner .tx { min-width:0; }
-#status-banner .st { font-weight:700; font-size:12.5px; color:var(--accent); line-height:1.35; }
-#status-banner .hint { font-size:11px; color:var(--ink-2); margin-top:2px; line-height:1.5; }
-#status-banner.is-run { background:#eaf6ea; } #status-banner.is-run .ic{ background:var(--ok);} #status-banner.is-run .st{ color:#0a7a0a; }
-#status-banner.is-warn { background:#fff6e2; } #status-banner.is-warn .ic{ background:var(--warn); color:#3a2a00;} #status-banner.is-warn .st{ color:#8a5b00; }
+#status-banner .ic { width:22px; height:22px; border-radius:50%; flex:none; display:grid; place-items:center;
+  background:var(--accent); color:#fff; font-size:10.5px; }
+#status-banner .tx { min-width:0; flex:1 1 auto; display:flex; align-items:baseline; gap:10px; overflow:hidden; white-space:nowrap; }
+#status-banner .st { font-weight:800; font-size:12.5px; color:var(--accent); flex:none; }
+#status-banner .hint { font-size:11px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; min-width:0; }
+#status-banner .hint b { color:var(--ink-1); }
+#status-banner .stat { flex:none; font-size:10px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+#status-banner.is-run { background:rgba(234,246,234,.94); } #status-banner.is-run .ic { background:var(--ok); } #status-banner.is-run .st { color:#0a7a0a; }
+#status-banner.is-warn { background:rgba(255,246,226,.96); } #status-banner.is-warn .ic { background:var(--warn); color:#3a2a00; } #status-banner.is-warn .st { color:#8a5b00; }
+/* 一時通知。状態行の右側に «出たり消えたり» するが、場所は取り続ける（レイアウトを揺らさない） */
+#toast { flex:none; max-width:46%; padding:4px 12px; border-radius:999px; font-size:11.5px; font-weight:700;
+  background:rgba(24,33,39,.92); color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  opacity:0; transform:translateY(4px); transition:opacity .3s, transform .3s; }
+#toast.show { opacity:1; transform:translateY(0); }
+#toast.warn { background:rgba(250,178,25,.96); color:#2a1d00; }
+#toast.crit { background:rgba(208,59,59,.96); }
+
+/* ---------- タブ（区分の切替） ----------
+   位置が固定の 4 つのボタン。下段の要約で «開かなくても今の値» が読める。 */
+#tabs { flex:none; display:grid; grid-template-columns:repeat(4,1fr); background:var(--s-2); border-bottom:1px solid var(--line); }
+#tabs button { border:none; background:transparent; padding:8px 4px 7px; cursor:pointer; font-family:inherit; color:var(--ink-3);
+  display:flex; flex-direction:column; align-items:center; gap:2px; min-width:0; border-bottom:2px solid transparent; transition:.14s; }
+#tabs button i { font-size:12px; }
+#tabs button b { font-size:11.5px; font-weight:800; letter-spacing:.04em; color:var(--ink-2); }
+#tabs button small { font-size:9.5px; font-weight:600; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  font-variant-numeric:tabular-nums; min-height:12px; color:var(--ink-3); }
+#tabs button:hover { background:var(--s-3); }
+#tabs button[aria-selected="true"] { background:var(--s-1); color:var(--accent); border-bottom-color:var(--accent); }
+#tabs button[aria-selected="true"] b { color:var(--accent); }
+#tabs button:focus-visible { outline:2px solid var(--accent-2); outline-offset:-2px; }
+.pane[hidden] { display:none; }
 
 #panels { flex:1; overflow-y:auto; overscroll-behavior:contain; }
 #panels::-webkit-scrollbar { width:9px; } #panels::-webkit-scrollbar-thumb { background:var(--line); border-radius:9px; }
@@ -235,12 +265,6 @@ canvas { display:block; }
   background:rgba(255,255,255,.94); backdrop-filter:blur(8px);
 }
 .sec[open] > summary { border-bottom:1px solid var(--line-2); }
-/* 群の見出し。«準備 → 運転 → 表示と設備» の順に並べ、目的で束ねる。 */
-.grp-hd { padding:13px 16px 5px; font-size:9.5px; font-weight:800; letter-spacing:.12em;
-  color:var(--ink-3); text-transform:uppercase; background:var(--s-2);
-  border-bottom:1px solid var(--line-2); display:flex; align-items:center; gap:7px; }
-.grp-hd i { font-size:10px; opacity:.7; }
-.grp-hd .hint { margin-left:auto; font-weight:600; letter-spacing:0; text-transform:none; font-size:10px; }
 .sec > summary::-webkit-details-marker { display:none; }
 .sec > summary .chev { margin-left:auto; transition:transform .18s; color:var(--ink-3); font-size:10px; }
 .sec[open] > summary .chev { transform:rotate(90deg); }
@@ -336,12 +360,12 @@ select.sel:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px
 
 /* ---------- 計測バー ---------- */
 #metrics {
-  position:fixed; bottom:16px; left:calc(var(--sb-w) + 16px); right:16px; z-index:10;
+  position:fixed; bottom:16px; left:calc(var(--sb-w) + 16px); right:16px; z-index:10; height:var(--metrics-h);
   display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:10px; pointer-events:none;
 }
 .mc { background:rgba(255,255,255,.9); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.9);
   border-radius:var(--r-l); padding:10px 12px 11px; box-shadow:var(--shadow-2); min-width:0;
-  display:flex; flex-direction:column; min-height:96px; }
+  display:flex; flex-direction:column; min-height:0; }
 .mc .k { font-size:9.5px; font-weight:800; color:var(--ink-3); letter-spacing:.05em; text-transform:uppercase;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .mc .val { font-size:22px; font-weight:800; color:var(--ink-1); line-height:1.15; margin-top:3px;
@@ -355,26 +379,13 @@ select.sel:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px
 .mc.is-warn .sub { color:#8a5b00; } .mc.is-crit .sub { color:var(--crit); }
 .mc.temp .val { color:var(--hot); }
 
-/* ---------- ヘッドアップ ---------- */
+/* ---------- ヘッドアップ（上部ツールバー） ---------- */
 #hud-top { position:fixed; top:14px; left:calc(var(--sb-w) + 16px); right:16px; z-index:9;
   display:flex; gap:10px; align-items:flex-start; pointer-events:none; }
-#legend { background:rgba(255,255,255,.86); backdrop-filter:blur(8px); border:1px solid var(--line);
-  border-radius:var(--r-m); padding:8px 12px; font-size:10.5px; color:var(--ink-2); box-shadow:var(--shadow-1); }
-#legend b { color:var(--ink-1); font-size:11px; display:block; margin-bottom:3px; }
-#legend span { display:inline-flex; align-items:center; gap:5px; margin-right:11px; white-space:nowrap; }
+/* 凡例はメニュー（表示）の中。3D に重ねる箱を減らす */
+#legend { font-size:10.5px; color:var(--ink-2); display:flex; flex-wrap:wrap; gap:4px 12px; }
+#legend span { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
 #legend em { width:9px; height:9px; border-radius:2px; display:inline-block; font-style:normal; }
-#toast { margin-left:auto; padding:11px 18px; border-radius:var(--r-l); font-size:12.5px; font-weight:700;
-  background:rgba(24,33,39,.92); color:#fff; box-shadow:var(--shadow-2); backdrop-filter:blur(8px);
-  opacity:0; transform:translateY(-8px); transition:opacity .3s,transform .3s; max-width:430px; }
-#toast.show { opacity:1; transform:translateY(0); }
-#toast.warn { background:rgba(250,178,25,.96); color:#2a1d00; }
-#toast.crit { background:rgba(208,59,59,.96); }
-
-#hud-br { position:fixed; right:16px; bottom:calc(16px + 112px); z-index:9; display:flex; flex-direction:column;
-  align-items:flex-end; gap:6px; pointer-events:none; font-size:10.5px; color:var(--ink-3); }
-#hud-br .box { background:rgba(255,255,255,.82); border:1px solid var(--line); border-radius:8px;
-  padding:5px 9px; font-variant-numeric:tabular-nums; }
-
 
 /* ---------- ラベル(3D上の注記) ---------- */
 .shortcuts { padding:2px 0 6px; font-size:10.5px; color:var(--ink-3); line-height:2.1; }
@@ -409,10 +420,12 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
 /* 計器は «1 行に収まっていること» が読みやすさの前提（2 行になると視線が往復する）。
    幅が足りなくなったらまず文字を詰め、それでも足りなくなってから 2 行にする。 */
 @media (max-width:1760px) {
-  .mc { min-height:88px; padding:9px 10px 10px; }
+  :root { --metrics-h:88px; }
+  .mc { padding:9px 10px 10px; }
   .mc .val { font-size:19px; }
 }
 @media (max-width:1400px) {
+  :root { --metrics-h:186px; }
   #metrics { grid-template-columns:repeat(5,minmax(0,1fr)); }
 }
 .mc .val .mode { font-size:10.5px; font-weight:800; color:var(--ink-3); margin-left:5px; letter-spacing:.02em; }
@@ -447,26 +460,42 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
 .note { font-size:10.5px; color:var(--ink-3); line-height:1.6; }
 .note.ok { color:#0a7a0a; }
 
-/* ---------- 画面上部ツールバー（視点・断面・ラベル）: 運転中に頻繁に使う操作を探させない ---------- */
-#toolbar { pointer-events:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-  background:rgba(255,255,255,.90); backdrop-filter:blur(10px); border:1px solid var(--line); border-radius:var(--r-l);
-  padding:7px 9px; box-shadow:var(--shadow-2); max-width:calc(100vw - var(--sb-w) - 32px); }
-#toolbar .tb-label { font-size:10px; font-weight:800; color:var(--ink-3); letter-spacing:.06em; text-transform:uppercase; margin:0 2px 0 4px; }
-#toolbar .tb-sep { width:1px; height:26px; background:var(--line); margin:0 3px; }
-#cam-chips { display:flex; gap:5px; }
-#cam-chips .chip { flex-direction:row; padding:6px 9px; gap:6px; font-size:11px; white-space:nowrap; }
-#cam-chips .chip .kbd { font-size:9px; font-weight:700; color:var(--ink-3); border:1px solid var(--line); border-radius:3px; padding:0 3px; }
+/* ---------- 画面上部ツールバー ----------
+   運転中に頻繁に使う «見る» 操作だけを、必ず 1 行に収める（2 行になると押す位置が変わる）。
+   群（視点／断面／注記／実績）は仕切りと見出しで分け、視点は 1 本の帯（セグメント）にして
+   «同じ種類の選択肢» だと形で分かるようにする。幅が足りなければ文字を落として絵記号にする。 */
+#toolbar { pointer-events:auto; display:flex; align-items:center; gap:6px; flex-wrap:nowrap; white-space:nowrap;
+  background:rgba(255,255,255,.92); backdrop-filter:blur(10px); border:1px solid var(--line); border-radius:var(--r-l);
+  padding:6px 8px; box-shadow:var(--shadow-2); max-width:100%; overflow:hidden; }
+#toolbar .tb-grp { display:flex; align-items:center; gap:5px; flex:none; }
+#toolbar .tb-label { font-size:10px; font-weight:800; color:var(--ink-3); letter-spacing:.06em; margin:0 3px 0 2px;
+  display:inline-flex; align-items:center; gap:4px; }
+#toolbar .tb-label i { font-size:10px; opacity:.8; }
+#toolbar .tb-sep { width:1px; height:24px; background:var(--line); margin:0 4px; flex:none; }
+#cam-chips { display:flex; gap:2px; background:var(--s-3); border-radius:var(--r-m); padding:3px; }
+#cam-chips .chip { flex-direction:row; padding:5px 8px; gap:5px; font-size:11px; white-space:nowrap; border:none;
+  border-radius:7px; background:transparent; color:var(--ink-2); }
+#cam-chips .chip i { font-size:11px; color:var(--ink-3); }
+#cam-chips .chip:hover { background:rgba(255,255,255,.7); color:var(--accent); }
+#cam-chips .chip[aria-pressed="true"] { background:var(--s-1); color:var(--accent); box-shadow:var(--shadow-1); }
+#cam-chips .chip .kbd { font-size:9px; font-weight:700; color:var(--ink-3); border:1px solid var(--line); border-radius:3px; padding:0 3px; line-height:1.3; }
 #cam-chips .chip[aria-pressed="true"] .kbd { color:var(--accent); border-color:var(--accent-2); }
 #toolbar .seg { padding:3px; }
-#toolbar .seg button { padding:6px 10px; white-space:nowrap; }
-.tb-btn { border:1px solid var(--line); background:var(--s-1); border-radius:8px; padding:6px 10px; cursor:pointer; font:inherit;
-  font-size:11px; font-weight:700; color:var(--ink-2); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+#toolbar .seg button { padding:5px 10px; white-space:nowrap; }
+.tb-btn { border:1px solid var(--line); background:var(--s-1); border-radius:8px; padding:5px 10px; cursor:pointer; font:inherit;
+  font-size:11px; font-weight:700; color:var(--ink-2); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; flex:none; }
 .tb-btn i { color:var(--ink-3); }
 .tb-btn[aria-pressed="true"] { background:var(--accent-soft); border-color:var(--accent-2); color:var(--accent); }
 .tb-btn[aria-pressed="true"] i { color:var(--accent); }
 .tb-btn:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px; }
-#hud-top { flex-wrap:wrap; }
-#legend { pointer-events:none; }
+.tb-btn.tb-log[aria-pressed="true"] { background:var(--accent); color:#fff; border-color:var(--accent); }
+.tb-btn.tb-log[aria-pressed="true"] i { color:#fff; }
+/* 幅が足りないときの段階的な縮め方: ① キー番号を落とす ② 視点の文字を落として絵記号だけにする */
+@media (max-width:1560px) { #cam-chips .chip .kbd { display:none; } #toolbar .tb-label span { display:none; } }
+@media (max-width:1330px) { #cam-chips .chip .nm { display:none; } #cam-chips .chip { padding:5px 7px; } #cam-chips .chip i { font-size:12px; } }
+/* 適用の案内とボタンは同じ枠（高さ固定）に入れ替えて出す */
+.apply-slot { min-height:40px; display:flex; align-items:center; }
+.apply-slot .btn { margin:0; }
 .sec table.sched td:first-child { color:var(--ink-3); }
 </style>
 </head>
@@ -491,15 +520,7 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
     <button id="btn-collapse" title="メニューをたたむ（M）" aria-label="メニューをたたむ"><i class="fa-solid fa-chevron-left"></i></button>
   </header>
 
-  <div id="status-banner">
-    <div class="ic"><i class="fa-solid fa-power-off" id="sb-icon"></i></div>
-    <div class="tx">
-      <div class="st" id="sb-state">待機中</div>
-      <div class="hint" id="sb-hint">「圧延サイクル開始」でスラブ供給から自動運転します。</div>
-    </div>
-  </div>
-
-  <!-- 主操作: 状態のすぐ下に常に見える（スクロールで探させない） -->
+  <!-- 主操作。位置は状態やメッセージに依らず固定（メッセージは画面下の状態行へ分離した） -->
   <div id="action-bar">
     <button class="btn btn-primary" id="btn-start">
       <i class="fa-solid fa-play"></i><span id="btn-start-tx">圧延サイクル開始</span><span class="kbd">Space</span>
@@ -510,11 +531,20 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
     </div>
   </div>
 
+  <!-- 区分は 4 つのタブ。«作業の流れ»（準備 → 運転）と «見え方・設備» を分け、
+       タブの下段にその区分の要約を出して、開かなくても今の状態が読めるようにする -->
+  <nav id="tabs" role="tablist" aria-label="メニュー">
+    <button role="tab" id="tab-prep"  aria-selected="true"  aria-controls="pane-prep"><i class="fa-solid fa-list-check"></i><b>準備</b><small id="tab-sum-prep"></small></button>
+    <button role="tab" id="tab-run"   aria-selected="false" aria-controls="pane-run"><i class="fa-solid fa-gauge-high"></i><b>運転</b><small id="tab-sum-run"></small></button>
+    <button role="tab" id="tab-view"  aria-selected="false" aria-controls="pane-view"><i class="fa-solid fa-eye"></i><b>表示</b><small id="tab-sum-view"></small></button>
+    <button role="tab" id="tab-equip" aria-selected="false" aria-controls="pane-equip"><i class="fa-solid fa-gears"></i><b>設備</b><small id="tab-sum-equip"></small></button>
+  </nav>
+
   <div id="panels">
 
-    <div class="grp-hd"><i class="fa-solid fa-list-check"></i>準備<span class="hint">材料と圧延計画</span></div>
-
-    <details class="sec" id="sec-material">
+    <!-- ===== 準備: 素材と目標 → パススケジュール ===== -->
+    <section class="pane" id="pane-prep" role="tabpanel" aria-labelledby="tab-prep">
+    <details class="sec" id="sec-material" open>
       <summary><span class="step">1</span> 素材と目標<span class="sum" id="sum-material"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="fld">
@@ -560,12 +590,15 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
           <div class="derived" id="der-trim"></div>
         </div>
         <div class="derived" id="der-slab" style="margin-bottom:9px;"></div>
-        <div class="note ok" id="note-apply"><i class="fa-solid fa-circle-check"></i> 待機中の変更は即時に反映されます（適用操作は不要）。</div>
-        <button class="btn btn-ghost" id="btn-apply-size" style="display:none;"><i class="fa-solid fa-check"></i>変更を適用（運転を中止してやり直す）</button>
+        <!-- 適用の案内とボタンは同じ 1 枠に入れ替えて出す（高さを変えない） -->
+        <div class="apply-slot">
+          <div class="note ok" id="note-apply"><i class="fa-solid fa-circle-check"></i> 待機中の変更は即時に反映されます（適用操作は不要）。</div>
+          <button class="btn btn-ghost" id="btn-apply-size" style="display:none;"><i class="fa-solid fa-check"></i>変更を適用（運転を中止してやり直す）</button>
+        </div>
       </div>
     </details>
 
-    <details class="sec" id="sec-sched">
+    <details class="sec" id="sec-sched" open>
       <summary><span class="step">2</span> パススケジュール<span class="sum" id="sum-sched"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="fld">
@@ -580,11 +613,12 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
         <div class="derived" style="margin-top:7px;" id="sched-note"></div>
       </div>
     </details>
+    </section>
 
-    <div class="grp-hd"><i class="fa-solid fa-play"></i>運転<span class="hint">自動 / 手動と速度</span></div>
-
-    <details class="sec" id="sec-run">
-      <summary><span class="step">3</span> 運転<span class="sum" id="sum-run"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
+    <!-- ===== 運転: モードと速度 → 板反り対策 → 手動操作 ===== -->
+    <section class="pane" id="pane-run" role="tabpanel" aria-labelledby="tab-run" hidden>
+    <details class="sec" id="sec-run" open>
+      <summary><span class="step">3</span> 運転モード<span class="sum" id="sum-run"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="seg" role="group" aria-label="運転モード" style="margin-bottom:11px;">
           <button id="mode-auto"   aria-pressed="true">自動スケジュール</button>
@@ -597,22 +631,6 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
             <input type="range" id="rng-timescale" min="0.25" max="8" value="5" step="0.25">
             <div class="derived">実時間比。実機の1サイクルは10分規模なので、早送りで通して見られます。物理計算は速度に依らず同一結果です。</div>
           </div>
-        </div>
-
-        <!-- 板反り対策。実機で使う 2 つの手を «効果が見える» 形で操作できるようにする -->
-        <div class="grp-hd">板反り対策</div>
-        <div class="fld">
-          <div class="top"><span class="k">パスライン調整（WR）</span><span class="v" id="lbl-pl">0<em>mm</em></span></div>
-          <input type="range" id="rng-pl" min="-60" max="60" value="0" step="1">
-          <div class="derived" id="der-pl"></div>
-        </div>
-        <div class="fld">
-          <div class="top"><span class="k">板面冷却 入側 / 出側</span><span class="v" id="lbl-cool-side"></span></div>
-          <div class="seg" role="group" aria-label="板面冷却の入側・出側">
-            <button id="cool-entry" aria-pressed="true">入側 ON</button>
-            <button id="cool-exit"  aria-pressed="true">出側 ON</button>
-          </div>
-          <div class="derived" id="der-cool-side"></div>
         </div>
 
         <div id="manual-controls" style="display:none;">
@@ -631,9 +649,30 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
       </div>
     </details>
 
-    <div class="grp-hd"><i class="fa-solid fa-sliders"></i>表示と設備<span class="hint">見え方・演出・諸元</span></div>
+    <!-- 板反り対策。実機で使う 2 つの手を «効果が見える» 形で操作できるようにする -->
+    <details class="sec" id="sec-curl" open>
+      <summary><i class="fa-solid fa-wave-square"></i> 板反り対策<span class="sum" id="sum-curl"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body">
+        <div class="fld">
+          <div class="top"><span class="k">パスライン調整（WR）</span><span class="v" id="lbl-pl">0<em>mm</em></span></div>
+          <input type="range" id="rng-pl" min="-60" max="60" value="0" step="1">
+          <div class="derived" id="der-pl"></div>
+        </div>
+        <div class="fld">
+          <div class="top"><span class="k">板面冷却 入側 / 出側</span><span class="v" id="lbl-cool-side"></span></div>
+          <div class="seg" role="group" aria-label="板面冷却の入側・出側">
+            <button id="cool-entry" aria-pressed="true">入側 ON</button>
+            <button id="cool-exit"  aria-pressed="true">出側 ON</button>
+          </div>
+          <div class="derived" id="der-cool-side"></div>
+        </div>
+      </div>
+    </details>
+    </section>
 
-    <details class="sec" id="sec-view">
+    <!-- ===== 表示: 断面 → 描画品質 → 凡例 → ショートカット ===== -->
+    <section class="pane" id="pane-view" role="tabpanel" aria-labelledby="tab-view" hidden>
+    <details class="sec" id="sec-view" open>
       <summary><i class="fa-solid fa-eye"></i> 見え方<span class="sum" id="sum-view"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="fld">
@@ -651,12 +690,16 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
           </div>
           <div class="derived" id="der-quality">標準：環境反射あり・影あり・解像度 1.5×まで</div>
         </div>
-        <div class="derived">視点は画面上部のツールバー（<kbd>1</kbd>–<kbd>9</kbd>）、設備ラベルは <kbd>L</kbd>、テーブル区分の記号は <kbd>Z</kbd> で切り替えます。左ドラッグ回転 / 右ドラッグ平行移動 / ホイール拡大縮小。<b>3D 上の設備ラベルを押すと、その設備へ視点が寄ります</b>（向きは変えません）。</div>
+        <div class="fld">
+          <div class="top"><span class="k">凡例（色の意味）</span></div>
+          <div id="legend"><span id="legend-items"></span></div>
+        </div>
+        <div class="derived">視点は画面上部のツールバー（<kbd>1</kbd>–<kbd>9</kbd>・<kbd>0</kbd>）、設備ラベルは <kbd>L</kbd>、テーブル区分の記号は <kbd>Z</kbd> で切り替えます。左ドラッグ回転 / 右ドラッグ平行移動 / ホイール拡大縮小。<b>3D 上の設備ラベルを押すと、その設備へ視点が寄ります</b>（向きは変えません）。</div>
       </div>
     </details>
 
-    <details class="sec" id="sec-env">
-      <summary><i class="fa-solid fa-droplet"></i> 演出・環境<span class="sum" id="sum-env"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
+    <details class="sec" id="sec-env" open>
+      <summary><i class="fa-solid fa-droplet"></i> 演出<span class="sum" id="sum-env"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="row"><span class="lbl">ロールクーラント<small>水主体エマルジョン（油分約6%）のロール噴射</small></span>
           <label class="switch"><input type="checkbox" id="chk-coolant" checked><span class="sl"></span></label></div>
@@ -667,7 +710,18 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
       </div>
     </details>
 
-    <details class="sec" id="sec-spec">
+    <details class="sec" id="sec-keys">
+      <summary><i class="fa-solid fa-keyboard"></i> ショートカット<span class="sum">Space / P / R / L / C / 1–9・0</span><i class="fa-solid fa-chevron-right chev"></i></summary>
+      <div class="body"><div class="shortcuts">
+        <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
+        <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>9</kbd><kbd>0</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>G</kbd>圧延実績</span><span><kbd>V</kbd>版数と履歴</span>
+      </div></div>
+    </details>
+    </section>
+
+    <!-- ===== 設備: ロール現品 → 諸元 → テーブル区分 ===== -->
+    <section class="pane" id="pane-equip" role="tabpanel" aria-labelledby="tab-equip" hidden>
+    <details class="sec" id="sec-spec" open>
       <summary><i class="fa-solid fa-gears"></i> 設備諸元<span class="sum" id="sum-spec"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="fld">
@@ -684,18 +738,22 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
         <div class="derived" id="table-note" style="margin-top:6px;"></div>
       </div>
     </details>
-
-    <details class="sec" id="sec-keys">
-      <summary><i class="fa-solid fa-keyboard"></i> ショートカット<span class="sum">Space / P / R / L / C / 1–9・0</span><i class="fa-solid fa-chevron-right chev"></i></summary>
-      <div class="body"><div class="shortcuts">
-        <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
-        <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>9</kbd><kbd>0</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>G</kbd>圧延実績</span><span><kbd>V</kbd>版数と履歴</span>
-      </div></div>
-    </details>
+    </section>
   </div>
 </aside>
 <button id="btn-expand" title="メニューを開く（M）" aria-label="メニューを開く"><i class="fa-solid fa-bars"></i></button>
 
+<!-- 状態行: «今どうなっていて、次に何をするか» をメニューから分離して 1 行で出す。
+     高さは固定（文の長さで他の要素が動かない）。右端は一時通知（トースト）と描画統計。 -->
+<div id="status-banner">
+  <div class="ic"><i class="fa-solid fa-power-off" id="sb-icon"></i></div>
+  <div class="tx">
+    <span class="st" id="sb-state">待機中</span>
+    <span class="hint" id="sb-hint">「圧延サイクル開始」でスラブ供給から自動運転します。</span>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div class="stat"><span id="fps">– fps</span> / <span id="dcalls">– draw</span></div>
+</div>
 
 <div id="metrics">
   <div class="mc"><div class="k">パス</div><div class="val"><span id="m-pass-v">0</span></div><div class="sub" id="m-pass-s">/ 全 7 パス</div></div>
@@ -713,29 +771,24 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
     <span id="m-flat-m" class="mode">平坦</span></div><div class="sub" id="m-crown-s">クラウン –</div></div>
 </div>
 
+<!-- 上部ツールバー: 運転中に頻繁に使う «見る» 操作だけを 1 行に収める（視点 → 断面 → 注記 → 実績） -->
 <div id="hud-top">
   <div id="toolbar">
-    <span class="tb-label">視点</span>
-    <div id="cam-chips" role="group" aria-label="視点"></div>
+    <div class="tb-grp" id="tb-views"><span class="tb-label"><i class="fa-solid fa-video"></i>視点</span><div id="cam-chips" role="group" aria-label="視点"></div></div>
     <div class="tb-sep"></div>
-    <span class="tb-label">断面</span>
-    <div class="seg" role="group" aria-label="断面表示">
-      <button id="cut-solid" aria-pressed="false">実体</button>
-      <button id="cut-half"  aria-pressed="true">半断面</button>
-      <button id="cut-xray"  aria-pressed="false">透視</button>
-    </div>
+    <div class="tb-grp"><span class="tb-label"><i class="fa-solid fa-cube"></i>断面</span>
+      <div class="seg" role="group" aria-label="断面表示">
+        <button id="cut-solid" aria-pressed="false" title="実体（C で切替）">実体</button>
+        <button id="cut-half"  aria-pressed="true"  title="半断面: 手前と天面を透過（C）">半断面</button>
+        <button id="cut-xray"  aria-pressed="false" title="透視: 全部を透過（C）">透視</button>
+      </div></div>
     <div class="tb-sep"></div>
-    <button class="tb-btn" id="tb-labels" aria-pressed="true" title="設備ラベル（L）"><i class="fa-solid fa-tag"></i>ラベル</button>
-    <button class="tb-btn" id="tb-zones" aria-pressed="false" title="テーブル区分の記号（Z）"><i class="fa-solid fa-list-ol"></i>テーブル記号</button>
+    <div class="tb-grp"><span class="tb-label"><i class="fa-solid fa-tags"></i>注記</span>
+      <button class="tb-btn" id="tb-labels" aria-pressed="true" title="設備ラベル（L）"><i class="fa-solid fa-tag"></i>ラベル</button>
+      <button class="tb-btn" id="tb-zones" aria-pressed="false" title="テーブル区分の記号（Z）"><i class="fa-solid fa-list-ol"></i>区分記号</button></div>
     <div class="tb-sep"></div>
-    <button class="tb-btn" id="tb-log" aria-pressed="false" title="圧延実績ビュワー（G）。3D を見ながら使えます"><i class="fa-solid fa-chart-line"></i>実績</button>
+    <button class="tb-btn tb-log" id="tb-log" aria-pressed="false" title="圧延実績ビュワー（G）。3D を見ながら使えます"><i class="fa-solid fa-chart-line"></i>実績</button>
   </div>
-  <div id="legend"><b>凡例</b><span id="legend-items"></span></div>
-  <div id="toast"></div>
-</div>
-
-<div id="hud-br">
-  <div class="box"><span id="fps">– fps</span> / <span id="dcalls">– draw</span></div>
 </div>
 
 <div id="tags"></div>
@@ -825,6 +878,26 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.15.0', base: '73cd172', date: '2026-09-08', title: 'メニューと上部バーの再構成・メッセージの分離・冷却ノズルとサイドガイドの作り直し・頭尾荷重の検算', items: [
+      // --- UI ---
+      { t: '状態文と一時通知をサイドバーから分離し、計器バーの真上に高さ固定の «状態行» として置いた', w: '#status-banner / UIManager._banner' },
+      { t: 'サイドバーを «主操作 → 4 タブ（準備／運転／表示／設備）→ 中身» の固定構造にし、タブ下段に要約を出す', w: '#tabs / UIManager._buildTabs' },
+      { t: '上部ツールバーを 1 行に固定。視点は短い名前の帯、群は視点 → 断面 → 注記 → 実績', w: 'VIEWS[].short / #toolbar' },
+      { t: 'UI が崩れないことを 4 つの画面幅で機械判定する評価器を新設', w: 'tools/uicheck.mjs' },
+      // --- 設備 ---
+      { t: '板面冷却ヘッダをラインに平行な OS / DS 各 1 本にし、ノズルをクォーター部狙いで 34° 内向きに傾けた', w: 'TABLE.GUIDE.HEADER / Parts.guideHeader / Layout.nozzleDir' },
+      { t: '冷却域を 1 か所（Layout.coolZones）に集約し、運転・予測・噴射・諸元表が同じ域を見る', w: 'Layout.coolZones / Rolling.activeCoolLength' },
+      { t: 'サイドガイドを写真どおり «ポケット付きバーにコロ 9 個» で作り直した（上面のボルト無し）', w: 'Parts.sideGuideBar / GUIDE.N=9' },
+      // --- 荷重の頭尾 ---
+      { t: 'ロール抜熱と噴射冷却を «その材料点» へ配るようにした（尻が頭の受けた冷却まで背負って 50 K 冷たく読まれていた）', w: 'writeHeat(heat − chill) / _localCool' },
+      { t: '荷重を «バイトに入る前» の温度で解く（噛んでいるセルへ積んだ発熱を同じセルから読んでいた）', w: 'SlabState.dTEntry' },
+      { t: '出側板厚の書き戻しを通過割合の重み付き平均にした（尻抜けの薄い楔がセル 1 つぶんに引き伸ばされていた）', w: 'SlabState.writeGauge' },
+      { t: '圧下の事前設定に荷重学習を入れた（予測が実測の 1.5 倍で締めすぎ、頭が 1〜2 mm 薄く出ていた）', w: 'AGC.ADAPT / MillState.adapt' },
+      { t: 'スタンドの伸びを 2 次系（15 Hz・ζ 0.35）にし、ロードセル値（伸び × ミル定数）を計器・記録・AGC が読む', w: 'MILL.STAND / MillState.forceMeas' },
+      { t: '頭尾 AGC ロックを実装（頭 1.2 m・尻 1.2 m は荷重 FB を止める）', w: 'AGC.END_HOLD' },
+      { t: '頭の潤滑膜未形成による摩擦上昇を実装（README 2-2 の #6）', w: 'PROCESS.MU_HEAD' },
+      { t: '頭尾の荷重差を要因分解する評価器を新設', w: 'tools/headtail.mjs' },
+    ] },
     { v: '1.14.0', base: '4be48da', date: '2026-09-08', title: '装入まわりの作り直し —— スタッカークレーン・盤木敷きのヤード・コイルカーの足まわり・屑の手掴み', items: [
       // --- 装入設備 ---
       { t: 'ピット炉をライン側へ 2.5 m 寄せた（Z 24,000 → 21,500）', w: 'CONFIG.FURNACE.Z' },
@@ -1215,10 +1288,14 @@ const CONFIG = {
     WEAR_CROWN_K: 1.2e-10,                 // 摩耗クラウン [µm・径差 /(t·mm)]
     WEAR_CROWN_MAX: 120,                   // 摩耗クラウンの上限 [µm]
     FLAT_MAX: 4.0,                         // 扁平半径の上限（R'/R）。これ以上は圧延不能域
-    /* 荷重に対する伸びの応答時定数 [s]。スタンドは «ばね» なので伸びは荷重にほぼ即応する
-     * （固有振動数 10〜30 Hz 級 ＝ 時定数は数十 ms）。噛み込み衝撃が «高いが短い» のは
-     * このため。ここを大きくすると衝撃が不自然に長く居座り、荷重が過大に出る。 */
-    STRETCH_TAU: 0.025,
+    /* スタンドの伸びの動特性。ハウジング・チョック・ロールの «質量 ＋ ばね» なので、
+     * 荷重の階段（噛み込み）に対して伸びは 2 次系で応答し、固有振動数 10〜30 Hz 級で
+     * 減衰しながら振れる（従来は時定数 25 ms の 1 次遅れで、行き過ぎは出なかった）。
+     * 噛み込みの瞬間に伸びが目標を通り越すぶんだけギャップが余計に開き、頭が厚く出る
+     * —— 実機で言う «2 次応答の遅れによる頭の板厚外れ» はこれ。
+     *   FN   …… 固有振動数 [Hz]
+     *   ZETA …… 減衰比（0.3〜0.4 で行き過ぎ 25〜37 %） */
+    STAND: { FN: 15, ZETA: 0.35 },
     FORCE_FILTER: 0.35,                    // 過負荷保護が見る荷重の平滑化時定数 [s]
   },
 
@@ -1251,6 +1328,20 @@ const CONFIG = {
      * 頭の数 m の外れ（オフゲージ長）を短くできる —— 実機の頭尾対策の主力。 */
     FF_KP: 0.8,
     HOLD_SPEED: 3,                         // これ以下の速度で噛んだままなら制御を保持 [mpm]
+    /* セットアップモデルの学習（荷重学習）。圧下の事前設定は «予定荷重ぶんの伸び» を
+     * 見込んで締めるが、予定荷重はスケジュール生成の予測値で、実測との比が 0.65〜0.95 と
+     * 保守側に外れる。外れたぶんだけ噛み込み直後のギャップが狙いから外れ（予測が大きい
+     * ほど頭が薄く出る）、荷重 FB が締め直すまでの頭の数 m は圧下量が違う板になる。
+     * 実機のセットアップモデルは前パスの実測荷重で予測を補正する（学習）ので、同じことを
+     * する: パスが終わるたびに «実測の平均荷重 ÷ 予測» を取り、GAIN で平滑して次パスの
+     * 事前設定に掛ける。ロットをまたいでも覚えている（実機の学習テーブルと同じ）。 */
+    ADAPT: { GAIN: 0.6, MIN: 0.6, MAX: 1.4 },
+    /* 頭尾ロック [mm]。噛み込み直後と尻抜け直前は荷重が過渡（衝撃・弧の充満・尻の抜け）で、
+     * ゲージメータがそれを «板厚偏差» と誤読して圧下を振るので、実機ではその区間だけ
+     * 荷重 FB を止める（頭尾 AGC ロック）。ロック中はミルばねだけが効くので、冷えて硬い頭は
+     * そのぶん厚く出て次パスの尻へ持ち越され、次々パスの頭へ戻ってくる（可逆圧延は
+     * パスごとに頭尾が入れ替わる）。0 にすると常時 FB。 */
+    END_HOLD: 1200,
   },
 
   DRIVE: {                                  // 駆動側 (−Z)
@@ -1331,11 +1422,16 @@ const CONFIG = {
     // サイドガイドは入出側対称なので位置は ±X の1値で持つ（進行方向から上流側を選ぶ）。
     // 可動のガイドバーはテーブル架台の外側（BASE_Z）に床から立つ固定架台のアーム軸受を
     // 貫いて開閉する。ハウジングの外（2,450〜）から 4,350 までの長さ。
-    GUIDE: { X: 3400, LEN: 1900, H: 700, ROLL_D: 260, N: 3, OPEN_MARGIN: 600, RATE: 500,
+    /* サイドガイドの可動バー。写真（コロ 9 個入りの鋳鋼バー）に合わせ、バー本体は
+     * 背板・上下フランジ・仕切り壁で «ポケット» を作り、各ポケットに立てコロを 1 個ずつ
+     * 収める（コロは仕切りの面より RECESS だけ手前へ出て板の耳に当たる）。
+     * 高さ H は最大スラブ厚 536 mm を受けるための寸法で、写真の薄板用バーより高い。 */
+    GUIDE: { X: 3400, LEN: 1900, H: 700, ROLL_D: 130, N: 9, RECESS: 20, OPEN_MARGIN: 600, RATE: 500,
              BASE_Z: 2300, ARM_L: 1700, ARM_Y: 300,
-             /* 板面クーラント。門型（柱 POST_X/POST_Z、梁 BEAM_Y）から 2 本のヘッダ
-              * （ステーション中心 ±DX、パスライン上 Y、Φ D）を吊り、板の上面へ噴射する。
-              * 1 本あたりの冷却域は ZONE。※各寸法は推定値
+             /* 板面クーラント。門型（柱 POST_X/POST_Z、梁 BEAM_Y）から、ラインに «平行» な
+              * ヘッダを OS / DS に 1 本ずつ（ライン中心から ±Z、パスライン上 Y、Φ D、長さ LEN）
+              * 吊り、ノズルは板の «クォーター部»（幅の 1/4 ＝ ライン中心から ±AIM_Z）を狙って
+              * 内向きに傾ける。1 ステーションの冷却域は長さ LEN（＝ ヘッダ長）。※各寸法は推定値
               *   STATIONS = 門型を立てる位置。«テーブル区分の名前»（その区分の中央）か
               *   «正準 X»（第 1 パスが +X ＝ 出側が正）で書き、Layout.coolStations が世界 X に直す。
               *   入側・出側とも «サイドガイドの上»（正準 ∓3,400）。板面冷却はロールバイトの
@@ -1343,7 +1439,9 @@ const CONFIG = {
               *   どれだけ冷えるか» しか効かない。門型はサイドガイド架台（|x| ≤ 4,310、
               *   Z ±3,910）の外側に柱を立てられるよう POST_X / POST_Z を持つ。 */
              HEADER: { STATIONS: [{ x: -3400 }, { x: 3400 }],
-                       DX: 500, Y: 950, D: 140, POST_X: 960, POST_W: 240, POST_Z: 2900, BEAM_Y: 1600, ZONE: 600,
+                       LEN: 1200, Z: 1250, Y: 950, D: 140, PITCH: 300,
+                       AIM_Z: 620,          // テーブル胴長 2,490 の 1/4（クォーター部）
+                       POST_X: 960, POST_W: 240, POST_Z: 2900, BEAM_Y: 1600,
                        // 材料が来る手前で開弁する距離（噴射の見た目だけ。熱計算は実通過長で効かせる）
                        LEAD: 6000 } },
   },
@@ -1985,6 +2083,11 @@ const CONFIG = {
    * MU_KT は温度勾配 [1/K]、MU_KV は速度のべき（0 で速度非依存、大きいほど流体潤滑寄り）。 */
   PROCESS: { MU: 0.25, MU_KT: 0.0016, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
              TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.95, PEAK_K: 1.22,
+             /* 頭の潤滑膜。ロールバイトの潤滑膜は材料が入って初めてできるので、頭は乾いた
+              * 状態で噛み、摩擦係数が高い（摩擦丘が大きく面圧が上がる）。膜が育つにつれて
+              * 指数で消える: μ = μ0·(1 + K·exp(−d/LEN))（d: 頭から圧延した長さ）。
+              * K と LEN は実測値ではなく文献的な目安（頭で 2 割強・1 m で膜が育つ）。 */
+             MU_HEAD: { K: 0.25, LEN: 1000 },
              ACCEL: 110, BITE_ANGLE_MAX: 0.42, PASS_TIME_MAX: 150 },  // mpm/s, rad(24°), s
 
   // パススケジュールは板厚・板幅から Rolling.buildSchedule() が生成する（初期値は空）
@@ -2025,20 +2128,21 @@ const CONFIG = {
   ],
 
   VIEWS: [                                                // カメラプリセット (mm)
-    { id:'overview', name:'全景',       icon:'fa-mountain-sun',     pos:[ 24000, 19000, 46000], tgt:[ -7000,   600,  1500] },
-    { id:'stand',    name:'圧延機',     icon:'fa-industry',         pos:[ 17000,  8000, 21000], tgt:[     0,  1900,     0] },
-    { id:'bite',     name:'ロールバイト', icon:'fa-magnifying-glass', pos:[  6600,  2000,  2200], tgt:[   200,  1150,     0] },
-    { id:'drive',    name:'駆動側',     icon:'fa-gears',            pos:[ 34000, 13000,-16000], tgt:[     0,  1400, -9500] },
-    { id:'supply',   name:'装入設備',   icon:'fa-truck-ramp-box',   pos:[  6000,  9000, 21000], tgt:[-13000,  1200,  3800] },
-    { id:'coiler',   name:'巻取設備',   icon:'fa-arrows-spin',      pos:[ 15500,  4600,  9500], tgt:[  8000,  2500,     0] },
+    // short はツールバーの帯に出す短い名前（1 行に収めるため）。name は説明・ツールチップ用。
+    { id:'overview', name:'全景',       short:'全景',   icon:'fa-mountain-sun',     pos:[ 24000, 19000, 46000], tgt:[ -7000,   600,  1500] },
+    { id:'stand',    name:'圧延機',     short:'圧延機', icon:'fa-industry',         pos:[ 17000,  8000, 21000], tgt:[     0,  1900,     0] },
+    { id:'bite',     name:'ロールバイト', short:'バイト', icon:'fa-magnifying-glass', pos:[  6600,  2000,  2200], tgt:[   200,  1150,     0] },
+    { id:'drive',    name:'駆動側',     short:'駆動側', icon:'fa-gears',            pos:[ 34000, 13000,-16000], tgt:[     0,  1400, -9500] },
+    { id:'supply',   name:'装入設備',   short:'装入',   icon:'fa-truck-ramp-box',   pos:[  6000,  9000, 21000], tgt:[-13000,  1200,  3800] },
+    { id:'coiler',   name:'巻取設備',   short:'巻取',   icon:'fa-arrows-spin',      pos:[ 15500,  4600,  9500], tgt:[  8000,  2500,     0] },
     // 75 mm シャーはワークロールから約 30.6 m。他の視点では画面外なので専用の視点を置く。
-    { id:'shear',    name:'75mmシャー', icon:'fa-scissors',         pos:[ 36500,  5200, 11500], tgt:[ 30800,  1200,  1500] },
-    { id:'piler',    name:'30mmシャー・パイラー', icon:'fa-layer-group', pos:[ 92000,  7000, 17000], tgt:[ 85500,  1000,     0] },
+    { id:'shear',    name:'75 mm シャー', short:'75シャー', icon:'fa-scissors',      pos:[ 36500,  5200, 11500], tgt:[ 30800,  1200,  1500] },
+    { id:'piler',    name:'30 mm シャー・パイラー', short:'30シャー', icon:'fa-layer-group', pos:[ 92000,  7000, 17000], tgt:[ 85500,  1000,     0] },
     // 板面冷却（入側・出側ともサイドガイドの上）。ミル近傍なので «圧延機» 視点でも
     // 画角には入るが、ヘッダとノズルを見るには寄った視点が要る。
-    { id:'cool',     name:'板面冷却',   icon:'fa-shower',           pos:[ 12000,  5500, 12000], tgt:[     0,  1700,     0] },
+    { id:'cool',     name:'板面冷却',   short:'冷却',   icon:'fa-shower',           pos:[ 12000,  5500, 12000], tgt:[     0,  1700,     0] },
     // ピット炉バンク（9 基）とスラブヤードは A-4〜A-1 の脇。ラインからいちばん遠いので専用の視点を置く
-    { id:'pit',      name:'ピット炉・スラブヤード', icon:'fa-fire', pos:[-60000, 26000, 52000], tgt:[-96000,  2000, 18000] },
+    { id:'pit',      name:'ピット炉・スラブヤード', short:'ピット炉', icon:'fa-fire', pos:[-60000, 26000, 52000], tgt:[-96000,  2000, 18000] },
   ],
 };
 
@@ -2163,15 +2267,24 @@ const Layout = {
   },
   /** ヘッダ X が入側（true）か出側（false）か */
   coolIsEntry(x) { return x > 0; },
-  /** 板面クーラントのヘッダ 1 本ごとの世界 X（門型 1 基につき ±DX の 2 本）。 */
-  coolHeaderXs() {
-    const dx = CONFIG.TABLE.GUIDE.HEADER.DX;
-    return Layout.coolStations(true).flatMap(x => [x - dx, x + dx]);
+  /**
+   * 板面冷却の冷却域 [x0, x1]（世界 X。ON のステーションだけ）。ヘッダはラインに平行で
+   * 長さ LEN なので、冷却域はステーション中心 ±LEN/2。運転の熱計算（guideCoolFrac /
+   * _localCool）・噴射の描画・予測は、噴射が «どこからどこまで» かをここだけから取る。
+   */
+  coolZones(onlyOn = true) {
+    const L = CONFIG.TABLE.GUIDE.HEADER.LEN;
+    return Layout.coolStations(onlyOn).map(x => [x - L / 2, x + L / 2]);
   },
-  /** すべてのヘッダ X（ON / OFF に関わらず。描画の «設備がある位置» はこちら）。 */
-  coolHeaderXsAll() {
-    const dx = CONFIG.TABLE.GUIDE.HEADER.DX;
-    return Layout.coolStations().flatMap(x => [x - dx, x + dx]);
+  /** 効いているヘッダの本数（1 ステーションに OS / DS の 2 本） */
+  coolHeaderCount(onlyOn = true) { return Layout.coolStations(onlyOn).length * 2; },
+  /**
+   * ノズルの向き（ローカル。+Z 側のヘッダ）。ヘッダ（Z, Y）から板面のクォーター（AIM_Z, 0）へ
+   * 向かう単位ベクトル。描画の噴射方向とノズルの傾きはここだけを見る。
+   */
+  nozzleDir() {
+    const H = CONFIG.TABLE.GUIDE.HEADER, dz = H.AIM_Z - H.Z, dy = -H.Y, n = Math.hypot(dz, dy);
+    return { z: dz / n, y: dy / n, tilt: Math.atan2(H.Z - H.AIM_Z, H.Y) };   // tilt: 鉛直からの傾き [rad]
   },
   /** 区分の世界 X 範囲 [min, max] */
   range(name) {
@@ -2586,7 +2699,7 @@ const Rolling = {
    * temp は板の平均温度（数値）か、板厚方向の層温度（配列: 上面 → 下面）。層温度を渡すと
    * 変形抵抗は層ごとの値の平均になり（冷えた表層は硬い）、上下面の差 kfTop/kfBot も返す。
    */
-  solve(hIn, hOut, width, speedMpm, temp, tensionMPa = 0, alloy = Rolling.alloy(), ra = null) {
+  solve(hIn, hOut, width, speedMpm, temp, tensionMPa = 0, alloy = Rolling.alloy(), ra = null, muScale = 1) {
     const dh = hIn - hOut;
     if (dh <= 0 || width <= 0)
       return { force: 0, forceTon: 0, torque: 0, power: 0, powerKW: 0, Ld: 0, kf: 0, pm: 0,
@@ -2595,7 +2708,7 @@ const Rolling = {
     const hMean = (hIn + hOut) / 2;
     const v = Math.abs(speedMpm) / 60 * 1000;                       // mm/s
     const strain = Math.log(hIn / hOut);
-    const mu = Rolling.friction(typeof temp === 'number' ? temp : temp[(temp.length - 1) >> 1], speedMpm, ra);
+    const mu = Rolling.friction(typeof temp === 'number' ? temp : temp[(temp.length - 1) >> 1], speedMpm, ra) * muScale;
     /* ロールの弾性扁平は «荷重 → 扁平 → 接触弧 → 荷重» の陰的な関係なので、
      * 接触弧長を不動点反復で解く（緩和つき。3〜6 回で 1e-5 に落ちる）。
      * 1 回目（＝剛体ロール）の荷重も残しておき、扁平がどれだけ効いたかを見えるようにする。 */
@@ -3280,10 +3393,10 @@ const Rolling = {
    * 1パスでの材料平均温度の変化 [K]（加工発熱 − ロール抜熱 − クーラント冷却 − 表面放熱）。
    * スケジュール生成用の集中定数モデル。運転時は板厚方向の層モデルで同じ要素を解く。
    */
-  /** そのパスで材料が下をくぐるヘッダの本数（板の走る範囲 reach [mm] の内側にあるもの） */
-  activeHeaders(reach) {
+  /** そのパスで材料がくぐる板面冷却域の合計長 [mm]（板の走る範囲 reach [mm] の内側にあるもの） */
+  activeCoolLength(reach) {
     if (!(reach > 0)) return 0;
-    return Layout.coolHeaderXs().filter(x => Math.abs(x) <= reach).length;
+    return Layout.coolZones().filter(([a, b]) => Math.abs((a + b) / 2) <= reach).reduce((t, [a, b]) => t + (b - a), 0);
   },
   passTempChange(hIn, hOut, speedMpm, T, passTime = 30, alloy = Rolling.alloy(),
                  width = CONFIG.SLAB.WID_DEFAULT, reach = Infinity, rollT = CONFIG.MILL.ROLL_T0) {
@@ -3315,7 +3428,7 @@ const Rolling = {
      * 温度＝ 2〜3 割高い荷重を出していた（運転側 PhysicsEngine.guideCoolFrac は
      * 実際の通過長で薄めているので、予測だけが食い違っていた）。 */
     const sf = PhysicsEngine.stripFilm(T);
-    const gz = Rolling.activeHeaders(reach) * CONFIG.TABLE.GUIDE.HEADER.ZONE;
+    const gz = Rolling.activeCoolLength(reach);
     const guide = sf.h > 0 && gz > 0 ? drop(sf.T, sf.h * CO.GUIDE_TOP * gz / v / (rc * hEff)) : 0;
     // テーブルローラとの接触（下面のみ、両エッジ寄りの 2 本の線）。パス中ずっと効く。
     const touch = drop(TT.T, TT.H * Math.min(1, 2 * TT.BAND / width) * Math.min(1, TT.ARC / TT.PITCH)
@@ -3618,7 +3731,14 @@ class SlabState {
      * 荷重はこの 2 つを見て計算する（幾何・体積収支は従来どおり公称値で回す）。 */
     this.hProf = new Float32Array(SlabState.NPROF).fill(this.thickness);   // 入側（前パスが残した）
     this._hNext = new Float32Array(SlabState.NPROF).fill(this.thickness);  // 出側（このパスが書く）
+    this._hAcc = new Float64Array(SlabState.NPROF); this._hCov = new Float64Array(SlabState.NPROF);   // 出側の重み付き平均
     this.dTProf = new Float64Array(SlabState.NPROF);
+    /* このパスで «その材料点» に積んだ正味の熱（加工発熱 − ロール抜熱）[K]。dTProf は
+     * 通った点にその場で積まれるので、いま噛んでいるセルを dTProf で読むと «この
+     * パスの発熱を半分もらった温度» で荷重を解いてしまう（実測: 局所温度が 1 セルごとに
+     * 13 K の鋸歯になり、平均で 6 K 高い側へ寄っていた）。荷重が見るべきは «バイトに
+     * 入る前» の温度なので、このパスぶんを引いて読む（dTEntry）。 */
+    this._qProf = new Float64Array(SlabState.NPROF);
     this.resetEndChill();
     this._dTmp = new Float64Array(SlabState.NPROF);
     this._wLo = SlabState.NPROF; this._wHi = -1;      // このパスで書けた範囲
@@ -3650,6 +3770,19 @@ class SlabState {
     if (!(tot > 1e-9)) return 0;
     const du = d * this.thickness / tot;
     return Num.clamp(this.dir > 0 ? vLo / tot - du : vLo / tot + du, 0, 1);
+  }
+  /**
+   * 世界 X にある材料の材料座標 u∈[0,1]。噛み込み中は左右で板厚が違う（片側は圧延済み）ので
+   * «体積の比» で割り出す（uBite と同じ約束）。noBite なら板厚一様で長さの比そのもの。
+   */
+  uAtX(x, gap) {
+    const L = Math.max(this.xMax - this.xMin, 1e-6);
+    if (!this.inBite) return Num.clamp((x - this.xMin) / L, 0, 1);
+    const hL = this.dir > 0 ? this.thickness : gap, hR = this.dir > 0 ? gap : this.thickness;
+    const lo = Math.max(-this.xMin, 0), hi = Math.max(this.xMax, 0), tot = lo * hL + hi * hR;
+    if (!(tot > 1e-9)) return 0;
+    const v = x < 0 ? (x - this.xMin) * hL : lo * hL + x * hR;
+    return Num.clamp(v / tot, 0, 1);
   }
   /** 材料座標 u の «その場所の» 板厚 [mm]（前のパスが残したもの） */
   hAt(u) { return this.hProf[Math.round(Num.clamp(u, 0, 1) * (SlabState.NPROF - 1))]; }
@@ -3689,22 +3822,46 @@ class SlabState {
       h[i] = this.hProf[a] * (1 - w) + this.hProf[b] * w;
       d[i] = this.dTProf[a] * (1 - w) + this.dTProf[b] * w;
     }
-    this.hProf.set(h); this._hNext.set(h); this.dTProf.set(d);
+    const q = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      const u = i / (N - 1);
+      const src = end > 0 ? u * (1 - frac) : frac + u * (1 - frac);
+      const p = src * (N - 1), a = Math.floor(p), b = Math.min(a + 1, N - 1), w = p - a;
+      q[i] = this._qProf[a] * (1 - w) + this._qProf[b] * w;
+    }
+    this.hProf.set(h); this._hNext.set(h); this.dTProf.set(d); this._qProf.set(q);
   }
   /** 材料座標 u の温度偏差 [K]（端部の冷え。平均からの差） */
   dTAt(u) { return this.dTProf[Math.round(Num.clamp(u, 0, 1) * (SlabState.NPROF - 1))]; }
+  /**
+   * 材料座標 u の «バイトに入る前の» 温度偏差 [K]。dTProf からこのパスで積んだ正味の熱
+   * （_qProf）を引いたもの。荷重・変形抵抗はこちらで解く（発熱は変形の結果であって原因ではない）。
+   */
+  dTEntry(u) {
+    const i = Math.round(Num.clamp(u, 0, 1) * (SlabState.NPROF - 1));
+    return this.dTProf[i] - this._qProf[i];
+  }
   /**
    * u0→u1 の区間へ «出たときの板厚» を書き込む（またいだセルを取りこぼさない）。
    * 書き先は出側バッファ。読みは入側バッファなので、いま噛んでいるセルを
    * その場で書き潰して «圧下量ゼロ» にしてしまう取り違えが起きない。
    */
   writeGauge(u0, u1, h) {
-    const N = SlabState.NPROF;
-    const a = Math.round(Num.clamp(Math.min(u0, u1), 0, 1) * (N - 1));
-    const b = Math.round(Num.clamp(Math.max(u0, u1), 0, 1) * (N - 1));
-    for (let i = a; i <= b; i++) this._hNext[i] = h;
-    if (a < this._wLo) this._wLo = a;
-    if (b > this._wHi) this._wHi = b;
+    /* セルへは «通過した割合» を重みに平均して書く。セルを丸めて上書きすると、尻抜けで
+     * 接触弧が空いていく最後の 60 mm（荷重が抜けてギャップが閉じ、薄い楔になる）が
+     * セル 1 つぶん（板長 40 m で 170 mm）に引き伸ばされ、次のパスの頭が «内側より
+     * 0.4 mm 薄い» 板として入っていた（実測）。重み付きなら楔はセルの中で薄まる。 */
+    const N = SlabState.NPROF, A = this._hAcc, W = this._hCov;
+    const p0 = Num.clamp(Math.min(u0, u1), 0, 1) * (N - 1), p1 = Num.clamp(Math.max(u0, u1), 0, 1) * (N - 1);
+    const i0 = Math.max(Math.floor(p0 - 0.5), 0), i1 = Math.min(Math.ceil(p1 + 0.5), N - 1);
+    for (let i = i0; i <= i1; i++) {
+      const ov = Math.max(Math.min(p1, i + 0.5) - Math.max(p0, i - 0.5), 0);
+      const w = p1 > p0 ? ov : (i === Math.round(p0) ? 1e-6 : 0);   // 止まっていても «いま居るセル» は書く
+      if (w <= 0) continue;
+      A[i] += h * w; W[i] += w; this._hNext[i] = A[i] / W[i];
+      if (i < this._wLo) this._wLo = i;
+      if (i > this._wHi) this._wHi = i;
+    }
   }
   /**
    * u0→u1 の区間へ «その材料点が受けた加工発熱» [K] を積む。
@@ -3719,8 +3876,8 @@ class SlabState {
    * 端のセルは受け持ちが半分なので、その半分で割り戻して 1 パスでちょうど 1 回ぶんにする。
    */
   writeHeat(u0, u1, dT) {
-    if (!(dT > 0)) return;
-    const N = SlabState.NPROF, D = this.dTProf;
+    if (!(Math.abs(dT) > 1e-9)) return;
+    const N = SlabState.NPROF, D = this.dTProf, Q = this._qProf;
     let a = Num.clamp(Math.min(u0, u1), 0, 1), b = Num.clamp(Math.max(u0, u1), 0, 1);
     /* 1 つの材料点がロールバイトを通るのは 1 パスに 1 回だけ。ところが巻取パスでは
      * 板の一部がリールに載っていて、材料座標を «体積の比» で割り出す uBite が
@@ -3738,13 +3895,14 @@ class SlabState {
     const i0 = Math.max(Math.floor(p0 - 0.5), 0), i1 = Math.min(Math.ceil(p1 + 0.5), N - 1);
     for (let i = i0; i <= i1; i++) {
       const ov = Math.min(p1, i + 0.5) - Math.max(p0, i - 0.5);
-      if (ov > 0) D[i] += dT * ov / ((i === 0 || i === N - 1) ? 0.5 : 1);
+      if (ov > 0) { const q = dT * ov / ((i === 0 || i === N - 1) ? 0.5 : 1); D[i] += q; Q[i] += q; }
     }
     SlabState.zeroMean(D);            // 平均は層モデルの持ち分。ここは «分布» だけ
   }
   /** パスの始まり: 出側バッファを入側の写しから始める（通らなかった所は前の値が残る） */
   beginGauge() {
-    this._hNext.set(this.hProf); this._uPrev = null;
+    this._hNext.set(this.hProf); this._uPrev = null; this._qProf.fill(0);
+    this._hAcc.fill(0); this._hCov.fill(0);
     this._wLo = SlabState.NPROF; this._wHi = -1;
     this._qLo = 2; this._qHi = -1;                  // 加工発熱を積み終えた材料座標の範囲
   }
@@ -3926,7 +4084,13 @@ class MillState {
      *   gap       —— 実ギャップ ＝ screw + stretch。描画も圧延計算もこれを見る */
     this.gap = CONFIG.MILL.GAP_MAX; this.targetGap = CONFIG.MILL.GAP_MAX;
     this.screw = CONFIG.MILL.GAP_MAX; this.screwCmd = CONFIG.MILL.GAP_MAX;
-    this.stretch = 0; this.trim = 0;
+    this.stretch = 0; this.stretchV = 0; this.trim = 0;   // 伸びとその速度（2 次系の状態）
+    this.adapt = 1;                            // セットアップモデルの学習係数（実測荷重 ÷ 予測）
+    /* ロードセルが読む荷重 [t] ＝ ハウジングの伸び × ミル定数。実機の計器・記録・AGC が見るのは
+     * これで、バイトで材料が受けている力（slab.rollForce）そのものではない。スタンドが
+     * 2 次系なので、噛み込みの階段荷重に対して伸びが行き過ぎるぶんだけ «高いが短い» 衝撃が出る。 */
+    this.forceMeas = 0;
+    this._fSum = 0; this._fN = 0;              // このパスの «弧が満ちて定速で走った» 荷重の積算（学習用）
     this.gaugeH = null;                        // X 線厚み計の読み [mm]（材料が届くまで null）
     this._gq = [];                             // 厚み計までの輸送遅れ（{t, h} の待ち行列）
     this.currentSpeed = 0; this.targetSpeed = 0;
@@ -4129,6 +4293,8 @@ class MillController {
       if (Math.abs(m.screw - m.screwCmd) < 0.5 && Math.abs(m.currentSpeed) < 1) m.passPhase = 'RUN';
     } else if (m.passPhase === 'RUN') {
       m.targetSpeed = sch.dir * Math.min(sch.speed, m.powerCap);
+      // 学習用: 弧が満ちて所定速度の 8 割以上で走っている間の荷重だけを平均する（頭尻の過渡は入れない）
+      if (s.biteFill > 0.99 && Math.abs(m.currentSpeed) >= sch.speed * 0.8) { m._fSum += m.forceMeas; m._fN++; }
       // 尻抜け後も «後端の切断が残っていれば» 送り続ける（そのまま板を送って後端を刃へ運ぶ）
       const cleared = (sch.dir > 0 ? s.xMin > CONFIG.SAFE_CLEAR : s.xMax < -CONFIG.SAFE_CLEAR)
                     && !(finish && finish.cropPending());
@@ -4139,7 +4305,14 @@ class MillController {
     }
   }
   advance() {
-    const m = this.mill;
+    const m = this.mill, AD = CONFIG.AGC.ADAPT, prev = CONFIG.SCHEDULE[m.passIndex];
+    /* セットアップモデルの学習: このパスの実測平均荷重 ÷ 予測（steady）で次パスの事前設定を補正する。
+     * 標本が少ないパス（板が短く定速区間が無い）は学習しない。 */
+    if (prev && prev.steady > 0 && m._fN >= 60) {
+      const ratio = Num.clamp(m._fSum / m._fN / prev.steady, AD.MIN, AD.MAX);
+      m.adapt = Num.clamp(m.adapt + AD.GAIN * (ratio - m.adapt), AD.MIN, AD.MAX);
+    }
+    m._fSum = 0; m._fN = 0;
     m.trim = 0; m.gaugeH = null; m._gq.length = 0;   // 目標が変わるので板厚制御は積分をやめて出直す
     m.passIndex++;
     if (m.passIndex >= CONFIG.SCHEDULE.length) {
@@ -4227,7 +4400,7 @@ class RollingLog {
     const c = this._cur;
     if (c) {
       if (c.hIn === null && s.inBite) { c.hIn = s.thickness; c.tIn = s.temperature; }
-      const f = s.rollForce || 0, v = Math.abs(m.currentSpeed), pw = (s.rollPower || 0) / 1000;
+      const f = m.forceMeas || 0, v = Math.abs(m.currentSpeed), pw = (s.rollPower || 0) / 1000;
       if (f > c.fMax) c.fMax = f;
       if (v > c.vMax) c.vMax = v;
       if (pw > c.pMax) c.pMax = pw;
@@ -4247,7 +4420,7 @@ class RollingLog {
      * «板厚制御がどう追い込んだか» がそのまま見える。 */
     const sh = s.wShape;
     this.series.push({ t: +this.lot.t.toFixed(2), pass: i + 1,
-                       f: +(s.rollForce || 0).toFixed(0), v: +Math.abs(m.currentSpeed).toFixed(1),
+                       f: +(m.forceMeas || 0).toFixed(0), v: +Math.abs(m.currentSpeed).toFixed(1),
                        p: +((s.rollPower || 0) / 1000).toFixed(2), h: +s.thickness.toFixed(2),
                        g: +m.gap.toFixed(2), sc: +m.screw.toFixed(2),
                        // 幅方向の形状（クラウン [µm]・平坦度 [I-unit]・ベンディング力 [t]）
@@ -5327,7 +5500,8 @@ class PhysicsEngine {
                         { coil: this.finish.mode === 'COIL', length: spec.length });
     this.mill.rollTemp = CONFIG.MILL.ROLL_T0;
     this.mill.gap = this.mill.targetGap = this.mill.screw = this.mill.screwCmd = th;
-    this.mill.stretch = 0; this.mill.trim = 0; this.mill.gaugeH = null; this.mill._gq.length = 0;
+    this.mill.stretch = 0; this.mill.stretchV = 0; this.mill.forceMeas = 0; this.mill.trim = 0; this.mill.gaugeH = null; this.mill._gq.length = 0;
+    this.mill._fSum = 0; this.mill._fN = 0;                                  // 学習係数 adapt はロットをまたいで保つ
     this.mill.currentSpeed = this.mill.targetSpeed = 0;
     this.mill.powerCap = Drive.maxSpeed(this.mill.wrDia);
     this.mill.passIndex = -1; this.mill.passPhase = 'IDLE';
@@ -5393,8 +5567,8 @@ class PhysicsEngine {
     const auto = m.mode === 'AUTO';
     // 1) 圧下位置の指令。噛み込み前は «予定荷重» を、噛み込み後は «実荷重» を見込む。
     const plan = CONFIG.SCHEDULE[m.passIndex];
-    const fRef = s.inBite ? s.rollForce
-                         : (auto && G.PRESET && plan ? (plan.steady ?? plan.force ?? 0) : 0);
+    const fRef = s.inBite ? m.forceMeas
+                         : (auto && G.PRESET && plan ? (plan.steady ?? plan.force ?? 0) * m.adapt : 0);
     // 制御が «自分で思っている» ミル定数（真値とは M_EST_ERR だけずれている）
     m.spring = fRef / (C.MODULUS * (1 + G.M_EST_ERR));
     /* フィードフォワード: 前のパスが残した «その場所の板厚» は分かっているので、
@@ -5426,17 +5600,30 @@ class PhysicsEngine {
      * 荷重が戻ってミルが開き、出側が大きく外れる（実測: 第 7 パスでギャップが 6.96 mm 振れ、
      * 出側 45 → 48.07 mm）。実機と同じく «噛んだまま止まっている間は制御を保持» する。 */
     const held = s.inBite && Math.abs(m.currentSpeed) < CONFIG.AGC.HOLD_SPEED;
-    if (held) return void (m.gap = Num.clamp(m.screw + m.stretch, C.GAP_MIN, C.GAP_MAX));
+    if (held) { m.stretchV = 0; return void (m.gap = Num.clamp(m.screw + m.stretch, C.GAP_MIN, C.GAP_MAX)); }
+    /* 頭尾ロック: 頭の END_HOLD（出側長さ）と尻の END_HOLD（入側の残り）は荷重 FB を止め、
+     * 圧下はその手前の位置のまま。ミルばねだけが働く区間になる。 */
+    const dHead = s.dir > 0 ? s.xMax : -s.xMin, dTail = s.dir > 0 ? -s.xMin : s.xMax;
+    const lock = auto && s.inBite && G.END_HOLD > 0 && (dHead < G.END_HOLD || dTail < G.END_HOLD);
+    m.agcLock = lock;
     /* 圧下位置の下限は «実ギャップの下限» ではない。実ギャップ h = S + F/M なので、
      * h を GAP_MIN まで詰めるには S を GAP_MIN より F/M だけ下へ入れる必要がある。
      * ここを GAP_MIN で止めていたため、薄板パスで圧下が飽和して板厚が目標から外れた
      * （実測: 目標 9.1 mm に対し 7.8 mm）。実ギャップ側の下限は下で別に効かせる。 */
     const screwMin = C.GAP_MIN - C.RATED_FORCE_T / C.MODULUS;
-    m.screwCmd = Num.clamp(m.targetGap - comp, screwMin, C.GAP_MAX);
+    if (!lock) m.screwCmd = Num.clamp(m.targetGap - comp, screwMin, C.GAP_MAX);
     const want = Num.approach(m.screw, m.screwCmd, G.TAU, dt);   // 圧下の応答（一次遅れ）
     m.screw = Num.rateTo(m.screw, want, C.GAP_RATE, dt);         // ＋シリンダ速度の制限
-    // 2) スタンドの伸びは荷重に一次遅れで追従する
-    m.stretch = Num.approach(m.stretch, (s.rollForce || 0) / C.MODULUS, C.STRETCH_TAU, dt);
+    /* 2) スタンドの伸び。質量とばねを持つ 2 次系  x'' + 2ζω x' + ω² x = ω²·F/M  で荷重に追従する
+     *    （半陰的オイラー。ω·dt = 0.79 < 2 なので固定ステップ 1/120 s で安定）。
+     *    噛み込みの階段荷重で伸びが行き過ぎ、その間だけギャップが余計に開く。 */
+    {
+      const w = 2 * Math.PI * C.STAND.FN, xT = (s.rollForce || 0) / C.MODULUS;
+      m.stretchV += (w * w * (xT - m.stretch) - 2 * C.STAND.ZETA * w * m.stretchV) * dt;
+      m.stretch += m.stretchV * dt;
+      if (m.stretch < 0) { m.stretch = 0; m.stretchV = Math.max(m.stretchV, 0); }   // 伸びは荷重側にしか出ない
+      m.forceMeas = C.MODULUS * m.stretch;                       // ロードセルはハウジングの伸びを読む
+    }
     m.gap = Num.clamp(m.screw + m.stretch, C.GAP_MIN, C.GAP_MAX);
     // 3) モニタ AGC（X 線厚み計 FB）。出た材料が計器へ届くまでの輸送遅れをそのまま持つ。
     const v = Math.abs(m.currentSpeed) / 60 * 1000;              // mm/s
@@ -5447,8 +5634,8 @@ class PhysicsEngine {
       while (m._gq.length && this.elapsed - m._gq[0].t >= lag) read = m._gq.shift().h;
       if (read !== null) {
         m.gaugeH = read;
-        if (auto) m.trim = Num.clamp(m.trim + (read - m.targetGap) * G.MON_KP * dt / G.MON_TAU,
-                                     -G.TRIM_MAX, G.TRIM_MAX);
+        if (auto && !lock) m.trim = Num.clamp(m.trim + (read - m.targetGap) * G.MON_KP * dt / G.MON_TAU,
+                                              -G.TRIM_MAX, G.TRIM_MAX);
       }
       if (m._gq.length > 4000) m._gq.splice(0, m._gq.length - 4000);
     } else if (!s.inBite) { m._gq.length = 0; m.gaugeH = null; }
@@ -5481,12 +5668,15 @@ class PhysicsEngine {
        * 公称値ではなくこの «その場所の値» で計算する。 */
       const u = s.uBite(gap);
       const hLoc = Math.max(s.hAt(u), gap + 1e-6);
-      const dTloc = s.dTAt(u);
+      const dTloc = s.dTEntry(u);                         // «バイトに入る前» の温度で解く
       s.hBite = hLoc;                                     // 制御（FF-AGC）が読む «その場所の入側厚»
       const Tl = s._Tloc;
       for (let j = 0; j < Tl.length; j++) Tl[j] = s.T[j] + dTloc;
       // 変形抵抗は層温度から（冷えた表層が硬い）。上下面の差が反りを生む
-      const res = Rolling.solve(hLoc, gap, s.width, m.currentSpeed, Tl, tension, s.alloy, m.wrRa);
+      // 頭の潤滑膜（未形成→形成）。頭から圧延した長さ（出側）で膜の育ちを見る
+      const MH = CONFIG.PROCESS.MU_HEAD, dHeadMm = Math.max(s.dir > 0 ? s.xMax : -s.xMin, 0);
+      const muScale = 1 + MH.K * Math.exp(-dHeadMm / MH.LEN);
+      const res = Rolling.solve(hLoc, gap, s.width, m.currentSpeed, Tl, tension, s.alloy, m.wrRa, muScale);
       // 弧が埋まっている割合だけ荷重・トルク・動力が立つ（投影接触長に比例）
       const fill = s.biteFill;
       res.forceTon *= fill; res.torque *= fill; res.powerKW *= fill;
@@ -5501,10 +5691,9 @@ class PhysicsEngine {
       const r = 1 - (1 - gap / hLoc) * fill;
       if (vOut > 0) { s.xMax += vOut * dt; s.xMin += vOut * r * dt; }
       else          { s.xMin += vOut * dt; s.xMax += vOut * r * dt; }
-      // 出ていった材料の «実際の板厚» と «そこで出た加工発熱» を材料座標へ書き戻す
+      // 出ていった材料の «実際の板厚» を材料座標へ書き戻す（熱は下の _biteThermal のあと）
       const uFrom = s._uPrev === null ? u : s._uPrev;
       s.writeGauge(uFrom, u, gap);
-      s.writeHeat(uFrom, u, res.heat);
       s._uPrev = u;
       // 出ていく板厚は «弧が満ちている間の» 実ギャップ。尻抜けで弧が空きかけると
       // 荷重が落ちてミルの伸びが戻るので、その区間を混ぜると薄く記録される。
@@ -5515,7 +5704,12 @@ class PhysicsEngine {
       // このステップでロールギャップを通過した体積分だけを板全体へ配分
       const passedFrac = (Math.abs(vOut) * dt * gap) / Math.max(s.thickness * s.length, 1);
       const contactTime = res.Ld / Math.max(Math.abs(v), 1e-3);
-      this._biteThermal(res.heat, contactTime, gap, passedFrac);
+      const chillPt = this._biteThermal(res.heat, contactTime, gap, passedFrac);
+      /* «その材料点» が受けた正味の熱（加工発熱 − ロール抜熱）を材料座標へ積む。
+       * 抜熱を層平均（板全体）だけから引いて分布へ書かないでいると、まだ通っていない尻の
+       * 材料が «頭が受けた抜熱ぶん» まで冷えて読まれる（実測: 尻の局所温度が内側より
+       * 最大 51 K 低く、荷重が 1.4 倍）。発熱と抜熱は同じ点に、同じ扱いで積む。 */
+      s.writeHeat(uFrom, u, res.heat - chillPt);
       /* --- 幅方向の形状（クラウン・平坦度）---------------------------------
        * 影響係数法は n×n を解くので毎フレームは重い。荷重・板厚・温度が «意味のある量»
        * 動いたときだけ解き直す（弧が満ちてからの 1 回目で必ず解く）。 */
@@ -5579,7 +5773,7 @@ class PhysicsEngine {
     /* 過負荷保護が見る荷重。噛み込みの衝撃は «高いが短い» ので、瞬時値で保護を掛けると
      * 正常な圧延でも止まってしまう（実機の保護も短時間平均で見る）。計器と記録には
      * 瞬時値を出し、停止判定だけこの平均を使う。 */
-    s.rollForceAvg = Num.approach(s.rollForceAvg, s.rollForce, CONFIG.MILL.FORCE_FILTER, dt);
+    s.rollForceAvg = Num.approach(s.rollForceAvg, m.forceMeas, CONFIG.MILL.FORCE_FILTER, dt);
     s.xCenter = (s.xMin + s.xMax) / 2;
     s.length = s.xMax - s.xMin;         // 板長は常に幾何から。噛み込み中も実長を保つ
     if (!s.inBite) s._vol = s.thickness * s.length;   // 噛み込み中の実効板厚（体積÷全長）の基準
@@ -5613,7 +5807,8 @@ class PhysicsEngine {
     const rc = al.RHO * al.CP, alpha = al.K / rc;                          // m²/s
     const Troll = this.mill.rollTemp;
     const x = 2 * M.H_ROLL * contactTime / (rc * (gap / 1000));
-    const dTavg = (s.temperature - Troll) * (1 - Math.exp(-x)) * passedFrac;      // 板厚平均の抜熱 [K]
+    const chillPt = (s.temperature - Troll) * (1 - Math.exp(-x));                 // 通った点 1 つの板厚平均の抜熱 [K]
+    const dTavg = chillPt * passedFrac;                                            // 板全体の平均に直した抜熱 [K]
     this._rollHeat(dTavg, rc);                                                    // 奪った熱はロールへ入る
     const delta = Math.max(M.CHILL_DEPTH_K * Math.sqrt(alpha * contactTime) * 1000, 0.5);   // mm
     const h = s.hEff, dz = h / (n - 1);
@@ -5626,6 +5821,7 @@ class PhysicsEngine {
       T[j] += heat * passedFrac;                                            // 加工発熱（一様）
       T[j] = Math.max(T[j] - dTavg * h * w[j] / wsum, Troll);               // 抜熱（表層に集中）
     }
+    return chillPt;
   }
 
   /**
@@ -5793,6 +5989,46 @@ class PhysicsEngine {
     for (let j = 1; j < n; j++) { const m = a[j] / b[j - 1]; b[j] -= m * c[j - 1]; d[j] -= m * d[j - 1]; }
     T[n - 1] = d[n - 1] / b[n - 1];
     for (let j = n - 2; j >= 0; j--) T[j] = (d[j] - c[j] * T[j + 1]) / b[j];
+    this._localCool(dt, dil > 0, gFrac > 0);
+  }
+
+  /**
+   * 噴射域の冷却を «その下に居る材料点» へ配る（長手方向の分布）。
+   *
+   * 層モデル（_thermal）はロールクーラント（ミル前後 COOLANT.ZONE）と板面冷却（ヘッダ下）を
+   * «噴射域 ÷ 板長» に薄めて板全体へ一様に入れる。総量はそれで合っているが、分布が無いと
+   * «まだ通っていない尻» が、頭が浴びた冷却まで背負って読まれる —— 尻がバイトに入る時点で
+   * このパスの噴射量を丸ごと受けた温度になり、頭はゼロ。実機では頭も尻も «自分がくぐった
+   * ぶん» しか冷えないので、1 点あたりの線量は同じで、違うのは受けた «時刻» だけ。
+   * ここでは噴射域の下に居るセルへ実際の熱流ぶんを引き、平均を戻す（層平均は _thermal が
+   * 既に持っているので、この配列の約束どおり «分布» だけを受け持つ）。
+   */
+  _localCool(dt, coolant, strip) {
+    const s = this.slab, M = CONFIG.MATERIAL, CO = M.COOLANT, D = s.dTProf, N = D.length;
+    if (!(coolant || strip) || !(s.length > 1)) return;
+    const rc = s.alloy.RHO * s.alloy.CP, hz = Math.max(s.hEff, 1) / 1000, gap = this.mill.gap;
+    const bo = PhysicsEngine.boiling(s.tTop), sf = PhysicsEngine.stripFilm(s.tTop);
+    const zones = [];
+    if (coolant) zones.push({ x0: -CO.ZONE / 2, x1: CO.ZONE / 2,
+      q: (CO.WET_TOP + CO.WET_BOT) * bo.h * Math.max(s.temperature - bo.T, 0) });
+    if (strip && sf.h > 0) {
+      const q = CO.GUIDE_TOP * sf.h * Math.max(s.tTop - sf.T, 0);
+      for (const [x0, x1] of Layout.coolZones()) zones.push({ x0, x1, q });
+    }
+    let hit = false;
+    for (const z of zones) {
+      const x0 = Math.max(z.x0, s.xMin), x1 = Math.min(z.x1, s.xMax);
+      if (!(x1 > x0) || !(z.q > 0)) continue;
+      const dT = z.q * dt / (rc * hz);                              // その点の板厚平均の温度落ち [K]
+      const u0 = s.uAtX(x0, gap), u1 = s.uAtX(x1, gap);
+      const p0 = Math.min(u0, u1) * (N - 1), p1 = Math.max(u0, u1) * (N - 1);
+      const i0 = Math.max(Math.floor(p0 - 0.5), 0), i1 = Math.min(Math.ceil(p1 + 0.5), N - 1);
+      for (let i = i0; i <= i1; i++) {
+        const ov = Math.min(p1, i + 0.5) - Math.max(p0, i - 0.5);
+        if (ov > 0) { D[i] -= dT * Math.min(ov, 1) / ((i === 0 || i === N - 1) ? 0.5 : 1); hit = true; }
+      }
+    }
+    if (hit) SlabState.zeroMean(D);
   }
 
   /**
@@ -5839,13 +6075,12 @@ class PhysicsEngine {
     SlabState.zeroMean(D);       // 平均は層モデルの持ち分。ここは «分布» だけを持つ
   }
 
-  /** 板面クーラントの有効割合: 板がヘッダ（4 本）の冷却域の下を通過している長さ ÷ 板長 */
+  /** 板面クーラントの有効割合: 板がヘッダの冷却域（Layout.coolZones）の下を通過している長さ ÷ 板長 */
   get guideCoolFrac() {
-    const s = this.slab, M = CONFIG.MATERIAL, HD = CONFIG.TABLE.GUIDE.HEADER;
+    const s = this.slab, M = CONFIG.MATERIAL;
     if (!(M.STRIP_COOL.MODE !== 'NONE' && s.onLine && Math.abs(this.mill.currentSpeed) > 3)) return 0;
     let cover = 0;
-    for (const hx of Layout.coolHeaderXs())
-      cover += Math.max(0, Math.min(hx + HD.ZONE / 2, s.xMax) - Math.max(hx - HD.ZONE / 2, s.xMin));
+    for (const [x0, x1] of Layout.coolZones()) cover += Math.max(0, Math.min(x1, s.xMax) - Math.max(x0, s.xMin));
     return Math.min(cover / Math.max(s.length, 1), 1);
   }
 
@@ -5896,7 +6131,7 @@ class PhysicsEngine {
       this._trip(`過負荷停止: 圧延荷重 ${s.rollForceAvg.toFixed(0)} t が非常最大 ${C.LIMIT_FORCE_T.toLocaleString()} t を超えました（材質・板厚・炉出し温度を見直してください）`);
       return;
     }
-    if (s.rollForce > C.RATED_FORCE_T)            w = { kind: 'crit', text: `圧延荷重が定格 ${C.RATED_FORCE_T} t を超過しています` };
+    if (m.forceMeas > C.RATED_FORCE_T)            w = { kind: 'crit', text: `圧延荷重が定格 ${C.RATED_FORCE_T} t を超過しています` };
     else if (s.rollPower > C.RATED_POWER_KW)      w = { kind: 'crit', text: `主電動機動力が定格 ${(C.RATED_POWER_KW / 1000).toFixed(1)} MW を超過しています` };
     else if (s.onLine && this.stillRolling && !this.finish.winding && s.temperature < this.tempFloor)
                                                   w = { kind: 'warn', text: `材料温度が圧延下限 ${this.tempFloor} ℃ を下回りました` };
@@ -6344,13 +6579,29 @@ const Parts = {
    * 架台の軸受を貫いて開閉シリンダの中へ入る（伸縮部材）。
    */
   sideGuideBar() {
-    const g = CONFIG.TABLE.GUIDE, zb = g.ROLL_D + 20;     // ローラ背面 + 逃げ
-    const parts = [G.at(G.box(g.LEN, g.H, 280), 0, g.H / 2, zb + 140)];   // 立板（ローラ受け）
-    const boxL = g.ARM_L - 900;
+    /* 写真のバー: 背板の前に上下のフランジと仕切り壁で «ポケット» を作り、各ポケットに
+     * 立てコロを 1 個ずつ収める。コロは仕切りの面より RECESS だけ手前へ出て板の耳に当たる。
+     * 上面のボルト類は付けない（取付ボルトは架台側）。 */
+    const g = CONFIG.TABLE.GUIDE, pitch = g.LEN / g.N, pocketW = g.ROLL_D + 40;
+    const wallT = pitch - pocketW;                          // 仕切り壁の厚み
+    const depth = g.ROLL_D + 30;                            // ポケット奥行き（コロ背面 + 逃げ）
+    const zb = g.RECESS + depth;                            // 背板の前面
+    const flangeT = 45, backT = 120;
+    const parts = [G.at(G.box(g.LEN, g.H, backT), 0, g.H / 2, zb + backT / 2)];                 // 背板
+    parts.push(G.at(G.box(g.LEN, flangeT, depth + backT), 0, g.H - flangeT / 2, g.RECESS + (depth + backT) / 2));   // 上フランジ
+    parts.push(G.at(G.box(g.LEN, flangeT, depth + backT), 0, flangeT / 2, g.RECESS + (depth + backT) / 2));         // 下フランジ
+    for (let i = 0; i <= g.N; i++) {                                                            // 仕切り壁（両端は半分）
+      const x = -g.LEN / 2 + i * pitch, w = (i === 0 || i === g.N) ? wallT / 2 : wallT;
+      const xc = i === 0 ? x + w / 2 : i === g.N ? x - w / 2 : x;
+      parts.push(G.at(G.box(w, g.H - 2 * flangeT, depth), xc, g.H / 2, g.RECESS + depth / 2));
+    }
+    // 背板から後ろへ出るスライドアーム 2 本（架台の軸受を貫いてシリンダへ）。根元に補強リブ
+    const boxL = g.ARM_L - 900, zArm = zb + backT;
     for (const sx of [-1, 1]) {
       const x = sx * (g.LEN / 2 - 300);
-      parts.push(G.at(G.box(320, 260, boxL), x, g.ARM_Y + 130, zb + 280 + boxL / 2));            // スライドアーム
-      parts.push(G.at(G.cyl(200, 900, 'z', 12), x, g.ARM_Y + 130, zb + 280 + boxL + 450));       // シリンダロッド
+      parts.push(G.at(G.box(320, 260, boxL), x, g.ARM_Y + 130, zArm + boxL / 2));                // スライドアーム
+      parts.push(G.at(G.box(60, g.H - 2 * flangeT - 60, 360), x, g.H / 2, zArm + 180));          // 補強リブ（背板 → アーム）
+      parts.push(G.at(G.cyl(200, 900, 'z', 12), x, g.ARM_Y + 130, zArm + boxL + 450));           // シリンダロッド
     }
     return G.merge(parts);
   },
@@ -6380,13 +6631,18 @@ const Parts = {
     parts.push(G.at(G.box(2 * H.POST_X + H.POST_W, 240, 300), 0, P + H.BEAM_Y + 120, H.POST_Z));   // 柱頭のつなぎ
     return G.merge(parts);
   },
-  /** 門型の梁（Z 方向 2 本）と、ヘッダを吊る横つなぎ・吊り材。板の上に架かるので «天面» 扱い。 */
+  /**
+   * 門型の梁（Z 方向 2 本）と、ヘッダを吊る横つなぎ・吊り材。板の上に架かるので «天面» 扱い。
+   * ヘッダはラインに平行（X 方向）で OS / DS に 1 本ずつ（z = ±Z）なので、横つなぎも z = ±Z に
+   * 渡し、そこから 2 本の吊り材（x = ±LEN/2 − 150）でヘッダを吊る。
+   */
   guideHeaderBeams() {
     const H = CONFIG.TABLE.GUIDE.HEADER, P = CONFIG.MILL.PASS_LINE, parts = [];
     for (const sx of [-1, 1]) parts.push(G.at(G.box(H.POST_W, 300, 2 * H.POST_Z + 300), sx * H.POST_X, P + H.BEAM_Y + 150, 0));   // 梁
-    for (const z of [-900, 900]) {
-      parts.push(G.at(G.box(2 * H.POST_X - H.POST_W, 200, 200), 0, P + H.BEAM_Y + 100, z));            // 横つなぎ
-      for (const sx of [-1, 1]) parts.push(G.at(G.box(120, H.BEAM_Y - H.Y - H.D / 2, 120), sx * H.DX, P + (H.BEAM_Y + H.Y + H.D / 2) / 2, z));   // 吊り
+    const hangL = H.BEAM_Y - H.Y - H.D / 2, xh = H.LEN / 2 - 150;
+    for (const sz of [-1, 1]) {
+      parts.push(G.at(G.box(2 * H.POST_X - H.POST_W, 200, 200), 0, P + H.BEAM_Y + 100, sz * H.Z));      // 横つなぎ（ヘッダの真上）
+      for (const sx of [-1, 1]) parts.push(G.at(G.box(120, hangL, 120), sx * xh, P + H.Y + H.D / 2 + hangL / 2, sz * H.Z));   // 吊り
     }
     return G.merge(parts);
   },
@@ -6397,28 +6653,44 @@ const Parts = {
    */
   guideHeaderSupply() {
     /* 配管は門型（柱・梁）とサイドガイド架台の «外側» を通す。中を抜こうとすると
-     * 柱や梁と体積が重なる（実測で最大 120 mm の食い込み）。ヘッダへの取り合いは
-     * ヘッダ端（胴長の外）で止め、パイプの中まで潜り込ませない。 */
+     * 柱や梁と体積が重なる（実測で最大 120 mm の食い込み）。
+     * 経路: 元弁の箱（床上、+Z 側の柱の外）→ 立ち上がり管 → 梁の上をライン直角（Z）に渡る
+     * マニホールド → OS / DS それぞれの降し管（ヘッダの外側 z = ±(Z + 250)）→ ヘッダ中央へ
+     * 水平の取り合い。降し管は横つなぎ（z = ±Z）の外側を通し、部材と重ねない。 */
     const H = CONFIG.TABLE.GUIDE.HEADER, P = CONFIG.MILL.PASS_LINE, parts = [];
     const top = P + H.BEAM_Y + 320;                 // 梁（〜BEAM_Y+300）より上を通す
-    const zp = H.POST_Z + 380;                      // 柱（POST_Z ± 150）より外side
-    const zh = CONFIG.TABLE.BARREL / 2 + 100;       // ヘッダ端（ここで止める）
-    const xr = H.POST_X + 420, D = 220;             // 立ち上がりは柱の外
+    const zp = H.POST_Z + 380;                      // 柱（POST_Z ± 150）より外側（+Z）
+    const zd = H.Z + 250, D = 220;                  // 降し管の Z（ヘッダの外側）
+    const xr = H.POST_X + 420;                      // 立ち上がりは柱の外
     parts.push(G.at(G.cyl(D, top - 300, 'y', 10), xr, (top + 300) / 2, zp));            // 立ち上がり
-    parts.push(G.at(G.cyl(D, 2 * (xr - H.DX) + 2 * H.DX, 'x', 10), 0, top, zp));        // マニホールド
-    for (const d of [-1, 1]) {
-      parts.push(G.at(G.cyl(D * 0.8, top - (P + H.Y), 'y', 8), d * H.DX, (top + P + H.Y) / 2, zp));  // 降し管
-      parts.push(G.at(G.cyl(D * 0.9, zp - zh, 'z', 8), d * H.DX, P + H.Y, (zp + zh) / 2));           // ヘッダへの取り合い
-      parts.push(G.at(G.box(280, 280, 280), d * H.DX, top - 420, zp));                               // 開閉弁
+    parts.push(G.at(G.cyl(D, xr, 'x', 10), xr / 2, top, zp));                             // 柱外 → ライン中心（x = 0）へ
+    parts.push(G.at(G.cyl(D, 2 * zp, 'z', 10), 0, top, 0));                               // マニホールド（梁の上を Z に渡る）
+    for (const sz of [-1, 1]) {
+      const zq = sz * zd;
+      parts.push(G.at(G.cyl(D * 0.8, top - (P + H.Y), 'y', 8), 0, (top + P + H.Y) / 2, zq));         // 降し管
+      const z0 = H.Z + H.D / 2 - 10;                                                              // ヘッダの管壁で止める（中へ潜らせない）
+      parts.push(G.at(G.cyl(D * 0.9, zd - z0, 'z', 8), 0, P + H.Y, sz * (z0 + (zd - z0) / 2)));      // ヘッダ中央への取り合い
+      parts.push(G.at(G.box(280, 280, 280), 0, top - 420, zq));                                      // 開閉弁（OS / DS 別）
     }
     parts.push(G.at(G.box(520, 900, 440), xr, 700, zp + 460));                          // 元弁・流量計の箱
     return G.merge(parts);
   },
-  /** ヘッダ 1 本（Z 方向のパイプ + 下向きノズル列）。原点＝パイプ中心。 */
+  /**
+   * ヘッダ 1 本（+Z 側。ラインに平行な X 方向のパイプ ＋ クォーター部を狙って内向きに傾けた
+   * ノズル列）。原点＝パイプ中心。−Z 側は Y まわりに π 回して置く。
+   * ノズルの向きは Layout.nozzleDir()（噴射の描画も同じ向きを見る）。
+   */
   guideHeader() {
-    const H = CONFIG.TABLE.GUIDE.HEADER, W = CONFIG.TABLE.BARREL + 200, parts = [G.cyl(H.D, W, 'z', 12)];
-    for (let z = -W / 2 + 150; z <= W / 2 - 150; z += 300) parts.push(G.at(G.cyl(44, 120, 'y', 6), 0, -H.D / 2 - 50, z));
-    parts.push(G.at(G.cyl(H.D * 0.7, 300, 'y', 8), 0, H.D / 2 + 150, -W / 2 + 200));   // 給液口
+    const H = CONFIG.TABLE.GUIDE.HEADER, nd = Layout.nozzleDir(), L = H.LEN;
+    const parts = [G.cyl(H.D, L, 'x', 12), G.at(G.cyl(H.D * 1.25, 60, 'x', 12), -L / 2 + 30, 0, 0),
+                   G.at(G.cyl(H.D * 1.25, 60, 'x', 12), L / 2 - 30, 0, 0)];             // パイプと両端の管継手
+    const n = Math.max(1, Math.round(L / H.PITCH)), x0 = -L / 2 + (L - (n - 1) * H.PITCH) / 2;
+    for (let i = 0; i < n; i++) {
+      const x = x0 + i * H.PITCH, len = 150, r = H.D / 2 + len / 2 - 10;
+      // ノズル: パイプ表面から向き nd に len だけ突き出す円筒（rx: X まわりに tilt だけ内向きへ）
+      parts.push(G.at(G.cyl(44, len, 'y', 6), x, r * nd.y, r * nd.z, nd.z < 0 ? nd.tilt : -nd.tilt, 0, 0));
+    }
+    parts.push(G.at(G.cyl(H.D * 0.7, 300, 'y', 8), 0, H.D / 2 + 150, 0));                // 給液口（中央上）
     return G.merge(parts);
   },
   /**
@@ -8091,7 +8363,8 @@ class GuideView {
     const H = g.HEADER, postGeo = Parts.guideHeaderPosts(), beamGeo = Parts.guideHeaderBeams(), hdrGeo = Parts.guideHeader();
     const supGeo = Parts.guideHeaderSupply();
     this.sided.top = [];
-    this.headers = new Instances(hdrGeo, MAT.tableFrame, 4, { cull: false, cast: true, name: '板面クーラントヘッダ' });
+    this.headers = new Instances(hdrGeo, MAT.tableFrame, 2 * Layout.coolStations().length,
+                                 { cull: false, cast: true, name: '板面クーラントヘッダ' });
     this.headerXs = [];
     let hi = 0;
     for (const x of Layout.coolStations()) {
@@ -8122,7 +8395,9 @@ class GuideView {
       sup.position.set(u(x), 0, 0);
       if (drive) sup.rotation.y = Math.PI;
       put(sup, drive ? 'far' : 'near');
-      for (const d of [-1, 1]) { const hx = x + d * H.DX; this.headers.set(hi++, hx, P + H.Y, 0); this.headerXs.push(hx); }
+      // OS（+Z）と DS（−Z）に 1 本ずつ。−Z 側は Y まわりに π 回してノズルを内向きにする
+      for (const sz of [1, -1]) this.headers.set(hi++, x, P + H.Y, sz * H.Z, 0, sz > 0 ? 0 : Math.PI, 0);
+      this.headerXs.push(x);
     }
     this.headers.commit().finalize(); scene.add(this.headers.mesh);
   }
@@ -9193,21 +9468,21 @@ class SprayView {
        * 冷却の «熱計算» は今までどおり «実際に下を通った長さ» だけで効かせ、
        * 噴射の «見た目» だけをこの先行分（LEAD）ぶん早く始める。 */
       const LEAD = H.LEAD;
-      const active = Layout.coolHeaderXs()
-        .filter(hx => slab.xMax > hx - H.ZONE - LEAD && slab.xMin < hx + H.ZONE + LEAD);
-      /* 噴射はノズル列（300 mm ピッチ）から出す。ヘッダ 1 本を «1 点から» 出すと
-       * 遠くから見たとき «滴が少し落ちている» だけに見えて、設備が働いている感じが出ない。
+      const active = Layout.coolZones()
+        .filter(([x0, x1]) => slab.xMax > x0 - LEAD && slab.xMin < x1 + LEAD);
+      /* 噴射は OS / DS のヘッダのノズル列（PITCH）から、クォーター部へ向けて斜めに撃ち出す。
+       * ノズルの向きはヘッダの形状と同じ Layout.nozzleDir() を見る（形と噴射が食い違わない）。
        * 粒は大きめ・寿命は短めにして «幕» として読めるようにする。 */
-      const nz = Math.max(2, Math.round(T.BARREL / 300));
-      if (active.length) this._emit('strip', (wet ? 460 : 200) * active.length, dt, 46, r => {
-        const hx = active[Math.floor(r() * active.length)];
-        const zi = Math.floor(r() * nz), z = (zi / (nz - 1) - 0.5) * T.BARREL + (r() - .5) * 120;
-        const x = hx + (r() - .5) * 150, y = CONFIG.MILL.PASS_LINE + H.Y - H.D / 2 - 90;
-        // 初速をほぼ 0 にして自由落下させる。終端速度で撃ち出すと 0.8 m を 0.05 s で
-        // 通り過ぎてしまい、同時に見えている粒が 20 個ほどにしかならず «幕» に見えない。
-        if (wet) this.strip.spawn(x, y, z, (r() - .5) * 200, -150 - r() * 350, (r() - .5) * 200,
-                                  0.42 + r() * 0.26, 170 + r() * 120);
-        else this.stripAir.spawn(x, y, z, (r() - .5) * 420, -1600 - r() * 700, (r() - .5) * 420,
+      const nd = Layout.nozzleDir(), nn = Math.max(1, Math.round(H.LEN / H.PITCH));
+      const v0 = wet ? 2400 : 3200;                        // ノズル出口速度 [mm/s]（クォーターまで届く）
+      if (active.length) this._emit('strip', (wet ? 520 : 240) * active.length, dt, 46, r => {
+        const [x0, x1] = active[Math.floor(r() * active.length)], sz = r() < 0.5 ? 1 : -1;
+        const xi = Math.floor(r() * nn), x = x0 + (x1 - x0) * (xi + 0.5) / nn + (r() - .5) * 60;
+        const y = CONFIG.MILL.PASS_LINE + H.Y + nd.y * 160, z = sz * (H.Z + nd.z * 160);
+        const vy = nd.y * v0 * (0.85 + r() * 0.3), vz = sz * nd.z * v0 * (0.85 + r() * 0.3);
+        if (wet) this.strip.spawn(x, y, z, (r() - .5) * 260, vy, vz + (r() - .5) * 260,
+                                  0.40 + r() * 0.26, 170 + r() * 120);
+        else this.stripAir.spawn(x, y, z, (r() - .5) * 420, vy * 1.2, vz * 1.2 + (r() - .5) * 420,
                                  0.45 + r() * 0.35, 480 + r() * 340);
       });
     }
@@ -9215,9 +9490,7 @@ class SprayView {
      * ヘッダ（入側 A-5 は板が 62 m 以上伸びるパスまで来ない）の下は «テーブルの面»。
      * ここを常に «板の上面» にしていたため、板が居ないヘッダでは液滴が数十 mm 落ちただけで
      * 消えてしまい、遠目には何も出ていないように見えていた。 */
-    const H2 = CONFIG.TABLE.GUIDE.HEADER;
-    const onPlate = Layout.coolHeaderXs().some(hx =>
-      slab.onLine && slab.xMax > hx - H2.ZONE && slab.xMin < hx + H2.ZONE);
+    const onPlate = Layout.coolZones().some(([x0, x1]) => slab.onLine && slab.xMax > x0 && slab.xMin < x1);
     const stripFloor = CONFIG.MILL.PASS_LINE + (onPlate ? (slab.inBite ? mill.gap : slab.thickness) : 0);
     this.strip.update(dt, stripFloor);
     this.stripAir.update(dt, stripFloor);
@@ -9648,7 +9921,7 @@ class UIManager {
     this.logLot = null; this.logPass = new Set();
     this.logSeries = new Set(RollingLog.SERIES.map(q => q.key));
     this._logBox = null;
-    this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
+    this._buildTabs(); this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
     this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildStripCool(); this._buildCutScope();
     this._buildVersion();
     this._bind(); this._listen(); this._logDragResize(); this._logCrosshair();
@@ -9950,8 +10223,28 @@ class UIManager {
   }
 
   /**
-   * 区分を閉じていても «今どうなっているか» が分かるよう、各区分の見出しに要約を出す
-   * （探させない・思い出させない）。値はすべて状態から作る。
+   * メニューのタブ。押した区分だけを出し、選択は覚えておく（次に開いたとき同じ場所）。
+   * 各タブの下段には _summaries() が要約を入れる。
+   */
+  _buildTabs() {
+    this.tabs = ['prep', 'run', 'view', 'equip'];
+    let cur = 'prep';
+    try { const v = localStorage.getItem('hm.tab'); if (this.tabs.includes(v)) cur = v; } catch (e) { /* 保存できなくても動く */ }
+    this.selectTab = (id) => {
+      if (!this.tabs.includes(id)) return;
+      for (const t of this.tabs) {
+        $('tab-' + t).setAttribute('aria-selected', String(t === id));
+        $('pane-' + t).hidden = t !== id;
+      }
+      $('panels').scrollTop = 0;
+      try { localStorage.setItem('hm.tab', id); } catch (e) { /* 同上 */ }
+    };
+    for (const t of this.tabs) $('tab-' + t).addEventListener('click', () => this.selectTab(t));
+    this.selectTab(cur);
+  }
+  /**
+   * 区分を閉じていても «今どうなっているか» が分かるよう、各区分の見出しとタブの下段に
+   * 要約を出す（探させない・思い出させない）。値はすべて状態から作る。
    */
   _summaries() {
     const d = this._dims, K = CONFIG, set = (id, t) => { const el = $(id); if (el && el.textContent !== t) el.textContent = t; };
@@ -9969,6 +10262,13 @@ class UIManager {
       .filter(([id]) => $(id)?.checked).map(([, n]) => n);
     set('sum-env', env.length ? env.join('・') : 'すべて OFF');
     set('sum-spec', $('lbl-roll')?.textContent ? `ロール ${$('lbl-roll').textContent}` : '');
+    const SC = K.MATERIAL.STRIP_COOL, pl = +($('rng-pl')?.value || 0);
+    set('sum-curl', `PL ${pl > 0 ? '+' : ''}${pl} mm ・ 冷却 ${SC.ENTRY && SC.EXIT ? '入出' : SC.ENTRY ? '入側' : SC.EXIT ? '出側' : 'なし'}`);
+    // タブの下段: その区分の «いちばん知りたい 1 つ» だけを短く
+    if (d) set('tab-sum-prep', `${d.alloy} → ${d.target} mm`);
+    set('tab-sum-run', $('sum-run').textContent);
+    set('tab-sum-view', $('sum-view').textContent);
+    set('tab-sum-equip', $('lbl-roll')?.textContent ? `ロール ${$('lbl-roll').textContent}` : '');
   }
   setLabels(on) {
     this.labelsOn = !!on;
@@ -10033,7 +10333,7 @@ class UIManager {
       const b = document.createElement('button');
       const key = i < 9 ? String(i + 1) : i === 9 ? '0' : '';    // 10 番目は «0»
       b.className = 'chip'; b.setAttribute('aria-pressed', i === 1 ? 'true' : 'false'); b.title = key ? `${v.name}（${key}）` : v.name;
-      b.innerHTML = `<i class="fa-solid ${v.icon}"></i>${v.name}${key ? `<span class="kbd">${key}</span>` : ''}`;
+      b.innerHTML = `<i class="fa-solid ${v.icon}"></i><span class="nm">${v.short ?? v.name}</span>${key ? `<span class="kbd">${key}</span>` : ''}`;
       b.onclick = () => this.selectView(i);
       host.appendChild(b); return b;
     });
@@ -10179,7 +10479,7 @@ class UIManager {
       ['パイラー', `ミル中心から ${(Math.min(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)}〜${(Math.max(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)} m ／ 開閉アーム式・リフトテーブル付`],
       ['装入設備', `転倒機 ミル中心から ${(Math.abs(CONFIG.SUPPLY.TILTER_X) / 1000).toFixed(1)} m（C-2 / C-1 の操作側）／ トランスファークレーンで横移動`],
       ['ピット炉', `${CONFIG.FURNACE.N} 基（A-4〜A-1 の操作側）／ 材質ごとに炉を分ける（8・9 番は予備）`],
-      ['板面冷却ヘッダ', `入側・出側とも サイドガイド上 各 2 本（運転で個別に ON/OFF、いま ${Layout.coolHeaderXs().length} 本が有効）（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 水冷 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（膜沸騰・ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）・空冷 ${CONFIG.MATERIAL.STRIP_COOL.MODES.AIR.H} W/m²K（強制対流）`],
+      ['板面冷却ヘッダ', `入側・出側とも サイドガイド上に ライン平行のヘッダを OS / DS 各 1 本（Φ${CONFIG.TABLE.GUIDE.HEADER.D} × ${CONFIG.TABLE.GUIDE.HEADER.LEN} L、ノズル ${CONFIG.TABLE.GUIDE.HEADER.PITCH} mm ピッチ、クォーター部 ±${CONFIG.TABLE.GUIDE.HEADER.AIM_Z} mm 狙い・鉛直から ${(Layout.nozzleDir().tilt * 180 / Math.PI).toFixed(0)}°）。運転で入側／出側を個別に ON/OFF（いま ${Layout.coolHeaderCount()} 本が有効）／ 水冷 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（膜沸騰・ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）・空冷 ${CONFIG.MATERIAL.STRIP_COOL.MODES.AIR.H} W/m²K（強制対流）`],
       ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
     ];
     $('spec-body').innerHTML = rows.map(([k, v]) =>
@@ -10284,8 +10584,8 @@ class UIManager {
       $('lbl-cool-side').textContent = n === 2 ? '両方' : n === 0 ? 'なし' : (SC.ENTRY ? '入側のみ' : '出側のみ');
       $('der-cool-side').innerHTML =
         `板面クーラントは <b>板の上面にだけ</b> 掛かります。片側を切ると上下の温度差が変わり、`
-        + `変形抵抗の差（＝反りの駆動力）が変わります。効いているヘッダ <b>${Layout.coolHeaderXs().length} 本</b>`
-        + ` / 全 ${Layout.coolHeaderXsAll().length} 本。方式そのもの（水冷・空冷・なし）はパススケジュールで選びます。`;
+        + `変形抵抗の差（＝反りの駆動力）が変わります。効いているヘッダ <b>${Layout.coolHeaderCount()} 本</b>`
+        + ` / 全 ${Layout.coolHeaderCount(false)} 本（OS / DS 各 1 本、クォーター狙い）。方式そのもの（水冷・空冷・なし）はパススケジュールで選びます。`;
       this._slabChanged(); this._summaries();
     };
     on('cool-entry', 'click', () => { CONFIG.MATERIAL.STRIP_COOL.ENTRY = !CONFIG.MATERIAL.STRIP_COOL.ENTRY; coolSide(); });
@@ -10516,8 +10816,8 @@ class UIManager {
       const sig = `${p.rolls.changes}:${p.rolls.iWr}:${p.rolls.iBr}:${Math.round(p.rolls.wrSet.work / 2e8)}`;
       if (sig !== this._shopSig) { this._shopSig = sig; this._renderShop(); } }
     this._lastThickness = s.thickness;
-    if (m.passIndex >= 0 && s.rollForce > 0)
-      this.peak[m.passIndex] = Math.max(this.peak[m.passIndex] ?? 0, s.rollForce);
+    if (m.passIndex >= 0 && m.forceMeas > 0)
+      this.peak[m.passIndex] = Math.max(this.peak[m.passIndex] ?? 0, m.forceMeas);
     if (this._acc % 4) return;                       // 表示更新は ~15 Hz（レイアウト負荷を抑える）
 
     const M = CONFIG.MILL;
@@ -10529,7 +10829,7 @@ class UIManager {
     $('m-len-s').textContent   = `伸び ${(s.length / (this.len0 || s.length)).toFixed(2)} 倍`;
     $('m-speed-v').textContent = (Math.abs(m.currentSpeed)).toFixed(0);
     $('m-speed-s').textContent = m.currentSpeed > 1 ? '前進 ▶' : m.currentSpeed < -1 ? '◀ 逆行' : '停止';
-    this._meter('m-force', s.rollForce, M.RATED_FORCE_T, s.rollForce.toFixed(0), t => `常用最大の ${(t * 100).toFixed(0)} %`);
+    this._meter('m-force', m.forceMeas, M.RATED_FORCE_T, m.forceMeas.toFixed(0), t => `常用最大の ${(t * 100).toFixed(0)} %`);
     this._meter('m-power', s.rollPower / 1000, Drive.ratedPowerKW / 1000, (s.rollPower / 1000).toFixed(1),
       t => `定格の ${(t * 100).toFixed(0)} % ／ ${m.motorRpm.toFixed(0)} rpm`);
     $('m-temp-v').textContent  = s.temperature.toFixed(0);
@@ -10630,7 +10930,8 @@ class UIManager {
     const b = $('status-banner');
     if (b.dataset.k === st + hint) return;
     b.dataset.k = st + hint; b.className = cls;
-    $('sb-icon').className = 'fa-solid ' + ic; $('sb-state').textContent = st; $('sb-hint').innerHTML = hint;
+    $('sb-icon').className = 'fa-solid ' + ic; $('sb-state').textContent = st;
+    const h = $('sb-hint'); h.innerHTML = hint; h.title = h.textContent;   // 1 行に収まらないぶんはツールチップで読める
   }
 
   toast(text, kind = 'info') {

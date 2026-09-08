@@ -100,7 +100,7 @@ const out = await page.evaluate(() => {
     if (sv) {
       const emit = {};
       const s0 = P.slab, m0 = P.mill, onLine = s0.onLine, sp = m0.currentSpeed;
-      const hx = window.__LAYOUT.coolHeaderXs()[0];
+      const hx = window.__LAYOUT.coolStations(true)[0];
       s0.onLine = true; m0.currentSpeed = 60; s0.xMin = hx - 2000; s0.xMax = hx + 2000;
       const alive = (f) => f.p.filter(q => q.life > 0 && q.age < q.life).length;
       for (const md of ['WATER', 'AIR', 'NONE']) {
