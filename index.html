@@ -599,6 +599,22 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
           </div>
         </div>
 
+        <!-- 板反り対策。実機で使う 2 つの手を «効果が見える» 形で操作できるようにする -->
+        <div class="grp-hd">板反り対策</div>
+        <div class="fld">
+          <div class="top"><span class="k">パスライン調整（WR）</span><span class="v" id="lbl-pl">0<em>mm</em></span></div>
+          <input type="range" id="rng-pl" min="-60" max="60" value="0" step="1">
+          <div class="derived" id="der-pl"></div>
+        </div>
+        <div class="fld">
+          <div class="top"><span class="k">板面冷却 入側 / 出側</span><span class="v" id="lbl-cool-side"></span></div>
+          <div class="seg" role="group" aria-label="板面冷却の入側・出側">
+            <button id="cool-entry" aria-pressed="true">入側 ON</button>
+            <button id="cool-exit"  aria-pressed="true">出側 ON</button>
+          </div>
+          <div class="derived" id="der-cool-side"></div>
+        </div>
+
         <div id="manual-controls" style="display:none;">
           <div class="fld">
             <div class="top"><span class="k">ロールギャップ（圧下）</span><span class="v" id="lbl-gap">400<em>mm</em></span></div>
@@ -809,6 +825,16 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.12.0', base: '1974c5f', date: '2026-09-08', title: '板反り対策の «見える化» —— パスライン調整と入側／出側冷却の個別 ON/OFF', items: [
+      { t: 'パスライン調整（WR）を運転で動かせるようにした。ロールの組をテーブルに対して ±60 mm 上下させる', w: 'MillState.plOffset' },
+      { t: 'パスライン調整が板に与える曲率を実装（κ = 3δ/L²、L は最初のテーブルローラまでの自由長）', w: 'Rolling.passLineCurl' },
+      { t: '小さいうちは除荷で戻るのでスプリングバックと組で効く（実機の «少し動かしても効かない» 感覚がそのまま出る）', w: 'Rolling.springback' },
+      { t: '板面冷却を入側／出側で個別に ON/OFF できるようにした。クーラントは板の上面にだけ掛かるので上下の温度差が変わる', w: 'STRIP_COOL.ENTRY / EXIT' },
+      { t: '熱計算・スケジュール予測・噴射の描画・諸元表が同じ 1 式（Layout.coolHeaderXs）を見る', w: 'Layout.coolStations' },
+      { t: '反り計器に内訳（バイト内の曲率／うちパスラインの寄与／除荷で戻った量）を出した', w: '#m-curl-s' },
+      { t: '先端高さの式に頭打ちを入れた。反りが強いと小たわみ梁理論の前提を外れて非物理な値になる', w: 'Rolling.curlSpan' },
+      { t: '対策の効果を実測する評価器を新設（23 項目）。パスラインを振って «反りが最小になる点» まで出す', w: 'tools/curlfixtrace.mjs' },
+    ] },
     { v: '1.11.0', base: '72d6901', date: '2026-09-08', title: 'スプリングバックと蛇行（キャンバー・差荷重制御）—— 形状の残り 2 項目', items: [
       { t: 'スプリングバックを実装。弾完全塑性の断面のモーメント–曲率から «除荷で戻る曲率» を厳密に出す', w: 'Rolling.springback' },
       { t: '実測で κ/κe が 1 を超えるのは中盤の厚いパスだけ。薄いパスの反りは弾性で全部戻る（実機と同じ向き）', w: 'tools/curlmeas.mjs' },
@@ -1049,6 +1075,12 @@ const CONFIG = {
     // 最大圧延速度はモータ最高回転数・減速比・ロール径から決まる従属値（Drive.maxSpeed）
     GAP_RATE:        70,             // 圧下シリンダ速度 mm/s ※推定値
     PASSLINE_ADJ_RANGE: 120,         // パスライン調整装置(ステップウェッジ)の可動量
+    /* 運転で入れられるパスライン調整の範囲 [mm]。ウェッジの可動量からロール研削の
+     * 補正ぶんを残した量。板反り対策として使うので、指令は ±PL_RANGE に収める。 */
+    PL_RANGE: 60,
+    /* バイト出口から最初のテーブルローラ（E-1）までの自由長 [mm]。
+     * パスライン調整が板に与える曲率 3·δ/L² の L。 */
+    PL_SPAN: 750,
     // ハウジング（オペレータ側/駆動側の2枚。窓の中にチョックが収まる）
     HOUSING: { POST_X: 1350, WIN_X: 1600, THICK_Z: 1300, INNER_Z: 1400,
                TOP_Y: 7000, BOT_Y: -3600, WIN_TOP: 5200, WIN_BOT: -2100, SOLE_T: 700 },
@@ -1804,6 +1836,11 @@ const CONFIG = {
                  desc: 'ヘッダを止めます。放射・自然対流・テーブルローラへの接触だけが残り、板はほとんど冷えません。' },
       },
       get mode() { return CONFIG.MATERIAL.STRIP_COOL.MODES[CONFIG.MATERIAL.STRIP_COOL.MODE]; },
+      /* 入側／出側それぞれの ON / OFF。板面クーラントは «板の上面» にだけ掛かるので、
+       * 片側を切ると上下の温度差が変わり、反りの向きと大きさが変わる ——
+       * 実機で «上面冷却を絞って反りを調整する» のと同じ操作になる。
+       * 位置（正準 ∓3,400）と同じく、真実はここ 1 か所（Layout.coolHeaderXs が見る）。 */
+      ENTRY: true, EXIT: true,
     },
     /* テーブルローラとの接触による下面の抜熱。
      * ローラは胴端 Φ281.6 → 中央 Φ219.6 の «鼓の逆» 形なので、平らな板は自分の板幅の位置で
@@ -2026,15 +2063,25 @@ const Layout = {
     return out.sort((a, b) => a.x - b.x);
   },
   /** 板面クーラントの門型を立てる世界 X。区分名ならその区分の中央、数値なら正準 X。 */
-  coolStations() {
-    return CONFIG.TABLE.GUIDE.HEADER.STATIONS.map(st => {
+  coolStations(onlyOn = false) {
+    const SC = CONFIG.MATERIAL.STRIP_COOL;
+    const xs = CONFIG.TABLE.GUIDE.HEADER.STATIONS.map(st => {
       if (st.sec === undefined) return CONFIG.FLIP * st.x;
       const r = Layout.range(st.sec);
       return (r[0] + r[1]) / 2;
     });
+    // 世界 X が正の側が入側（A テーブル側）、負の側が出側（コイラー側）
+    return onlyOn ? xs.filter(x => (x > 0 ? SC.ENTRY : SC.EXIT)) : xs;
   },
+  /** ヘッダ X が入側（true）か出側（false）か */
+  coolIsEntry(x) { return x > 0; },
   /** 板面クーラントのヘッダ 1 本ごとの世界 X（門型 1 基につき ±DX の 2 本）。 */
   coolHeaderXs() {
+    const dx = CONFIG.TABLE.GUIDE.HEADER.DX;
+    return Layout.coolStations(true).flatMap(x => [x - dx, x + dx]);
+  },
+  /** すべてのヘッダ X（ON / OFF に関わらず。描画の «設備がある位置» はこちら）。 */
+  coolHeaderXsAll() {
     const dx = CONFIG.TABLE.GUIDE.HEADER.DX;
     return Layout.coolStations().flatMap(x => [x - dx, x + dx]);
   },
@@ -2423,6 +2470,28 @@ const Rolling = {
     return CONFIG.CURL.GAIN * (res.kfTop - res.kfBot) / res.kf * Math.log(hIn / hOut) / hOut;
   },
   /**
+   * パスライン調整が «バイトを出た板» に与える曲率 [1/mm]。
+   *
+   * ロールの組をテーブルより δ だけ上げると、バイトを出た板は最初のテーブルローラ
+   * （ミル中心から L）まで δ だけ降りて来なければならない。根元（バイト出口）を
+   * 固定端と見た片持ち梁で、先端が δ 下がるときの根元の曲率は
+   *
+   *     κ = 3·δ / L²
+   *
+   * である。板はまだ熱く、圧延直後で降伏応力も低いので、この曲げは «そのまま» ではなく
+   * スプリングバックを経て残る。したがって
+   *   ・δ が小さいうちは弾性で戻り、反りは変わらない
+   *   ・ある程度動かすと効き始める
+   * という実機の «パスラインは少し動かしても効かない» 感覚がそのまま出る。
+   *
+   * 符号: ロール組を上げる（δ > 0）と板は下へ曲げられるので、上反りを打ち消す向き（負）。
+   */
+  passLineCurl(offset, span = CONFIG.MILL.PL_SPAN) {
+    if (!(span > 0)) return 0;
+    return -3 * offset / (span * span);
+  },
+
+  /**
    * スプリングバック（除荷で戻る曲率）。
    *
    * ロールバイトの中で板に付いた曲率 κ は、そのまま形として残るわけではない。
@@ -2462,7 +2531,12 @@ const Rolling = {
     // E [GPa→MPa=N/mm²]、ρ [kg/m³→kg/mm³]、g [N/kg]: EI は N·mm²、q は N/mm
     const EI = alloy.E * 1000 * w * h * h * h / 12, q = alloy.RHO * 1e-9 * 9.81 * h * w;
     const EIq = EI / q, liftOff = Math.sqrt(2 * EIq * k);
-    return { EIq, liftOff, tip: k * liftOff * liftOff / 4, touch: Math.SQRT2 * liftOff };
+    /* 先端高さ κℓ²/4 は «たわみが小さい» 前提の梁理論から出ている。反りが強いと
+     * ℓ に対して先端が持ち上がり過ぎて式の前提を外れる（数十 m という非物理な値になる）。
+     * 持ち上がりが浮き上がり長の 3 割を超えたところで頭打ちにし、«それ以上は
+     * この式では言えない» ことを形として示す。 */
+    return { EIq, liftOff, tip: Math.min(k * liftOff * liftOff / 4, 0.3 * liftOff),
+             touch: Math.SQRT2 * liftOff };
   },
   /* =========================================================================
    * 幅方向の形状 —— クラウン（板厚分布）と平坦度（残留応力）
@@ -3654,9 +3728,14 @@ class MillState {
     this.bendForceT = 0; this.bendCmd = 0;
     /* 圧下の傾き [mm]（OS − DS）。差荷重制御が動かして «くさび» を打ち消す。 */
     this.tilt = 0; this.tiltCmd = 0;
+    this.plOffset = 0;                         // パスライン調整量 [mm]（＋ = ロール組を上げる）
     this.tableGroup = CONFIG.TABLE.SELECT[CONFIG.TABLE.SELECT.length - 1];   // 駆動するテーブル区間（図面のテーブル選択）
   }
-  get passLine() { return CONFIG.MILL.PASS_LINE; }
+  /* パスライン（下ワークロール上面の高さ）。基準値 ＋ 運転で入れるオフセット。
+   * 実機の «パスライン調整» は、ロールの組をテーブルの高さに対して上下させる操作で、
+   * 板反りの代表的な対策のひとつ（バイトを出た板が下ロールに巻くか上ロールに巻くかが
+   * 変わり、付く曲率の向きが変わる）。可動量はステップウェッジの範囲に収まる。 */
+  get passLine() { return CONFIG.MILL.PASS_LINE + this.plOffset; }
   /** 下ワークロール上面 = パスライン（下ロールはパスライン調整装置の上で固定） */
   get wrBotY() { return this.passLine - this.wrDia / 2; }
   get wrTopY() { return this.passLine + this.gap + this.wrDia / 2; }
@@ -4863,6 +4942,10 @@ class PhysicsEngine {
     /* t=0: 在庫が全部新品 / t=1: 全部研削限度。組ごとに履歴を散らして在庫を作り直し、
      * ミルの現在径は «いま入っている組» から取る（真実は RollShop 1 か所）。 */
     bus.on('CMD_SET_ROLLS', (t) => { this.rolls.reset(t); this._mountRolls(); });
+    // パスライン調整（板反り対策）。ロールの組をテーブルに対して上下させる
+    bus.on('CMD_SET_PASSLINE', (v) => {
+      this.mill.plOffset = Num.clamp(v, -CONFIG.MILL.PL_RANGE, CONFIG.MILL.PL_RANGE);
+    });
     bus.on('CMD_START_SUPPLY', () => { if (this.supply.enabled) this.slab.onLine = false; });
     // 圧延実績のロットはここで始まる（素材と目標が確定した時点＝運転開始）
     bus.on('CMD_START_AUTO', () => {
@@ -5114,7 +5197,8 @@ class PhysicsEngine {
       // 反りは通過した分の重み付き平均で決まる
       /* バイトの中で付いた曲率から «除荷で戻る弾性ぶん» を引き、残る反りだけを積む。
        * 引かないと薄いパスにも消えない反りが残り、実機と逆の見え方になる。 */
-      const kBite = Rolling.curvature(res, hLoc, gap);
+      // 上下非対称による曲率に «パスライン調整» で与える曲率を足してから、除荷で戻す
+      const kBite = Rolling.curvature(res, hLoc, gap) + Rolling.passLineCurl(m.plOffset);
       const k = Rolling.springback(kBite, gap, res.kf, s.alloy);
       s.kBite = kBite;
       s._kAcc += k * passedFrac; s._kW += passedFrac; s.kNew = s._kAcc / Math.max(s._kW, 1e-9);
@@ -8443,13 +8527,20 @@ class SlabView {
     if (!this.mesh.visible) return;
     // 形状が変わっていなければ頂点更新も法線再計算も行わない（停止中のコストをゼロに）
     const sig = x0 + ':' + x1 + ':' + slab.thickness + ':' + slab.width + ':'
-              + mill.gap + ':' + mill.passLine + ':' + slab.inBite + ':' + slab.dir + ':'
+              + mill.gap + ':' + mill.passLine + ':' + (mill.plOffset || 0) + ':' + slab.inBite + ':' + slab.dir + ':'
               + slab.hCut[1] + ':' + slab.hCut[-1] + ':' + slab.hHomo + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig
               + ':' + (slab.wShape ? slab.wShape.crownAbs.toFixed(1) : '-')
               + ':' + (slab.zOff || 0).toFixed(1) + ':' + (slab.camberVis || 0).toExponential(3);
     if (sig === this._sig) return;
     this._sig = sig;
     const L = x1 - x0, w = slab.width, P = mill.passLine;
+    /* パスライン調整を入れると «ロールの組» だけが上下し、テーブルは動かない。
+     * 板はバイトの高さからテーブルの高さへ E テーブルの区間でなだらかに戻るので、
+     * 描画もその «渡り» を持たせる（板全体を持ち上げるとテーブルから浮いて見える）。 */
+    const plOff = mill.plOffset || 0;
+    const E = CONFIG.TABLE.SECTIONS.find(q => q.name === 'E-1');
+    const e0 = E ? Math.abs(E.x0) : 750, e1 = E ? Math.abs(E.x1) : 2150;
+    const plRamp = (xm) => plOff === 0 ? 0 : plOff * (1 - Num.smoothstep(e0, e1, Math.abs(xm)));
     const hIn = slab.thickness, gap = mill.gap;
     const rolling = slab.inBite && hIn > gap + 1e-6;
     const red = Num.clamp(1 - slab.thickness / slab.initialThickness, 0, 1);
@@ -8511,7 +8602,8 @@ class SlabView {
       // 板はテーブルの胴の外へは出られない（出たら落ちる）ので、そこで頭打ちにする
       const zLim = CONFIG.TABLE.BARREL / 2 - w / 2;
       const zc = Num.clamp(zOff + camb * dOut * dOut / 2, -zLim, zLim);
-      pos.setXYZ(i, u(x), u(P - dip + ((q.y + by * wq) * sy + h / 2) + dy + yl), u(q.z + zc + dz));
+      pos.setXYZ(i, u(x), u(P - plOff + plRamp(xm) - dip + ((q.y + by * wq) * sy + h / 2) + dy + yl),
+                 u(q.z + zc + dz));
     }
     pos.needsUpdate = true;
     this.geo.computeVertexNormals();
@@ -8592,7 +8684,7 @@ class SprayView {
       if (active.length) this._emit('strip', (wet ? 460 : 200) * active.length, dt, 46, r => {
         const hx = active[Math.floor(r() * active.length)];
         const zi = Math.floor(r() * nz), z = (zi / (nz - 1) - 0.5) * T.BARREL + (r() - .5) * 120;
-        const x = hx + (r() - .5) * 150, y = mill.passLine + H.Y - H.D / 2 - 90;
+        const x = hx + (r() - .5) * 150, y = CONFIG.MILL.PASS_LINE + H.Y - H.D / 2 - 90;
         // 初速をほぼ 0 にして自由落下させる。終端速度で撃ち出すと 0.8 m を 0.05 s で
         // 通り過ぎてしまい、同時に見えている粒が 20 個ほどにしかならず «幕» に見えない。
         if (wet) this.strip.spawn(x, y, z, (r() - .5) * 200, -150 - r() * 350, (r() - .5) * 200,
@@ -8608,7 +8700,7 @@ class SprayView {
     const H2 = CONFIG.TABLE.GUIDE.HEADER;
     const onPlate = Layout.coolHeaderXs().some(hx =>
       slab.onLine && slab.xMax > hx - H2.ZONE && slab.xMin < hx + H2.ZONE);
-    const stripFloor = mill.passLine + (onPlate ? (slab.inBite ? mill.gap : slab.thickness) : 0);
+    const stripFloor = CONFIG.MILL.PASS_LINE + (onPlate ? (slab.inBite ? mill.gap : slab.thickness) : 0);
     this.strip.update(dt, stripFloor);
     this.stripAir.update(dt, stripFloor);
 
@@ -8950,7 +9042,8 @@ class UIManager {
     this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildStripCool(); this._buildCutScope();
     this._buildVersion();
     this._bind(); this._listen(); this._logDragResize(); this._logCrosshair();
-    this.dims(); this._rollState(); this.renderSchedule(); this._banner('idle'); this._summaries();
+    this.dims(); this._rollState(); this._plState(); this._coolSide();
+    this.renderSchedule(); this._banner('idle'); this._summaries();
   }
 
   /* ===== 圧延実績ビュワー ==========================================================
@@ -9476,7 +9569,7 @@ class UIManager {
       ['パイラー', `ミル中心から ${(Math.min(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)}〜${(Math.max(Math.abs(CONFIG.PILER.X0), Math.abs(CONFIG.PILER.X1)) / 1000).toFixed(1)} m ／ 開閉アーム式・リフトテーブル付`],
       ['装入設備', `転倒機 ミル中心から ${(Math.abs(CONFIG.SUPPLY.TILTER_X) / 1000).toFixed(1)} m（C-2 / C-1 の操作側）／ トランスファークレーンで横移動`],
       ['ピット炉', `${CONFIG.FURNACE.N} 基（A-4〜A-1 の操作側）／ 材質ごとに炉を分ける（8・9 番は予備）`],
-      ['板面冷却ヘッダ', `入側・出側とも サイドガイド上 各 2 本（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 水冷 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（膜沸騰・ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）・空冷 ${CONFIG.MATERIAL.STRIP_COOL.MODES.AIR.H} W/m²K（強制対流）`],
+      ['板面冷却ヘッダ', `入側・出側とも サイドガイド上 各 2 本（運転で個別に ON/OFF、いま ${Layout.coolHeaderXs().length} 本が有効）（${CONFIG.TABLE.GUIDE.HEADER.ZONE} mm × 4）／ 水冷 ${CONFIG.MATERIAL.COOLANT.H_FILM} W/m²K（膜沸騰・ライデンフロスト点 ${CONFIG.MATERIAL.COOLANT.T_LEID} ℃ 超）・空冷 ${CONFIG.MATERIAL.STRIP_COOL.MODES.AIR.H} W/m²K（強制対流）`],
       ['パスライン高さ', `${M.PASS_LINE} mm <span style="color:var(--ink-3)">(推定)</span>`],
     ];
     $('spec-body').innerHTML = rows.map(([k, v]) =>
@@ -9552,6 +9645,42 @@ class UIManager {
     };
     on('rng-roll', 'input', rollState);
     this._rollState = rollState;
+
+    /* --- 板反り対策 ------------------------------------------------------
+     * どちらも «実機でやっている手» なので、効果が数字で見えることを最優先にする。
+     * 派生行には «その操作が板に与える曲率» と «いま残っている反り» を並べて出す。 */
+    const plState = () => {
+      const v = Num.clamp(+$('rng-pl').value, -CONFIG.MILL.PL_RANGE, CONFIG.MILL.PL_RANGE);
+      $('lbl-pl').innerHTML = (v > 0 ? '+' : '') + v + '<em>mm</em>';
+      const k = Rolling.passLineCurl(v);
+      $('der-pl').innerHTML =
+        `ロールの組をテーブルに対して ${v === 0 ? '基準位置' : (v > 0 ? '上げる' : '下げる')}。`
+        + `バイトを出た板は最初のテーブルローラ（${CONFIG.MILL.PL_SPAN} mm）まで戻るので、`
+        + `根元に <b>κ = 3δ/L² = ${Math.abs(k).toExponential(2)} 1/mm</b>`
+        + `${v === 0 ? '' : `（${k < 0 ? '下' : '上'}へ曲げる／半径 ${(1 / Math.abs(k) / 1000).toFixed(1)} m）`} の曲げが入ります。`
+        + `小さいうちは除荷で戻るので反りは変わりません（スプリングバック）。`;
+      this.bus.emit('CMD_SET_PASSLINE', v); this._summaries();
+    };
+    on('rng-pl', 'input', plState);
+    this._plState = plState;
+
+    const coolSide = () => {
+      const SC = CONFIG.MATERIAL.STRIP_COOL;
+      $('cool-entry').setAttribute('aria-pressed', String(SC.ENTRY));
+      $('cool-exit').setAttribute('aria-pressed', String(SC.EXIT));
+      $('cool-entry').textContent = `入側 ${SC.ENTRY ? 'ON' : 'OFF'}`;
+      $('cool-exit').textContent = `出側 ${SC.EXIT ? 'ON' : 'OFF'}`;
+      const n = (SC.ENTRY ? 1 : 0) + (SC.EXIT ? 1 : 0);
+      $('lbl-cool-side').textContent = n === 2 ? '両方' : n === 0 ? 'なし' : (SC.ENTRY ? '入側のみ' : '出側のみ');
+      $('der-cool-side').innerHTML =
+        `板面クーラントは <b>板の上面にだけ</b> 掛かります。片側を切ると上下の温度差が変わり、`
+        + `変形抵抗の差（＝反りの駆動力）が変わります。効いているヘッダ <b>${Layout.coolHeaderXs().length} 本</b>`
+        + ` / 全 ${Layout.coolHeaderXsAll().length} 本。方式そのもの（水冷・空冷・なし）はパススケジュールで選びます。`;
+      this._slabChanged(); this._summaries();
+    };
+    on('cool-entry', 'click', () => { CONFIG.MATERIAL.STRIP_COOL.ENTRY = !CONFIG.MATERIAL.STRIP_COOL.ENTRY; coolSide(); });
+    on('cool-exit', 'click', () => { CONFIG.MATERIAL.STRIP_COOL.EXIT = !CONFIG.MATERIAL.STRIP_COOL.EXIT; coolSide(); });
+    this._coolSide = coolSide;
 
     on('rng-timescale', 'input', e => { this.timeScale = +e.target.value; $('lbl-timescale').innerHTML = this.timeScale.toFixed(2).replace(/0$/, '') + '<em>×</em>'; this._summaries(); });
 
@@ -9799,9 +9928,14 @@ class UIManager {
     {
       const k = s.kNew, sp = Rolling.curlSpan(k, s.thickness, s.width, s.alloy);
       $('m-curl-v').textContent = Math.abs(k) > 1e-7 ? (1 / Math.abs(k) / 1000).toFixed(Math.abs(k) > 1e-4 ? 1 : 0) : '–';
+      /* 反りは «対策がどれだけ効いたか» が読めることが大事なので、内訳を並べて出す。
+       *   バイト内の曲率 → 除荷で戻る量 → 残る反り。パスライン調整の寄与も別に出す。 */
+      const kb = s.kBite || 0, kpl = Rolling.passLineCurl(m.plOffset);
+      const Rm = (v) => Math.abs(v) > 1e-9 ? (1 / Math.abs(v) / 1000).toFixed(1) + ' m' : '∞';
       $('m-curl-s').textContent = Math.abs(k) > 1e-7
-        ? `${k > 0 ? '上反り' : '下反り'} ／ 端の浮き ${k > 0 ? sp.tip.toFixed(0) : 0} mm ／ 上下温度差 ${(s.tBot - s.tTop).toFixed(1)} ℃`
-        : '平坦';
+        ? `${k > 0 ? '上反り' : '下反り'} ／ 端の浮き ${k > 0 ? sp.tip.toFixed(0) : 0} mm ／ 上下 ΔT ${(s.tBot - s.tTop).toFixed(1)} ℃`
+          + `／ バイト内 ${Rm(kb)}（うちパスライン ${Rm(kpl)}）`
+        : (Math.abs(kb) > 1e-9 ? `平坦（バイト内 ${Rm(kb)} は除荷で戻った）` : '平坦');
     }
     /* 幅方向の形状。板クラウン（中央 − 端）と平坦度（I-unit）。
      * 平坦度は «クラウン率の変化» で決まるので、クラウンが大きくても比例していれば平坦。 */
