@@ -5,7 +5,7 @@ const dir = path.join(__dirname, 'shots'); fs.mkdirSync(dir, { recursive: true }
 const { browser, page, errors } = await openApp({ viewport: { width: 1400, height: 800 }, quiet: true });
 await installHelpers(page);
 await page.evaluate(() => {
-  for (const id of ['sidebar', 'metrics', 'hud-top', 'hud-br']) {
+  for (const id of ['sidebar', 'metrics', 'hud-top', 'status-banner']) {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
   }
   window.__app.world.setCutaway('solid');       // 断面表示だと台車が透けて «足» が見えない

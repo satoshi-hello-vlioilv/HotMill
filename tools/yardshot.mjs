@@ -8,7 +8,7 @@ const { browser, page, errors } = await openApp({ viewport: { width: 1400, heigh
 await installHelpers(page);
 // UI を伏せて 3D だけを撮る（設備の見え方を確かめるため）
 await page.evaluate(() => {
-  for (const id of ['sidebar', 'metrics', 'hud-top', 'hud-br']) {
+  for (const id of ['sidebar', 'metrics', 'hud-top', 'status-banner']) {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
   }
   window.__app.world.setCutaway('solid');
