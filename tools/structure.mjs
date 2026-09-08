@@ -37,7 +37,7 @@ const out = await page.evaluate((EPS) => {
   add(F.cradle); add(F.wrapRods); add(F.wrapCyls);                     // ラッパーのキャリッジ・ロッド・シリンダー（動く）
   const S = W.supplyView;
   for (const k of ['tilterArm', 'trolley', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT',
-                   'mastSleeve', 'mastCol', 'mastHead', 'cab', 'cabGlass'])   // スタッカークレーンの吊具・運転室
+                   'mastSleeve', 'mastCol', 'mastHead', 'cab', 'cabIn', 'cabGlass'])   // スタッカークレーンの吊具・運転室
     add(S[k]);
   add(S.pitTong.g);                                        // スタッカークレーンのトング
   for (const t of (S.tongs ?? [])) add(t.rig.g);           // トランスファークレーンのトング
