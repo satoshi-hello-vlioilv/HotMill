@@ -7144,8 +7144,11 @@ const Parts = {
       // 爪の «歯»（滑り止めの刻み）。板厚の面を噛んで滑らせないための横溝
       ...Array.from({ length: 4 }, (_, k) =>
         G.at(G.box(T.JAW_PAD - 80, 60, 70), 0, -T.PIVOT_H + T.JAW_H * (0.2 + 0.2 * k), jz - T.JAW_T / 2 - 20)),
-      // 爪台の背のリブ（爪パッドを支える）
-      G.at(G.box(t + 60, T.JAW_H + 120, 120), 0, -T.PIVOT_H + T.JAW_H / 2, jz + T.JAW_T / 2 + 60),
+      /* 爪台の背のリブ（爪パッドを支える）。爪先より下へ出してはいけない ——
+       * アームが閉じる向きに回ると、爪先より下に在る点はさらに下がり、
+       * 受取テーブルのローラを突く（実測 54 mm。tools/tongtrace.mjs で見つけた）。
+       * 下端は爪先より 60 mm 上で止める。 */
+      G.at(G.box(t + 60, T.JAW_H - 60, 120), 0, -T.PIVOT_H + T.JAW_H / 2 + 30, jz + T.JAW_T / 2 + 60),
       // 肩ピン・ロッドピンの端部を塞ぐ座金（ピンが丸棒に見えないように）
       ...[[T.SHOULDER_Y, T.SHOULDER_Z, 300], [ry, rz, 260]].flatMap(([y, z, d]) =>
         [-1, 1].map(sx => G.at(G.cyl(d + 90, 50, 'x', 12), sx * (t / 2 + 90), y, z))),

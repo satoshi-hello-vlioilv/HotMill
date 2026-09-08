@@ -72,7 +72,7 @@ const out = await page.evaluate((EPS) => {
     P.step(1 / 120);
     if (n % 6) continue;                                  // 0.05 s ごと（姿勢の更新は render で起きる）
     W.render(P, 0.05);
-    const tg = SV.tongs.map((t) => tris(t.g));
+    const tg = SV.tongs.map((t) => tris(t.rig.g));
     for (const [name, o] of others()) for (const g of tg) {
       const d = dig(g, o);
       if (d.best > (worst[name]?.pen ?? 0))
@@ -80,7 +80,7 @@ const out = await page.evaluate((EPS) => {
     }
   }
   // 検査が «空振り» でないことを示すため、突き合わせた三角形数も返す
-  const dbg = { tong: SV.tongs.map(t => tris(t.g).length), others: others().map(([k, o]) => [k, o.length]) };
+  const dbg = { tong: SV.tongs.map(t => tris(t.rig.g).length), others: others().map(([k, o]) => [k, o.length]) };
   return { dbg, hits: Object.entries(worst).filter(([, w]) => w.pen > EPS).map(([k, w]) => ({ 相手: k, ...w })),
            worst, finished: !P.supply.active };
 }, EPS);

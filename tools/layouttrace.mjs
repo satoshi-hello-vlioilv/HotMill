@@ -53,7 +53,10 @@ const out = await page.evaluate(() => {
     const fed = locX() - xF0;
     // 板が +X へ進むとき上面も +X へ動く向き＝ −Z 回り。角度は 1 回転を超えるので位相で比べる
     const slipMm = Math.abs(wrap(rz(SV.bedRolls) - aB0 + fed / rr)) * rr;
-    ok('テーブルローラの送り量が FEED_DX に一致する', Math.abs(fed - S.FEED_DX) < 5, `送り ${mm(fed)} / ${S.FEED_DX} mm`);
+    /* 送り量は固定値ではなく «クレーンが待っている X まで» で決まる（板長で変わる）。
+     * トランスファークレーンは Z にしか動かないので、X 方向の位置合わせはローラの仕事。 */
+    const want = window.__LAYOUT.feedDX(P.slab.length);
+    ok('テーブルローラの送り量がクレーンの立ち位置まで届く', Math.abs(fed - want) < 5, `送り ${mm(fed)} / ${mm(want)} mm`);
     ok('ローラの回転が送り量と一致する（転がり条件・すべりが無い）', slipMm < 20, `すべり ${slipMm.toFixed(1)} mm`);
     ok('受取テーブルのローラがベッドと同じだけ回る', Math.abs(wrap(rz(SV.runoutRolls) - rz(SV.bedRolls))) < 1e-6,
        `差 ${(rz(SV.runoutRolls) - rz(SV.bedRolls)).toExponential(1)} rad`);
@@ -65,7 +68,7 @@ const out = await page.evaluate(() => {
     // 爪の «内面下端» をアームのワールド行列で実測する（描かれている姿勢そのものを測る）
     const jv = new T.Vector3();
     const jaws = () => { const out = [];
-      for (const tg of SV.tongs) for (const arm of tg.arms) {
+      for (const tg of SV.tongs) for (const arm of tg.rig.arms) {
         arm.updateWorldMatrix(true, false);
         jv.set(0, -TG.PIVOT_H * sc, zOpen * sc).applyMatrix4(arm.matrixWorld);
         out.push({ z: jv.z / sc, y: jv.y / sc });
