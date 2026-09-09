@@ -36,7 +36,12 @@ export async function openApp(opts = {}) {
     r.fulfill({ contentType: 'application/javascript',
       body: fs.readFileSync(f, 'utf8').replace(/from ['"]three['"]/g, `from '/__three__'`) });
   });
-  await page.route('**/font-awesome/**', r => r.fulfill({ contentType: 'text/css', body: '' }));
+  /* Font Awesome は外部フォントなので評価器では読み込まない。ただし «空の CSS» にすると
+   * アイコンの幅がゼロになり、UI の幅の実測（tools/uicheck.mjs）が実機と食い違う
+   * （実測: 上部ツールバーが 1,283 px → 実際は 1,470 px で、右端の «実績» が見切れていた）。
+   * 字形は要らないが «場所は取る» ので、1 em の箱として置き換える。 */
+  await page.route('**/font-awesome/**', r => r.fulfill({ contentType: 'text/css', body:
+    `.fa-solid,.fa-regular,.fa-brands,.fas,.far,.fab{display:inline-block;width:1em;height:1em;}` }));
   await page.route('**/index.html', r => {
     let h = fs.readFileSync(target, 'utf8');
     h = h.replace(/\bnew App\(\);/, 'window.__CFG = CONFIG; window.__VER = VERSION; window.__WRAP = Wrapper; window.__ROLL = Rolling; window.__SCRAP = Scrap; window.__CRADLE = Cradle; window.__CHAIN = CableChain; window.__LAYOUT = Layout; window.__SECT = Sect; window.__app = new App();');
@@ -70,6 +75,14 @@ export async function installHelpers(page) {
         if (pred(P, n)) return { n, t: n / 120, done: true };
       }
       return { n, t: n / 120, done: false };
+    };
+    /* 噴射の粒（クーラント・水蒸気・板面冷却）の «描画» だけを止める。粒は Points なので
+     * 形の検査（干渉・接地）には関係しないが、評価器のソフトウェア描画では半透明の
+     * 塗り面積が支配的で、1 コマ 10 → 64 ms になる。物理には触れないので結果は変わらない。 */
+    window.__spray = (on) => {
+      const sv = W.sprayView; if (!sv) return;
+      for (const k of ['coolant', 'steam', 'strip', 'stripAir']) if (sv[k]?.mesh) sv[k].mesh.visible = !!on;
+      sv.setDensity(on ? 1 : 0);
     };
     window.__cam = (pos, tgt) => {
       const sc = window.__CFG.SCALE;

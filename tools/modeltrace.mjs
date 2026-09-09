@@ -278,6 +278,40 @@ const out = await page.evaluate(async () => {
     A.bus.emit('CMD_RESET');
   }
 
+  /* ================= 幅反り（アンチクラスティック）とプロファイルカーブ値 ================= */
+  {
+    const nu = K.SHAPE.POISSON, W = 1330, h = 20;
+    const kw = (k, w, hh) => R.anticlastic(k, w, hh);
+    ok('幅反りは丈反りと逆向き（ポアソン効果）', kw(1e-5, W, h) < 0 && kw(-1e-5, W, h) > 0,
+       `κ +1e-5 → ${kw(1e-5, W, h).toExponential(2)} ／ κ −1e-5 → ${kw(-1e-5, W, h).toExponential(2)}`);
+    ok('幅反りの曲率は ν·κ を超えない', Math.abs(kw(1e-5, W, h)) <= nu * 1e-5 * (1 + 1e-9),
+       `${Math.abs(kw(1e-5, W, h) / 1e-5).toFixed(3)} ≦ ν ${nu}`);
+    // 細くて薄い（β 小）ほど完全に出る。広い／曲げが強い（β 大）ほど中央では消える
+    const narrow = Math.abs(kw(1e-6, 300, 40) / 1e-6), wide = Math.abs(kw(1e-4, 2200, 8) / 1e-4);
+    ok('板が広く曲げが強いほど幅反りは抑えられる（Searle 数）', narrow > wide * 5 && narrow > 0.9 * nu,
+       `細く薄い ${narrow.toFixed(3)} / 広く強い ${wide.toExponential(2)}（ν ${nu}）`);
+    ok('反り量は弦の 2 乗に比例する', Math.abs(R.chordRise(1e-5, 2000) / R.chordRise(1e-5, 1000) - 4) < 1e-9,
+       `1 m → ${R.chordRise(1e-5, 1000).toFixed(3)} mm ／ 2 m → ${R.chordRise(1e-5, 2000).toFixed(3)} mm`);
+    ok('曲率ゼロなら反り量もゼロ', R.chordRise(0, 1000) === 0 && kw(0, W, h) === 0);
+    // 板の状態から «計器・記録が読む 1 式» が出ていること
+    const wp = P.slab.warp;
+    ok('板が反り・太りの読み取り値を 1 か所で持つ（SlabState.warp）',
+       wp && ['len', 'wid', 'prof', 'R', 'kappa'].every(k2 => k2 in wp),
+       `丈 ${wp.len.toFixed(2)} mm ／ 幅 ${wp.wid.toFixed(2)} mm ／ P ${wp.prof === null ? '–' : wp.prof.toFixed(4)}`);
+    // プロファイルカーブ値: 中央が厚ければ 1 超、端が厚ければ 1 未満
+    const sh = R.crown({ hIn: 30, hOut: 25, width: W, forceT: 1200, T: 420, alloy: P.slab.alloy });
+    if (sh) {
+      // 測定位置は «端から 50 mm» ちょうど（格子点に丸めず、隣り合う 2 点から線形に取る）
+      ok('プロファイルカーブ値の測定位置が端から 50 mm ちょうど',
+         Math.abs(W / 2 - sh.profZ - K.SHAPE.PROF_MM) < 1e-6,
+         `端から ${(W / 2 - sh.profZ).toFixed(1)} mm ／ 格子の間隔 ${(W / (sh.n - 1)).toFixed(0)} mm`);
+      ok('プロファイルカーブ値が «中央厚 ÷ その位置の厚み»', sh.profRatio > 0.9 && sh.profRatio < 1.1,
+         `P ${sh.profRatio.toFixed(5)}`);
+      ok('中央が厚ければ 1 を超える（中厚）', (sh.crownAbs > 0) === (sh.profRatio > 1),
+         `クラウン ${sh.crownAbs.toFixed(0)} µm → P ${sh.profRatio.toFixed(5)}`);
+    } else ok('プロファイルカーブ値が求まる', false, 'crown が解けない');
+  }
+
   Res.failed = Res.checks.filter(c => !c.pass).length;
   return Res;
 });
