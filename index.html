@@ -8207,12 +8207,20 @@ const Parts = {
        * 極角 ANGLE を上流側へ倒した直線で、胴の架台（BASE_R + CYL_L の中ほど）を抱く。 */
       const CO = CONFIG.COILER, hh = H.ANGLE * Math.PI / 180;
       const upx = Math.sign(T.X - CO.X) || -1;
-      const rMid = H.BASE_R + H.CYL_L * 0.62;
-      const mx = CO.X + upx * Math.abs(Math.cos(hh)) * rMid;                          // 受けの X（世界）
-      const my = P + CO.Y_ABOVE + Math.sin(hh) * rMid;                                // 受けの Y
+      // 受けは «胴の後ろ»（クレビス）の位置。胴の途中を抱くと部材が部材の中に入る。
+      const rEnd = H.BASE_R + H.CYL_L + 300;
+      const mx = CO.X + upx * Math.abs(Math.cos(hh)) * rEnd;                          // 受けの X（世界）
+      const my = P + CO.Y_ABOVE + Math.sin(hh) * rEnd;                                // 受けの Y
+      /* クレビスの下に柱を立て、その上でラムの後端を受ける。
+       * 天端はラムの下端（軸から MOUNT/2 + 150）よりさらに下げて触れないようにする。 */
+      /* 柱は細くする（幅 200）。ラムは斜めに寝ているので、柱が太いほど «柱の幅の端で»
+       * ラムの下面が下がってきて当たる。天端も、その傾きぶん余分に下げておく。 */
+      const capW = 200, capH = 200;
+      const capY = my - (H.MOUNT / 2 + 150) - capW / 2 * Math.abs(Math.tan(hh)) - 260;
       add(0, G.at(G.box(800, 400, 500), F * 500, hp, 0));                             // 梁の下流側面のブラケット
-      add(0, G.at(G.box(360, Math.max(my - hp - 450, 200), 620), mx - T.X, (hp + 450 + my) / 2, 0));  // 受け柱
-      add(0, G.at(G.box(520, 260, 700), mx - T.X, my, 0));                            // 受け（シリンダーの架台を抱く）
+      add(0, G.at(G.box(capW, Math.max(capY - capH / 2 - hp - 450, 200), 620),
+                  mx - T.X, (hp + 450 + capY - capH / 2) / 2, 0));                     // 受け柱
+      add(0, G.at(G.box(capW + 180, capH, 700), mx - T.X, capY, 0));                   // 受け（ラムの後端を下から支える）
     });
   },
   /**
@@ -8328,7 +8336,10 @@ const Parts = {
       G.at(G.cyl(H.CYL_D, L, 'x', 16), L / 2, 0, 0),                       // 胴
       G.at(G.cyl(H.CYL_D + 90, 120, 'x', 16), 60, 0, 0),                   // 前蓋（ロッド案内）
       G.at(G.cyl(H.CYL_D + 60, 110, 'x', 16), L - 55, 0, 0),               // 後蓋
-      G.at(G.box(180, H.MOUNT + 260, H.CYL_D + 380), L * 0.62, 0, 0),      // 架台（梁へ留める耳）
+      // 後部支持（クレビス）。押すだけのラムなので «胴の後ろ» で受けるのが素直で、
+      // 胴の途中に耳を出して抱かせるより、架構と部材が取り合わない。
+      G.at(G.cyl(H.CYL_D + 120, 220, 'x', 16), L + 110, 0, 0),
+      G.at(G.box(240, H.MOUNT + 300, H.CYL_D + 420), L + 300, 0, 0),
       // 給排の配管（前後 2 ポート）。胴から «上» へ抜く
       ...[L * 0.18, L * 0.82].map(dx => G.at(G.cyl(70, H.CYL_D + 220, 'y', 8), dx, (H.CYL_D + 220) / 2 - 40, 0)),
     ]);
