@@ -978,7 +978,11 @@ const VERSION = {
       // --- 装入まわりの配置 ---
       { t: 'スラブヤードを 2 列 8.93 m から 1 列 2.93 m にし、ラインからの距離を 10.1 → 2.74 m まで詰めた。置ける枚数は段積み 3 段・置き場 9 か所で 16 → 18 枚に', w: 'CONFIG.SLAB_YARD' },
       { t: 'ピット炉の内法を «立てたスラブ 10 本» の大きさにした。板厚の面を突き合わせて並ぶので 10 × 鋳造厚 560 ＋ 逃げ 400 ＝ L 6,000。W は板幅の最大 2,200 ＋ 逃げで 2,600', w: 'CONFIG.FURNACE.L / W / PER_PIT' },
-      { t: '炉が X へ伸びたぶんバンクのピッチを 5,600 → 8,600 に広げ、ヤードを詰めたぶん Z を 21,500 → 9,700 へ寄せた。横行距離 17.7 → 6.7 m', w: 'CONFIG.FURNACE.PITCH / Z' },
+      { t: 'ヤードを詰めたぶん炉バンクの Z を 21,500 → 9,700 へ寄せた。横行距離 17.7 → 6.7 m、横行時間 25.5 → 9.7 秒', w: 'CONFIG.FURNACE.Z' },
+      { t: '炉バンクの端を入側テーブル A-1 の端（121,800）に揃えた。以前は等ピッチで並べていたため、テーブルの端より 24.5 m 外へ突き出していた', w: 'CONFIG.FURNACE.X1 / Layout.pitX' },
+      { t: '並びを図面どおりの 3-3-2 の群 ＋ 離れて PIT9 にした。群の中は壁を共有し、群の境目にだけ通路が空く。番号は A-1 側が PIT9', w: 'FURNACE.GROUPS / GAPS' },
+      { t: 'PIT9 を図面どおり極小（内法 1,600）にした。炉ごとに内法が違うので、床の開口・躯体・蓋も炉ごとの寸法で作る（同じ寸法の形は 1 つだけ作って使い回す）', w: 'FURNACE.SMALL_L / Layout.pitLen / Parts.furnacePit(L)' },
+      { t: 'バンクが縮んだので建屋を 150 → 132 m に戻し、クレーン走行路も 147 → 125 m に。PIT4 までの走行距離 86.2 → 62.1 m', w: 'CONFIG.BUILDING.X0 / CRANE.RUN_X0' },
       { t: 'バンクが伸びたので建屋を 132 → 150 m、クレーン走行路を 120 → 147 m に延ばし、走行桁の外端を炉の外（Z 27,000 → 14,000）へ詰めた', w: 'CONFIG.BUILDING.X0 / CRANE.RUN_X0 / GIRDER_Z1' },
       // --- トランスファークレーンの速度 ---
       { t: 'トランスファークレーンの定格速度を足した（横行 40・巻上 12 m/min）。実測では横行 71・巻上 65〜127 m/min で動いていた', w: 'CONFIG.TRANSFER.SPEED' },
@@ -1794,8 +1798,14 @@ const CONFIG = {
    * Z はスラブヤードを 3 m 幅に絞ったぶんラインへ寄せた（21,500 → 9,700）。
    * ここを動かすと «床の開口・炉蓋・クレーンの横行距離» が一緒に付いてくる
    * （Parts.building / SupplyView.lids / Layout.supplyPath）。 */
-  FURNACE: { N: 9, X0: -74000, PITCH: -8600, Z: 9700,
-             DEPTH: 5200, W: 2600, L: 6000, WALL: 500, LID_T: 380,
+  /* 並べ方は図面どおり —— «A-1 側の端が PIT9»、そこからミル側へ PIT8 … PIT1 と戻る。
+   *   X1     …… バンクの端（＝入側テーブル A-1 の端。入側テーブルの始まりと揃える）
+   *   GROUPS …… 群の分け方。図面では 3-3-2 の塊と、離れて小さな PIT9 が 1 基
+   *   GAPS   …… 群と群の間の通路（ミル側から順に）。群の中は壁を共有して連なる
+   *   SMALL_L … PIT9 の内法。図面のとおり極小（スラブ 2 本ぶん）
+   * 炉の位置は Layout.pitX が唯一の真実で、床の開口・炉蓋・クレーンの走行はそこを見る。 */
+  FURNACE: { N: 9, X1: -121800, GROUPS: [3, 3, 2, 1], GAPS: [1200, 8000, 4000], Z: 9700,
+             DEPTH: 5200, W: 2600, L: 6000, SMALL_L: 1600, WALL: 500, LID_T: 380,
              PER_PIT: 10 },
 
   /* スラブヤード —— 面削（フライス）を終えてピット炉へ入るのを待つスラブの置き場。
@@ -1816,7 +1826,7 @@ const CONFIG = {
    * ラインへ寄せた（Z0 12,000 → 4,200）。列を減らした置き数は段積みで戻す
    * （STACK 2 → 3 で 16 枚のまま）。 */
   SLAB_YARD: { Z0: 4200, ROW_DZ: 5200, ROWS: 1, PER_ROW: 9, PITCH: -6200,
-               X0: -74000, STACK: 3, PLATE_T: 45, PLATE_MARGIN: 800,
+               X0: -60000, STACK: 3, PLATE_T: 45, PLATE_MARGIN: 800,
                BAN_T: 300, BAN_OVER: 120, BAN_DX: 0.30 },
   /*
    * 装入クレーン（ピットクレーン）—— 転倒軸の真上に固定された橋（X 方向には走行しない。
@@ -1828,7 +1838,7 @@ const CONFIG = {
    * 正準オフセット）。炉が 9 基に増えて 100 m 近い走行域になったので、柱のピッチも広げる。
    * 走行桁の Z は «ラインを跨いで» 反対側（−6,500）と炉の外側（+27,000）に置く ——
    * 入側テーブル（Z ±1,765）とスラブヤード・炉バンクのどれにも柱を落とさないため。 */
-  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -134000, RUN_X1: 0, COL_PITCH: 12000,
+  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -112000, RUN_X1: 0, COL_PITCH: 12000,
              TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600,
              /* 定格速度 [m/min] と加減速度 [m/s²]。ここが «速度の唯一の真実» で、
               * 装入シーケンスの所要秒も、画面上の動きも、材料を放したあとの戻りも
@@ -2137,7 +2147,7 @@ const CONFIG = {
   // ピット幅（X）はハウジングのソールプレート（±2,200）が収まる最小に留める。ピットの
   // 真上には何も立てない（テーブル架台・エプロン脚はピット壁の上か床の上に置く）。
   // 深さはソールプレート下面（BOT_Y）に一致させ、ハウジングはピット床に接地する。
-  BUILDING: { X0: -150000, X1: 98000, Z: 34000, PIT: { X: 2300, Z: 6000, DEPTH: 3600 } },
+  BUILDING: { X0: -132000, X1: 98000, Z: 34000, PIT: { X: 2300, Z: 6000, DEPTH: 3600 } },
 
   /* --- 材料・プロセス定数（アルミニウム熱間圧延） ---------------------------
    * 変形抵抗   k = C·exp(−b(T−Tref))·ε̇^m          [MPa]
@@ -2493,7 +2503,7 @@ const CONFIG = {
   C.SHEAR30.X = neg(C.SHEAR30.X);
   C.SUPPLY.TILTER_X = neg(C.SUPPLY.TILTER_X);
   // ピット炉バンクとスラブヤードは «並びの向き» ごと折り返す（PITCH は符号付きの間隔）
-  C.FURNACE.X0 = neg(C.FURNACE.X0); C.FURNACE.PITCH = neg(C.FURNACE.PITCH);
+  C.FURNACE.X1 = neg(C.FURNACE.X1);
   C.SLAB_YARD.X0 = neg(C.SLAB_YARD.X0); C.SLAB_YARD.PITCH = neg(C.SLAB_YARD.PITCH);
   // CRANE.RUN_X0/X1 は Parts.craneRunway が自分で FLIP を掛けるので、ここでは触らない
   for (const s of C.TABLE.SECTIONS) s.side = -s.side;
@@ -2730,8 +2740,32 @@ const Layout = {
   get entryX() { return CONFIG.SUPPLY.TILTER_X + CONFIG.FLIP * CONFIG.TRANSFER.PARK_DX; },
   /** 転倒直後（中心が転倒軸から L/2）から受け渡し位置までの、ローラでの送り距離 [mm]。 */
   feedDX(length) { return Math.max(CONFIG.TRANSFER.PARK_DX - length / 2, 0); },
-  /** ピット炉 i 番（0 起点）の中心 X（世界）。並びの向きは PITCH の符号が持つ。 */
-  pitX(i) { const F = CONFIG.FURNACE; return F.X0 + i * F.PITCH; },
+  /** ピット炉 i 番（0 起点）の内法の長さ [mm]。図面どおり最後の 1 基（PIT9）は極小。 */
+  pitLen(i) { const F = CONFIG.FURNACE; return i === F.N - 1 ? F.SMALL_L : F.L; },
+  /** 炉 j と j−1 の間に入る通路 [mm]（群の境目でだけ空く）。 */
+  pitGap(j) {
+    const F = CONFIG.FURNACE; let n = 0;
+    for (let k = 0; k < F.GROUPS.length - 1; k++) { n += F.GROUPS[k]; if (j === n) return F.GAPS[k]; }
+    return 0;
+  },
+  /**
+   * ピット炉 i 番（0 起点）の中心 X（世界）。
+   * 図面どおり «A-1 側の端（F.X1）に PIT9» を置き、そこからミル側へ戻りながら
+   * 群（GROUPS）の中は壁を共有して連ね、群の境目にだけ通路（GAPS）を空ける。
+   */
+  pitX(i) {
+    const F = CONFIG.FURNACE, sg = Math.sign(F.X1) || -1;
+    let d = 0;                                                  // バンクの端からの距離
+    for (let j = F.N - 1; j > i; j--) d += Layout.pitLen(j) + 2 * F.WALL + Layout.pitGap(j);
+    d += Layout.pitLen(i) / 2 + F.WALL;
+    return F.X1 - sg * d;                                       // 端からミル側へ戻る
+  },
+  /** バンクの «端»（＝入側テーブルの端に合わせた側）と、ミル側の端。 */
+  pitBankEnds() {
+    const F = CONFIG.FURNACE, sg = Math.sign(F.X1) || -1;
+    const near = Layout.pitX(0) - sg * (Layout.pitLen(0) / 2 + F.WALL);   // PIT1 のミル側の面
+    return { far: F.X1, near };
+  },
   /**
    * 装入工程の «道順»（世界座標 mm）と、工程ごとの移動距離。
    * 姿勢を描く側（SupplyView._pose）と所要秒を決める側（SupplyController）が
@@ -8261,24 +8295,25 @@ const Parts = {
   },
 
   /* --- ピット炉（スラブを立てたまま加熱する） ----------------------------- */
-  furnacePit() {
+  /** 炉 1 基。内法の長さ L は炉ごとに違う（PIT9 は極小）ので引数で渡す。 */
+  furnacePit(L = CONFIG.FURNACE.L) {
     const F = CONFIG.FURNACE, w = F.WALL, parts = [];
-    parts.push(G.at(G.box(F.L + 2 * w, F.DEPTH, w), 0, -F.DEPTH / 2, -(F.W + w) / 2));
-    parts.push(G.at(G.box(F.L + 2 * w, F.DEPTH, w), 0, -F.DEPTH / 2,  (F.W + w) / 2));
-    parts.push(G.at(G.box(w, F.DEPTH, F.W), -(F.L + w) / 2, -F.DEPTH / 2, 0));
-    parts.push(G.at(G.box(w, F.DEPTH, F.W),  (F.L + w) / 2, -F.DEPTH / 2, 0));
-    parts.push(G.at(G.box(F.L, 300, F.W), 0, -F.DEPTH - 150, 0));           // 炉底
+    parts.push(G.at(G.box(L + 2 * w, F.DEPTH, w), 0, -F.DEPTH / 2, -(F.W + w) / 2));
+    parts.push(G.at(G.box(L + 2 * w, F.DEPTH, w), 0, -F.DEPTH / 2,  (F.W + w) / 2));
+    parts.push(G.at(G.box(w, F.DEPTH, F.W), -(L + w) / 2, -F.DEPTH / 2, 0));
+    parts.push(G.at(G.box(w, F.DEPTH, F.W),  (L + w) / 2, -F.DEPTH / 2, 0));
+    parts.push(G.at(G.box(L, 300, F.W), 0, -F.DEPTH - 150, 0));             // 炉底
     for (const sz of [-1, 1])                                                // 炉口の縁
-      parts.push(G.at(G.box(F.L + 2 * w + 700, 240, 350), 0, 120, sz * (F.W / 2 + w + 175)));
+      parts.push(G.at(G.box(L + 2 * w + 700, 240, 350), 0, 120, sz * (F.W / 2 + w + 175)));
     for (const sx of [-1, 1])
-      parts.push(G.at(G.box(350, 240, F.W + 2 * w), sx * (F.L / 2 + w + 175), 120, 0));
+      parts.push(G.at(G.box(350, 240, F.W + 2 * w), sx * (L / 2 + w + 175), 120, 0));
     return G.merge(parts);
   },
-  furnaceLid() {
+  furnaceLid(L = CONFIG.FURNACE.L) {
     const F = CONFIG.FURNACE, w = F.WALL;
     return G.merge([
-      G.at(G.box(F.L + 2 * w + 300, F.LID_T, F.W + 2 * w + 300), 0, 0, 0),
-      G.at(G.box(F.L * 0.5, 260, F.W + 2 * w + 300), 0, F.LID_T / 2 + 130, 0),
+      G.at(G.box(L + 2 * w + 300, F.LID_T, F.W + 2 * w + 300), 0, 0, 0),
+      G.at(G.box(L * 0.5, 260, F.W + 2 * w + 300), 0, F.LID_T / 2 + 130, 0),
     ]);
   },
 
@@ -8510,9 +8545,9 @@ const Parts = {
     /* ピット炉の開口は «炉の数だけ» 開ける。炉が 1 基だった頃の名残で転倒軸の真上に
      * 1 つだけ開いており、炉をバンク化して移したあとも穴だけが床に残っていた
      * （＝炉の無い穴）。開口の真実を Layout.pitX に一本化して取り違えを断つ。 */
-    const fx = FU.L / 2 + FU.WALL, fz = FU.W / 2 + FU.WALL;
+    const fz = FU.W / 2 + FU.WALL;
     for (let i = 0; i < FU.N; i++) {
-      const x = Layout.pitX(i);
+      const x = Layout.pitX(i), fx = Layout.pitLen(i) / 2 + FU.WALL;                  // 炉ごとに内法が違う
       hole(x - fx, FU.Z - fz, x + fx, FU.Z + fz);                                     // ピット炉 i 番
     }
     const PP = CONFIG.PILER, px0 = Math.min(PP.X0, PP.X1) + PP.PIT.MARGIN, px1 = Math.max(PP.X0, PP.X1) - PP.PIT.MARGIN;
@@ -9773,10 +9808,14 @@ class SupplyView {
     // 炉体は同じ形なので 1 つのジオメトリを N 回置く。蓋も N 枚あるが、開くのは
     // «いま使う炉»（材質で決まる）の 1 枚だけ。どれが開いているかが材質と一致する。
     const FU = CONFIG.FURNACE;
-    const pitGeo = Parts.furnacePit(), lidGeo = Parts.furnaceLid();
+    // 内法が炉ごとに違う（PIT9 は極小）ので、寸法ごとに 1 つだけ形を作って使い回す
+    const geoCache = new Map(), geoOf = (L) => {
+      if (!geoCache.has(L)) geoCache.set(L, { pit: Parts.furnacePit(L), lid: Parts.furnaceLid(L) });
+      return geoCache.get(L);
+    };
     this.pits = []; this.lids = [];
     for (let i = 0; i < FU.N; i++) {
-      const x = Layout.pitX(i);
+      const x = Layout.pitX(i), { pit: pitGeo, lid: lidGeo } = geoOf(Layout.pitLen(i));
       const pit = near(new THREE.Mesh(pitGeo, MAT.pit), MAT.pit); pit.receiveShadow = true;
       pit.name = 'ピット炉'; pit.position.set(u(x), 0, u(FU.Z)); this.group.add(pit); this.pits.push(pit);
       const lid = near(new THREE.Mesh(lidGeo, MAT.base), MAT.base); lid.castShadow = true;

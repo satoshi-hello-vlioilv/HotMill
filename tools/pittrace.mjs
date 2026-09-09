@@ -65,9 +65,14 @@ const out = await page.evaluate(async () => {
   return {
     yard: { rows: Y.ROWS, stack: Y.STACK, band: yz1 - yz0, near: yz0, far: yz1,
             slots: L.yardSlots().length, cap: L.yardSlots().reduce((a, q) => a + q.stack, 0) },
-    pit: { L: FU.L, W: FU.W, depth: FU.DEPTH, pitch: Math.abs(FU.PITCH), z0: pitZ0, z1: pitZ1,
+    pit: { L: FU.L, W: FU.W, depth: FU.DEPTH, z0: pitZ0, z1: pitZ1,
            perPit: FU.PER_PIT, cast: K.SLAB.CAST_MAX ?? 560, widMax: K.SLAB.WID_MAX, lenMax: K.SLAB.LEN_MAX,
-           bankEnd: Math.abs(L.pitX(FU.N - 1)) + FU.L / 2 + FU.WALL },
+           n: FU.N, smallL: FU.SMALL_L, groups: FU.GROUPS, gaps: FU.GAPS,
+           lens: Array.from({ length: FU.N }, (_, i) => L.pitLen(i)),
+           xs: Array.from({ length: FU.N }, (_, i) => Math.abs(L.pitX(i))),
+           ends: { far: Math.abs(L.pitBankEnds().far), near: Math.abs(L.pitBankEnds().near) },
+           entryEnd: Math.max(...K.TABLE.SECTIONS.filter(q => q.name.startsWith('A-')).map(q => Math.abs(q.x1))),
+           bankEnd: Math.abs(L.pitX(FU.N - 1)) + L.pitLen(FU.N - 1) / 2 + FU.WALL },
     gapYardPit: pitZ0 - yz1,
     building: Math.max(Math.abs(K.BUILDING.X0), Math.abs(K.BUILDING.X1)),
     runway: Math.abs(K.CRANE.RUN_X0) + Math.abs(K.SUPPLY.TILTER_X),
@@ -93,7 +98,23 @@ ok(`置ける枚数が減っていない（${y.cap} 枚 ≥ 16）`, y.cap >= 16,
 ok(`炉の内法 L が立てたスラブ ${p.perPit} 本ぶん（${p.L} ≥ ${p.perPit * p.cast}）`, p.L >= p.perPit * p.cast, p.L);
 ok(`炉の内法 W が板幅の最大を呑む（${p.W} ≥ ${p.widMax}）`, p.W >= p.widMax, p.W);
 ok(`炉の深さが板長の最大より深い（${p.depth} ≥ ${p.lenMax}）`, p.depth >= p.lenMax, p.depth);
-ok(`炉のピッチが内法＋壁より広い（${p.pitch} ≥ ${p.L + 2 * 500}）`, p.pitch >= p.L + 1000, p.pitch);
+// 図面の並び: A-1 側の端が PIT9（極小）、そこからミル側へ 3-3-2 の群
+ok(`バンクの端が入側テーブル A-1 の端と一致（炉 ${p.ends.far} / テーブル ${p.entryEnd}）`,
+   Math.abs(p.ends.far - p.entryEnd) <= 1, p.ends.far);
+ok(`A-1 側の端が PIT${p.n}（いちばん外の炉が最後の番号）`,
+   p.xs[p.n - 1] === Math.max(...p.xs), p.xs[p.n - 1]);
+ok(`PIT${p.n} が極小（内法 ${p.smallL} ≤ 通常の炉 ${p.L} の 1/3）`, p.smallL <= p.L / 3, p.smallL);
+ok(`炉の並びが群 ${p.groups.join('-')} になっている（群の中は壁を共有）`, (() => {
+     let n = 0; const bnd = new Set();
+     for (let k = 0; k < p.groups.length - 1; k++) { n += p.groups[k]; bnd.add(n); }
+     for (let i = 1; i < p.n; i++) {
+       const d = Math.abs(p.xs[i] - p.xs[i - 1]);
+       const want = (p.lens[i] + p.lens[i - 1]) / 2 + 2 * 500 + (bnd.has(i) ? p.gaps[[...bnd].indexOf(i)] : 0);
+       if (Math.abs(d - want) > 1) return false;
+     }
+     return true;
+   })(), p.xs.map(x => Math.round(x)).join(','));
+ok(`バンク全体が入側テーブルの内側に収まる（ミル側の端 ${Math.round(p.ends.near)} > 0）`, p.ends.near > 0 && p.ends.near < p.entryEnd, Math.round(p.ends.near));
 ok(`炉がヤードの外に 1〜4 m の間隔で並ぶ（${(out.gapYardPit / 1000).toFixed(2)} m）`,
    out.gapYardPit >= 1000 && out.gapYardPit <= 4000, out.gapYardPit);
 ok(`炉バンクが建屋に収まる（端 ${(p.bankEnd / 1000).toFixed(1)} m ≤ ${(out.building / 1000).toFixed(0)} m）`,
