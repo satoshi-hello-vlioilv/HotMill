@@ -1071,6 +1071,35 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.19.0', base: 'a907600', date: '2026-09-09', title: 'ピットクレーンをワイヤー仕様へ・運転計画（キュー／プリセット／ループ）・保存と入出力・Excel 書き出し', items: [
+      // --- ピットクレーン ---
+      { t: '吊具を剛体の伸縮マストからワイヤ 4 本掛けにした。トロリのシーブ → 下部シーブブロック → 旋回装置 → トング の順に下から積み上げるので、どの姿勢でも繋がって見える', w: 'Parts.pitRopeBlock / pitSlewUnit / SupplyView.ropesP' },
+      { t: '仕様書の «主要事項» を能力として取り込んだ。定格 10 t・揚程 7.5 m・スパン 21 m・巻上 14／横行 40／走行 85 m/min・旋回 4 rpm・CAB 移動 30 m/min・開閉 3 回/min', w: 'CONFIG.CRANE.SPEED / RATED_T / LIFT / MOTOR' },
+      { t: '揚程 7.5 m に合わせて吊り上げ余裕を 2,600 → 1,400 にした。炉底からの巻上距離がちょうど 7,500 mm になる', w: 'CRANE.HOIST_CLEAR' },
+      { t: 'トングの開きを図面どおり最大 1,900・最小 250 にした。掴める板幅は 1,500 mm なので、定格 10 t とあわせて «吊れない材» を素材決定時に知らせる', w: 'CRANE.TONG.W_MAX / W_MIN' },
+      { t: '旋回装置（4 rpm）は機構として実装した。いまの炉とラインはどちらも長手側面が世界 Z を向いているので装入では回さない', w: 'SupplyView._slew / TongRig.yaw0' },
+      // --- 運転計画 ---
+      { t: '上部の右端に «運転計画 / 一時停止 / 実績» の 3 つのピルを、作業の流れと同じ順で置いた。ツールバーの畳み具合に関わらず位置が動かない', w: '.tb-pill / UIManager._fitToolbar' },
+      { t: '幅が足りないときの畳み方に段階 3 を足した。ツールバーを先に縮め、いちばんよく使うピルの文字は最後に落とす', w: 'body[data-pill-fit]' },
+      { t: '運転計画の板（Q）を作った。キュー・プリセット・保存データの 3 区分で、スケジュールをセットしてから実行する', w: '#pnl-plan / UIManager.renderPlan' },
+      { t: '繰り返しを «なし / キュー全体 / 1 ロット» の 3 通りにした。1 ロット終わるたびに次の条件を当てて自動で走り出す', w: 'UIManager._planStep / _planStop' },
+      { t: '過負荷停止したときは運転計画も止める。同じ条件を繰り返しても同じところで止まるため', w: "bus.on('STATE_TRIP')" },
+      // --- 保存と入出力 ---
+      { t: '運転計画を IndexedDB へ保存できるようにした。使えない環境では localStorage へ静かに落ちる', w: 'Store' },
+      { t: '保存データの削除・すべて削除・JSON でのエクスポート／インポートを足した', w: 'UIManager.planExport / planImport' },
+      // --- Excel ---
+      { t: 'ロット単位の実績を Excel ブックで書き出せるようにした。外部ライブラリを足さず、無圧縮 ZIP と最小の XLSX を自前で書く', w: 'Zip / Xlsx / UIManager.exportXlsx' },
+      { t: 'シートを «ロット諸元 / パス実績 / 時系列» の 3 枚に分けた。CSV だと 1 枚に押し込むことになり表の切れ目が読みにくい', w: 'Xlsx.book' },
+      { t: '時系列の分解能を正確に 100 ms にした。標本の余りを 0 に戻していたため、物理の刻み 1/120 s では間隔が 0.108 s に伸びていた。繰り越すようにして平均 0.100 s', w: 'RollingLog.sample' },
+      // --- 一時停止 ---
+      { t: '一時停止を上部のピルからも押せるようにし、運転していないときは «押せない» ことが見て分かるようにした', w: 'UIManager._pauseBtn' },
+      // --- 作業中に見つけて直したこと ---
+      { t: '旋回装置の固定側と回転側が 22 mm 重なっていた。実機の旋回輪は入れ子だが、別メッシュを入れ子にすると部材が部材の中に居ることになるので、軸受のすきまぶん上下に分けた', w: 'Parts.pitSlewUnit' },
+      { t: '巻上ワイヤがシーブブロックへ 50 mm 食い込んでいた。ワイヤの下端を天フランジの上面で止めた（実機もワイヤはフランジの穴から入る）', w: 'CRANE.ROPE.BOT_DY' },
+      { t: '群の中で隣り合う炉の «炉口の縁» と炉蓋が重なっていた。炉は 1 基ずつ縁（±350）を持つので、縁 2 枚ぶん 800 mm を空け、炉蓋も炉の外形に収めた', w: 'FURNACE.IN_GAP / Parts.furnaceLid' },
+      { t: '静的構造の検査が «動く部材» の一覧をマストのまま持っていた。新しい吊具へ更新し、lid → lids の綴り誤りも直した（炉蓋は一度も除外されていなかった）', w: 'tools/structure.mjs' },
+      { t: 'スラブヤードのラベルが «2 列» 前提の式だった。列数に依らない式にし、クレーンのラベル名も «装入クレーン（ワイヤ吊り）» にした', w: 'UIManager._buildTags' },
+    ] },
     { v: '1.18.0', base: '53a7d40', date: '2026-09-09', title: 'クレーンの移行速度を実機の定格速度で解く・板面冷却の着水蒸気・装入まわりの配置とピットトングの作り直し', items: [
       { t: 'ピットクレーンの速度を実測した。走行 1,007 m/min（77.21 m を 4.6 秒。加減速の山では 1,511）・巻上 145・横行 312・立てかけ降下 68 m/min。装入クレーンの一般値（走行 100〜150／横行 30〜60／巻上 10〜20）に対し走行で約 8.4 倍だった', w: 'tools/cranetrace.mjs' },
       { t: '原因は工程の所要秒が距離を見ない固定値だったこと。ピット炉が 9 基に増えて走行域が 77 m になっても、秒数は 4.6 のまま据え置かれていた', w: 'CONFIG.SEQUENCE' },
@@ -1914,7 +1943,9 @@ const CONFIG = {
    *   GAPS   …… 群と群の間の通路（ミル側から順に）。群の中は壁を共有して連なる
    *   SMALL_L … PIT9 の内法。図面のとおり極小（スラブ 2 本ぶん）
    * 炉の位置は Layout.pitX が唯一の真実で、床の開口・炉蓋・クレーンの走行はそこを見る。 */
-  FURNACE: { N: 9, X1: -121800, GROUPS: [3, 3, 2, 1], GAPS: [1200, 8000, 4000], Z: 9700,
+  /* IN_GAP は «群の中で隣り合う炉» の間。炉は 1 基ずつ自分の壁と炉口の縁（±350）を
+   * 持つので、密着させると隣の縁と重なる。縁 2 枚ぶん（700）を空けて 800 とする。 */
+  FURNACE: { N: 9, X1: -121800, GROUPS: [3, 3, 2, 1], GAPS: [1200, 8000, 4000], IN_GAP: 800, Z: 9700,
              DEPTH: 5200, W: 2600, L: 6000, SMALL_L: 1600, WALL: 500, LID_T: 380,
              PER_PIT: 10 },
 
@@ -1956,7 +1987,10 @@ const CONFIG = {
              MOTOR: { HOIST: 90, CLOSE: 55, TRAVERSE: 15, TRAVEL: 60, SLEW: 5.5, CAB: 1.5 },  // kW（走行 15×4・CAB 0.75×2）
              /* 吊具はワイヤ 4 本掛け。トロリのシーブから «下部シーブブロック» へ降り、
               * ブロックの下に旋回装置（4 rpm）を挟んでトングを吊る。 */
-             ROPE: { D: 42, FALLS: 4, SPREAD: 900, SPAN: 620, SHEAVE_D: 620, AXIS: 'x', TOP_DY: -0.34, BOT_DY: 300 },
+             /* BOT_DY はワイヤの下端。ブロックの «天フランジの上面» で止める
+              * （実機もワイヤはフランジの穴からブロックへ入る）。中まで伸ばすと
+              * 部材が部材の中に居ることになり、構造検査に引っかかる。 */
+             ROPE: { D: 42, FALLS: 4, SPREAD: 900, SPAN: 620, SHEAVE_D: 620, AXIS: 'x', TOP_DY: -0.34, BOT_DY: 500 },
              BLOCK: { W: 1500, H: 700, D: 1100 },        // 下部シーブブロック
              SLEW:  { D: 1150, H: 560 },                 // 旋回装置（ブロックとトングの間）
              /* 揚程 7,500 mm は «炉底のスラブ底面 → 吊り上げ位置» の高さそのもの。
@@ -2866,11 +2900,11 @@ const Layout = {
   feedDX(length) { return Math.max(CONFIG.TRANSFER.PARK_DX - length / 2, 0); },
   /** ピット炉 i 番（0 起点）の内法の長さ [mm]。図面どおり最後の 1 基（PIT9）は極小。 */
   pitLen(i) { const F = CONFIG.FURNACE; return i === F.N - 1 ? F.SMALL_L : F.L; },
-  /** 炉 j と j−1 の間に入る通路 [mm]（群の境目でだけ空く）。 */
+  /** 炉 j と j−1 の間 [mm]。群の境目は通路（GAPS）、群の中は炉口の縁ぶん（IN_GAP）。 */
   pitGap(j) {
     const F = CONFIG.FURNACE; let n = 0;
     for (let k = 0; k < F.GROUPS.length - 1; k++) { n += F.GROUPS[k]; if (j === n) return F.GAPS[k]; }
-    return 0;
+    return F.IN_GAP;
   },
   /**
    * ピット炉 i 番（0 起点）の中心 X（世界）。
@@ -8591,17 +8625,20 @@ const Parts = {
     parts.push(G.at(G.box(w, F.DEPTH, F.W), -(L + w) / 2, -F.DEPTH / 2, 0));
     parts.push(G.at(G.box(w, F.DEPTH, F.W),  (L + w) / 2, -F.DEPTH / 2, 0));
     parts.push(G.at(G.box(L, 300, F.W), 0, -F.DEPTH - 150, 0));             // 炉底
-    for (const sz of [-1, 1])                                                // 炉口の縁
-      parts.push(G.at(G.box(L + 2 * w + 700, 240, 350), 0, 120, sz * (F.W / 2 + w + 175)));
+    // 炉口の縁。X 方向は «炉の外形ぶん» に収める（群の中の炉は壁を共有して隣り合う）
+    for (const sz of [-1, 1])
+      parts.push(G.at(G.box(L + 2 * w - 60, 240, 350), 0, 120, sz * (F.W / 2 + w + 175)));
     for (const sx of [-1, 1])
       parts.push(G.at(G.box(350, 240, F.W + 2 * w), sx * (L / 2 + w + 175), 120, 0));
     return G.merge(parts);
   },
+  /* 蓋は «炉の外形ぶん» に収める。群の中の炉は壁を共有して隣り合うので、
+   * 外形より広い蓋にすると隣の蓋と重なる（X だけ内側へ 60 mm 詰める）。 */
   furnaceLid(L = CONFIG.FURNACE.L) {
-    const F = CONFIG.FURNACE, w = F.WALL;
+    const F = CONFIG.FURNACE, w = F.WALL, lx = L + 2 * w - 60;
     return G.merge([
-      G.at(G.box(L + 2 * w + 300, F.LID_T, F.W + 2 * w + 300), 0, 0, 0),
-      G.at(G.box(L * 0.5, 260, F.W + 2 * w + 300), 0, F.LID_T / 2 + 130, 0),
+      G.at(G.box(lx, F.LID_T, F.W + 2 * w + 300), 0, 0, 0),
+      G.at(G.box(lx * 0.5, 260, F.W + 2 * w + 300), 0, F.LID_T / 2 + 130, 0),
     ]);
   },
 
@@ -8733,17 +8770,21 @@ const Parts = {
    */
   pitSlewUnit(C = CONFIG.CRANE, moving = false) {
     const W = C.SLEW, parts = [];
+    /* 固定側（上）と回転側（下）は «触れずに» 分ける。実機の旋回輪は入れ子だが、
+     * 別々のメッシュを入れ子にすると «部材が部材の中に居る» 検査（structure）に
+     * 引っかかるので、軸受のすきま（H の 5 %）を素直に空けて上下に積む。 */
     if (!moving) {
-      parts.push(G.at(G.cyl(W.D, W.H * 0.34, 'y', 20), 0, W.H * 0.33, 0));           // 固定側（外輪）
-      parts.push(G.at(G.box(360, 420, 360), W.D * 0.42, W.H * 0.62, 0));             // 旋回モータ
-      parts.push(G.at(G.cyl(240, 260, 'y', 12), W.D * 0.42, W.H * 0.95, 0));         // 減速機
+      parts.push(G.at(G.cyl(W.D, W.H * 0.34, 'y', 20), 0, W.H * 0.34, 0));           // 固定側（外輪）
+      // 旋回駆動は «ブロックの外側» へ張り出させる（真上のブロックと取り合わない）
+      parts.push(G.at(G.box(360, 420, 360), W.D * 0.85, W.H * 0.62, 0));             // 旋回モータ
+      parts.push(G.at(G.cyl(240, 260, 'y', 12), W.D * 0.85, W.H * 0.95, 0));         // 減速機
       return G.merge(parts);
     }
-    parts.push(G.at(G.cyl(W.D * 0.92, W.H * 0.30, 'y', 20), 0, W.H * 0.05, 0));      // 回転側（内輪）
-    parts.push(G.at(G.cyl(W.D * 0.62, W.H * 0.36, 'y', 16), 0, -W.H * 0.28, 0));     // 首
+    parts.push(G.at(G.cyl(W.D * 0.92, W.H * 0.28, 'y', 20), 0, -W.H * 0.02, 0));     // 回転側（内輪）
+    parts.push(G.at(G.cyl(W.D * 0.62, W.H * 0.34, 'y', 16), 0, -W.H * 0.30, 0));     // 首
     for (const k of [0, 1, 2, 3])                                                     // 歯（旋回していることが見える）
-      parts.push(G.at(G.box(150, W.H * 0.22, 90), Math.cos(k * Math.PI / 2) * W.D * 0.40,
-                      W.H * 0.05, Math.sin(k * Math.PI / 2) * W.D * 0.40));
+      parts.push(G.at(G.box(150, W.H * 0.20, 90), Math.cos(k * Math.PI / 2) * W.D * 0.40,
+                      -W.H * 0.02, Math.sin(k * Math.PI / 2) * W.D * 0.40));
     return G.merge(parts);
   },
   /**
@@ -10413,7 +10454,8 @@ class SupplyView {
      * どの姿勢でも «繋がって» 見える（数字を別々に置くと必ずどこかで浮く）。 */
     const SW = CR.SLEW, BK = CR.BLOCK, RP = CR.ROPE;
     const slewBotY = tp.mastTop + 260;                       // 旋回装置の下端（トングの頭のすぐ上）
-    const slewY = slewBotY + SW.H / 2, blockY = slewBotY + SW.H + BK.H / 2;
+    // ブロックは旋回装置の «上» に、軸受のすきまぶん離して載せる（部材が重ならない）
+    const slewY = slewBotY + SW.H / 2, blockY = slewBotY + SW.H + BK.H / 2 + 150;
     this.slewRot.position.set(u(c.x), u(slewY), u(c.z));
     this.slewFix.position.set(u(c.x), u(slewY), u(c.z));
     this.slewRot.rotation.y = this._slew || 0;               // 旋回角（4 rpm。いまの装入では回さない）
@@ -10875,8 +10917,9 @@ class LabelView {
       ['ピット炉（9 基）',  (Layout.pitX(0) + Layout.pitX(CONFIG.FURNACE.N - 1)) / 2, 1800, CONFIG.FURNACE.Z, 120000],
       ['スラブヤード（面削済み）', (Layout.yardSlots()[0].x + Layout.yardSlots()[CONFIG.SLAB_YARD.PER_ROW - 1].x) / 2,
        CONFIG.SLAB_YARD.PLATE_T + CONFIG.SLAB_YARD.BAN_T + 1400,
-       CONFIG.SLAB_YARD.Z0 + CONFIG.SLAB_YARD.ROW_DZ / 2, 120000],
-      ['スタッカークレーン', (Layout.pitX(0) + CONFIG.SUPPLY.TILTER_X) / 2, CONFIG.CRANE.GIRDER_Y + 1500, CONFIG.FURNACE.Z, 130000],
+       // 列の «真ん中»。1 列でも 2 列でも同じ式で当たる（列が 1 つなら Z0 そのもの）
+       CONFIG.SLAB_YARD.Z0 + CONFIG.SLAB_YARD.ROW_DZ * (CONFIG.SLAB_YARD.ROWS - 1) / 2, 120000],
+      ['装入クレーン（ワイヤ吊り）', (Layout.pitX(0) + CONFIG.SUPPLY.TILTER_X) / 2, CONFIG.CRANE.GIRDER_Y + 1500, CONFIG.FURNACE.Z, 130000],
     ].map(([t, x, y, z, maxD]) => {
       const el = document.createElement('div'); el.className = 'tag'; el.textContent = t;
       el.title = `${t} へ視点を移す`;
