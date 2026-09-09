@@ -14,9 +14,11 @@ const out = await page.evaluate(() => {
   const SV = W.supplyView, SP = K.CRANE.SPEED;
   const DT = 1 / 240;                                   // 速度の山を見逃さない細かさ
 
-  // 工程 → 見る軸（クレーンが動かす方向）
-  const AXIS = { hoist: 'y', travel: 'x', traverse: 'z', set: 'y' };
-  const RATED = { hoist: SP.HOIST, travel: SP.TRAVEL, traverse: SP.TRAVERSE, set: SP.HOIST };
+  // 工程 → 見る軸（クレーンが動かす方向）。ピットクレーンとトランスファークレーンの両方。
+  const AXIS = { hoist: 'y', travel: 'x', traverse: 'z', set: 'y', grab: 'y', transfer: 'z', lower: 'y' };
+  const MV = K.CRANE_MOVES;
+  const RATED = Object.fromEntries(Object.keys(AXIS).map(k => [k, K[MV[k].by].SPEED[MV[k].v]]));
+  const CRANE_OF = Object.fromEntries(Object.keys(AXIS).map(k => [k, MV[k].by]));
 
   P.reset();
   A.bus.emit('CMD_START_SUPPLY');
@@ -29,7 +31,7 @@ const out = await page.evaluate(() => {
     const ph = sup.phase, key = K.SEQUENCE[sup.step][1];
     const pose = SV._pose(sup, slab, passY);
     if (AXIS[key]) {
-      const ax = AXIS[key], s = seen[key] ||= { d: Math.abs(path.move[key]), sec: 0, vMax: 0, v: [], n: 0 };
+      const ax = AXIS[key], s = seen[key] ||= { d: Math.abs(path.move[MV[key].d]), sec: 0, vMax: 0, v: [], n: 0 };
       if (prev && prev.key === key) {
         const v = Math.abs(pose[ax] - prev[ax]) / DT;    // mm/s
         s.vMax = Math.max(s.vMax, v); s.v.push(v); s.sec += DT; s.n++;
@@ -47,9 +49,9 @@ const out = await page.evaluate(() => {
     return { key, axis: AXIS[key], d_m: +(s.d / 1000).toFixed(2), sec: +s.sec.toFixed(2),
              vMax: +mpm(s.vMax).toFixed(1), vMean: +mpm(s.d / s.sec).toFixed(1),
              vStart: +mpm(vStart).toFixed(1), vEnd: +mpm(vEnd).toFixed(1),
-             rated: RATED[key], predSec: +L.moveSec(key, slab, passY).toFixed(2) };
+             rated: RATED[key], by: CRANE_OF[key], predSec: +L.moveSec(key, slab, passY).toFixed(2) };
   });
-  return { rows, speed: SP, totalSec: +t.toFixed(1), done: !sup.active,
+  return { rows, speed: SP, tspeed: K.TRANSFER.SPEED, totalSec: +t.toFixed(1), done: !sup.active,
            seq: K.SEQUENCE.map(q => ({ ph: q[0], key: q[1], fixed: q[2], dur: +(sup.dur[q[1]] || 0).toFixed(2) })) };
 });
 await browser.close();
@@ -64,11 +66,16 @@ ok('装入シーケンスが完走する', out.done, out.done);
 for (const [k, [lo, hi]] of Object.entries(NORM))
   ok(`定格 ${k} = ${out.speed[k]} m/min が一般値 ${lo}〜${hi} の範囲`, out.speed[k] >= lo && out.speed[k] <= hi, out.speed[k]);
 ok(`加速度 ${out.speed.ACCEL} m/s² が 0.2〜0.8 の範囲`, out.speed.ACCEL >= 0.2 && out.speed.ACCEL <= 0.8, out.speed.ACCEL);
+for (const [k, [lo, hi]] of Object.entries(NORM))
+  if (out.tspeed[k] !== undefined)
+    ok(`トランスファー 定格 ${k} = ${out.tspeed[k]} m/min が一般値 ${lo}〜${hi} の範囲`,
+       out.tspeed[k] >= lo && out.tspeed[k] <= hi, out.tspeed[k]);
 
 for (const r of out.rows) {
   ok(`${r.key}: 最大速度 ${r.vMax} ≤ 定格 ${r.rated} m/min`, r.vMax <= r.rated * 1.02, r.vMax);
   // 十分に長い移動（ランプ 2 本ぶんより長い）は定格まで上がりきるはず
-  const dRamp = (r.rated * 1000 / 60) ** 2 / (out.speed.ACCEL * 1000) / 1000;   // [m]
+  const acc = (r.by === 'TRANSFER' ? out.tspeed : out.speed).ACCEL;
+  const dRamp = (r.rated * 1000 / 60) ** 2 / (acc * 1000) / 1000;   // [m]
   if (r.d_m > dRamp * 1.5)
     ok(`${r.key}: 定格まで加速しきる（最大 ${r.vMax} ≥ ${(r.rated * 0.95).toFixed(0)}）`, r.vMax >= r.rated * 0.95, r.vMax);
   ok(`${r.key}: 発進が瞬時でない（初速 ${r.vStart} < 定格の 5 %）`, r.vStart < r.rated * 0.05, r.vStart);

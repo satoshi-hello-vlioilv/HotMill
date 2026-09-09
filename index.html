@@ -961,7 +961,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
-    { v: '1.18.0', base: '53a7d40', date: '2026-09-09', title: 'ピットクレーンの移行速度を実機の定格速度で解く・板面冷却の着水蒸気', items: [
+    { v: '1.18.0', base: '53a7d40', date: '2026-09-09', title: 'クレーンの移行速度を実機の定格速度で解く・板面冷却の着水蒸気・装入まわりの配置とピットトングの作り直し', items: [
       { t: 'ピットクレーンの速度を実測した。走行 1,007 m/min（77.21 m を 4.6 秒。加減速の山では 1,511）・巻上 145・横行 312・立てかけ降下 68 m/min。装入クレーンの一般値（走行 100〜150／横行 30〜60／巻上 10〜20）に対し走行で約 8.4 倍だった', w: 'tools/cranetrace.mjs' },
       { t: '原因は工程の所要秒が距離を見ない固定値だったこと。ピット炉が 9 基に増えて走行域が 77 m になっても、秒数は 4.6 のまま据え置かれていた', w: 'CONFIG.SEQUENCE' },
       { t: '所要時間と途中位置を、距離・定格速度・加減速度から台形速度線図で解く共通部品を作った。短い移動は自動的に三角形になる', w: 'Ramp.time / Ramp.s' },
@@ -975,6 +975,19 @@ const VERSION = {
       { t: '板の上面・着水点・板が真下に居るヘッダを 1 か所に集約した。噴射（strip）と蒸気（steam）が別々の板面を見てしまうことがない', w: 'SprayView.update の topY / onZones / nd' },
       { t: '着水蒸気は水冷のときだけ立てる（空冷は送風なので蒸発しない）。先行開弁のぶんは板が無くテーブルに落ちるので蒸気にしない', w: 'STRIP_COOL.mode.spray' },
       { t: '蒸気の場を 300 → 460 に増やし、バイトと着水点で分け合う。「水蒸気」スイッチ 1 つで両方を制御する', w: 'SprayView.steam' },
+      // --- 装入まわりの配置 ---
+      { t: 'スラブヤードを 2 列 8.93 m から 1 列 2.93 m にし、ラインからの距離を 10.1 → 2.74 m まで詰めた。置ける枚数は段積み 3 段・置き場 9 か所で 16 → 18 枚に', w: 'CONFIG.SLAB_YARD' },
+      { t: 'ピット炉の内法を «立てたスラブ 10 本» の大きさにした。板厚の面を突き合わせて並ぶので 10 × 鋳造厚 560 ＋ 逃げ 400 ＝ L 6,000。W は板幅の最大 2,200 ＋ 逃げで 2,600', w: 'CONFIG.FURNACE.L / W / PER_PIT' },
+      { t: '炉が X へ伸びたぶんバンクのピッチを 5,600 → 8,600 に広げ、ヤードを詰めたぶん Z を 21,500 → 9,700 へ寄せた。横行距離 17.7 → 6.7 m', w: 'CONFIG.FURNACE.PITCH / Z' },
+      { t: 'バンクが伸びたので建屋を 132 → 150 m、クレーン走行路を 120 → 147 m に延ばし、走行桁の外端を炉の外（Z 27,000 → 14,000）へ詰めた', w: 'CONFIG.BUILDING.X0 / CRANE.RUN_X0 / GIRDER_Z1' },
+      // --- トランスファークレーンの速度 ---
+      { t: 'トランスファークレーンの定格速度を足した（横行 40・巻上 12 m/min）。実測では横行 71・巻上 65〜127 m/min で動いていた', w: 'CONFIG.TRANSFER.SPEED' },
+      { t: '掴む・放すを含む工程は «動いている区間» を持たせ、所要秒 ＝ 移動時間 ÷ その区間とした。装入まわりで秒を手で置いた箇所は無くなった', w: 'CRANE_MOVES.win / Layout.moveSec' },
+      // --- ピットクレーンのトング ---
+      { t: 'ピットクレーンのトングを «スラブの長手側面を掴む» 方式にした。板厚の面を掴むと、転倒機がまさにその面を受け面で受けるので爪が挟まる', w: 'SupplyView.pitTong / gripPit' },
+      { t: '掴む高さを板の上端から 900 mm 下にした。以前は板の下端を掴んでいたため、マストが板の中を突き抜けていた（吊具は干渉検査の対象外で見逃されていた）', w: 'CRANE.TONG.GRIP_DOWN' },
+      { t: 'トングの形を図面どおりに作り直した。リンク板と 2 本のピン・下すぼまりの箱型ボディ・外へ開いてから鉛直に落ちる長い湾曲アーム・内へ曲がったかぎ', w: 'Parts.pitTongHead / pitTongBody / pitTongArm' },
+      { t: 'アームのピンが中心から離れていてもよいように姿勢の解き方を一般化した。骨組みは 2 つのクレーンで共通のまま', w: 'TongRig.PIVOT_Z' },
     ] },
     { v: '1.17.0', base: 'ebc3b29', date: '2026-09-09', title: '上部メニューの見切れ・実績の導線・冷却ノズルの狙い・反りとプロファイルの計器化', items: [
       // --- 上部メニュー ---
@@ -1685,6 +1698,12 @@ const CONFIG = {
    * 転倒機側の設備と重ならない。
    */
   TRANSFER: {
+    /* 定格速度 [m/min] と加減速度 [m/s²]。ピットクレーン（CRANE.SPEED）と同じ扱いで、
+     * 装入シーケンスの所要秒も画面上の動きもここから決まる。こちらは平置きの板を
+     * 1.7 m 持ち上げて 3.8 m 運ぶだけの小型機なので、走行は持たず横行と巻上だけ。
+     * 一般値は 横行 30〜60、巻上 8〜15 m/min。以前は所要秒が固定で、
+     * 横行 71・巻上 65〜127 m/min という速さで動いていた。 */
+    SPEED: { TRAVERSE: 40, HOIST: 12, ACCEL: 0.4 },
     /* トランスファークレーンの «立ち位置»（転倒軸からミル側へ）。
      *
      * このクレーンはラインと直角（Z）にしか動かない。掴む位置も降ろす位置も同じ X で、
@@ -1766,8 +1785,18 @@ const CONFIG = {
    *   X0    …… 1 番炉の中心（正準）。PITCH ぶんずつ外側（ミルから遠い側）へ並ぶ
    *   Z     …… 炉口の中心 Z（スラブヤードの外側）
    */
-  FURNACE: { N: 9, X0: -74000, PITCH: -5600, Z: 21500,
-             DEPTH: 5200, W: 2800, L: 2400, WALL: 500, LID_T: 380 },
+  /* 炉の内法は «立てたスラブが 10 本入る» 大きさ。スラブは炉の中で板厚の面を
+   * 突き合わせて（＝X 方向に）並ぶので、
+   *   L（X）… 10 × 鋳造厚 560 ＋ 出し入れの逃げ 400 ＝ 6,000
+   *   W（Z）… 板幅の最大 2,200 ＋ 吊具の逃げ 400 ＝ 2,600
+   * となる。炉が X へ伸びたぶん、バンクのピッチも壁厚と炉間の通路ぶん広げる
+   * （6,000 ＋ 壁 2×500 ＋ 縁と通路 1,600 ＝ 8,600）。
+   * Z はスラブヤードを 3 m 幅に絞ったぶんラインへ寄せた（21,500 → 9,700）。
+   * ここを動かすと «床の開口・炉蓋・クレーンの横行距離» が一緒に付いてくる
+   * （Parts.building / SupplyView.lids / Layout.supplyPath）。 */
+  FURNACE: { N: 9, X0: -74000, PITCH: -8600, Z: 9700,
+             DEPTH: 5200, W: 2600, L: 6000, WALL: 500, LID_T: 380,
+             PER_PIT: 10 },
 
   /* スラブヤード —— 面削（フライス）を終えてピット炉へ入るのを待つスラブの置き場。
    * 上下面は鏡面、側面と長辺の丸みは鋳肌のまま（＝圧延材と同じ Sect / MAT.slabFaces）。
@@ -1782,8 +1811,12 @@ const CONFIG = {
    *   スラブ —— 盤木の上。段は «真上に» 揃える（盤木で受けているのでずれない）。
    * BAN_DX は盤木の中心が長手のどこに来るか（板長に対する比）。両端に寄せ過ぎると
    * 自重で中央が垂れ、内へ寄せ過ぎると端が垂れるので、支点は 1/5 点あたりに置く。 */
-  SLAB_YARD: { Z0: 12000, ROW_DZ: 5200, ROWS: 2, PER_ROW: 8, PITCH: -6200,
-               X0: -74000, STACK: 2, PLATE_T: 45, PLATE_MARGIN: 1200,
+  /* 幅は «1 列 ＋ 通路» の 3 m 弱（板幅 1,330 ＋ 余白 2×800 ＝ 2,930）。
+   * 2 列 8.9 m ではラインと炉の間が空き過ぎていたので 1 列にし、そのぶん
+   * ラインへ寄せた（Z0 12,000 → 4,200）。列を減らした置き数は段積みで戻す
+   * （STACK 2 → 3 で 16 枚のまま）。 */
+  SLAB_YARD: { Z0: 4200, ROW_DZ: 5200, ROWS: 1, PER_ROW: 9, PITCH: -6200,
+               X0: -74000, STACK: 3, PLATE_T: 45, PLATE_MARGIN: 800,
                BAN_T: 300, BAN_OVER: 120, BAN_DX: 0.30 },
   /*
    * 装入クレーン（ピットクレーン）—— 転倒軸の真上に固定された橋（X 方向には走行しない。
@@ -1795,7 +1828,7 @@ const CONFIG = {
    * 正準オフセット）。炉が 9 基に増えて 100 m 近い走行域になったので、柱のピッチも広げる。
    * 走行桁の Z は «ラインを跨いで» 反対側（−6,500）と炉の外側（+27,000）に置く ——
    * 入側テーブル（Z ±1,765）とスラブヤード・炉バンクのどれにも柱を落とさないため。 */
-  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 27000, RUN_X0: -107000, RUN_X1: 0, COL_PITCH: 12000,
+  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -134000, RUN_X1: 0, COL_PITCH: 12000,
              TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600,
              /* 定格速度 [m/min] と加減速度 [m/s²]。ここが «速度の唯一の真実» で、
               * 装入シーケンスの所要秒も、画面上の動きも、材料を放したあとの戻りも
@@ -1817,19 +1850,35 @@ const CONFIG = {
               * 真下のトング（＝炉口）を見下ろせるようにする（実機の «飛行機の操縦席» の感）。
               * DX はトロリ中心からの張り出し（トングの視界を塞がない側へ寄せる）。 */
              CAB: { W: 2000, H: 2200, D: 2400, DX: 2600, SILL: 0.34 },
-             /* トング（立てたスラブの板厚面を挟む）。形の生成器と姿勢の解き方は
-              * トランスファークレーンと共通（Parts.tong* / TongRig）で、寸法だけが違う。
-              * 板を «立てたまま» 掴むので、爪パッドは板幅の方向（世界 Z）に長い。 */
+             /* ピットクレーンのトング —— «スラブの長手側面（3,450 × 板厚の面）» を挟む。
+              *
+              * 以前は «板厚の面»（幅 × 長さの広い面）を挟んでいたが、転倒機はその広い面を
+              * 受け面で受けるので、爪が板と受け面の間に挟まって当たる。長手側面を挟めば
+              * 爪は板の «横» に居るだけになり、転倒機とどこも取り合わない。
+              * したがって爪は世界 Z（＝板幅の方向）に開閉し、パッドは板厚の面に当たるので
+              * 板厚より少し狭い（JAW_PAD）。
+              *
+              * 形は図面の «2 本の長い湾曲アーム ＋ 下すぼまりの箱型ボディ» に合わせる:
+              *   PIVOT_Z … アームのピンはトング中心から左右へ離れた 2 本（図の 2 つのボス）
+              *   BODY    … そのピンの間に吊り下がる箱（リブと帯板を持つ）
+              *   アーム  … ピンから外へ開きながら降り、途中から鉛直に落ちて爪へ至る
+              * 掴む高さは «板の上端から GRIP_DOWN 下» —— 上のほうを掴むので、
+              * ボディは板の頭より上に収まり、板の中に入り込まない。 */
              TONG: {
-               W_MAX: 1800, ROD_SPAN: 1100, H: 2600, JAW_H: 520,
-               PIVOT_H: 980,
-               SHOULDER_Z: 800, SHOULDER_Y: -190,
-               OUTER_Z: 880, OUTER_Y: -560,
-               ROD_PIN_Y: -330,
-               CROSS_Y: 470, CROSS_H: 280,
-               CYL_D: 300, CYL_L: 440, CYL_Y: 520,
-               ROD_D: 150,
-               ARM_T: 170, JAW_T: 180, JAW_PAD: 1300, MAST: 380, JAW_LIFT: 40,
+               STYLE: 'PIT',
+               W_MAX: 2800,          // 全開時の爪内面の間隔（板幅の最大 2,200 ＋ 逃げ）
+               PIVOT_Z: 430,         // アームのピン（トング中心から Z へ）
+               PIVOT_H: 2200,        // ピン中心 → 爪先
+               H: 4200,              // ピン中心 → 吊りピン（マスト頭）
+               GRIP_DOWN: 900,       // 板の上端から爪先までの深さ
+               JAW_H: 700, JAW_T: 200, JAW_PAD: 460, JAW_LIFT: 0,
+               ARM_T: 260, MAST: 520,
+               SPLAY: [0.85, 0.32, 1.0, 0.60],   // アームの折れ点（[z比, y比] × 2）
+               ROD_SPAN: 1300, ROD_PIN_Y: -700,
+               CROSS_Y: 1100, CROSS_H: 340,
+               CYL_D: 360, CYL_L: 1000, CYL_Y: 1100,
+               ROD_D: 190,
+               BODY: { W: 1050, W2: 700, H: 1050, T: 820, TOP: -150 },
              } },
 
   /* 装入シーケンス。[フェーズ, 進捗キー, 所要秒, 表示文] を並べるだけで工程が決まる。
@@ -1844,21 +1893,30 @@ const CONFIG = {
     ['SET',      'set',      null, '転倒機にスラブを立てかけています'],
     ['TILT',     'tilt',     3.6,  '転倒装置でスラブを倒しています'],
     ['FEED',     'feed',     1.6,  '転倒機ベッドのテーブルローラでスラブを受取テーブルへ送っています'],
-    ['GRAB',     'grab',     3.2,  'トランスファークレーンが倒したスラブをトングで掴んで吊り上げています'],
-    ['TRANSFER', 'transfer', 3.2,  'トランスファークレーンでミルラインへ横移動しています'],
-    ['LOWER',    'lower',    2.6,  '入側テーブルへ降ろしています'],
+    ['GRAB',     'grab',     null, 'トランスファークレーンが倒したスラブをトングで掴んで吊り上げています'],
+    ['TRANSFER', 'transfer', null, 'トランスファークレーンでミルラインへ横移動しています'],
+    ['LOWER',    'lower',    null, '入側テーブルへ降ろしています'],
   ],
 
-  /* 装入クレーンが動く工程の «距離 ⇄ 定格速度» の対応表。
-   * d は Layout.supplyPath().move の距離キー、v は CRANE.SPEED の速度キー。
-   * 所要秒（SupplyController）も途中位置（SupplyView._pose）もここを見るので、
+  /* クレーンが動く工程の «距離 ⇄ 定格速度» の対応表。
+   *   by  … どちらのクレーンか（CONFIG[by].SPEED を見る）
+   *   d   … Layout.supplyPath().move の距離キー
+   *   v   … SPEED の速度キー
+   *   win … その工程のうち «実際に動いている» 進捗の区間。掴む・放す動作を含む工程は
+   *          動くのが一部だけなので、所要秒は 移動時間 ÷ 区間の長さ になる。
+   * 所要秒（SupplyController）も途中位置（SupplyView）もここを見るので、
    * «何秒かかるか» と «どう見えるか» が原理的にずれない。
    * SET（転倒機へ立てかける降下）は吊ったまま降ろすので巻上と同じ定格。 */
   CRANE_MOVES: {
-    hoist:    { d: 'hoist',    v: 'HOIST'    },
-    travel:   { d: 'travel',   v: 'TRAVEL'   },
-    traverse: { d: 'traverse', v: 'TRAVERSE' },
-    set:      { d: 'set',      v: 'HOIST'    },
+    hoist:    { by: 'CRANE',    d: 'hoist',    v: 'HOIST',     win: [0, 1] },
+    travel:   { by: 'CRANE',    d: 'travel',   v: 'TRAVEL',    win: [0, 1] },
+    traverse: { by: 'CRANE',    d: 'traverse', v: 'TRAVERSE',  win: [0, 1] },
+    set:      { by: 'CRANE',    d: 'set',      v: 'HOIST',     win: [0, 1] },
+    // トランスファークレーン。GRAB は «降ろす → 掴む → 吊り上げる» の 3 段で、
+    // 動くのは前後の 1/4 ずつ。LOWER は前半 0.6 で降ろし、残りで放して爪を上げる。
+    grab:     { by: 'TRANSFER', d: 'lift',     v: 'HOIST',     win: [0.6, 1], win2: [0.05, 0.45] },
+    transfer: { by: 'TRANSFER', d: 'cross',    v: 'TRAVERSE',  win: [0, 1] },
+    lower:    { by: 'TRANSFER', d: 'lift',     v: 'HOIST',     win: [0, 0.6] },
   },
 
   /* 巻取機（出側リール）—— 板材放出だけでなくコイル巻取ができる。
@@ -2079,7 +2137,7 @@ const CONFIG = {
   // ピット幅（X）はハウジングのソールプレート（±2,200）が収まる最小に留める。ピットの
   // 真上には何も立てない（テーブル架台・エプロン脚はピット壁の上か床の上に置く）。
   // 深さはソールプレート下面（BOT_Y）に一致させ、ハウジングはピット床に接地する。
-  BUILDING: { X0: -132000, X1: 98000, Z: 34000, PIT: { X: 2300, Z: 6000, DEPTH: 3600 } },
+  BUILDING: { X0: -150000, X1: 98000, Z: 34000, PIT: { X: 2300, Z: 6000, DEPTH: 3600 } },
 
   /* --- 材料・プロセス定数（アルミニウム熱間圧延） ---------------------------
    * 変形抵抗   k = C·exp(−b(T−Tref))·ε̇^m          [MPa]
@@ -2690,20 +2748,30 @@ const Layout = {
     const xStand = S.TILTER_X - F * (D + th / 2);
     const yPit = -FU.DEPTH + L / 2, yHi = passY + CR.HOIST_CLEAR + L / 2, yStand = passY - D + L / 2;
     return { xPit, xStand, xFlat: Layout.entryX, yPit, yHi, yStand, zPit: FU.Z, zStand: S.SIDE_Z, D,
-             move: { hoist: yHi - yPit, travel: xStand - xPit, traverse: S.SIDE_Z - FU.Z, set: yHi - yStand } };
+             move: { hoist: yHi - yPit, travel: xStand - xPit, traverse: S.SIDE_Z - FU.Z, set: yHi - yStand,
+                     lift: CONFIG.TRANSFER.LIFT, cross: S.SIDE_Z } };
   },
-  /** 工程 key の台形速度線図の諸元（距離・定格速度 mm/s・加速度 mm/s²）。無ければ null。 */
+  /** 工程 key の台形速度線図の諸元（距離・定格速度 mm/s・加速度 mm/s²・動く区間）。無ければ null。 */
   moveRamp(key, slab, passY) {
     const m = CONFIG.CRANE_MOVES[key]; if (!m) return null;
-    const sp = CONFIG.CRANE.SPEED;
-    return { d: Layout.supplyPath(slab, passY).move[m.d], v: Ramp.mpm(sp[m.v]), a: sp.ACCEL * 1000 };
+    const sp = CONFIG[m.by].SPEED, w = m.win;
+    return { d: Layout.supplyPath(slab, passY).move[m.d], v: Ramp.mpm(sp[m.v]), a: sp.ACCEL * 1000,
+             win: w, win2: m.win2, span: w[1] - w[0] };
   },
-  /** 工程 key の所要秒（距離 ÷ 定格速度）。動かない工程は 0。 */
-  moveSec(key, slab, passY) { const r = Layout.moveRamp(key, slab, passY); return r ? Ramp.time(r.d, r.v, r.a) : 0; },
-  /** 工程 key の進捗 p（時間比）→ 距離比。moveSec と同じ線図の上を通る。 */
-  moveS(key, p, slab, passY) {
+  /** 工程 key の所要秒。動くのが一部だけの工程は «移動時間 ÷ その区間» に伸ばす。 */
+  moveSec(key, slab, passY) {
     const r = Layout.moveRamp(key, slab, passY);
-    return r ? Ramp.s(p, r.d, r.v, r.a) : Num.clamp(p, 0, 1);
+    return r ? Ramp.time(r.d, r.v, r.a) / r.span : 0;
+  },
+  /**
+   * 工程 key の進捗 p（時間比）→ 距離比。moveSec と同じ線図の上を通る。
+   * win（既定はその工程の動く区間）の外では 0 / 1 に張り付く。
+   */
+  moveS(key, p, slab, passY, win) {
+    const r = Layout.moveRamp(key, slab, passY);
+    if (!r) return Num.clamp(p, 0, 1);
+    const [a, b] = win || r.win;
+    return Ramp.s(Num.clamp((p - a) / (b - a), 0, 1), r.d, r.v, r.a);
   },
   /** 材質キー → 炉の添字（0 起点）。ALLOYS[key].pit が真実で、範囲外は 1 番炉へ落とす。 */
   pitOf(alloyKey = CONFIG.MATERIAL.ALLOY) {
@@ -5145,16 +5213,22 @@ class TongRig {
     const near = opt.near ?? ((m) => m);
     this.g = new THREE.Group(); this.g.name = 'トング';
     this.g.rotation.y = opt.yaw ?? 0;
+    this.pz = T.PIVOT_Z ?? 0;                          // アームのピンが中心から離れている距離
     host.add(this.g);
-    for (const geo of [Parts.tongMast(T), Parts.tongCrosshead(T)]) {
+    /* 形は «寸法表が持つ様式» で切り替える。骨組み（ピン 1 本で開閉する 2 本のアーム）は
+     * 同じなので、姿勢の解き方（set）は 1 つで足りる。 */
+    const pit = T.STYLE === 'PIT';
+    for (const geo of (pit ? [Parts.pitTongHead(T), Parts.pitTongBody(T), Parts.tongCrosshead(T)]
+                           : [Parts.tongMast(T), Parts.tongCrosshead(T)])) {
       const m = near(new THREE.Mesh(geo, MAT.hydraulic), MAT.hydraulic); m.castShadow = true; this.g.add(m);
     }
-    const armGeo = Parts.tongArm(T), cylGeo = Parts.tongCylinder(T), rodGeo = Parts.tongRod(T);
+    const armGeo = pit ? Parts.pitTongArm(T) : Parts.tongArm(T);
+    const cylGeo = Parts.tongCylinder(T), rodGeo = Parts.tongRod(T);
     this.arms = []; this.rods = [];
     // −Z 側は親グループを Y 180° 回した鏡像なので、アームの回転は両側とも同じ符号で書ける
     for (const sz of [-1, 1]) {
       const side = new THREE.Group(); if (sz < 0) side.rotation.y = Math.PI; this.g.add(side);
-      const arm = new THREE.Group(); side.add(arm); this.arms.push(arm);
+      const arm = new THREE.Group(); arm.position.z = u(this.pz); side.add(arm); this.arms.push(arm);
       const am = near(new THREE.Mesh(armGeo, MAT.hydraulic), MAT.hydraulic); am.castShadow = true; arm.add(am);
       const cyl = near(new THREE.Mesh(cylGeo, MAT.hydraulic), MAT.hydraulic); cyl.castShadow = true;
       cyl.position.z = u(T.ROD_SPAN / 2); side.add(cyl);          // 受け梁の端に鉛直に据える
@@ -5168,16 +5242,18 @@ class TongRig {
    * 返り値の mastTop は «吊りピンの高さ» —— 吊る側（ワイヤ／マスト）はここへ繋ぐ。
    */
   set(x, jawY, z, halfGrip) {
-    const T = this.T;
-    const zOpen = T.W_MAX / 2 - T.JAW_T;                          // 全開時の爪内面
-    const R = Math.hypot(zOpen, T.PIVOT_H), a0 = Math.atan2(zOpen, T.PIVOT_H);
-    const a = Math.asin(Num.clamp(Math.min(halfGrip, zOpen) / R, -1, 1));
+    const T = this.T, pz = this.pz;
+    // 距離はすべて «アームのピン» から測る（ピンが中心から pz 離れていてもよい）
+    const zOpen = T.W_MAX / 2 - T.JAW_T;                          // 全開時の爪内面（トング中心から）
+    const zl = zOpen - pz;                                        // ピン → 爪内面
+    const R = Math.hypot(zl, T.PIVOT_H), a0 = Math.atan2(zl, T.PIVOT_H);
+    const a = Math.asin(Num.clamp(Math.min(halfGrip - pz, zl) / R, -1, 1));
     const pivotY = jawY + R * Math.cos(a), mastTop = pivotY + (T.H - T.PIVOT_H);
     // ロッドピンはアームと一体なので «同じ回転» を掛けるだけ。シリンダ本体は受け梁に
     // 固定されたままなので、ロッドの «出代» がこの 2 点間の距離として自然に決まる。
     const arot = a0 - a, cs = Math.cos(arot), sn = Math.sin(arot);
-    const rz0 = T.ROD_SPAN / 2, ry0 = T.ROD_PIN_Y;
-    const rz = ry0 * sn + rz0 * cs, ry = ry0 * cs - rz0 * sn;
+    const rz0 = T.ROD_SPAN / 2, ry0 = T.ROD_PIN_Y, lz0 = rz0 - pz;
+    const rz = pz + (ry0 * sn + lz0 * cs), ry = ry0 * cs - lz0 * sn;
     const dz = rz - rz0, dy = ry - this.rodTopY;
     const rl = Math.hypot(dz, dy), rAng = Math.atan2(-dz, -dy);
     this.g.position.set(u(x), u(pivotY), u(z));
@@ -8092,6 +8168,98 @@ const Parts = {
     ]);
   },
 
+  /* --- ピットクレーンのトング（図面の «2 本の長い湾曲アーム ＋ 箱型ボディ»）-----
+   * 骨組みはトランスファークレーンのトングと同じ（ピンのまわりに回る 2 本のアームを
+   * シリンダで開閉する）が、掴むものが «立てたスラブの長手側面» なので姿が違う。
+   *   ・ピンが 2 本（中心から ±PIVOT_Z）に分かれ、その間にボディが吊り下がる
+   *   ・アームはピンから外へ開きながら降り、途中から鉛直に落ちて爪へ至る
+   *   ・爪は内側を向いた «かぎ» で、板の側面を噛む
+   * 寸法はすべて CONFIG.CRANE.TONG から取るので、板の最大寸法を変えれば形も追従する。
+   * ------------------------------------------------------------------------ */
+
+  /** 上部のリンク板と 2 本のピン、そこから伸びる首（吊りピンまで）。原点＝ピンの高さの中心。 */
+  pitTongHead(T = CONFIG.CRANE.TONG) {
+    const t = T.ARM_T, pz = T.PIVOT_Z, up = T.H - T.PIVOT_H, mw = T.MAST;
+    const parts = [
+      G.at(G.box(t + 160, 300, 2 * pz + 760), 0, 0, 0),                       // リンク板（2 本のピンを渡す）
+      G.at(G.box(mw, up - 320, mw), 0, (up - 320) / 2 + 160, 0),              // 首（マスト）
+      G.at(G.box(mw + 220, 300, mw + 180), 0, up - 150, 0),                   // 上部ヘッド
+      G.at(G.cyl(240, mw + 480, 'x', 12), 0, up - 150, 0),                    // 吊りピン
+      G.at(G.cyl(120, 400, 'y', 8), 0, up + 200, 0),                          // 頂部の吊り金具
+    ];
+    for (const sz of [-1, 1]) {
+      parts.push(G.at(G.cyl(520, t + 260, 'x', 16), 0, 0, sz * pz));          // アームのピン（図の 2 つのボス）
+      for (const sx of [-1, 1])                                               // ピン端の座金
+        parts.push(G.at(G.cyl(620, 70, 'x', 16), sx * (t / 2 + 160), 0, sz * pz));
+      // 首とリンク板を繋ぐ三角リブ
+      parts.push(G.at(G.box(t - 40, 300, pz * 0.9), 0, 300, sz * pz * 0.5,
+                      Math.atan2(300, sz * pz * 0.9) - Math.PI / 2));
+    }
+    // マストの回り止め（吊りビームのハンガーに嵌まる案内板）
+    for (const sz of [-1, 1]) parts.push(G.at(G.box(mw + 160, 220, 90), 0, up - 480, sz * (mw / 2 + 45)));
+    return G.merge(parts);
+  },
+
+  /**
+   * 2 本のピンの間に吊り下がる箱型ボディ（下すぼまり）。図の «リブと帯板の付いた箱»。
+   * 板の頭より上に収まる高さにしてあるので、掴んでいる間も板と取り合わない。
+   */
+  pitTongBody(T = CONFIG.CRANE.TONG) {
+    const B = T.BODY, y0 = B.TOP, y1 = B.TOP - B.H, wT = B.W / 2, wB = B.W2 / 2, parts = [];
+    const slant = Math.hypot(B.H, wT - wB), ang = Math.atan2(wT - wB, B.H);
+    parts.push(G.at(G.box(B.T + 120, 110, B.W + 160), 0, y0, 0));                    // 天板（ピンの間に渡る）
+    parts.push(G.at(G.box(B.T, 90, B.W2), 0, y1, 0));                                // 底のフランジ
+    for (const sz of [-1, 1]) {                                                      // 下すぼまりの側板（Z 側）
+      parts.push(G.at(G.box(B.T, slant, 90), 0, (y0 + y1) / 2, sz * (wT + wB) / 2, sz * ang));
+      // 側板の «帯»（図の横一文字の補強）と縦リブ 3 本
+      parts.push(G.at(G.box(B.T + 40, 120, 70), 0, y0 - B.H * 0.42, sz * ((wT + wB) / 2 + 40)));
+      for (const k of [-1, 0, 1])
+        parts.push(G.at(G.box(120, slant - 120, 60), k * B.T * 0.3, (y0 + y1) / 2, sz * ((wT + wB) / 2 + 40), sz * ang));
+    }
+    for (const sx of [-1, 1])                                                        // 前後の面（X 側・台形を平均幅で）
+      parts.push(G.at(G.box(70, B.H, (B.W + B.W2) / 2), sx * B.T / 2, (y0 + y1) / 2, 0));
+    return G.merge(parts);
+  },
+
+  /**
+   * アーム 1 本（+Z 側・全開の姿勢）。原点は «そのアーム自身のピン»。
+   * ピンから外へ開きながら降り（SPLAY の折れ点）、鉛直に落ちて爪へ至る。
+   * −Z 側は親グループを Y 180° 回した鏡像で作るので、開閉は rotation.x だけで表せる。
+   */
+  pitTongArm(T = CONFIG.CRANE.TONG) {
+    const t = T.ARM_T, pz = T.PIVOT_Z, P = T.PIVOT_H;
+    const zl = T.W_MAX / 2 - T.JAW_T - pz;                    // ピン → 爪内面（全開）
+    const jz = zl + T.JAW_T / 2;                              // 爪パッドの中心
+    const rz = T.ROD_SPAN / 2 - pz, ry = T.ROD_PIN_Y;         // ロッドピン（ピンからの相対）
+    const bar = (z0, y0, z1, y1, hh) => {
+      const dz = z1 - z0, dy = y1 - y0;
+      return G.at(G.box(t, hh, Math.hypot(dz, dy)), 0, (y0 + y1) / 2, (z0 + z1) / 2, Math.atan2(-dy, dz));
+    };
+    const [k1z, k1y, k2z, k2y] = T.SPLAY;
+    const b1z = zl * k1z, b1y = -P * k1y, b2z = zl * k2z, b2y = -P * k2y;
+    const jawY = -P + T.JAW_H;                                // 爪台の上端
+    return G.merge([
+      G.at(G.cyl(460, t, 'x', 16), 0, 0, 0),                                        // ピンのボス
+      bar(0, 0, b1z, b1y, 360),                                                     // ピン → 外へ開く
+      bar(b1z, b1y, b2z, b2y, 330),                                                 // 開き切るまで
+      bar(b2z, b2y, zl, jawY, 300),                                                 // ここから鉛直に爪へ
+      bar(0, 0, rz, ry, 240),                                                       // ロッドピンの腕
+      G.at(G.cyl(260, t + 140, 'x', 12), 0, ry, rz),                                // ロッドピン
+      bar(rz, ry, b1z, b1y, 190),                                                   // 腕と本体を繋ぐリブ
+      G.at(G.box(T.JAW_PAD, T.JAW_H, T.JAW_T), 0, -P + T.JAW_H / 2, jz),            // 爪パッド
+      /* 爪先の «かぎ»（図の内へ曲がった先端）。板の側面を噛んで滑らせない。
+       * 掴み面（z = zl）より内へ出るのは «噛み込む深さ» ぶんだけに留める ——
+       * 深く出すと、爪を閉じたときに板の中へ食い込んだ絵になる。 */
+      G.at(G.box(T.JAW_PAD - 60, 180, 200), 0, -P + 90, zl + 60, -0.32),
+      G.at(G.box(T.JAW_PAD, 150, T.JAW_T), 0, -P + 75, jz),                       // 爪台の下端
+      // 噛み止めの刻み（横溝）
+      ...Array.from({ length: 4 }, (_, k) =>
+        G.at(G.box(T.JAW_PAD - 80, 60, 70), 0, -P + T.JAW_H * (0.35 + 0.17 * k), zl + 15)),
+      // ロッドピンの端部を塞ぐ座金
+      ...[-1, 1].map(sx => G.at(G.cyl(350, 50, 'x', 12), sx * (t / 2 + 90), ry, rz)),
+    ]);
+  },
+
   /* --- ピット炉（スラブを立てたまま加熱する） ----------------------------- */
   furnacePit() {
     const F = CONFIG.FURNACE, w = F.WALL, parts = [];
@@ -9685,7 +9853,9 @@ class SupplyView {
     /* トング（立てたスラブの板厚の面を挟む）。爪が閉じる向きを ±X にしたいので
      * Y まわりに 90° 回す（生成器は ±Z に閉じる姿勢で作ってある）。
      * これで爪パッドの長手（ローカル X）は世界 Z ＝ 板幅の方向を向く。 */
-    this.pitTong = new TongRig(CR.TONG, this.group, { yaw: Math.PI / 2, near });
+    /* 爪は «板幅の方向»（世界 Z）に開閉する —— 掴むのはスラブの長手側面なので。
+     * 以前は yaw = π/2 で板厚の面を挟んでおり、転倒機の受け面と爪が同じ場所を取り合った。 */
+    this.pitTong = new TongRig(CR.TONG, this.group, { yaw: 0, near });
     this._crane = { x: null, z: CONFIG.FURNACE.Z, beamY: null };   // 装入クレーンの現在位置（走行 X・横行 Z・昇降。急に戻さず速度制限で戻す）
 
     // --- トランスファークレーン：ピットクレーンとは完全に別の、低い最小限フレーム ---
@@ -9795,9 +9965,9 @@ class SupplyView {
         return { x: Num.lerp(x0, xFlat, p.feed), y: P + th / 2, z: S.SIDE_Z, rot: 0, hung: false };
       }
       // トランスファークレーン: トングで掴んで吊り上げ（GRAB）→ 横移動（TRANSFER）→ 降ろす（LOWER）
-      case 'GRAB':     return { x: xFlat, y: P + th / 2 + TR.LIFT * Num.smoothstep(0.75, 1, p.grab), z: S.SIDE_Z, rot: 0, hung: false };
-      case 'TRANSFER': return { x: xFlat, y: P + th / 2 + TR.LIFT, z: Num.lerp(S.SIDE_Z, 0, Num.smoothstep(0, 1, p.transfer)), rot: 0, hung: false };
-      case 'LOWER':    return { x: xFlat, y: P + th / 2 + TR.LIFT * (1 - Num.smoothstep(0, 0.6, p.lower)), z: 0, rot: 0, hung: false };
+      case 'GRAB':     return { x: xFlat, y: P + th / 2 + TR.LIFT * mv('grab'), z: S.SIDE_Z, rot: 0, hung: false };
+      case 'TRANSFER': return { x: xFlat, y: P + th / 2 + TR.LIFT, z: Num.lerp(S.SIDE_Z, 0, mv('transfer')), rot: 0, hung: false };
+      case 'LOWER':    return { x: xFlat, y: P + th / 2 + TR.LIFT * (1 - mv('lower')), z: 0, rot: 0, hung: false };
       default:         return { x: xFlat, y: P + th / 2, z: 0, rot: 0, hung: false };
     }
   }
@@ -9819,10 +9989,12 @@ class SupplyView {
     const ph = sup.active ? sup.phase : (slab.onLine ? 'DONE' : 'LID');
     switch (ph) {
       case 'GRAB': {
-        const g = p.grab;
+        const g = p.grab, M = CONFIG.CRANE_MOVES.grab;
+        // 降ろす（win2）→ 掴む → 吊り上げる（win）。上下はどちらも巻上の定格速度で動く。
         return { x: xFlat, z: S.SIDE_Z,
-                 jawY: Num.lerp(high, grabY, Num.smoothstep(0.35, 0.6, g)) + TR.LIFT * Num.smoothstep(0.75, 1, g),
-                 open: 1 - Num.smoothstep(0.6, 0.75, g) };
+                 jawY: Num.lerp(high, grabY, Layout.moveS('grab', g, slab, P, M.win2))
+                       + TR.LIFT * Layout.moveS('grab', g, slab, P),
+                 open: 1 - Num.smoothstep(0.45, 0.6, g) };
       }
       case 'TRANSFER': return { x: xFlat, z: pose.z, jawY: jawOf(pose.y), open: 0 };
       case 'LOWER': {
@@ -9883,8 +10055,10 @@ class SupplyView {
      * 吊りピンの高さが幾何で決まり、そこから内筒の出代（＝伸ばす長さ）が決まる。
      * 立てたスラブは板厚の面を掴むので、掴む半幅は板厚の半分。 */
     const TGP = CR.TONG;
-    const gripPit = hung ? th / 2 : TGP.W_MAX / 2 - TGP.JAW_T;          // 放しているときは全開
-    const jawY = (hung ? pose.y - L / 2 : c.beamY - 1400) + TGP.JAW_LIFT;
+    /* 掴むのは長手側面なので開き幅は «板幅の半分»。掴む高さは板の上端から GRIP_DOWN 下
+     * —— 上のほうを掴むので、ボディもシリンダも板の頭より上に収まる。 */
+    const gripPit = hung ? w / 2 : TGP.W_MAX / 2 - TGP.JAW_T;           // 放しているときは全開
+    const jawY = (hung ? pose.y + L / 2 - TGP.GRIP_DOWN : c.beamY - 1400) + TGP.JAW_LIFT;
     const tp = this.pitTong.set(c.x, jawY, c.z, gripPit);
     this.mastHead.position.set(u(c.x), u(tp.mastTop), u(c.z));
     // 外筒はトロリの下面に固定。内筒はその中から «頭» まで伸びる

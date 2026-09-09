@@ -1,0 +1,124 @@
+// ピット炉バンク・スラブヤードの配置と、ピットクレーンのトングの «掴み方» を検査する。
+//
+// 見たいのは 3 つ。
+//   ① ヤードが «3 m 幅の 1 列» でラインのすぐ脇に居るか、炉がその外に詰めて並ぶか
+//   ② 炉の内法が «立てたスラブ 10 本» を呑めるか（板厚の面を突き合わせて並ぶ向き）
+//   ③ トングがスラブの «長手側面» を掴み、ボディが板の頭より上に収まっているか
+//      —— 板厚の面を掴むと転倒機の受け面と爪が同じ場所を取り合う。
+import { openApp, installHelpers } from './harness.mjs';
+
+const { browser, page } = await openApp({ viewport: { width: 900, height: 520 }, quiet: true });
+await installHelpers(page);
+
+const out = await page.evaluate(async () => {
+  const A = window.__app, W = A.world, P = A.physics, K = window.__CFG, L = window.__LAYOUT, T = window.__T, S = K.SCALE;
+  const SV = W.supplyView, FU = K.FURNACE, Y = K.SLAB_YARD, TG = K.CRANE.TONG;
+
+  const bb = new T.Box3(), box = (o) => { const b = new T.Box3(); b.setFromObject(o); return {
+    x0: b.min.x / S, x1: b.max.x / S, y0: b.min.y / S, y1: b.max.y / S, z0: b.min.z / S, z1: b.max.z / S }; };
+
+  // --- 配置（設定値と実物の両方から） ---
+  const slab = P.slab, wid = slab.width, len = slab.length;
+  const plate = L.yardPlate(len, wid);
+  const pitHalfZ = FU.W / 2 + FU.WALL;
+  const pitZ0 = Math.abs(FU.Z) - pitHalfZ, pitZ1 = Math.abs(FU.Z) + pitHalfZ;
+  const yz0 = Math.min(Math.abs(plate.z0), Math.abs(plate.z1)), yz1 = Math.max(Math.abs(plate.z0), Math.abs(plate.z1));
+
+  // --- トング: 吊り上げ切った瞬間の姿勢で測る ---
+  A.bus.emit('CMD_START_SUPPLY');
+  let g = 0;
+  while (P.supply.phase !== 'TRAVEL' && g++ < 400000) P.step(1 / 120);
+  P.step(1 / 120);
+  SV.update(P.supply, slab, P.mill, 1 / 60);
+  W.scene.updateMatrixWorld(true);                      // 位置を入れた «あと» の行列で測る
+  const pose = SV._pose(P.supply, slab, P.mill.passLine);
+  const slabTop = pose.y + len / 2, slabBot = pose.y - len / 2;
+
+  // g の直下: [0]=ヘッド [1]=ボディ [2]=受け梁 がトングの «動かない側»、その後ろが左右のアーム
+  // トングの中心（＝クレーンの居る Z）を原点にして測る
+  const tc = new T.Vector3(); SV.pitTong.g.getWorldPosition(tc);
+  const cz = tc.z / S;
+  const fixed = SV.pitTong.g.children.filter(o => o.isMesh).map(box);
+  const arms_g = SV.pitTong.arms, arms = arms_g.map(box);
+  const fixedY0 = Math.min(...fixed.map(b => b.y0));
+  const armY0 = Math.min(...arms.map(b => b.y0));
+  /* 爪の «内面» は、アームの箱ではなく «爪の高さにある頂点» で測る
+   * —— アームの箱にはピンのボス（トング中心の近く）も入ってしまうため。 */
+  const innerAt = (grp, side) => {
+    let best = null; const v = new T.Vector3();
+    grp.updateWorldMatrix(true, true);
+    grp.traverse(o => {
+      if (!o.isMesh || !o.geometry?.attributes?.position) return;
+      const pos = o.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+        const y = v.y / S, z = v.z / S - cz;
+        if (y > armY0 + TG.JAW_H) continue;               // 爪の高さだけを見る
+        if (side * z <= 0) continue;
+        if (best === null || side * z < side * best) best = z;
+      }
+    });
+    return best;
+  };
+  const armInnerZ = arms.map((_, i) => innerAt(arms_g[i], i === 0 ? -1 : 1));
+
+  return {
+    yard: { rows: Y.ROWS, stack: Y.STACK, band: yz1 - yz0, near: yz0, far: yz1,
+            slots: L.yardSlots().length, cap: L.yardSlots().reduce((a, q) => a + q.stack, 0) },
+    pit: { L: FU.L, W: FU.W, depth: FU.DEPTH, pitch: Math.abs(FU.PITCH), z0: pitZ0, z1: pitZ1,
+           perPit: FU.PER_PIT, cast: K.SLAB.CAST_MAX ?? 560, widMax: K.SLAB.WID_MAX, lenMax: K.SLAB.LEN_MAX,
+           bankEnd: Math.abs(L.pitX(FU.N - 1)) + FU.L / 2 + FU.WALL },
+    gapYardPit: pitZ0 - yz1,
+    building: Math.max(Math.abs(K.BUILDING.X0), Math.abs(K.BUILDING.X1)),
+    runway: Math.abs(K.CRANE.RUN_X0) + Math.abs(K.SUPPLY.TILTER_X),
+    girderZ1: K.CRANE.GIRDER_Z1,
+    tong: { yaw: SV.pitTong.g.rotation.y, pz: SV.pitTong.pz, gripHalf: wid / 2,
+            armInnerZ, fixedY0, armY0, slabTop, slabBot, gripDown: TG.GRIP_DOWN,
+            jawT: TG.JAW_T, jawPad: TG.JAW_PAD, th: slab.thickness, wMax: TG.W_MAX },
+  };
+});
+await browser.close();
+
+const checks = [];
+const ok = (n, c, g) => checks.push({ name: n, pass: !!c, got: g });
+const y = out.yard, p = out.pit, t = out.tong;
+
+// ① ヤード
+ok(`ヤードは 1 列（${y.rows} 列）`, y.rows === 1, y.rows);
+ok(`ヤードの幅が 3 m 前後（${(y.band / 1000).toFixed(2)} m）`, y.band >= 2400 && y.band <= 3600, y.band);
+ok(`ヤードがラインのすぐ脇（内側の縁 ${(y.near / 1000).toFixed(2)} m ≤ 3.5 m）`, y.near <= 3500, y.near);
+ok(`置ける枚数が減っていない（${y.cap} 枚 ≥ 16）`, y.cap >= 16, y.cap);
+
+// ② ピット炉
+ok(`炉の内法 L が立てたスラブ ${p.perPit} 本ぶん（${p.L} ≥ ${p.perPit * p.cast}）`, p.L >= p.perPit * p.cast, p.L);
+ok(`炉の内法 W が板幅の最大を呑む（${p.W} ≥ ${p.widMax}）`, p.W >= p.widMax, p.W);
+ok(`炉の深さが板長の最大より深い（${p.depth} ≥ ${p.lenMax}）`, p.depth >= p.lenMax, p.depth);
+ok(`炉のピッチが内法＋壁より広い（${p.pitch} ≥ ${p.L + 2 * 500}）`, p.pitch >= p.L + 1000, p.pitch);
+ok(`炉がヤードの外に 1〜4 m の間隔で並ぶ（${(out.gapYardPit / 1000).toFixed(2)} m）`,
+   out.gapYardPit >= 1000 && out.gapYardPit <= 4000, out.gapYardPit);
+ok(`炉バンクが建屋に収まる（端 ${(p.bankEnd / 1000).toFixed(1)} m ≤ ${(out.building / 1000).toFixed(0)} m）`,
+   p.bankEnd <= out.building, p.bankEnd);
+ok(`クレーン走行路が炉バンクを覆う（${(out.runway / 1000).toFixed(1)} m ≥ ${(p.bankEnd / 1000).toFixed(1)} m）`,
+   out.runway >= p.bankEnd, out.runway);
+ok(`走行桁の外端が炉の外に出ている（${out.girderZ1} ≥ ${Math.round(p.z1)}）`, out.girderZ1 >= p.z1, out.girderZ1);
+
+// ③ トング
+ok('爪は板幅の方向（世界 Z）に開閉する（yaw = 0）', Math.abs(t.yaw) < 1e-6, t.yaw);
+ok(`爪の全開が板幅の最大より広い（${t.wMax - 2 * t.jawT} ≥ ${p.widMax}）`, t.wMax - 2 * t.jawT >= p.widMax, t.wMax);
+ok(`爪パッドが板厚に収まる（${t.jawPad} ≤ ${t.th}）`, t.jawPad <= t.th, t.jawPad);
+const err = t.armInnerZ.map(z => Math.abs(Math.abs(z) - t.gripHalf));
+ok(`左右の爪が板の長手側面を掴んでいる（±${t.gripHalf} mm に対し誤差 ${err.map(e => e.toFixed(0)).join(' / ')} mm）`,
+   err.every(e => e <= 120), err.map(e => +e.toFixed(0)).join('/'));
+ok(`左右の爪が対称（${t.armInnerZ.map(z => z.toFixed(0)).join(' / ')}）`,
+   Math.abs(t.armInnerZ[0] + t.armInnerZ[1]) <= 60, t.armInnerZ.map(z => +z.toFixed(0)).join('/'));
+ok(`ボディ・受け梁が板の頭より上（下端 ${t.fixedY0.toFixed(0)} ≥ 板頭 ${t.slabTop.toFixed(0)} − 100）`,
+   t.fixedY0 >= t.slabTop - 100, (t.fixedY0 - t.slabTop).toFixed(0));
+ok(`爪は板の上のほうを掴む（爪先 ${t.armY0.toFixed(0)} が板の中央より上）`,
+   t.armY0 >= (t.slabTop + t.slabBot) / 2, (t.armY0 - t.slabBot).toFixed(0));
+
+console.log(JSON.stringify({ yard: y, pit: p, gapYardPit: Math.round(out.gapYardPit), tong: {
+  ...t, armInnerZ: t.armInnerZ.map(z => +z.toFixed(0)) } }, null, 1));
+for (const c of checks) console.log(`${c.pass ? 'OK  ' : 'NG  '} ${c.name}  → ${c.got}`);
+const bad = checks.filter(c => !c.pass);
+console.log(`\n${checks.length - bad.length}/${checks.length} ${bad.length ? 'FAIL' : 'PASS'}`);
+process.exit(bad.length ? 1 : 0);
