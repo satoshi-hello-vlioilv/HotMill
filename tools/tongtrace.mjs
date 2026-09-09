@@ -66,9 +66,13 @@ const out = await page.evaluate((EPS) => {
   ];
 
   window.__startAuto(true);
+  /* 見る時間は «装入シーケンスそのものの長さ» から取る。工程の秒はクレーンの定格速度と
+   * 距離から決まる（＝寸法を変えると伸び縮みする）ので、90 秒などと決め打ちにすると
+   * «終わらなかった» というだけで落ちる。実際、炉を離して置いた版で 157 秒に伸びた。 */
+  const budget = Math.ceil((P.supplyCtrl.remainSec || 90) * 1.3);
   const worst = {};
   let n = 0;
-  while (n++ < 120 * 90 && P.supply.active) {
+  while (n++ < 120 * budget && P.supply.active) {
     P.step(1 / 120);
     if (n % 6) continue;                                  // 0.05 s ごと（姿勢の更新は render で起きる）
     W.render(P, 0.05);
