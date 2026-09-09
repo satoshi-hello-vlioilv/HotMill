@@ -79,7 +79,11 @@ const out = await page.evaluate(async () => {
     girderZ1: K.CRANE.GIRDER_Z1,
     tong: { yaw: SV.pitTong.g.rotation.y, pz: SV.pitTong.pz, gripHalf: wid / 2,
             armInnerZ, fixedY0, armY0, slabTop, slabBot, gripDown: TG.GRIP_DOWN,
-            jawT: TG.JAW_T, jawPad: TG.JAW_PAD, th: slab.thickness, wMax: TG.W_MAX },
+            jawT: TG.JAW_T, jawPad: TG.JAW_PAD, th: slab.thickness, wMax: TG.W_MAX, wMin: TG.W_MIN,
+            ratedT: K.CRANE.RATED_T, liftSpec: K.CRANE.LIFT,
+            lift: L.supplyPath(slab, P.mill.passLine).move.hoist,
+            span: K.CRANE.GIRDER_Z1 - K.CRANE.GIRDER_Z0,
+            wire: { ropes: SV.ropesP?.length ?? 0, noMast: !SV.mastCol && !SV.mastSleeve } },
   };
 });
 await browser.close();
@@ -125,7 +129,16 @@ ok(`走行桁の外端が炉の外に出ている（${out.girderZ1} ≥ ${Math.r
 
 // ③ トング
 ok('爪は板幅の方向（世界 Z）に開閉する（yaw = 0）', Math.abs(t.yaw) < 1e-6, t.yaw);
-ok(`爪の全開が板幅の最大より広い（${t.wMax - 2 * t.jawT} ≥ ${p.widMax}）`, t.wMax - 2 * t.jawT >= p.widMax, t.wMax);
+// 図面の «トング最大開き 1,900 / 最小 250»。掴める板幅は 1,900 − 爪厚 2 枚。
+ok(`爪の全開が図面どおり（外側 ${t.wMax} mm ＝ トング最大開き）`, t.wMax === 1900, t.wMax);
+ok(`爪の最小開きが図面どおり（${t.wMin} mm）`, t.wMin === 250, t.wMin);
+ok(`既定ロットの板幅を掴める（掴める最大 ${t.wMax - 2 * t.jawT} ≥ ${t.gripHalf * 2}）`,
+   t.wMax - 2 * t.jawT >= t.gripHalf * 2, t.wMax - 2 * t.jawT);
+ok(`定格荷重 ${t.ratedT} t が仕様どおり`, t.ratedT === 10, t.ratedT);
+ok(`揚程が仕様どおり（巻上距離 ${(t.lift / 1000).toFixed(2)} m ＝ ${(t.liftSpec / 1000).toFixed(1)} m）`,
+   Math.abs(t.lift - t.liftSpec) <= 50, Math.round(t.lift));
+ok(`スパンが仕様どおり（${(t.span / 1000).toFixed(1)} m ＝ 21 m）`, Math.abs(t.span - 21000) <= 50, t.span);
+ok('吊具がワイヤ吊り（剛体マストを持たない）', t.wire.ropes === 4 && t.wire.noMast, JSON.stringify(t.wire));
 ok(`爪パッドが板厚に収まる（${t.jawPad} ≤ ${t.th}）`, t.jawPad <= t.th, t.jawPad);
 const err = t.armInnerZ.map(z => Math.abs(Math.abs(z) - t.gripHalf));
 ok(`左右の爪が板の長手側面を掴んでいる（±${t.gripHalf} mm に対し誤差 ${err.map(e => e.toFixed(0)).join(' / ')} mm）`,

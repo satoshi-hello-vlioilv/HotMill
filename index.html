@@ -1838,15 +1838,28 @@ const CONFIG = {
    * 正準オフセット）。炉が 9 基に増えて 100 m 近い走行域になったので、柱のピッチも広げる。
    * 走行桁の Z は «ラインを跨いで» 反対側（−6,500）と炉の外側（+27,000）に置く ——
    * 入側テーブル（Z ±1,765）とスラブヤード・炉バンクのどれにも柱を落とさないため。 */
-  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -112000, RUN_X1: 0, COL_PITCH: 12000,
-             TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600,
+  /* 走行桁の Z スパンは仕様の «スパン 21 m»（−6,500 〜 +14,500）。 */
+  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14500, RUN_X0: -112000, RUN_X1: 0, COL_PITCH: 12000,
+             /* 主要事項（仕様書より）。定格荷重は «吊れる重さ» の上限なので、
+              * ロットの質量がこれを超えたら運転前に知らせる（UIManager._craneLoad）。 */
+             RATED_T: 10, TEST_K: 1.25, LIFT: 7500, VOLT: 220, HZ: 60,
+             MOTOR: { HOIST: 90, CLOSE: 55, TRAVERSE: 15, TRAVEL: 60, SLEW: 5.5, CAB: 1.5 },  // kW（走行 15×4・CAB 0.75×2）
+             /* 吊具はワイヤ 4 本掛け。トロリのシーブから «下部シーブブロック» へ降り、
+              * ブロックの下に旋回装置（4 rpm）を挟んでトングを吊る。 */
+             ROPE: { D: 42, FALLS: 4, SPREAD: 900, SPAN: 620, SHEAVE_D: 620, AXIS: 'x', TOP_DY: -0.34, BOT_DY: 300 },
+             BLOCK: { W: 1500, H: 700, D: 1100 },        // 下部シーブブロック
+             SLEW:  { D: 1150, H: 560 },                 // 旋回装置（ブロックとトングの間）
+             /* 揚程 7,500 mm は «炉底のスラブ底面 → 吊り上げ位置» の高さそのもの。
+              * HOIST_CLEAR はその差から決まる（炉深さ 5,200 − パスライン 900 で 7,500 になる）。 */
+             TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 1400,
              /* 定格速度 [m/min] と加減速度 [m/s²]。ここが «速度の唯一の真実» で、
               * 装入シーケンスの所要秒も、画面上の動きも、材料を放したあとの戻りも
-              * すべてこの 3 つから決まる（Ramp / Layout.moveRamp / SupplyView）。
-              * 値は製鉄・非鉄圧延の装入（ソーキングピット）クレーンの一般値:
-              *   走行 100〜150、横行 30〜60、巻上 10〜20 m/min。加速度は 0.3〜0.5 m/s²。
-              * 以前はここが無く、走行 77 m を 4.6 秒（＝約 1,000 m/min）で走っていた。 */
-             SPEED: { TRAVEL: 120, TRAVERSE: 45, HOIST: 15, ACCEL: 0.4 },
+              * すべてここから決まる（Ramp / Layout.moveRamp / SupplyView）。
+              * 値は仕様書の «主要事項» そのもの:
+              *   巻上 14（0.233 m/s）／横行 40（0.667）／走行 85（1.4167）m/min、
+              *   旋回 4 rpm（0.419 rad/s）／CAB 移動 30 m/min／開閉 3 回/min。
+              * 加減速度だけは仕様書に無いのでインバータ制御の一般値 0.4 m/s² を置く。 */
+             SPEED: { TRAVEL: 85, TRAVERSE: 40, HOIST: 14, ACCEL: 0.4, SLEW: 4, CAB: 30, CLOSE: 3 },
              /* 巻上ワイヤ。ドラムから «トロリ下面のシーブ» を経て吊りビーム上面の
               * シーブへ降り、2 本掛け（FALLS）で戻る。ワイヤの上端＝トロリのシーブ芯、
               * 下端＝ビームのシーブ芯にすると、両端がシーブに隠れて «繋がって» 見える
@@ -1876,7 +1889,8 @@ const CONFIG = {
               * ボディは板の頭より上に収まり、板の中に入り込まない。 */
              TONG: {
                STYLE: 'PIT',
-               W_MAX: 2800,          // 全開時の爪内面の間隔（板幅の最大 2,200 ＋ 逃げ）
+               W_MAX: 1900,          // 図面の «トング最大開き»（爪の外側どうし）
+               W_MIN: 250,           // 図面の «トング最小開き»（爪の内面どうし）
                PIVOT_Z: 430,         // アームのピン（トング中心から Z へ）
                PIVOT_H: 2200,        // ピン中心 → 爪先
                H: 4200,              // ピン中心 → 吊りピン（マスト頭）
@@ -5246,7 +5260,8 @@ class TongRig {
     this.rodTopY = T.CYL_Y - T.CYL_L / 2 - 100;        // ロッドが出る位置（シリンダ下蓋の下面）
     const near = opt.near ?? ((m) => m);
     this.g = new THREE.Group(); this.g.name = 'トング';
-    this.g.rotation.y = opt.yaw ?? 0;
+    this.yaw0 = opt.yaw ?? 0;                          // 爪が閉じる向きの基準（旋回はこれに足す）
+    this.g.rotation.y = this.yaw0;
     this.pz = T.PIVOT_Z ?? 0;                          // アームのピンが中心から離れている距離
     host.add(this.g);
     /* 形は «寸法表が持つ様式» で切り替える。骨組み（ピン 1 本で開閉する 2 本のアーム）は
@@ -8419,31 +8434,44 @@ const Parts = {
    * マストは 2 段。外筒はトロリに固定され、内筒がその中を伸び縮みする。
    */
   /** マスト外筒（トロリの下面に固定）。原点＝外筒の上端。 */
-  stackerSleeve(C = CONFIG.CRANE) {
-    const M = C.MAST, w = M.OUT_W, d = M.OUT_D, t = M.WALL, parts = [];
-    for (const sx of [-1, 1]) parts.push(G.at(G.box(t, M.OUT_H, d), sx * (w / 2 - t / 2), -M.OUT_H / 2, 0));
-    for (const sz of [-1, 1]) parts.push(G.at(G.box(w - 2 * t, M.OUT_H, t), 0, -M.OUT_H / 2, sz * (d / 2 - t / 2)));
-    // 上下端の案内ローラ（内筒を抱いて首振りを止める）
-    for (const dy of [-160, -M.OUT_H + 160]) for (const sx of [-1, 1])
-      parts.push(G.at(G.cyl(190, 220, 'x', 12), sx * (M.IN_W / 2 + 95), dy, 0));
-    parts.push(G.at(G.box(w + 320, 180, d + 320), 0, -90, 0));                       // トロリへの取付フランジ
-    // 昇降ラック（内筒を押し引きするピニオンの相手）。マストの片面に付く
-    parts.push(G.at(G.box(160, M.OUT_H - 300, 120), w / 2 + 80, -M.OUT_H / 2, 0));
+  /**
+   * 下部シーブブロック（ワイヤ 4 本掛けの «動滑車» 側）。原点＝ブロックの中心。
+   * トロリのシーブから降りたワイヤはここで折り返す。剛体マスト（スタッカー式）を
+   * やめてワイヤ吊りにしたので、吊具の重さはこのブロックが受ける。
+   */
+  pitRopeBlock(C = CONFIG.CRANE) {
+    const B = C.BLOCK, R = C.ROPE, parts = [];
+    parts.push(G.at(G.box(B.W, B.H, B.D), 0, 0, 0));                                 // 枠
+    parts.push(G.at(G.box(B.W + 220, 140, B.D + 220), 0, B.H / 2 + 70, 0));           // 上フランジ（ワイヤの入口）
+    parts.push(G.at(G.box(B.W * 0.62, 220, B.D * 0.62), 0, -B.H / 2 - 110, 0));       // 下フランジ（旋回装置へ）
+    // シーブ（ワイヤの折り返し）。4 本掛けなので 2 本の軸に 2 枚ずつ
+    for (const sz of [-1, 1]) for (const sd of [-1, 1])
+      parts.push(G.at(G.cyl(R.SHEAVE_D, 120, 'z', 16), sd * R.SPAN, 0, sz * R.SPREAD / 2 * 0.5));
+    for (const sd of [-1, 1])                                                        // シーブ軸
+      parts.push(G.at(G.cyl(190, B.D + 180, 'z', 12), sd * R.SPAN, 0, 0));
+    for (const sx of [-1, 1])                                                        // 側板のリブ
+      parts.push(G.at(G.box(90, B.H - 120, B.D - 160), sx * (B.W / 2 - 45), 0, 0));
     return G.merge(parts);
   },
-  /** マスト内筒（単位長 1,000 mm。上端が原点で下へ伸ばす。View が scale.y で実長へ）。 */
-  stackerColumn(C = CONFIG.CRANE) {
-    const M = C.MAST;
-    return G.at(G.box(M.IN_W, 1000, M.IN_D), 0, -500, 0);
-  },
-  /** 内筒の下端に付く «トング頭»（吊りピンを受ける）。原点＝吊りピン。 */
-  stackerHead(C = CONFIG.CRANE) {
-    const M = C.MAST;
-    return G.merge([
-      G.at(G.box(M.IN_W + 240, 320, M.IN_D + 240), 0, 260, 0),
-      G.at(G.cyl(260, M.IN_W + 520, 'x', 12), 0, 0, 0),                                // 吊りピン
-      ...[-1, 1].map(sx => G.at(G.cyl(380, 60, 'x', 12), sx * (M.IN_W / 2 + 280), 0, 0)),
-    ]);
+  /**
+   * 旋回装置（ブロックとトングの間）。仕様の «旋回 4 rpm・5.5 kW» の実体で、
+   * 吊ったスラブを水平面内で回す。上半分はブロック側（回らない）、
+   * 下半分はトング側（回る）—— View は下半分だけを回す。
+   */
+  pitSlewUnit(C = CONFIG.CRANE, moving = false) {
+    const W = C.SLEW, parts = [];
+    if (!moving) {
+      parts.push(G.at(G.cyl(W.D, W.H * 0.34, 'y', 20), 0, W.H * 0.33, 0));           // 固定側（外輪）
+      parts.push(G.at(G.box(360, 420, 360), W.D * 0.42, W.H * 0.62, 0));             // 旋回モータ
+      parts.push(G.at(G.cyl(240, 260, 'y', 12), W.D * 0.42, W.H * 0.95, 0));         // 減速機
+      return G.merge(parts);
+    }
+    parts.push(G.at(G.cyl(W.D * 0.92, W.H * 0.30, 'y', 20), 0, W.H * 0.05, 0));      // 回転側（内輪）
+    parts.push(G.at(G.cyl(W.D * 0.62, W.H * 0.36, 'y', 16), 0, -W.H * 0.28, 0));     // 首
+    for (const k of [0, 1, 2, 3])                                                     // 歯（旋回していることが見える）
+      parts.push(G.at(G.box(150, W.H * 0.22, 90), Math.cos(k * Math.PI / 2) * W.D * 0.40,
+                      W.H * 0.05, Math.sin(k * Math.PI / 2) * W.D * 0.40));
+    return G.merge(parts);
   },
   /**
    * 操縦席。桁の下でトロリと一緒に動き、真下のトング（＝炉口）を見下ろす。
@@ -9868,19 +9896,23 @@ class SupplyView {
     this.girder = near(new THREE.Mesh(Parts.craneGirder(CR), MAT.tableFrame), MAT.tableFrame);
     this.girder.name = '装入クレーン桁'; this.girder.castShadow = true;
     this.girder.position.set(u(S.TILTER_X), u(this.girderY), u(zc)); this.group.add(this.girder);
-    this.trolley = new THREE.Mesh(Parts.craneTrolley(CR.TROLLEY), MAT.hydraulic);
+    this.trolley = new THREE.Mesh(Parts.craneTrolley(CR.TROLLEY, CR.ROPE), MAT.hydraulic);
     this.trolley.name = 'トロリ'; this.trolley.castShadow = true; this.group.add(this.trolley);
-    /* 吊具は «剛体の伸縮マスト»。外筒はトロリの下面に固定、内筒がその中を伸びる。
-     * 炉口へ差し込むときに振れないので、トングは «真下へ真っすぐ» 降りる。 */
-    this.mastSleeve = near(new THREE.Mesh(Parts.stackerSleeve(CR), MAT.tableFrame), MAT.tableFrame);
-    this.mastSleeve.name = 'マスト外筒'; this.mastSleeve.castShadow = true; this.group.add(this.mastSleeve);
-    /* マストは «構造材» なので鋼の色。油圧系の琥珀にすると、ヤードの盤木（茶）と
-     * 見分けが付かず «木の柱» に見えてしまう（実際に見比べて確かめた）。
-     * 琥珀は油圧で動くもの（トング）に取っておく。 */
-    this.mastCol = new THREE.Mesh(Parts.stackerColumn(CR), MAT.spindle);
-    this.mastCol.name = 'マスト内筒'; this.mastCol.castShadow = true; this.group.add(this.mastCol);
-    this.mastHead = new THREE.Mesh(Parts.stackerHead(CR), MAT.spindle);
-    this.mastHead.name = 'トング頭'; this.mastHead.castShadow = true; this.group.add(this.mastHead);
+    /* 吊具は «ワイヤ 4 本掛け»（仕様どおり）。トロリのシーブから下部シーブブロックへ
+     * 降り、ブロックの下に旋回装置（4 rpm）を挟んでトングを吊る。
+     * 以前は剛体の伸縮マストだったが、実機の仕様はワイヤ吊り＋旋回である。 */
+    this.ropeBlock = near(new THREE.Mesh(Parts.pitRopeBlock(CR), MAT.spindle), MAT.spindle);
+    this.ropeBlock.name = '下部シーブブロック'; this.ropeBlock.castShadow = true; this.group.add(this.ropeBlock);
+    this.slewFix = new THREE.Mesh(Parts.pitSlewUnit(CR, false), MAT.spindle);
+    this.slewFix.name = '旋回装置（固定側）'; this.slewFix.castShadow = true; this.group.add(this.slewFix);
+    this.slewRot = new THREE.Mesh(Parts.pitSlewUnit(CR, true), MAT.hydraulic);
+    this.slewRot.name = '旋回装置（回転側）'; this.slewRot.castShadow = true; this.group.add(this.slewRot);
+    const ropeGeoP = Parts.craneRope(CR.ROPE.D);
+    this.ropesP = [];
+    for (const sd of [-1, 1]) for (const sf of [-1, 1]) {
+      const m = new THREE.Mesh(ropeGeoP, MAT.rod); m.name = '巻上ワイヤ';
+      m.userData.rope = { sd, sf }; this.group.add(m); this.ropesP.push(m);
+    }
     /* 操縦席 —— 桁の下、トロリと一緒に動く。前面・側面がガラスで、真下のトングと
      * 炉口を見下ろせる（実機の «乗ると飛行機に乗っているよう» な運転室）。 */
     this.cab = near(new THREE.Mesh(Parts.craneCab(CR), MAT.tableFrame), MAT.tableFrame);
@@ -9896,6 +9928,10 @@ class SupplyView {
      * 以前は yaw = π/2 で板厚の面を挟んでおり、転倒機の受け面と爪が同じ場所を取り合った。 */
     this.pitTong = new TongRig(CR.TONG, this.group, { yaw: 0, near });
     this._crane = { x: null, z: CONFIG.FURNACE.Z, beamY: null };   // 装入クレーンの現在位置（走行 X・横行 Z・昇降。急に戻さず速度制限で戻す）
+    /* 旋回角 [rad]。仕様は 4 rpm（0.419 rad/s）で回せるが、いまの炉とラインは
+     * どちらも «長手側面が世界 Z» を向いているので、装入では回す必要がない。
+     * 機構は実装してあるので、向きの違う炉を足せばそのまま使える。 */
+    this._slew = 0;
 
     // --- トランスファークレーン：ピットクレーンとは完全に別の、低い最小限フレーム ---
     // フレーム自体の Z スパン（FT.GIRDER_Z0/Z1）は転倒アームの占有域の外に置いてあるので、
@@ -10099,13 +10135,26 @@ class SupplyView {
     const gripPit = hung ? w / 2 : TGP.W_MAX / 2 - TGP.JAW_T;           // 放しているときは全開
     const jawY = (hung ? pose.y + L / 2 - TGP.GRIP_DOWN : c.beamY - 1400) + TGP.JAW_LIFT;
     const tp = this.pitTong.set(c.x, jawY, c.z, gripPit);
-    this.mastHead.position.set(u(c.x), u(tp.mastTop), u(c.z));
-    // 外筒はトロリの下面に固定。内筒はその中から «頭» まで伸びる
-    const sleeveTop = this.trolleyY - CR.TROLLEY.H / 2;
-    this.mastSleeve.position.set(u(c.x), u(sleeveTop), u(c.z));
-    const colTop = sleeveTop - 300, colLen = Math.max(colTop - (tp.mastTop + 260), 200);
-    this.mastCol.position.set(u(c.x), u(colTop), u(c.z));
-    this.mastCol.scale.y = colLen / 1000;
+    /* 吊り上げは «トングの吊りピン → 旋回装置 → 下部シーブブロック → ワイヤ → トロリ»
+     * の順に下から積み上げる。爪先の高さが決まれば残りは幾何で決まるので、
+     * どの姿勢でも «繋がって» 見える（数字を別々に置くと必ずどこかで浮く）。 */
+    const SW = CR.SLEW, BK = CR.BLOCK, RP = CR.ROPE;
+    const slewBotY = tp.mastTop + 260;                       // 旋回装置の下端（トングの頭のすぐ上）
+    const slewY = slewBotY + SW.H / 2, blockY = slewBotY + SW.H + BK.H / 2;
+    this.slewRot.position.set(u(c.x), u(slewY), u(c.z));
+    this.slewFix.position.set(u(c.x), u(slewY), u(c.z));
+    this.slewRot.rotation.y = this._slew || 0;               // 旋回角（4 rpm。いまの装入では回さない）
+    this.pitTong.g.rotation.y = this.pitTong.yaw0 + (this._slew || 0);
+    this.ropeBlock.position.set(u(c.x), u(blockY), u(c.z));
+    {
+      const yTop = this.trolleyY + CR.TROLLEY.H * RP.TOP_DY, yBot = blockY + RP.BOT_DY;
+      const len = Math.max(yTop - yBot, 10);
+      for (const m of this.ropesP) {
+        const { sd, sf } = m.userData.rope;
+        m.position.set(u(c.x + sd * RP.SPAN), u((yTop + yBot) / 2), u(c.z + sf * RP.SPREAD / 2));
+        m.scale.y = len / 1000;
+      }
+    }
     // 操縦席はトロリの脇（桁の下）。トロリと一緒に走行・横行する
     const cabY = this.trolleyY - CR.CAB.H / 2 - 400;
     this.cab.position.set(u(c.x + CONFIG.FLIP * CR.CAB.DX), u(cabY), u(c.z));
@@ -11745,6 +11794,15 @@ class UIManager {
         if (finW < C.WIDTH_MIN || finW > C.WIDTH_MAX) warn.push(`コイル巾 ${C.WIDTH_MIN}〜${C.WIDTH_MAX} mm を外れます`);
         if (od > C.OD_MAX || od < C.OD_MIN) warn.push(`コイル外径 Φ${od.toFixed(0)} が Φ${C.OD_MIN}〜Φ${C.OD_MAX} を外れます`);
         if (coilKg > C.WEIGHT_MAX) warn.push(`コイル重量 ${(coilKg / 1000).toFixed(1)} t が最大 ${C.WEIGHT_MAX / 1000} t を超えます`);
+      }
+      /* 装入クレーンの能力（仕様書の定格荷重と図面のトング開き）。
+       * «炉から吊り上げられない材» は運転しても始まらないので、素材を決めた時点で知らせる。 */
+      {
+        const CR = CONFIG.CRANE, gripMax = CR.TONG.W_MAX - 2 * CR.TONG.JAW_T;
+        if (mass > CR.RATED_T)
+          warn.push(`スラブ質量 ${mass.toFixed(1)} t が装入クレーンの定格荷重 ${CR.RATED_T} t を超えます`);
+        if (d.width > gripMax)
+          warn.push(`板幅 ${d.width} mm が装入トングの最大開き ${gripMax} mm（長手側面を掴む）を超えます`);
       }
       $('der-slab').innerHTML =
         `スラブ質量 ${mass.toFixed(1)} t ／ ${sch.length} パス ／ 最終長 ${(outLen / 1000).toFixed(1)} m（伸び ${(th / d.target).toFixed(1)} 倍）` +
