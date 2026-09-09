@@ -98,7 +98,10 @@ const out = await page.evaluate(async () => {
     ok('摩擦係数が状態（温度・速度）で変わる', has, has ? 'Rolling.friction' : '未実装（μ 一定）');
     if (has) {
       const m1 = R.friction(350, 30), m2 = R.friction(500, 30), m3 = R.friction(450, 300);
-      ok('温度が上がると摩擦係数が下がる', m2 < m1, `350 ℃ ${m1.toFixed(3)} → 500 ℃ ${m2.toFixed(3)}`);
+      // 温度依存は向きが定まらない（アルミは凝着で上がるとする測定もある）ので、係数の符号どおりに動くことだけを見る
+      const kt = window.__CFG.PROCESS.MU_KT;
+      ok('摩擦係数の温度依存が係数 MU_KT の符号どおり（0 なら中立）', kt > 0 ? m2 < m1 : kt < 0 ? m2 > m1 : Math.abs(m2 - m1) < 1e-9,
+         `350 ℃ ${m1.toFixed(3)} → 500 ℃ ${m2.toFixed(3)}（MU_KT ${kt}）`);
       ok('速度が上がると摩擦係数が下がる', m3 < R.friction(450, 30),
          `30 mpm ${R.friction(450, 30).toFixed(3)} → 300 mpm ${m3.toFixed(3)}`);
       const all = [m1, m2, m3];

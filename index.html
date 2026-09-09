@@ -878,6 +878,18 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.16.0', base: 'ac9cc23', date: '2026-09-09', title: '実機のパススケジュールとの突き合わせ —— 圧下配分則・段取り時間・短時間過負荷・摩擦の温度依存の見直し', items: [
+      { t: '実機のスケジュール（A5052 530 → 8 mm・23 パス・120/80/50 mpm）をそのまま流し、荷重・動力・温度・所要時間をパスごとに比べる評価器を新設', w: 'tools/realsched.mjs' },
+      { t: '主機の短時間過負荷率（2.0 倍）を持たせた。実機は 30 mm 圧下を 120 mpm で通しており、定格で頭打ちにすると実機の速度が出せない。サイクル全体の実効（RMS）が定格を超えるときはスケジュールの注意書きで示す', w: 'CONFIG.DRIVE.OVERLOAD' },
+      { t: 'パス間の段取り時間を 30 → 6 s に。実機データ（530 → 65 を 17 パス 3 分）から逆算すると 1 パスあたり圧延 2〜7 s ＋ 段取り 5〜7 s', w: 'PROCESS.PASS_OVERHEAD' },
+      { t: 'パス終了の噛み出し余裕を 8,000 → 3,000 mm に。1 パスあたり往復 8 s の空走が入り、厚板段の所要が実機の 1.6 倍になっていた', w: 'CONFIG.SAFE_CLEAR' },
+      { t: '実操業の圧下配分則を入れた。厚板段は初パス軽圧下 → 30 mm 定圧下 → 圧下率 19 % でクロップ厚 65 へ、仕上げ段は目標から上へ組む（最終 50 %・その前 38 %・以後 10 mm 定圧下）。物理の上限はこの則の上から別に効く', w: 'PROCESS.PRACTICE / Rolling.buildSchedule' },
+      { t: '摩擦係数の温度依存を中立（MU_KT = 0）にした。鋼の経験式の向きで入れていたが、アルミでは向きが定まらず、実機の 16 → 8 mm が常用最大以内で通る事実と合わなかった', w: 'PROCESS.MU_KT' },
+      { t: '上下非対称の曲率にはスプリングバックを掛けない。全層が塑性域で弾性の芯が無く、出口で戻らない。除荷で戻るのは «曲げモーメントで付けた» パスライン調整の曲率だけ', w: 'PhysicsEngine._dynamics' },
+      { t: '実測: 厚板段 17 パスが実機 180 s に対し 205 s、仕上げ 4 パスが 270 s に対し 128 s、16 → 8 mm が 240 s に対し 239 s', w: 'tools/realsched.mjs' },
+      { t: '未解決: 最終パス（16 → 8 mm・50 mpm）の尻が 4,231 t で非常最大 4,200 t を超える。原因は摩擦ではなく尻の温度（パス開始時 352 ℃ → 尻 246 ℃、kf 118 → 224 MPa）。実機の尻温度か荷重実績が要る', w: 'tools/realsched.mjs' },
+      { t: '【作業中・未合格】この版は評価器 3 本が通っていない。schedtrace: 成立とした 504 通り中 24 通りで非常最大を超えるパスが残る／loadtrace: 既定ロットが 25 パスになり第 22 パスで AGC が 3 mm 振れ、最終パスが目標を 3.2 % 超える／modeltrace: 段取りが短くなった分ロール温度の上昇が 5 パスで 1.5 K に留まる。main へは入れない', w: 'tools/schedtrace.mjs / loadtrace.mjs' },
+    ] },
     { v: '1.15.0', base: '73cd172', date: '2026-09-08', title: 'メニューと上部バーの再構成・メッセージの分離・冷却ノズルとサイドガイドの作り直し・頭尾荷重の検算', items: [
       // --- UI ---
       { t: '状態文と一時通知をサイドバーから分離し、計器バーの真上に高さ固定の «状態行» として置いた', w: '#status-banner / UIManager._banner' },
@@ -1348,6 +1360,11 @@ const CONFIG = {
     // 主電動機 1,900 kW × 2 台（直流）。0/150/330 rpm、減速比 5.96:1。
     // 150 rpm までは定トルク、そこから 330 rpm までは定出力という直流機の特性を持つ。
     MOTOR_KW: 1900, MOTOR_N: 2, RPM_BASE: 150, RPM_MAX: 330, GEAR: 5.96,
+    /* 短時間過負荷率。直流圧延機用電動機は定格の 2〜2.5 倍のトルクを短時間（1 パス数秒〜数十秒）
+     * 出せる。実機は 30 mm 圧下を 120 mpm で通しており、本アプリの動力は 3.7〜5.0 MW（定格 3.8 MW）
+     * になる —— 定格で頭打ちにすると実機の速度が出せない。パス単位の上限はこの倍率で見て、
+     * サイクル全体の実効（RMS）が定格内かはスケジュールの注意書きで示す。 */
+    OVERLOAD: 2.0,
     COUPLING_Z: -3960,                      // スピンドル継手（ロール側）＝ フォークの外側の自在継手中心
     PINION_Z:   -9500,                      // ピニオンスタンド出力軸（ここからミル側へ 1,200 mm 出る）
     PINION_SPAN: 1800, STAND_L: 2200,       // ピニオン軸間 / ギヤボックス奥行
@@ -2081,18 +2098,43 @@ const CONFIG = {
    * 目標板厚へ届かなくなっていた）。よって係数は «最大 ÷ 平均» の 1 つだけにする。 */
   /* MU まわり: 摩擦係数は «基準点 MU（TREF, MU_VREF）から、温度と速度で動かす» 形で持つ。
    * MU_KT は温度勾配 [1/K]、MU_KV は速度のべき（0 で速度非依存、大きいほど流体潤滑寄り）。 */
-  PROCESS: { MU: 0.25, MU_KT: 0.0016, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
+  /* MU_KT: 摩擦係数の温度勾配 [1/K]。従来 0.0016（温度が下がるほど μ が上がる＝鋼の熱間圧延の
+   * 経験式の向き）だったが、アルミの熱間圧延では逆に «温度が上がるほど凝着で μ が上がる» とする
+   * 測定もあり、向きそのものが定まらない。実機の 16 → 8 mm（50 mpm、尻の局所温度 270 ℃ 級）が
+   * 常用最大 3,920 t 以内で通っている事実に対し、旧値では μ = 0.34 → 5,400 t（張力込み 4,980 t）と
+   * 非常最大を超えて止まっていた。パスごとの実測荷重で較正できるまで温度依存は中立（0）にし、
+   * 速度依存（MU_KV）と粗度依存だけを残す（tools/realsched.mjs）。 */
+  PROCESS: { MU: 0.25, MU_KT: 0.0, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
              TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.95, PEAK_K: 1.22,
              /* 頭の潤滑膜。ロールバイトの潤滑膜は材料が入って初めてできるので、頭は乾いた
               * 状態で噛み、摩擦係数が高い（摩擦丘が大きく面圧が上がる）。膜が育つにつれて
               * 指数で消える: μ = μ0·(1 + K·exp(−d/LEN))（d: 頭から圧延した長さ）。
               * K と LEN は実測値ではなく文献的な目安（頭で 2 割強・1 m で膜が育つ）。 */
              MU_HEAD: { K: 0.25, LEN: 1000 },
-             ACCEL: 110, BITE_ANGLE_MAX: 0.42, PASS_TIME_MAX: 150 },  // mpm/s, rad(24°), s
+             ACCEL: 110, BITE_ANGLE_MAX: 0.42, PASS_TIME_MAX: 150,    // mpm/s, rad(24°), s
+             /* パス間の段取り時間 [s]（圧下設定・停止・反転・加速）。実機データ（530 → 65 を 17 パス
+              * 3 分）から逆算すると 1 パスあたり圧延そのもの 2〜7 s ＋ 段取り 5〜7 s。従来の 30 s は
+              * 予測の温度落ちを過大にしていた。 */
+             PASS_OVERHEAD: 6,
+             /* 実操業の圧下配分則（実機データ A5052・530 → 8 mm・23 パスより）。
+              *   厚板段: 初パスは軽圧下（FIRST_DRAFT）、以後 DRAFT_PLATE の定圧下。板厚 × RED_PLATE が
+              *           DRAFT_PLATE を下回ったら圧下率 RED_PLATE（5 mm 丸め）で落とし、クロップ厚 H_CROP に
+              *           ぴたり着ける。速度は V_PLATE。
+              *   仕上げ段（コイル）: 目標から上へ組む。最終パス圧下率 RED_LAST（張力あり）、その前 RED_LAST2、
+              *           そこから H_CROP まで DRAFT_FINISH の定圧下。出側 H_FINISH 以下は V_FINISH、巻取パスは V_COIL。
+              *   板材の仕上げ段: H_CROP から目標まで DRAFT_FINISH の定圧下。
+              * 定圧下 30 mm の理由（鋳造組織の耳割れ・噛み込み・トルクのどれか）は本データからは決められない。
+              * 物理の上限（噛み込み角・荷重・動力）はこの則の上から別に効く。 */
+             PRACTICE: { FIRST_DRAFT: 10, DRAFT_PLATE: 30, RED_PLATE: 0.19, H_CROP: 65,
+                         DRAFT_FINISH: 10, RED_LAST: 0.50, RED_LAST2: 0.38,
+                         V_PLATE: 120, V_FINISH: 80, H_FINISH: 20, V_COIL: 50 } },
 
   // パススケジュールは板厚・板幅から Rolling.buildSchedule() が生成する（初期値は空）
   SCHEDULE: [],
-  SAFE_CLEAR: 8000,                                     // パス終了と判定する噛み出し余裕 mm
+  /* パス終了と判定する噛み出し余裕 [mm]。尻がミルを抜けてから制動距離（120 mpm で 1.1 m）を
+   * 見込んで止まる。8,000 にしていたため 1 パスあたり往復 8 s の空走が入り、厚板段の所要が
+   * 実機の 1.6 倍になっていた（tools/realsched.mjs）。 */
+  SAFE_CLEAR: 3000,
 
   COLORS: {
     SLAB:        0xc9ccd1,   // 熱間アルミ (この温度域では発光しない)
@@ -2401,12 +2443,12 @@ const Drive = {
     const D = CONFIG.DRIVE;
     return Math.PI * (dia / 1000) * (D.RPM_MAX / D.GEAR);
   },
-  /** 所要トルク M [N·m] を出せる最高速度 [mpm]。定出力域では速度と反比例する。 */
+  /** 所要トルク M [N·m] を出せる最高速度 [mpm]。定出力域では速度と反比例する（短時間過負荷込み）。 */
   speedLimit(torqueNm, dia) {
     const D = CONFIG.DRIVE, vMax = Drive.maxSpeed(dia);
     if (!(torqueNm > 1)) return vMax;
     const vBase = Math.PI * (dia / 1000) * (D.RPM_BASE / D.GEAR);
-    return Num.clamp(vBase * Drive.maxTorque / torqueNm, 5, vMax);
+    return Num.clamp(vBase * Drive.maxTorque * D.OVERLOAD / torqueNm, 5, vMax);
   },
 };
 
@@ -3308,7 +3350,7 @@ const Rolling = {
   /** 1パスに要する時間 [s]（板長＋噛み出し余裕を速度で割る）。 */
   passTime(lenMm, speedMpm) {
     // 圧下設定・加減速・反転の段取り時間を一定分見込む（実測に近づけるため）
-    return (lenMm + 2 * CONFIG.SAFE_CLEAR) / Math.max(Math.abs(speedMpm) / 60 * 1000, 1) + 30;
+    return (lenMm + 2 * CONFIG.SAFE_CLEAR) / Math.max(Math.abs(speedMpm) / 60 * 1000, 1) + CONFIG.PROCESS.PASS_OVERHEAD;
   },
 
   /** マンドレル軸に出せる最大トルク [N·m]（550 kW ÷ 基底 300 rpm × 減速比 8.5） */
@@ -3456,7 +3498,7 @@ const Rolling = {
     const vMax = Drive.maxSpeed();
     // 荷重の余裕は «モデルの不確かさ» だけを見る（常用最大の LOAD_MARGIN まで）。
     // 頭・尻の割増は予測荷重そのものへ PEAK_K で織り込む。
-    const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * 0.84;
+    const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * CONFIG.DRIVE.OVERLOAD * 0.84;
     // 圧延が進むと材料温度が下がり変形抵抗が上がる。生成時にもその推移を織り込む。
     const drafts = [], temps = [];
     let h = h0, T = temp;
@@ -3468,7 +3510,33 @@ const Rolling = {
     /* 速度の見当。«圧下量を決める側» と «最終表を作る側» が別々の見当を持つと、同じパスを
      * 違う速度＝違うパス時間＝違う温度で評価してしまい、選んだときは荷重上限内だったパスが
      * 表では上限を大きく超える（実測で 55 % 超過）。板厚だけの関数にして 1 か所にまとめる。 */
-    const vSeed = (hh) => Math.round(Num.lerp(55, vMax, Num.clamp((h0 - hh) / Math.max(h0 - hTarget, 1e-6), 0, 1)) / 5) * 5;
+    /* 速度は実操業則: 厚板段・仕上げ段は V_PLATE、出側 H_FINISH 以下は V_FINISH、巻取パスは V_COIL。
+     * ここから動力上限（短時間過負荷込み）で落とす。 */
+    const PR = P.PRACTICE;
+    const vSeed = (hOut, isCoil = false) => Math.min(vMax, isCoil ? PR.V_COIL : hOut <= PR.H_FINISH ? PR.V_FINISH : PR.V_PLATE);
+    /* 実操業の圧下配分則（PROCESS.PRACTICE）。厚板段はクロップ厚まで、仕上げ段は目標から上へ組む。 */
+    const hCrop = Math.max(Math.min(PR.H_CROP, h0 - 1), hTarget);
+    const finishSeq = (() => {                         // 仕上げ段の «通る板厚»（小さい順）
+      const seq = [];
+      if (coil) {
+        let x = hTarget / (1 - PR.RED_LAST); seq.push(Math.round(x));
+        x = seq[0] / (1 - PR.RED_LAST2); seq.push(Math.round(x));
+        while (seq[seq.length - 1] + PR.DRAFT_FINISH < hCrop - 0.5) seq.push(seq[seq.length - 1] + PR.DRAFT_FINISH);
+      } else {
+        let x = hTarget; while (x + PR.DRAFT_FINISH < hCrop - 0.5) { x += PR.DRAFT_FINISH; seq.push(x); }
+      }
+      return seq.filter(v => v < hCrop - 0.5 && v > hTarget + 0.5);
+    })();
+    const practiceDraft = (hh, idx) => {
+      if (hh > hCrop + 0.5) {                          // 厚板段
+        let d = idx === 0 ? PR.FIRST_DRAFT
+              : (hh * PR.RED_PLATE >= PR.DRAFT_PLATE ? PR.DRAFT_PLATE : Math.max(5, Math.round(hh * PR.RED_PLATE / 5) * 5));
+        if (hh - d - hCrop < d * 0.5) d = hh - hCrop;  // 端数は最後の厚板パスに寄せてクロップ厚にぴたり着ける
+        return Math.max(d, 1);
+      }
+      const nxt = finishSeq.filter(v => v < hh - 0.5).sort((a, b) => b - a)[0] ?? hTarget;   // 仕上げ段
+      return Math.max(hh - nxt, 0.5);
+    };
     // 予測を «パスの最大» へそろえる係数（噛み込み衝撃＋端部の冷えぶん。実測 1.15〜1.22）
     const peakK = P.PEAK_K;
     // パス時間 ＝ 材長 / 速度。75 mm シャーをまたぐパスだけ先端切断の往復ぶんを足す。
@@ -3487,9 +3555,10 @@ const Rolling = {
     };
     while (h > hTarget + 0.5 && drafts.length < 30) {
       const idx = drafts.length, dir = CONFIG.FLIP * (idx % 2 === 0 ? 1 : -1);
-      const vRef = vSeed(h);
       const capRatio = coil ? 0.50 : 0.40;                     // 張力をかける巻取パスは大圧下できる
       const dFin = h - hTarget;
+      const dPr = Math.min(practiceDraft(h, idx), dFin);      // 実操業則の圧下量（物理の上限はこの下で効く）
+      const vRef = vSeed(h - dPr, coil && dPr >= dFin - 1e-6);
       // 荷重は «このパスで実際に出せる速度» で通したときの «パスの終わり» の温度で見る。
       // 主機は動力律速で低温パスほど遅くなり、遅いほど通過中に冷えて硬くなる。入側温度と
       // 参照速度で組むと、薄板の後段（特に巻取パス）で実荷重が上限を超える。
@@ -3516,7 +3585,7 @@ const Rolling = {
         }
         return c;
       };
-      const cap = capacity();
+      const cap = Math.min(capacity(), dPr);
       let d;
       if (dFin <= cap) { d = dFin; if (coil) coilPass = idx; }
       else {
@@ -3556,7 +3625,7 @@ const Rolling = {
     }
     // 速度は質量流に合わせて上げ、主機動力の定格で頭打ちにする。ただし温度は選んだ速度に
     // 依存する（低速ほどロールに熱を奪われる）ので、速度→温度→速度 を反復して収束させる。
-    let speeds = (() => { let hh = h0; return drafts.map((d) => { const v = vSeed(hh); hh -= d; return v; }); })();
+    let speeds = (() => { let hh = h0; return drafts.map((d, i) => { hh -= d; return vSeed(hh, coil && i === (coilPass >= 0 ? coilPass : drafts.length - 1)); }); })();
     const forces = [], steadies = [], tEnds = [];
     for (let it = 0; it < 5; it++) {
       let hh = h0, TT = temp;
@@ -3606,6 +3675,20 @@ const Rolling = {
     const floor = Rolling.tempFloor(coil, alloy);
     const reasons = [], notes = [];
     const fmt = (f) => f > 9999 ? '9,999 t 以上' : Math.round(f).toLocaleString() + ' t';
+    /* 主機の実効負荷。パスごとの動力は短時間過負荷で定格を超えてよいが、サイクル全体の
+     * RMS が定格を超えると電動機が熱で持たない。荷重 × 速度から各パスの動力を出し、
+     * 時間で重み付けした RMS を定格と比べる（超えれば注意）。 */
+    if (sch.length && Number.isFinite(sch[0].tEnd)) {
+      let e2 = 0, tt = 0, hIn = null;
+      for (const q of sch) {
+        if (hIn === null) { hIn = q.gap; continue; }   // 入側厚は前パスの出側。初パスは h0 が要るので平均から外す
+        const r = Rolling.solve(hIn, q.gap, CONFIG.SLAB.WID_DEFAULT, q.speed, q.tEnd, 0, alloy);
+        const secs = Rolling.passTime(CONFIG.SLAB.LEN_DEFAULT * sch[0].gap / q.gap, q.speed);
+        e2 += r.powerKW * r.powerKW * secs; tt += secs; hIn = q.gap;
+      }
+      const rms = tt > 0 ? Math.sqrt(e2 / tt) : 0;
+      if (rms > Drive.ratedPowerKW) notes.push(`主機の実効動力 ${(rms / 1000).toFixed(1)} MW がサイクル平均で定格 ${(Drive.ratedPowerKW / 1000).toFixed(1)} MW を超えます（各パスは短時間過負荷 ${CONFIG.DRIVE.OVERLOAD} 倍の範囲内）`);
+    }
     // 予測の不確かさ（±10 % 程度）を見込み、非常最大の 1.1 倍を超える場合を «成立しない» とする
     if (maxF > M.LIMIT_FORCE_T * 1.1) {                             // 非常最大超過 → 過負荷停止する
       const over = sch.find(q => q.force > M.LIMIT_FORCE_T * 1.1);
@@ -5741,9 +5824,15 @@ class PhysicsEngine {
       // 反りは通過した分の重み付き平均で決まる
       /* バイトの中で付いた曲率から «除荷で戻る弾性ぶん» を引き、残る反りだけを積む。
        * 引かないと薄いパスにも消えない反りが残り、実機と逆の見え方になる。 */
-      // 上下非対称による曲率に «パスライン調整» で与える曲率を足してから、除荷で戻す
-      const kBite = Rolling.curvature(res, hLoc, gap) + Rolling.passLineCurl(m.plOffset);
-      const k = Rolling.springback(kBite, gap, res.kf, s.alloy);
+      /* 上下非対称の曲率は «上下の層の塑性伸びの差» で、バイトの中で全層が塑性域にあるので
+       * 弾性の芯が無く、出口でモーメントが抜けても戻らない（そのまま残る）。従来はこれにも
+       * 曲げのスプリングバックを掛けていたため、軽圧下パスの反りが «全部戻って» 0 になっていた
+       * （実機スケジュール 30 mm 圧下で反り無し）。除荷で戻るのは «曲げモーメントで付けた»
+       * パスライン調整の曲率だけ。 */
+      const kAsym = Rolling.curvature(res, hLoc, gap);
+      const kPl = Rolling.passLineCurl(m.plOffset);
+      const kBite = kAsym + kPl;
+      const k = kAsym + Rolling.springback(kPl, gap, res.kf, s.alloy);
       s.kBite = kBite;
       s._kAcc += k * passedFrac; s._kW += passedFrac; s.kNew = s._kAcc / Math.max(s._kW, 1e-9);
       s.biteOk = res.biteOk;
