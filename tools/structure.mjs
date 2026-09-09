@@ -36,8 +36,10 @@ const out = await page.evaluate((EPS) => {
   for (const w of (F.wrapRolls ?? [])) { add(w.roll); add(w.arms); }   // ベルトラッパー（揺動する）
   add(F.cradle); add(F.wrapRods); add(F.wrapCyls);                     // ラッパーのキャリッジ・ロッド・シリンダー（動く）
   const S = W.supplyView;
-  for (const k of ['tilterArm', 'trolley', 'lid', 'girderT', 'trolleyT', 'beamT', 'ropesT',
-                   'mastSleeve', 'mastCol', 'mastHead', 'cab', 'cabIn', 'cabGlass'])   // スタッカークレーンの吊具・運転室
+  for (const k of ['tilterArm', 'trolley', 'lids', 'girderT', 'trolleyT', 'beamT', 'ropesT',
+                   // ピットクレーンの吊具（ワイヤ 4 本掛け → 下部シーブブロック → 旋回装置）と運転室。
+                   // どれも走行・横行・昇降でクレーンと一緒に動くので、静的構造の判定からは外す。
+                   'ropesP', 'ropeBlock', 'slewFix', 'slewRot', 'cab', 'cabIn', 'cabGlass'])
     add(S[k]);
   add(S.pitTong.g);                                        // スタッカークレーンのトング
   for (const t of (S.tongs ?? [])) add(t.rig.g);           // トランスファークレーンのトング

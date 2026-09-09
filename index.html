@@ -83,25 +83,25 @@ canvas { display:block; }
    見出しが掴み手、右下が大きさ変更の掴み手。位置と大きさは閉じても覚えている。
    表は «数の並び» が主役なので、数字は等幅・右寄せにして桁を縦に揃える。
    色は «系列の区別» と «計画との差» にだけ使い、装飾には使わない。 */
-#pnl-log {
+.pnl {
   position:fixed; z-index:60; display:flex; flex-direction:column;
   left:auto; right:18px; top:96px; width:min(1180px,72vw); height:min(660px,74vh);
   min-width:520px; min-height:280px; max-width:98vw; max-height:94vh;
   background:var(--s-1); color:var(--ink-1); border:1px solid var(--line);
   border-radius:var(--r-l); box-shadow:var(--shadow-2); overflow:hidden;
 }
-#pnl-log[hidden] { display:none; }
-#pnl-log header { flex:none; display:grid; gap:4px 12px; align-items:center;
+.pnl[hidden] { display:none; }
+.pnl header { flex:none; display:grid; gap:4px 12px; align-items:center;
   grid-template-columns:1fr auto; grid-template-areas:"hd btns" "sub btns";
   padding:10px 12px 9px 16px; color:#fff; cursor:grab; user-select:none;
   background:linear-gradient(135deg,#1b262c 0%,#2c3d47 100%); }
-#pnl-log header.drag { cursor:grabbing; }
-#pnl-log header .hd { grid-area:hd; display:flex; align-items:center; gap:12px; min-width:0; overflow:hidden; }
-#pnl-log header .ttl { font-weight:800; font-size:13px; letter-spacing:.06em; white-space:nowrap; }
-#pnl-log header .ttl i { opacity:.7; margin-right:5px; }
-#pnl-log header .sub { grid-area:sub; font-size:10.5px; opacity:.72; line-height:1.5;
+.pnl header.drag { cursor:grabbing; }
+.pnl header .hd { grid-area:hd; display:flex; align-items:center; gap:12px; min-width:0; overflow:hidden; }
+.pnl header .ttl { font-weight:800; font-size:13px; letter-spacing:.06em; white-space:nowrap; }
+.pnl header .ttl i { opacity:.7; margin-right:5px; }
+.pnl header .sub { grid-area:sub; font-size:10.5px; opacity:.72; line-height:1.5;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#pnl-log header .btns { grid-area:btns; display:flex; align-items:center; gap:7px; }
+.pnl header .btns { grid-area:btns; display:flex; align-items:center; gap:7px; }
 /* ロット選択は «縮んでよい» 要素。縮まないままだと板を狭めたとき CSV ボタンに重なる */
 .lotsel { height:26px; flex:0 1 auto; min-width:90px; max-width:340px; padding:0 8px; border-radius:7px; cursor:pointer;
   font-size:11px; font-family:inherit; font-variant-numeric:tabular-nums;
@@ -115,80 +115,80 @@ canvas { display:block; }
 #btn-log-close:hover { background:rgba(255,255,255,.2); }
 /* 操作列: «何を見るか»（タブ）・«どの項目»・«どのパス» の 3 つだけを 1 行に置く。
    選ぶ中身（項目 11 個・パス 23 個）はポップオーバーへ入れて、行が折り返さないようにする。 */
-#pnl-log .ctl { flex:none; display:flex; gap:8px; align-items:center; min-height:40px;
+.pnl .ctl { flex:none; display:flex; gap:8px; align-items:center; min-height:40px;
   padding:6px 14px; background:var(--s-2); border-bottom:1px solid var(--line-2); }
-#pnl-log .ctl .sep { width:1px; align-self:stretch; background:var(--line); margin:2px 2px; flex:none; }
-#pnl-log .ctl .seg { flex:none; }
-#pnl-log .ctl .seg button { padding:4px 10px; font-size:10.5px; white-space:nowrap; }
-#pnl-log .ctlhint { margin-left:auto; font-size:10px; color:var(--ink-3); white-space:nowrap;
+.pnl .ctl .sep { width:1px; align-self:stretch; background:var(--line); margin:2px 2px; flex:none; }
+.pnl .ctl .seg { flex:none; }
+.pnl .ctl .seg button { padding:4px 10px; font-size:10.5px; white-space:nowrap; }
+.pnl .ctlhint { margin-left:auto; font-size:10px; color:var(--ink-3); white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis; min-width:0; }
-#pnl-log .pop { position:relative; flex:none; }
-#pnl-log .popbtn { height:26px; padding:0 10px; border-radius:8px; border:1px solid var(--line);
+.pnl .pop { position:relative; flex:none; }
+.pnl .popbtn { height:26px; padding:0 10px; border-radius:8px; border:1px solid var(--line);
   background:var(--s-1); color:var(--ink-2); font:inherit; font-size:10.5px; font-weight:700; cursor:pointer;
   display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
-#pnl-log .popbtn::after { content:'▾'; font-size:9px; opacity:.6; }
-#pnl-log .popbtn b { font-weight:800; color:var(--accent); font-variant-numeric:tabular-nums; }
-#pnl-log .popbtn[aria-expanded="true"] { border-color:var(--accent-2); background:var(--accent-soft); color:var(--accent); }
-#pnl-log .popmenu { position:absolute; top:calc(100% + 6px); left:0; z-index:5; padding:10px;
+.pnl .popbtn::after { content:'▾'; font-size:9px; opacity:.6; }
+.pnl .popbtn b { font-weight:800; color:var(--accent); font-variant-numeric:tabular-nums; }
+.pnl .popbtn[aria-expanded="true"] { border-color:var(--accent-2); background:var(--accent-soft); color:var(--accent); }
+.pnl .popmenu { position:absolute; top:calc(100% + 6px); left:0; z-index:5; padding:10px;
   background:var(--s-1); border:1px solid var(--line); border-radius:var(--r-m); box-shadow:var(--shadow-2);
   width:max-content; max-width:min(620px,74vw); max-height:min(360px,52vh); overflow:auto; }
-#pnl-log .popmenu[hidden] { display:none; }
-#pnl-log .pophd { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;
+.pnl .popmenu[hidden] { display:none; }
+.pnl .pophd { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;
   font-size:10px; font-weight:800; color:var(--ink-3); letter-spacing:.08em; }
-#pnl-log .chip em { font-style:normal; opacity:.55; font-weight:600; }
-#pnl-log .chip[aria-pressed="true"] em { opacity:.85; }
-#pnl-log .chips { display:flex; flex-wrap:wrap; gap:5px; }
+.pnl .chip em { font-style:normal; opacity:.55; font-weight:600; }
+.pnl .chip[aria-pressed="true"] em { opacity:.85; }
+.pnl .chips { display:flex; flex-wrap:wrap; gap:5px; }
 /* チップは «中身の高さ» で決める。高さを 23 px に固定していたため、凡例（最大値）が
    入ると文字が箱からあふれ、下の行に重なって読めなくなっていた。 */
-#pnl-log .chip { display:inline-flex; align-items:center; gap:5px; min-height:23px; padding:2px 9px;
+.pnl .chip { display:inline-flex; align-items:center; gap:5px; min-height:23px; padding:2px 9px;
   border-radius:99px; border:1px solid var(--line); background:var(--s-1); color:var(--ink-3); white-space:nowrap;
   font-size:10.5px; font-weight:700; font-family:inherit; cursor:pointer; font-variant-numeric:tabular-nums; }
-#pnl-log .chip s { width:9px; height:9px; border-radius:3px; text-decoration:none; background:currentColor; opacity:.35; }
-#pnl-log .chip[aria-pressed="true"] { color:var(--ink-1); border-color:currentColor; background:var(--s-1); }
-#pnl-log .chip[aria-pressed="true"] s { opacity:1; }
-#pnl-log .chip:hover { border-color:var(--ink-3); }
-#pnl-log .mini { min-height:23px; padding:2px 9px; border-radius:99px; font-size:10.5px; font-weight:700;
+.pnl .chip s { width:9px; height:9px; border-radius:3px; text-decoration:none; background:currentColor; opacity:.35; }
+.pnl .chip[aria-pressed="true"] { color:var(--ink-1); border-color:currentColor; background:var(--s-1); }
+.pnl .chip[aria-pressed="true"] s { opacity:1; }
+.pnl .chip:hover { border-color:var(--ink-3); }
+.pnl .mini { min-height:23px; padding:2px 9px; border-radius:99px; font-size:10.5px; font-weight:700;
   border:1px dashed var(--line); background:transparent; color:var(--ink-3); cursor:pointer; font-family:inherit; }
-#pnl-log .mini:hover { color:var(--ink-1); border-color:var(--ink-3); }
+.pnl .mini:hover { color:var(--ink-1); border-color:var(--ink-3); }
 /* 表示タブ（グラフ＋表 / グラフ / 表）。片方だけのときは残りが全高を使う */
 #pnl-log[data-show="chart"] .tblwrap { display:none; }
 #pnl-log[data-show="table"] .chart { display:none; }
 #pnl-log[data-show="chart"] .chart, #pnl-log[data-show="table"] .tblwrap { flex:1 1 auto; }
 /* 板を大きくしたぶんはチャートと表で分け合う（余白が増えるだけにしない） */
-#pnl-log .body { flex:1 1 auto; display:flex; flex-direction:column; gap:10px;
+.pnl .body { flex:1 1 auto; display:flex; flex-direction:column; gap:10px;
   padding:10px 14px 12px; overflow:hidden; min-height:0; }
-#pnl-log .chart { position:relative; flex:1 1 44%; min-height:150px; border:1px solid var(--line-2);
+.pnl .chart { position:relative; flex:1 1 44%; min-height:150px; border:1px solid var(--line-2);
   border-radius:var(--r-m); background:var(--s-2); overflow:hidden; cursor:crosshair; }
 /* 読み取り線。グラフは «形» を見るためのものだが、数値をその場で読めないと結局
    表に戻ることになる。線を当てた時刻の値をその場に出して、往復させない。 */
-#pnl-log .chart .cross { position:absolute; top:0; bottom:0; width:1px; background:var(--ink-3);
+.pnl .chart .cross { position:absolute; top:0; bottom:0; width:1px; background:var(--ink-3);
   opacity:.55; pointer-events:none; }
-#pnl-log .chart .read { position:absolute; top:6px; pointer-events:none; z-index:2;
+.pnl .chart .read { position:absolute; top:6px; pointer-events:none; z-index:2;
   background:rgba(255,255,255,.96); border:1px solid var(--line); border-radius:8px;
   padding:5px 8px; font-size:10.5px; line-height:1.55; box-shadow:var(--shadow-1);
   font-variant-numeric:tabular-nums; white-space:nowrap; }
-#pnl-log .chart .read b { font-weight:800; }
-#pnl-log .chart .read i { font-style:normal; display:inline-block; width:8px; height:8px;
+.pnl .chart .read b { font-weight:800; }
+.pnl .chart .read i { font-style:normal; display:inline-block; width:8px; height:8px;
   border-radius:2px; margin-right:5px; vertical-align:-1px; }
-#pnl-log .chart svg { display:block; width:100%; height:100%; }
-#pnl-log .tblwrap { flex:1 1 56%; min-height:90px; overflow:auto; }
-#pnl-log table { border-collapse:collapse; width:100%; font-size:11.5px; font-variant-numeric:tabular-nums; }
-#pnl-log th, #pnl-log td { padding:5px 8px; border-bottom:1px solid var(--line-2); text-align:right; white-space:nowrap; }
-#pnl-log th { background:var(--s-2); color:var(--ink-2); font-weight:700; font-size:10.5px; position:sticky; top:0; }
-#pnl-log th i { display:block; font-style:normal; font-weight:600; font-size:9px; color:var(--ink-3); }
-#pnl-log td:first-child, #pnl-log th:first-child { text-align:center; font-weight:800; }
-#pnl-log td.dir { text-align:center; color:var(--ink-3); }
-#pnl-log tr.live td { background:var(--accent-soft); }
-#pnl-log tbody tr { cursor:pointer; }
-#pnl-log tbody tr:hover td { background:var(--s-2); }
-#pnl-log tr.off td { opacity:.34; }
-#pnl-log td.over { color:var(--crit); font-weight:800; }
-#pnl-log td.plan { color:var(--ink-3); }
-#pnl-log .empty { padding:26px; text-align:center; color:var(--ink-3); font-size:12px; }
-#pnl-log footer { flex:none; padding:8px 14px; background:var(--s-2); border-top:1px solid var(--line);
+.pnl .chart svg { display:block; width:100%; height:100%; }
+.pnl .tblwrap { flex:1 1 56%; min-height:90px; overflow:auto; }
+.pnl table { border-collapse:collapse; width:100%; font-size:11.5px; font-variant-numeric:tabular-nums; }
+.pnl th, .pnl td { padding:5px 8px; border-bottom:1px solid var(--line-2); text-align:right; white-space:nowrap; }
+.pnl th { background:var(--s-2); color:var(--ink-2); font-weight:700; font-size:10.5px; position:sticky; top:0; }
+.pnl th i { display:block; font-style:normal; font-weight:600; font-size:9px; color:var(--ink-3); }
+.pnl td:first-child, .pnl th:first-child { text-align:center; font-weight:800; }
+.pnl td.dir { text-align:center; color:var(--ink-3); }
+.pnl tr.live td { background:var(--accent-soft); }
+.pnl tbody tr { cursor:pointer; }
+.pnl tbody tr:hover td { background:var(--s-2); }
+.pnl tr.off td { opacity:.34; }
+.pnl td.over { color:var(--crit); font-weight:800; }
+.pnl td.plan { color:var(--ink-3); }
+.pnl .empty { padding:26px; text-align:center; color:var(--ink-3); font-size:12px; }
+.pnl footer { flex:none; padding:8px 14px; background:var(--s-2); border-top:1px solid var(--line);
   font-size:10.5px; color:var(--ink-3); display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
-#pnl-log .lg { display:inline-flex; align-items:center; gap:5px; }
-#pnl-log .lg s { display:inline-block; width:14px; height:3px; border-radius:2px; text-decoration:none; }
+.pnl .lg { display:inline-flex; align-items:center; gap:5px; }
+.pnl .lg s { display:inline-block; width:14px; height:3px; border-radius:2px; text-decoration:none; }
 #log-grip { position:absolute; right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize;
   background:linear-gradient(135deg,transparent 46%,var(--line) 46%,var(--line) 54%,transparent 54%,
              transparent 66%,var(--line) 66%,var(--line) 74%,transparent 74%); }
@@ -516,6 +516,9 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
 /* 幅が足りないときの段階的な縮め方（UIManager._fitToolbar が data-fit を付ける）:
      1 …… キー番号と群の見出し文字を落とす
      2 …… 視点とボタンの文字も落として絵記号だけにする
+     3 …… 右端のピル（運転計画・一時停止・実績）も絵記号と数字だけにする
+   ピルを «最後に» 縮めるのは、いちばんよく使うものだから —— 文字が残っているうちは
+   読んで選べるし、絵記号だけになっても位置は動かないので手は同じところへ伸びる。
    «画面の幅» ではなく «ツールバーが実際に使える幅» で決めるのが要点。メニュー（幅 372 px）を
    たたむかどうかで使える幅は大きく変わるので、@media では合わない —— 実測すると 1,728 px の
    画面でメニューを開いた状態は «1,560 px 超» と判定されて畳まれず、右端が切れていた。 */
@@ -525,16 +528,53 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
 #toolbar[data-fit="2"] #cam-chips .chip { padding:5px 7px; }
 #toolbar[data-fit="2"] #cam-chips .chip i { font-size:12px; }
 #toolbar[data-fit="2"] .tb-btn { padding:5px 8px; }
-/* 実績ピル: ツールバーとは独立に、常に同じ場所（右端）に出す */
-#tb-log { pointer-events:auto; flex:none; height:34px; box-shadow:var(--shadow-2); background:rgba(255,255,255,.92);
+/* 段階 3 はピル側に付く（ピルはツールバーの外に居るので、印は body に置く） */
+body[data-pill-fit="1"] .tb-pill .nm, body[data-pill-fit="1"] .tb-pill .kbd { display:none; }
+body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
+/* ピル: ツールバーとは独立に、常に同じ場所（右端）に同じ順で出す。
+   «よく使うもの» はツールバーの畳み具合に関わらず位置が動かない（探させない）。 */
+.tb-pill { pointer-events:auto; flex:none; height:34px; box-shadow:var(--shadow-2); background:rgba(255,255,255,.92);
   backdrop-filter:blur(10px); border-radius:var(--r-l); padding:0 12px; gap:7px; }
-#tb-log b { font-size:11px; font-weight:800; min-width:18px; height:18px; padding:0 5px; border-radius:9px;
+.tb-pill b { font-size:11px; font-weight:800; min-width:18px; height:18px; padding:0 5px; border-radius:9px;
   background:var(--s-3); color:var(--ink-2); display:inline-flex; align-items:center; justify-content:center;
   font-variant-numeric:tabular-nums; }
-#tb-log .kbd { font-size:9px; font-weight:700; color:var(--ink-3); border:1px solid var(--line); border-radius:3px;
+.tb-pill .kbd { font-size:9px; font-weight:700; color:var(--ink-3); border:1px solid var(--line); border-radius:3px;
   padding:0 3px; line-height:1.3; }
-#tb-log[aria-pressed="true"] b { background:rgba(255,255,255,.25); color:#fff; }
-#tb-log[aria-pressed="true"] .kbd { color:#fff; border-color:rgba(255,255,255,.5); }
+.tb-pill[aria-pressed="true"] b { background:rgba(255,255,255,.25); color:#fff; }
+.tb-pill[aria-pressed="true"] .kbd { color:#fff; border-color:rgba(255,255,255,.5); }
+/* 一時停止ピル: 押している間（＝停止中）は琥珀。運転していないときは薄く出す（押せないことが分かる） */
+#tb-pause[aria-pressed="true"] { background:var(--warn,#c98a00); color:#fff; border-color:var(--warn,#c98a00); }
+#tb-pause[aria-pressed="true"] i { color:#fff; }
+#tb-pause[disabled] { opacity:.45; pointer-events:none; }
+/* 運転計画パネルの中身 */
+.pnl .pane { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:9px; }
+.pnl .pane[hidden] { display:none; }
+.pnl .planrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.pnl .planrow .grow { flex:1 1 auto; }
+.pnl table.plan { width:100%; border-collapse:collapse; font-size:11px; }
+.pnl table.plan th { position:sticky; top:0; z-index:1; background:var(--s-2); color:var(--ink-3);
+  font-size:10px; font-weight:700; text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+.pnl table.plan td { padding:5px 8px; border-bottom:1px solid var(--line-2); white-space:nowrap;
+  font-variant-numeric:tabular-nums; }
+.pnl table.plan tr.now td { background:var(--accent-soft); color:var(--accent); font-weight:700; }
+.pnl table.plan td.act { text-align:right; }
+.pnl table.plan .ib { width:24px; height:22px; border-radius:6px; border:1px solid var(--line);
+  background:var(--s-1); color:var(--ink-3); cursor:pointer; }
+.pnl table.plan .ib:hover { color:var(--ink-1); border-color:var(--ink-3); }
+.pnl .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(232px,1fr)); gap:10px; align-content:start;
+  overflow:auto; padding:2px; }
+.pnl .card { text-align:left; padding:11px 12px; border-radius:var(--r-m); border:1px solid var(--line);
+  background:var(--s-1); cursor:pointer; display:flex; flex-direction:column; gap:5px; }
+.pnl .card:hover { border-color:var(--accent-2); background:var(--accent-soft); }
+.pnl .card .nm { font-weight:800; font-size:12px; color:var(--ink-1); }
+.pnl .card .ds { font-size:10.5px; color:var(--ink-3); line-height:1.55; }
+.pnl .card .tg { align-self:flex-start; font-size:9.5px; font-weight:700; padding:1px 7px; border-radius:99px;
+  background:var(--s-3); color:var(--ink-2); }
+.pnl .empty { margin:auto; text-align:center; font-size:11.5px; color:var(--ink-3); line-height:1.9; }
+.pnl header .go { height:27px; padding:0 13px; border-radius:8px; font-size:11px; font-weight:800;
+  border:0; background:var(--accent); color:#fff; cursor:pointer; }
+.pnl header .go[disabled] { opacity:.45; cursor:default; }
+.pnl .planstat { font-size:10.5px; font-weight:700; color:var(--accent); white-space:nowrap; }
 /* 記録中は赤い点。«いま貯まっている» ことが押す前に分かる */
 #tb-log.rec::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--crit); flex:none;
   animation:recblink 1.2s ease-in-out infinite; }
@@ -841,8 +881,16 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
       <button class="tb-btn" id="tb-labels" aria-pressed="true" title="設備ラベル（L）"><i class="fa-solid fa-tag"></i><span class="nm">ラベル</span></button>
       <button class="tb-btn" id="tb-zones" aria-pressed="false" title="テーブル区分の記号（Z）"><i class="fa-solid fa-list-ol"></i><span class="nm">区分記号</span></button></div>
   </div>
-  <!-- 実績: 記録が何パス貯まっているかを数で見せ、記録中は赤い点が点く。押すと 3D を見ながら開く -->
-  <button class="tb-btn tb-log" id="tb-log" aria-pressed="false"
+  <!-- 右端のピル 3 つ。«計画 → 運転 → 実績» の順に並べる（作業の流れと同じ順）。
+       ツールバーの畳み具合に関わらず位置が動かないので、探さずに手が届く。 -->
+  <button class="tb-btn tb-pill" id="tb-plan" aria-pressed="false"
+    title="運転計画を開く（Q）。プリセットを選ぶか、いまの条件をキューに足して、順に流します">
+    <i class="fa-solid fa-list-ol"></i><span class="nm">運転計画</span>
+    <b id="tb-plan-n" title="キューに入っているロット数">0</b><span class="kbd">Q</span></button>
+  <button class="tb-btn tb-pill" id="tb-pause" aria-pressed="false" disabled
+    title="シミュレーションを一時停止／再開する（P）">
+    <i class="fa-solid fa-pause"></i><span class="nm" id="tb-pause-tx">一時停止</span><span class="kbd">P</span></button>
+  <button class="tb-btn tb-pill tb-log" id="tb-log" aria-pressed="false"
     title="圧延実績ビュワーを開く（G）。パスごとの荷重・温度・形状と時系列グラフを、3D を見ながら読めます">
     <i class="fa-solid fa-chart-line"></i><span class="nm">実績</span>
     <b id="tb-log-n" title="記録されたパス数">0</b><span class="kbd">G</span></button>
@@ -850,9 +898,70 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
 
 <div id="tags"></div>
 
+<!-- 運転計画。«何を・どの順で・何回流すか» を決めてから運転する板。
+     実績ビュワーと同じ非モーダルの板にして、3D を見ながら使える。
+     区分は «キュー（これから流すもの）／プリセット（すぐ試せる型）／保存データ（自分の条件）» の 3 つだけ。 -->
+<section id="pnl-plan" class="pnl" hidden aria-label="運転計画">
+  <header id="plan-drag">
+    <div class="hd">
+      <span class="ttl"><i class="fa-solid fa-list-ol"></i> 運転計画</span>
+      <span class="planstat" id="plan-stat"></span>
+    </div>
+    <div class="sub" id="plan-sub">プリセットを選ぶか、いまの条件をキューに足してから «この計画で実行» を押します。</div>
+    <div class="btns">
+      <button id="btn-plan-run" class="go" type="button" title="キューの先頭から順に流します">この計画で実行</button>
+      <button id="btn-plan-close" type="button" title="閉じる（Esc / Q）" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  </header>
+  <div class="ctl">
+    <div class="seg" role="group" aria-label="表示するもの">
+      <button id="plan-tab-queue"  aria-pressed="true"  type="button">キュー <b id="plan-n">0</b></button>
+      <button id="plan-tab-preset" aria-pressed="false" type="button">プリセット</button>
+      <button id="plan-tab-saved"  aria-pressed="false" type="button">保存データ <b id="plan-saved-n">0</b></button>
+    </div>
+    <div class="sep"></div>
+    <div class="seg" role="group" aria-label="繰り返し">
+      <button id="plan-loop-none"  aria-pressed="true"  type="button" title="1 巡したら止まります">繰り返しなし</button>
+      <button id="plan-loop-queue" aria-pressed="false" type="button" title="キューの最後まで流したら先頭へ戻ります">キュー全体</button>
+      <button id="plan-loop-lot"   aria-pressed="false" type="button" title="いま流しているロットだけを繰り返します">1 ロット</button>
+    </div>
+    <span class="ctlhint" id="plan-hint">デモンストレーションでは «キュー全体» にすると止まりません</span>
+  </div>
+  <div class="body">
+    <!-- キュー -->
+    <div class="pane" id="plan-pane-queue">
+      <div class="planrow">
+        <button class="mini" id="btn-plan-add" type="button" title="左メニューでいま決めている条件をキューの末尾へ足します">＋ いまの条件を追加</button>
+        <button class="mini" id="btn-plan-clear" type="button">キューを空にする</button>
+        <span class="grow"></span>
+        <button class="mini" id="btn-plan-save" type="button" title="キューに名前を付けてブラウザへ保存します">この計画を保存</button>
+      </div>
+      <div class="tblwrap"><table class="plan" id="plan-table"><thead><tr>
+        <th>#</th><th>材質</th><th>鋳造厚<i>mm</i></th><th>面削<i>mm</i></th><th>板幅<i>mm</i></th>
+        <th>板長<i>mm</i></th><th>炉出し<i>℃</i></th><th>目標厚<i>mm</i></th><th>仕上げ</th><th>板面冷却</th><th></th>
+      </tr></thead><tbody id="plan-body"></tbody></table></div>
+    </div>
+    <!-- プリセット -->
+    <div class="pane" id="plan-pane-preset" hidden>
+      <div class="cards" id="plan-presets"></div>
+    </div>
+    <!-- 保存データ -->
+    <div class="pane" id="plan-pane-saved" hidden>
+      <div class="planrow">
+        <button class="mini" id="btn-plan-export" type="button" title="保存データをすべて JSON ファイルへ書き出します">エクスポート（JSON）</button>
+        <button class="mini" id="btn-plan-import" type="button" title="書き出した JSON を読み込みます">インポート</button>
+        <input type="file" id="plan-file" accept="application/json,.json" hidden>
+        <span class="grow"></span>
+        <button class="mini" id="btn-plan-wipe" type="button" title="保存データをすべて消します">すべて削除</button>
+      </div>
+      <div class="cards" id="plan-saved"></div>
+    </div>
+  </div>
+</section>
+
 <!-- 圧延実績ビュワー。«計器が指した値» だけを、パス表と時系列で見せる。3D を見ながら使うので «モーダルではない» 板（パネル）にしてある。
      見出しを掴んで移動、右下の掴みで大きさ変更。閉じても位置と大きさは覚えている。 -->
-<section id="pnl-log" hidden aria-label="圧延実績ビュワー">
+<section id="pnl-log" class="pnl" hidden aria-label="圧延実績ビュワー">
   <header id="log-drag">
     <div class="hd">
       <span class="ttl"><i class="fa-solid fa-chart-line"></i> 圧延実績</span>
@@ -860,6 +969,7 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
     </div>
     <div class="sub" id="log-lot">運転を開始すると記録が始まります。</div>
     <div class="btns">
+      <button id="btn-log-xlsx" type="button" title="このロットの実績を Excel ブック（.xlsx）で保存">Excel</button>
       <button id="btn-log-csv" type="button" title="CSV をクリップボードへコピー">CSV</button>
       <button id="btn-log-close" type="button" title="閉じる（Esc / G）" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
     </div>
@@ -961,6 +1071,35 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.19.0', base: 'a907600', date: '2026-09-09', title: 'ピットクレーンをワイヤー仕様へ・運転計画（キュー／プリセット／ループ）・保存と入出力・Excel 書き出し', items: [
+      // --- ピットクレーン ---
+      { t: '吊具を剛体の伸縮マストからワイヤ 4 本掛けにした。トロリのシーブ → 下部シーブブロック → 旋回装置 → トング の順に下から積み上げるので、どの姿勢でも繋がって見える', w: 'Parts.pitRopeBlock / pitSlewUnit / SupplyView.ropesP' },
+      { t: '仕様書の «主要事項» を能力として取り込んだ。定格 10 t・揚程 7.5 m・スパン 21 m・巻上 14／横行 40／走行 85 m/min・旋回 4 rpm・CAB 移動 30 m/min・開閉 3 回/min', w: 'CONFIG.CRANE.SPEED / RATED_T / LIFT / MOTOR' },
+      { t: '揚程 7.5 m に合わせて吊り上げ余裕を 2,600 → 1,400 にした。炉底からの巻上距離がちょうど 7,500 mm になる', w: 'CRANE.HOIST_CLEAR' },
+      { t: 'トングの開きを図面どおり最大 1,900・最小 250 にした。掴める板幅は 1,500 mm なので、定格 10 t とあわせて «吊れない材» を素材決定時に知らせる', w: 'CRANE.TONG.W_MAX / W_MIN' },
+      { t: '旋回装置（4 rpm）は機構として実装した。いまの炉とラインはどちらも長手側面が世界 Z を向いているので装入では回さない', w: 'SupplyView._slew / TongRig.yaw0' },
+      // --- 運転計画 ---
+      { t: '上部の右端に «運転計画 / 一時停止 / 実績» の 3 つのピルを、作業の流れと同じ順で置いた。ツールバーの畳み具合に関わらず位置が動かない', w: '.tb-pill / UIManager._fitToolbar' },
+      { t: '幅が足りないときの畳み方に段階 3 を足した。ツールバーを先に縮め、いちばんよく使うピルの文字は最後に落とす', w: 'body[data-pill-fit]' },
+      { t: '運転計画の板（Q）を作った。キュー・プリセット・保存データの 3 区分で、スケジュールをセットしてから実行する', w: '#pnl-plan / UIManager.renderPlan' },
+      { t: '繰り返しを «なし / キュー全体 / 1 ロット» の 3 通りにした。1 ロット終わるたびに次の条件を当てて自動で走り出す', w: 'UIManager._planStep / _planStop' },
+      { t: '過負荷停止したときは運転計画も止める。同じ条件を繰り返しても同じところで止まるため', w: "bus.on('STATE_TRIP')" },
+      // --- 保存と入出力 ---
+      { t: '運転計画を IndexedDB へ保存できるようにした。使えない環境では localStorage へ静かに落ちる', w: 'Store' },
+      { t: '保存データの削除・すべて削除・JSON でのエクスポート／インポートを足した', w: 'UIManager.planExport / planImport' },
+      // --- Excel ---
+      { t: 'ロット単位の実績を Excel ブックで書き出せるようにした。外部ライブラリを足さず、無圧縮 ZIP と最小の XLSX を自前で書く', w: 'Zip / Xlsx / UIManager.exportXlsx' },
+      { t: 'シートを «ロット諸元 / パス実績 / 時系列» の 3 枚に分けた。CSV だと 1 枚に押し込むことになり表の切れ目が読みにくい', w: 'Xlsx.book' },
+      { t: '時系列の分解能を正確に 100 ms にした。標本の余りを 0 に戻していたため、物理の刻み 1/120 s では間隔が 0.108 s に伸びていた。繰り越すようにして平均 0.100 s', w: 'RollingLog.sample' },
+      // --- 一時停止 ---
+      { t: '一時停止を上部のピルからも押せるようにし、運転していないときは «押せない» ことが見て分かるようにした', w: 'UIManager._pauseBtn' },
+      // --- 作業中に見つけて直したこと ---
+      { t: '旋回装置の固定側と回転側が 22 mm 重なっていた。実機の旋回輪は入れ子だが、別メッシュを入れ子にすると部材が部材の中に居ることになるので、軸受のすきまぶん上下に分けた', w: 'Parts.pitSlewUnit' },
+      { t: '巻上ワイヤがシーブブロックへ 50 mm 食い込んでいた。ワイヤの下端を天フランジの上面で止めた（実機もワイヤはフランジの穴から入る）', w: 'CRANE.ROPE.BOT_DY' },
+      { t: '群の中で隣り合う炉の «炉口の縁» と炉蓋が重なっていた。炉は 1 基ずつ縁（±350）を持つので、縁 2 枚ぶん 800 mm を空け、炉蓋も炉の外形に収めた', w: 'FURNACE.IN_GAP / Parts.furnaceLid' },
+      { t: '静的構造の検査が «動く部材» の一覧をマストのまま持っていた。新しい吊具へ更新し、lid → lids の綴り誤りも直した（炉蓋は一度も除外されていなかった）', w: 'tools/structure.mjs' },
+      { t: 'スラブヤードのラベルが «2 列» 前提の式だった。列数に依らない式にし、クレーンのラベル名も «装入クレーン（ワイヤ吊り）» にした', w: 'UIManager._buildTags' },
+    ] },
     { v: '1.18.0', base: '53a7d40', date: '2026-09-09', title: 'クレーンの移行速度を実機の定格速度で解く・板面冷却の着水蒸気・装入まわりの配置とピットトングの作り直し', items: [
       { t: 'ピットクレーンの速度を実測した。走行 1,007 m/min（77.21 m を 4.6 秒。加減速の山では 1,511）・巻上 145・横行 312・立てかけ降下 68 m/min。装入クレーンの一般値（走行 100〜150／横行 30〜60／巻上 10〜20）に対し走行で約 8.4 倍だった', w: 'tools/cranetrace.mjs' },
       { t: '原因は工程の所要秒が距離を見ない固定値だったこと。ピット炉が 9 基に増えて走行域が 77 m になっても、秒数は 4.6 のまま据え置かれていた', w: 'CONFIG.SEQUENCE' },
@@ -1804,7 +1943,9 @@ const CONFIG = {
    *   GAPS   …… 群と群の間の通路（ミル側から順に）。群の中は壁を共有して連なる
    *   SMALL_L … PIT9 の内法。図面のとおり極小（スラブ 2 本ぶん）
    * 炉の位置は Layout.pitX が唯一の真実で、床の開口・炉蓋・クレーンの走行はそこを見る。 */
-  FURNACE: { N: 9, X1: -121800, GROUPS: [3, 3, 2, 1], GAPS: [1200, 8000, 4000], Z: 9700,
+  /* IN_GAP は «群の中で隣り合う炉» の間。炉は 1 基ずつ自分の壁と炉口の縁（±350）を
+   * 持つので、密着させると隣の縁と重なる。縁 2 枚ぶん（700）を空けて 800 とする。 */
+  FURNACE: { N: 9, X1: -121800, GROUPS: [3, 3, 2, 1], GAPS: [1200, 8000, 4000], IN_GAP: 800, Z: 9700,
              DEPTH: 5200, W: 2600, L: 6000, SMALL_L: 1600, WALL: 500, LID_T: 380,
              PER_PIT: 10 },
 
@@ -1838,15 +1979,31 @@ const CONFIG = {
    * 正準オフセット）。炉が 9 基に増えて 100 m 近い走行域になったので、柱のピッチも広げる。
    * 走行桁の Z は «ラインを跨いで» 反対側（−6,500）と炉の外側（+27,000）に置く ——
    * 入側テーブル（Z ±1,765）とスラブヤード・炉バンクのどれにも柱を落とさないため。 */
-  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14000, RUN_X0: -112000, RUN_X1: 0, COL_PITCH: 12000,
-             TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600,
+  /* 走行桁の Z スパンは仕様の «スパン 21 m»（−6,500 〜 +14,500）。 */
+  CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 14500, RUN_X0: -112000, RUN_X1: 0, COL_PITCH: 12000,
+             /* 主要事項（仕様書より）。定格荷重は «吊れる重さ» の上限なので、
+              * ロットの質量がこれを超えたら運転前に知らせる（UIManager._craneLoad）。 */
+             RATED_T: 10, TEST_K: 1.25, LIFT: 7500, VOLT: 220, HZ: 60,
+             MOTOR: { HOIST: 90, CLOSE: 55, TRAVERSE: 15, TRAVEL: 60, SLEW: 5.5, CAB: 1.5 },  // kW（走行 15×4・CAB 0.75×2）
+             /* 吊具はワイヤ 4 本掛け。トロリのシーブから «下部シーブブロック» へ降り、
+              * ブロックの下に旋回装置（4 rpm）を挟んでトングを吊る。 */
+             /* BOT_DY はワイヤの下端。ブロックの «天フランジの上面» で止める
+              * （実機もワイヤはフランジの穴からブロックへ入る）。中まで伸ばすと
+              * 部材が部材の中に居ることになり、構造検査に引っかかる。 */
+             ROPE: { D: 42, FALLS: 4, SPREAD: 900, SPAN: 620, SHEAVE_D: 620, AXIS: 'x', TOP_DY: -0.34, BOT_DY: 500 },
+             BLOCK: { W: 1500, H: 700, D: 1100 },        // 下部シーブブロック
+             SLEW:  { D: 1150, H: 560 },                 // 旋回装置（ブロックとトングの間）
+             /* 揚程 7,500 mm は «炉底のスラブ底面 → 吊り上げ位置» の高さそのもの。
+              * HOIST_CLEAR はその差から決まる（炉深さ 5,200 − パスライン 900 で 7,500 になる）。 */
+             TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 1400,
              /* 定格速度 [m/min] と加減速度 [m/s²]。ここが «速度の唯一の真実» で、
               * 装入シーケンスの所要秒も、画面上の動きも、材料を放したあとの戻りも
-              * すべてこの 3 つから決まる（Ramp / Layout.moveRamp / SupplyView）。
-              * 値は製鉄・非鉄圧延の装入（ソーキングピット）クレーンの一般値:
-              *   走行 100〜150、横行 30〜60、巻上 10〜20 m/min。加速度は 0.3〜0.5 m/s²。
-              * 以前はここが無く、走行 77 m を 4.6 秒（＝約 1,000 m/min）で走っていた。 */
-             SPEED: { TRAVEL: 120, TRAVERSE: 45, HOIST: 15, ACCEL: 0.4 },
+              * すべてここから決まる（Ramp / Layout.moveRamp / SupplyView）。
+              * 値は仕様書の «主要事項» そのもの:
+              *   巻上 14（0.233 m/s）／横行 40（0.667）／走行 85（1.4167）m/min、
+              *   旋回 4 rpm（0.419 rad/s）／CAB 移動 30 m/min／開閉 3 回/min。
+              * 加減速度だけは仕様書に無いのでインバータ制御の一般値 0.4 m/s² を置く。 */
+             SPEED: { TRAVEL: 85, TRAVERSE: 40, HOIST: 14, ACCEL: 0.4, SLEW: 4, CAB: 30, CLOSE: 3 },
              /* 巻上ワイヤ。ドラムから «トロリ下面のシーブ» を経て吊りビーム上面の
               * シーブへ降り、2 本掛け（FALLS）で戻る。ワイヤの上端＝トロリのシーブ芯、
               * 下端＝ビームのシーブ芯にすると、両端がシーブに隠れて «繋がって» 見える
@@ -1876,7 +2033,8 @@ const CONFIG = {
               * ボディは板の頭より上に収まり、板の中に入り込まない。 */
              TONG: {
                STYLE: 'PIT',
-               W_MAX: 2800,          // 全開時の爪内面の間隔（板幅の最大 2,200 ＋ 逃げ）
+               W_MAX: 1900,          // 図面の «トング最大開き»（爪の外側どうし）
+               W_MIN: 250,           // 図面の «トング最小開き»（爪の内面どうし）
                PIVOT_Z: 430,         // アームのピン（トング中心から Z へ）
                PIVOT_H: 2200,        // ピン中心 → 爪先
                H: 4200,              // ピン中心 → 吊りピン（マスト頭）
@@ -2742,11 +2900,11 @@ const Layout = {
   feedDX(length) { return Math.max(CONFIG.TRANSFER.PARK_DX - length / 2, 0); },
   /** ピット炉 i 番（0 起点）の内法の長さ [mm]。図面どおり最後の 1 基（PIT9）は極小。 */
   pitLen(i) { const F = CONFIG.FURNACE; return i === F.N - 1 ? F.SMALL_L : F.L; },
-  /** 炉 j と j−1 の間に入る通路 [mm]（群の境目でだけ空く）。 */
+  /** 炉 j と j−1 の間 [mm]。群の境目は通路（GAPS）、群の中は炉口の縁ぶん（IN_GAP）。 */
   pitGap(j) {
     const F = CONFIG.FURNACE; let n = 0;
     for (let k = 0; k < F.GROUPS.length - 1; k++) { n += F.GROUPS[k]; if (j === n) return F.GAPS[k]; }
-    return 0;
+    return F.IN_GAP;
   },
   /**
    * ピット炉 i 番（0 起点）の中心 X（世界）。
@@ -5026,6 +5184,166 @@ class MillController {
  *  ・時系列は間引いて持つ（既定 10 Hz）。1 パス数十秒 × 9 パスで数千点に収まり、
  *    そのままグラフに描ける。
  */
+/**
+ * ブラウザ内保存。IndexedDB を使い、使えない環境（file:// で塞がれている等）では
+ * localStorage へ静かに落ちる。«どちらで動いているか» は kind で分かる。
+ * 保存するのは «運転計画»（ロットの条件を並べたもの）だけなので、器は 1 つで足りる。
+ */
+const Store = {
+  NAME: 'hotmill', VER: 1, ST: 'plans', LS: 'hotmill.plans',
+  _db: null, kind: null,
+  _open() {
+    if (Store._db) return Promise.resolve(Store._db);
+    return new Promise((res, rej) => {
+      if (!self.indexedDB) return rej(new Error('no indexedDB'));
+      let r;
+      try { r = indexedDB.open(Store.NAME, Store.VER); } catch (e) { return rej(e); }
+      r.onupgradeneeded = () => {
+        const db = r.result;
+        if (!db.objectStoreNames.contains(Store.ST)) db.createObjectStore(Store.ST, { keyPath: 'id' });
+      };
+      r.onsuccess = () => { Store.kind = 'IndexedDB'; res(Store._db = r.result); };
+      r.onerror = () => rej(r.error);
+      r.onblocked = () => rej(new Error('blocked'));
+    });
+  },
+  _idb(mode, fn) {
+    return Store._open().then(db => new Promise((res, rej) => {
+      const tx = db.transaction(Store.ST, mode), q = fn(tx.objectStore(Store.ST));
+      tx.oncomplete = () => res(q ? q.result : undefined);
+      tx.onerror = () => rej(tx.error);
+    }));
+  },
+  _ls() { try { return JSON.parse(localStorage.getItem(Store.LS) || '[]'); } catch { return []; } },
+  _lsPut(rows) { Store.kind = 'localStorage'; localStorage.setItem(Store.LS, JSON.stringify(rows)); },
+  /** 保存されている計画をすべて返す（新しい順）。 */
+  async all() {
+    try { const r = await Store._idb('readonly', st => st.getAll()); return (r || []).sort((a, b) => b.saved - a.saved); }
+    catch { return Store._ls().sort((a, b) => b.saved - a.saved); }
+  },
+  async put(rec) {
+    try { await Store._idb('readwrite', st => st.put(rec)); }
+    catch { const rows = Store._ls().filter(q => q.id !== rec.id); rows.push(rec); Store._lsPut(rows); }
+  },
+  async del(id) {
+    try { await Store._idb('readwrite', st => st.delete(id)); }
+    catch { Store._lsPut(Store._ls().filter(q => q.id !== id)); }
+  },
+  async clear() {
+    try { await Store._idb('readwrite', st => st.clear()); }
+    catch { Store._lsPut([]); }
+  },
+};
+
+/**
+ * 無圧縮（store 方式）の ZIP と、そこに載せる最小の XLSX 書き出し。
+ *
+ * 表計算へ渡すのに CSV では «複数の表を 1 枚に押し込む» ことになり、
+ * 「ロットの諸元」「パス実績」「時系列」が 1 枚に混ざって読みにくい。
+ * XLSX ならシートを分けられるので、外部ライブラリを足さずに «最小限だけ» 書く。
+ * 文字列は inlineStr で持つ（共有文字列表を作らない）ぶん短く済む。
+ */
+const Zip = {
+  _T: (() => { const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t; })(),
+  crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = Zip._T[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; },
+  /** files: [{ name, text }] → Blob（無圧縮 ZIP） */
+  blob(files) {
+    const enc = new TextEncoder(), parts = [], central = [];
+    let off = 0;
+    const u16 = (v) => [v & 255, (v >> 8) & 255];
+    const u32 = (v) => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+    for (const f of files) {
+      const name = enc.encode(f.name), data = enc.encode(f.text), crc = Zip.crc32(data);
+      const local = new Uint8Array([...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+        ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0), ...name]);
+      parts.push(local, data);
+      central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+        ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length),
+        ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off), ...name]));
+      off += local.length + data.length;
+    }
+    const cSize = central.reduce((a, c) => a + c.length, 0);
+    const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length),
+      ...u32(cSize), ...u32(off), ...u16(0)]);
+    return new Blob([...parts, ...central, end], { type: 'application/zip' });
+  },
+};
+const Xlsx = {
+  esc: (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+  col(i) { let s = ''; i++; while (i > 0) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = (i - r - 1) / 26; } return s; },
+  /** rows: 値の二次元配列（数値はそのまま数値セル、それ以外は文字セル）。 */
+  sheet(rows) {
+    const body = rows.map((r, y) => '<row r="' + (y + 1) + '">' + r.map((v, x) => {
+      const ref = Xlsx.col(x) + (y + 1);
+      if (v === null || v === undefined || v === '') return '';
+      return typeof v === 'number' && Number.isFinite(v)
+        ? `<c r="${ref}"><v>${v}</v></c>`
+        : `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${Xlsx.esc(v)}</t></is></c>`;
+    }).join('') + '</row>').join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+      body + '</sheetData></worksheet>';
+  },
+  /** sheets: [{ name, rows }] → .xlsx の Blob */
+  book(sheets) {
+    const n = sheets.length, idx = Array.from({ length: n }, (_, i) => i + 1);
+    const files = [
+      { name: '[Content_Types].xml', text: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+        idx.map(i => `<Override PartName="/xl/worksheets/sheet${i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') +
+        '</Types>' },
+      { name: '_rels/.rels', text: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+        '</Relationships>' },
+      { name: 'xl/workbook.xml', text: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+        sheets.map((s, i) => `<sheet name="${Xlsx.esc(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') +
+        '</sheets></workbook>' },
+      { name: 'xl/_rels/workbook.xml.rels', text: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        idx.map(i => `<Relationship Id="rId${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i}.xml"/>`).join('') +
+        '</Relationships>' },
+      ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, text: Xlsx.sheet(s.rows) })),
+    ];
+    return Zip.blob(files);
+  },
+};
+/**
+ * 運転計画のプリセット。«押せばすぐ流れる» 型を用意しておく。
+ * 先頭はこのアプリの既定（実機からいただいたロット）そのもので、
+ * プリセットを押さなければ、左メニューで決めた条件がそのままキューに入る。
+ */
+const DEMO_LOT = { alloy: 'A5052', cast: 560, scalp: 15, width: 1330, length: 3450, temp: 433,
+                   target: 8, trim: 15, mode: 'COIL', cool: 'WATER', entry: false, exit: true };
+const PRESETS = [
+  { name: '実機サンプル（既定）', loop: 'none', lots: [{ ...DEMO_LOT }],
+    desc: 'A5052 560 mm 鋳造・片面 15 面削 → 530 mm、1,330 × 3,450、炉出し 433 ℃、8 mm コイル。実機からいただいたロットそのものです。' },
+  { name: '実機サンプルを流し続ける', loop: 'lot', lots: [{ ...DEMO_LOT }],
+    desc: '同じロットを繰り返します。展示や動作確認で «止まらずに動き続ける» 状態にしたいときに。' },
+  { name: '厚板 → 板材（A5083 30 mm）', loop: 'none',
+    lots: [{ ...DEMO_LOT, alloy: 'A5083', target: 30, mode: 'PLATE', temp: 450 }],
+    desc: '巻き取らず、シャーで定尺に切り分けてパイラーへ積むまでを見ます。' },
+  { name: 'デモ 3 連（材質と仕上げを変える）', loop: 'queue',
+    lots: [{ ...DEMO_LOT },
+           { ...DEMO_LOT, alloy: 'A1050', target: 6, temp: 420, width: 1200 },
+           { ...DEMO_LOT, alloy: 'A5083', target: 30, mode: 'PLATE', temp: 450, width: 1500 }],
+    desc: 'コイル → 薄物コイル → 厚板の 3 ロットを順に流し、最後まで行ったら先頭へ戻ります。' },
+];
+
+/** Blob をファイルとして保存させる（リンクを 1 度だけ作って捨てる）。 */
+function saveBlob(blob, name) {
+  const a = document.createElement('a'), url = URL.createObjectURL(blob);
+  a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 class RollingLog {
   constructor() { this.lots = []; this.reset(); }
   reset() {
@@ -5101,8 +5419,11 @@ class RollingLog {
       }
     }
     this._t += dt;
-    if (this._t < 1 / RollingLog.SAMPLE_HZ) return;
-    this._t = 0;
+    const per = 1 / RollingLog.SAMPLE_HZ;
+    if (this._t < per) return;
+    /* 余りは «次へ繰り越す»（0 に戻さない）。物理の刻みは 1/120 s なので、0 に戻すと
+     * 標本の間隔が 0.108 s に伸びてしまう。繰り越せば長い目で見て正確に 100 ms になる。 */
+    this._t -= per;
     /* 1 標本に «荷重・速度・板厚・ギャップ・動力・温度・位置» を残す。板厚とギャップを
      * 並べて持つのが要点で、この 2 本を重ねると «荷重でミルがどれだけ開いたか»
      * «板厚制御がどう追い込んだか» がそのまま見える。 */
@@ -5246,7 +5567,8 @@ class TongRig {
     this.rodTopY = T.CYL_Y - T.CYL_L / 2 - 100;        // ロッドが出る位置（シリンダ下蓋の下面）
     const near = opt.near ?? ((m) => m);
     this.g = new THREE.Group(); this.g.name = 'トング';
-    this.g.rotation.y = opt.yaw ?? 0;
+    this.yaw0 = opt.yaw ?? 0;                          // 爪が閉じる向きの基準（旋回はこれに足す）
+    this.g.rotation.y = this.yaw0;
     this.pz = T.PIVOT_Z ?? 0;                          // アームのピンが中心から離れている距離
     host.add(this.g);
     /* 形は «寸法表が持つ様式» で切り替える。骨組み（ピン 1 本で開閉する 2 本のアーム）は
@@ -8303,17 +8625,20 @@ const Parts = {
     parts.push(G.at(G.box(w, F.DEPTH, F.W), -(L + w) / 2, -F.DEPTH / 2, 0));
     parts.push(G.at(G.box(w, F.DEPTH, F.W),  (L + w) / 2, -F.DEPTH / 2, 0));
     parts.push(G.at(G.box(L, 300, F.W), 0, -F.DEPTH - 150, 0));             // 炉底
-    for (const sz of [-1, 1])                                                // 炉口の縁
-      parts.push(G.at(G.box(L + 2 * w + 700, 240, 350), 0, 120, sz * (F.W / 2 + w + 175)));
+    // 炉口の縁。X 方向は «炉の外形ぶん» に収める（群の中の炉は壁を共有して隣り合う）
+    for (const sz of [-1, 1])
+      parts.push(G.at(G.box(L + 2 * w - 60, 240, 350), 0, 120, sz * (F.W / 2 + w + 175)));
     for (const sx of [-1, 1])
       parts.push(G.at(G.box(350, 240, F.W + 2 * w), sx * (L / 2 + w + 175), 120, 0));
     return G.merge(parts);
   },
+  /* 蓋は «炉の外形ぶん» に収める。群の中の炉は壁を共有して隣り合うので、
+   * 外形より広い蓋にすると隣の蓋と重なる（X だけ内側へ 60 mm 詰める）。 */
   furnaceLid(L = CONFIG.FURNACE.L) {
-    const F = CONFIG.FURNACE, w = F.WALL;
+    const F = CONFIG.FURNACE, w = F.WALL, lx = L + 2 * w - 60;
     return G.merge([
-      G.at(G.box(L + 2 * w + 300, F.LID_T, F.W + 2 * w + 300), 0, 0, 0),
-      G.at(G.box(L * 0.5, 260, F.W + 2 * w + 300), 0, F.LID_T / 2 + 130, 0),
+      G.at(G.box(lx, F.LID_T, F.W + 2 * w + 300), 0, 0, 0),
+      G.at(G.box(lx * 0.5, 260, F.W + 2 * w + 300), 0, F.LID_T / 2 + 130, 0),
     ]);
   },
 
@@ -8419,31 +8744,48 @@ const Parts = {
    * マストは 2 段。外筒はトロリに固定され、内筒がその中を伸び縮みする。
    */
   /** マスト外筒（トロリの下面に固定）。原点＝外筒の上端。 */
-  stackerSleeve(C = CONFIG.CRANE) {
-    const M = C.MAST, w = M.OUT_W, d = M.OUT_D, t = M.WALL, parts = [];
-    for (const sx of [-1, 1]) parts.push(G.at(G.box(t, M.OUT_H, d), sx * (w / 2 - t / 2), -M.OUT_H / 2, 0));
-    for (const sz of [-1, 1]) parts.push(G.at(G.box(w - 2 * t, M.OUT_H, t), 0, -M.OUT_H / 2, sz * (d / 2 - t / 2)));
-    // 上下端の案内ローラ（内筒を抱いて首振りを止める）
-    for (const dy of [-160, -M.OUT_H + 160]) for (const sx of [-1, 1])
-      parts.push(G.at(G.cyl(190, 220, 'x', 12), sx * (M.IN_W / 2 + 95), dy, 0));
-    parts.push(G.at(G.box(w + 320, 180, d + 320), 0, -90, 0));                       // トロリへの取付フランジ
-    // 昇降ラック（内筒を押し引きするピニオンの相手）。マストの片面に付く
-    parts.push(G.at(G.box(160, M.OUT_H - 300, 120), w / 2 + 80, -M.OUT_H / 2, 0));
+  /**
+   * 下部シーブブロック（ワイヤ 4 本掛けの «動滑車» 側）。原点＝ブロックの中心。
+   * トロリのシーブから降りたワイヤはここで折り返す。剛体マスト（スタッカー式）を
+   * やめてワイヤ吊りにしたので、吊具の重さはこのブロックが受ける。
+   */
+  pitRopeBlock(C = CONFIG.CRANE) {
+    const B = C.BLOCK, R = C.ROPE, parts = [];
+    parts.push(G.at(G.box(B.W, B.H, B.D), 0, 0, 0));                                 // 枠
+    parts.push(G.at(G.box(B.W + 220, 140, B.D + 220), 0, B.H / 2 + 70, 0));           // 上フランジ（ワイヤの入口）
+    parts.push(G.at(G.box(B.W * 0.62, 220, B.D * 0.62), 0, -B.H / 2 - 110, 0));       // 下フランジ（旋回装置へ）
+    // シーブ（ワイヤの折り返し）。4 本掛けなので 2 本の軸に 2 枚ずつ
+    for (const sz of [-1, 1]) for (const sd of [-1, 1])
+      parts.push(G.at(G.cyl(R.SHEAVE_D, 120, 'z', 16), sd * R.SPAN, 0, sz * R.SPREAD / 2 * 0.5));
+    for (const sd of [-1, 1])                                                        // シーブ軸
+      parts.push(G.at(G.cyl(190, B.D + 180, 'z', 12), sd * R.SPAN, 0, 0));
+    for (const sx of [-1, 1])                                                        // 側板のリブ
+      parts.push(G.at(G.box(90, B.H - 120, B.D - 160), sx * (B.W / 2 - 45), 0, 0));
     return G.merge(parts);
   },
-  /** マスト内筒（単位長 1,000 mm。上端が原点で下へ伸ばす。View が scale.y で実長へ）。 */
-  stackerColumn(C = CONFIG.CRANE) {
-    const M = C.MAST;
-    return G.at(G.box(M.IN_W, 1000, M.IN_D), 0, -500, 0);
-  },
-  /** 内筒の下端に付く «トング頭»（吊りピンを受ける）。原点＝吊りピン。 */
-  stackerHead(C = CONFIG.CRANE) {
-    const M = C.MAST;
-    return G.merge([
-      G.at(G.box(M.IN_W + 240, 320, M.IN_D + 240), 0, 260, 0),
-      G.at(G.cyl(260, M.IN_W + 520, 'x', 12), 0, 0, 0),                                // 吊りピン
-      ...[-1, 1].map(sx => G.at(G.cyl(380, 60, 'x', 12), sx * (M.IN_W / 2 + 280), 0, 0)),
-    ]);
+  /**
+   * 旋回装置（ブロックとトングの間）。仕様の «旋回 4 rpm・5.5 kW» の実体で、
+   * 吊ったスラブを水平面内で回す。上半分はブロック側（回らない）、
+   * 下半分はトング側（回る）—— View は下半分だけを回す。
+   */
+  pitSlewUnit(C = CONFIG.CRANE, moving = false) {
+    const W = C.SLEW, parts = [];
+    /* 固定側（上）と回転側（下）は «触れずに» 分ける。実機の旋回輪は入れ子だが、
+     * 別々のメッシュを入れ子にすると «部材が部材の中に居る» 検査（structure）に
+     * 引っかかるので、軸受のすきま（H の 5 %）を素直に空けて上下に積む。 */
+    if (!moving) {
+      parts.push(G.at(G.cyl(W.D, W.H * 0.34, 'y', 20), 0, W.H * 0.34, 0));           // 固定側（外輪）
+      // 旋回駆動は «ブロックの外側» へ張り出させる（真上のブロックと取り合わない）
+      parts.push(G.at(G.box(360, 420, 360), W.D * 0.85, W.H * 0.62, 0));             // 旋回モータ
+      parts.push(G.at(G.cyl(240, 260, 'y', 12), W.D * 0.85, W.H * 0.95, 0));         // 減速機
+      return G.merge(parts);
+    }
+    parts.push(G.at(G.cyl(W.D * 0.92, W.H * 0.28, 'y', 20), 0, -W.H * 0.02, 0));     // 回転側（内輪）
+    parts.push(G.at(G.cyl(W.D * 0.62, W.H * 0.34, 'y', 16), 0, -W.H * 0.30, 0));     // 首
+    for (const k of [0, 1, 2, 3])                                                     // 歯（旋回していることが見える）
+      parts.push(G.at(G.box(150, W.H * 0.20, 90), Math.cos(k * Math.PI / 2) * W.D * 0.40,
+                      -W.H * 0.02, Math.sin(k * Math.PI / 2) * W.D * 0.40));
+    return G.merge(parts);
   },
   /**
    * 操縦席。桁の下でトロリと一緒に動き、真下のトング（＝炉口）を見下ろす。
@@ -9868,19 +10210,23 @@ class SupplyView {
     this.girder = near(new THREE.Mesh(Parts.craneGirder(CR), MAT.tableFrame), MAT.tableFrame);
     this.girder.name = '装入クレーン桁'; this.girder.castShadow = true;
     this.girder.position.set(u(S.TILTER_X), u(this.girderY), u(zc)); this.group.add(this.girder);
-    this.trolley = new THREE.Mesh(Parts.craneTrolley(CR.TROLLEY), MAT.hydraulic);
+    this.trolley = new THREE.Mesh(Parts.craneTrolley(CR.TROLLEY, CR.ROPE), MAT.hydraulic);
     this.trolley.name = 'トロリ'; this.trolley.castShadow = true; this.group.add(this.trolley);
-    /* 吊具は «剛体の伸縮マスト»。外筒はトロリの下面に固定、内筒がその中を伸びる。
-     * 炉口へ差し込むときに振れないので、トングは «真下へ真っすぐ» 降りる。 */
-    this.mastSleeve = near(new THREE.Mesh(Parts.stackerSleeve(CR), MAT.tableFrame), MAT.tableFrame);
-    this.mastSleeve.name = 'マスト外筒'; this.mastSleeve.castShadow = true; this.group.add(this.mastSleeve);
-    /* マストは «構造材» なので鋼の色。油圧系の琥珀にすると、ヤードの盤木（茶）と
-     * 見分けが付かず «木の柱» に見えてしまう（実際に見比べて確かめた）。
-     * 琥珀は油圧で動くもの（トング）に取っておく。 */
-    this.mastCol = new THREE.Mesh(Parts.stackerColumn(CR), MAT.spindle);
-    this.mastCol.name = 'マスト内筒'; this.mastCol.castShadow = true; this.group.add(this.mastCol);
-    this.mastHead = new THREE.Mesh(Parts.stackerHead(CR), MAT.spindle);
-    this.mastHead.name = 'トング頭'; this.mastHead.castShadow = true; this.group.add(this.mastHead);
+    /* 吊具は «ワイヤ 4 本掛け»（仕様どおり）。トロリのシーブから下部シーブブロックへ
+     * 降り、ブロックの下に旋回装置（4 rpm）を挟んでトングを吊る。
+     * 以前は剛体の伸縮マストだったが、実機の仕様はワイヤ吊り＋旋回である。 */
+    this.ropeBlock = near(new THREE.Mesh(Parts.pitRopeBlock(CR), MAT.spindle), MAT.spindle);
+    this.ropeBlock.name = '下部シーブブロック'; this.ropeBlock.castShadow = true; this.group.add(this.ropeBlock);
+    this.slewFix = new THREE.Mesh(Parts.pitSlewUnit(CR, false), MAT.spindle);
+    this.slewFix.name = '旋回装置（固定側）'; this.slewFix.castShadow = true; this.group.add(this.slewFix);
+    this.slewRot = new THREE.Mesh(Parts.pitSlewUnit(CR, true), MAT.hydraulic);
+    this.slewRot.name = '旋回装置（回転側）'; this.slewRot.castShadow = true; this.group.add(this.slewRot);
+    const ropeGeoP = Parts.craneRope(CR.ROPE.D);
+    this.ropesP = [];
+    for (const sd of [-1, 1]) for (const sf of [-1, 1]) {
+      const m = new THREE.Mesh(ropeGeoP, MAT.rod); m.name = '巻上ワイヤ';
+      m.userData.rope = { sd, sf }; this.group.add(m); this.ropesP.push(m);
+    }
     /* 操縦席 —— 桁の下、トロリと一緒に動く。前面・側面がガラスで、真下のトングと
      * 炉口を見下ろせる（実機の «乗ると飛行機に乗っているよう» な運転室）。 */
     this.cab = near(new THREE.Mesh(Parts.craneCab(CR), MAT.tableFrame), MAT.tableFrame);
@@ -9896,6 +10242,10 @@ class SupplyView {
      * 以前は yaw = π/2 で板厚の面を挟んでおり、転倒機の受け面と爪が同じ場所を取り合った。 */
     this.pitTong = new TongRig(CR.TONG, this.group, { yaw: 0, near });
     this._crane = { x: null, z: CONFIG.FURNACE.Z, beamY: null };   // 装入クレーンの現在位置（走行 X・横行 Z・昇降。急に戻さず速度制限で戻す）
+    /* 旋回角 [rad]。仕様は 4 rpm（0.419 rad/s）で回せるが、いまの炉とラインは
+     * どちらも «長手側面が世界 Z» を向いているので、装入では回す必要がない。
+     * 機構は実装してあるので、向きの違う炉を足せばそのまま使える。 */
+    this._slew = 0;
 
     // --- トランスファークレーン：ピットクレーンとは完全に別の、低い最小限フレーム ---
     // フレーム自体の Z スパン（FT.GIRDER_Z0/Z1）は転倒アームの占有域の外に置いてあるので、
@@ -10099,13 +10449,27 @@ class SupplyView {
     const gripPit = hung ? w / 2 : TGP.W_MAX / 2 - TGP.JAW_T;           // 放しているときは全開
     const jawY = (hung ? pose.y + L / 2 - TGP.GRIP_DOWN : c.beamY - 1400) + TGP.JAW_LIFT;
     const tp = this.pitTong.set(c.x, jawY, c.z, gripPit);
-    this.mastHead.position.set(u(c.x), u(tp.mastTop), u(c.z));
-    // 外筒はトロリの下面に固定。内筒はその中から «頭» まで伸びる
-    const sleeveTop = this.trolleyY - CR.TROLLEY.H / 2;
-    this.mastSleeve.position.set(u(c.x), u(sleeveTop), u(c.z));
-    const colTop = sleeveTop - 300, colLen = Math.max(colTop - (tp.mastTop + 260), 200);
-    this.mastCol.position.set(u(c.x), u(colTop), u(c.z));
-    this.mastCol.scale.y = colLen / 1000;
+    /* 吊り上げは «トングの吊りピン → 旋回装置 → 下部シーブブロック → ワイヤ → トロリ»
+     * の順に下から積み上げる。爪先の高さが決まれば残りは幾何で決まるので、
+     * どの姿勢でも «繋がって» 見える（数字を別々に置くと必ずどこかで浮く）。 */
+    const SW = CR.SLEW, BK = CR.BLOCK, RP = CR.ROPE;
+    const slewBotY = tp.mastTop + 260;                       // 旋回装置の下端（トングの頭のすぐ上）
+    // ブロックは旋回装置の «上» に、軸受のすきまぶん離して載せる（部材が重ならない）
+    const slewY = slewBotY + SW.H / 2, blockY = slewBotY + SW.H + BK.H / 2 + 150;
+    this.slewRot.position.set(u(c.x), u(slewY), u(c.z));
+    this.slewFix.position.set(u(c.x), u(slewY), u(c.z));
+    this.slewRot.rotation.y = this._slew || 0;               // 旋回角（4 rpm。いまの装入では回さない）
+    this.pitTong.g.rotation.y = this.pitTong.yaw0 + (this._slew || 0);
+    this.ropeBlock.position.set(u(c.x), u(blockY), u(c.z));
+    {
+      const yTop = this.trolleyY + CR.TROLLEY.H * RP.TOP_DY, yBot = blockY + RP.BOT_DY;
+      const len = Math.max(yTop - yBot, 10);
+      for (const m of this.ropesP) {
+        const { sd, sf } = m.userData.rope;
+        m.position.set(u(c.x + sd * RP.SPAN), u((yTop + yBot) / 2), u(c.z + sf * RP.SPREAD / 2));
+        m.scale.y = len / 1000;
+      }
+    }
     // 操縦席はトロリの脇（桁の下）。トロリと一緒に走行・横行する
     const cabY = this.trolleyY - CR.CAB.H / 2 - 400;
     this.cab.position.set(u(c.x + CONFIG.FLIP * CR.CAB.DX), u(cabY), u(c.z));
@@ -10553,8 +10917,9 @@ class LabelView {
       ['ピット炉（9 基）',  (Layout.pitX(0) + Layout.pitX(CONFIG.FURNACE.N - 1)) / 2, 1800, CONFIG.FURNACE.Z, 120000],
       ['スラブヤード（面削済み）', (Layout.yardSlots()[0].x + Layout.yardSlots()[CONFIG.SLAB_YARD.PER_ROW - 1].x) / 2,
        CONFIG.SLAB_YARD.PLATE_T + CONFIG.SLAB_YARD.BAN_T + 1400,
-       CONFIG.SLAB_YARD.Z0 + CONFIG.SLAB_YARD.ROW_DZ / 2, 120000],
-      ['スタッカークレーン', (Layout.pitX(0) + CONFIG.SUPPLY.TILTER_X) / 2, CONFIG.CRANE.GIRDER_Y + 1500, CONFIG.FURNACE.Z, 130000],
+       // 列の «真ん中»。1 列でも 2 列でも同じ式で当たる（列が 1 つなら Z0 そのもの）
+       CONFIG.SLAB_YARD.Z0 + CONFIG.SLAB_YARD.ROW_DZ * (CONFIG.SLAB_YARD.ROWS - 1) / 2, 120000],
+      ['装入クレーン（ワイヤ吊り）', (Layout.pitX(0) + CONFIG.SUPPLY.TILTER_X) / 2, CONFIG.CRANE.GIRDER_Y + 1500, CONFIG.FURNACE.Z, 130000],
     ].map(([t, x, y, z, maxD]) => {
       const el = document.createElement('div'); el.className = 'tag'; el.textContent = t;
       el.title = `${t} へ視点を移す`;
@@ -10960,6 +11325,10 @@ class UIManager {
      * 計器の変化を «読む» には速すぎた。2× なら実機の 1 サイクル 11 分が 5 分半で、
      * 動きを追いながら数字も読める。物理計算は倍率に依らず同じ結果になる。 */
     this.timeScale = 2; this.passIndex = -1; this.cutaway = 'half'; this.labelsOn = true; this.zonesOn = false; this.quality = 'auto';
+    /* 運転計画。lots は «ロットの条件» の並び、loop は none / queue / lot。
+     * running のあいだは 1 ロット終わるたびに次を当てて自動で走り出す。 */
+    this.plan = { lots: [], loop: 'none', i: 0, done: 0, running: false, t: null };
+    this.planOpen = false; this.planTab = 'queue'; this.saved = [];
     this._acc = 0;
     // 実績ビュワーの状態: ロット（null = 運転中の最新）／パス（空 = 全部）／項目
     this.logLot = null; this.logPass = new Set();
@@ -10968,8 +11337,10 @@ class UIManager {
     this._buildTabs(); this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
     this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildStripCool(); this._buildCutScope();
     this._buildVersion();
-    this._bind(); this._listen(); this._logDragResize(); this._logCrosshair();
+    this._bind(); this._listen(); this._logDragResize(); this._panelDrag('pnl-plan', 'plan-drag'); this._logCrosshair();
     this.dims(); this._rollState(); this._plState(); this._coolSide(); this.setLogShow('both');
+    this.setPlanLoop('none'); this.renderPlan(); this._pauseBtn();
+    this._loadSaved();                                   // 保存データは開く前に数だけ拾っておく
     this.renderSchedule(); this._banner('idle'); this._summaries();
   }
 
@@ -11237,10 +11608,13 @@ class UIManager {
       p.style.right = 'auto';
     }
   }
-  _logDragResize() {
-    const p = $('pnl-log'), hd = $('log-drag'), grip = $('log-grip');
+  _logDragResize() { this._panelDrag('pnl-log', 'log-drag', 'log-grip', () => this.renderLog()); }
+  /** 板（パネル）を «見出しで移動・右下で大きさ変更» できるようにする。両方の板で同じ 1 式。 */
+  _panelDrag(pnlId, hdId, gripId, onResize) {
+    const p = $(pnlId), hd = $(hdId), grip = gripId ? $(gripId) : null;
+    if (!p || !hd) return;
     const save = () => { const r = p.getBoundingClientRect();
-      this._logBox = { x: r.left, y: r.top, w: r.width, h: r.height }; };
+      this['_box_' + pnlId] = { x: r.left, y: r.top, w: r.width, h: r.height }; };
     const start = (e, mode) => {
       if (e.target.closest('button,select')) return;
       e.preventDefault();
@@ -11256,7 +11630,7 @@ class UIManager {
         } else {
           p.style.width = Num.clamp(r.width + dx, 520, innerWidth - r.left - 4) + 'px';
           p.style.height = Num.clamp(r.height + dy, 280, innerHeight - r.top - 4) + 'px';
-          this.renderLog();                      // 大きさに合わせてチャートを描き直す
+          onResize?.();                          // 大きさに合わせて中身を描き直す
         }
       };
       const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up);
@@ -11264,8 +11638,62 @@ class UIManager {
       addEventListener('pointermove', move); addEventListener('pointerup', up);
     };
     hd.addEventListener('pointerdown', e => start(e, 'move'));
-    grip.addEventListener('pointerdown', e => start(e, 'size'));
+    grip?.addEventListener('pointerdown', e => start(e, 'size'));
     addEventListener('resize', () => { if (this.logOpen) this._logPlace(); });
+  }
+
+  /**
+   * ロット 1 本ぶんの実績を Excel ブック（.xlsx）で保存する。
+   * シートは «ロット諸元 / パス実績 / 時系列» の 3 枚に分ける —— CSV だと 1 枚に
+   * 押し込むことになり、表の切れ目が読みにくい。時系列の分解能は RollingLog.SAMPLE_HZ
+   * （10 Hz ＝ 100 ms）で、これは «シミュレーション時間» の刻みなので描画のフレーム
+   * レートに依らない（30 fps を割っても標本は 100 ms のまま）。
+   */
+  exportXlsx() {
+    const t = this._logTarget(), L = t?.lot;
+    const b = $('btn-log-xlsx');
+    if (!L) { b.textContent = '記録がありません'; setTimeout(() => { b.textContent = 'Excel'; }, 1600); return; }
+    const sel = [...this.logPass], on = (no) => !sel.length || sel.includes(no);
+    const num = (v, n) => (v === null || v === undefined || Number.isNaN(v)) ? '' : +(+v).toFixed(n);
+    const meta = [
+      ['項目', '値'],
+      ['ロット開始', L.started.toLocaleString('ja-JP')],
+      ['材質', L.alloyKey], ['呼び厚（鋳造厚）[mm]', L.cast], ['片面面削 [mm]', L.scalp],
+      ['圧延前厚 [mm]', num(L.thick0, 1)], ['板幅 [mm]', L.width], ['板長 [mm]', L.length],
+      ['炉出し温度 [℃]', L.tPit], ['目標板厚 [mm]', L.target],
+      ['仕上げ', L.mode === 'COIL' ? 'コイル巻取' : '板材'], ['板面冷却', L.cool],
+      ['計画パス数', L.passPlan], ['実績パス数', t.passes.length],
+      ['所要時間 [s]', num(L.t, 1)],
+      ['出側板厚 [mm]', num(L.outThick, 2)], ['出側板長 [m]', num(L.outLen / 1000, 2)],
+      ['出側温度 [℃]', num(L.outTemp, 0)],
+      ['時系列の分解能 [Hz]', RollingLog.SAMPLE_HZ],
+      ['出力したパス', sel.length ? sel.join(' ') : 'すべて'],
+      ['出力日時', new Date().toLocaleString('ja-JP')],
+    ];
+    const pHead = ['パス', '方向', '入厚[mm]', '出厚[mm]', '圧下率[%]', '最大荷重[t]', '平均荷重[t]', '計画荷重[t]',
+                   '最大速度[mpm]', '平均速度[mpm]', '計画速度[mpm]', '計画ギャップ[mm]', '最小ギャップ[mm]',
+                   'ミル伸び[mm]', '最大動力[MW]', '入温[℃]', '出側温[℃]', '出温[℃]',
+                   '丈反り[mm]', '幅反り[mm]', 'プロファイル[-]', '板長[m]', '所要[s]'];
+    const pRows = t.passes.map(c => this.log.row(c)).filter(r => on(r.no)).map(r =>
+      [r.no, r.dir, num(r.hIn, 1), num(r.hOut, 1), num(r.red, 1), num(r.fMax, 0), num(r.fAvg, 0), num(r.planForce, 0),
+       num(r.vMax, 1), num(r.vAvg, 1), num(r.planSpeed, 0), num(r.gap, 2), num(r.gMin, 2), num(r.spring, 2),
+       num(r.pMax, 2), num(r.tIn, 0), num(r.tExit, 0), num(r.tOut, 0),
+       num(r.curlL, 2), num(r.curlW, 2), num(r.prof, 4), num(r.len / 1000, 2), num(r.sec, 1)]);
+    const sHead = ['時刻[s]', 'パス', '荷重[t]', '速度[mpm]', '板厚[mm]', 'ギャップ[mm]', '圧下位置[mm]', '動力[MW]',
+                   '目標ギャップ[mm]', '出側板厚[mm]', 'クラウン[um]', '平坦度[I]', 'ベンディング[t]', '横ずれ[mm]',
+                   '丈反り[mm]', '幅反り[mm]', 'プロファイル[-]', '温度[℃]', '位置[mm]'];
+    const sRows = t.series.filter(q => on(q.pass)).map(q =>
+      [q.t, q.pass, q.f, q.v, q.h, q.g, q.sc, q.p, q.tg, q.hd, q.cr, q.fl, q.bd, q.zo, q.cl, q.cw, q.pc, q.T, q.x]);
+    const blob = Xlsx.book([
+      { name: 'ロット諸元', rows: meta },
+      { name: 'パス実績', rows: [pHead, ...pRows] },
+      { name: `時系列(${RollingLog.SAMPLE_HZ}Hz)`, rows: [sHead, ...sRows] },
+    ]);
+    const st = L.started, pad = (v) => String(v).padStart(2, '0');
+    saveBlob(blob, `hotmill_${L.alloyKey}_${st.getFullYear()}${pad(st.getMonth() + 1)}${pad(st.getDate())}` +
+                   `_${pad(st.getHours())}${pad(st.getMinutes())}.xlsx`);
+    b.textContent = `保存しました（${sRows.length} 標本）`;
+    setTimeout(() => { b.textContent = 'Excel'; }, 2200);
   }
 
   /**
@@ -11404,11 +11832,20 @@ class UIManager {
    * 収まるまで data-fit を 0 → 1 → 2 と上げるだけ。判断の材料が «画面の幅» ではなく
    * «この箱の幅» なので、メニューをたたんで広くなればひとりでに元へ戻る。
    */
+  /**
+   * 畳み具合を «実際に使える幅» から決める。ツールバーを 0 → 1 → 2 と縮めても
+   * 収まらないときは、最後に右端のピルの文字を落とす（段階 3）。
+   * ピルを最後に回すのは、いちばんよく使うものだから。
+   */
   _fitToolbar() {
     const tb = $('toolbar'); if (!tb) return;
-    for (const lv of ['0', '1', '2']) {
-      tb.dataset.fit = lv;
-      if (tb.scrollWidth <= tb.clientWidth + 1) return;
+    const fits = () => tb.scrollWidth <= tb.clientWidth + 1;
+    for (const pill of ['0', '1']) {
+      document.body.dataset.pillFit = pill;
+      for (const lv of ['0', '1', '2']) {
+        tb.dataset.fit = lv;
+        if (fits()) return;
+      }
     }
   }
   _watchToolbar() {
@@ -11746,6 +12183,15 @@ class UIManager {
         if (od > C.OD_MAX || od < C.OD_MIN) warn.push(`コイル外径 Φ${od.toFixed(0)} が Φ${C.OD_MIN}〜Φ${C.OD_MAX} を外れます`);
         if (coilKg > C.WEIGHT_MAX) warn.push(`コイル重量 ${(coilKg / 1000).toFixed(1)} t が最大 ${C.WEIGHT_MAX / 1000} t を超えます`);
       }
+      /* 装入クレーンの能力（仕様書の定格荷重と図面のトング開き）。
+       * «炉から吊り上げられない材» は運転しても始まらないので、素材を決めた時点で知らせる。 */
+      {
+        const CR = CONFIG.CRANE, gripMax = CR.TONG.W_MAX - 2 * CR.TONG.JAW_T;
+        if (mass > CR.RATED_T)
+          warn.push(`スラブ質量 ${mass.toFixed(1)} t が装入クレーンの定格荷重 ${CR.RATED_T} t を超えます`);
+        if (d.width > gripMax)
+          warn.push(`板幅 ${d.width} mm が装入トングの最大開き ${gripMax} mm（長手側面を掴む）を超えます`);
+      }
       $('der-slab').innerHTML =
         `スラブ質量 ${mass.toFixed(1)} t ／ ${sch.length} パス ／ 最終長 ${(outLen / 1000).toFixed(1)} m（伸び ${(th / d.target).toFixed(1)} 倍）` +
         (coil ? `<br>コイル: 外径 Φ${od.toFixed(0)} ／ 内径 Φ${C.MANDREL_D} ／ ${(coilKg / 1000).toFixed(1)} t` +
@@ -11775,6 +12221,23 @@ class UIManager {
     on('chk-steam',   'change', e => { this.bus.emit('CMD_SET_ENV', { steam: e.target.checked }); this._summaries(); });
     on('chk-supply-anim', 'change', e => { this.bus.emit('CMD_SET_SUPPLY_ANIM', e.target.checked); this._summaries(); });
 
+    on('tb-plan', 'click', () => this.togglePlan());
+    on('tb-pause', 'click', () => this.togglePause());
+    on('btn-plan-close', 'click', () => this.togglePlan(false));
+    on('btn-plan-run', 'click', () => this.planRun());
+    on('btn-plan-add', 'click', () => this.planAdd());
+    on('btn-plan-clear', 'click', () => this.planClear());
+    on('btn-plan-save', 'click', () => this.planSave());
+    on('btn-plan-export', 'click', () => this.planExport());
+    on('btn-plan-import', 'click', () => $('plan-file').click());
+    on('plan-file', 'change', e => { const f = e.target.files[0]; if (f) this.planImport(f); e.target.value = ''; });
+    on('btn-plan-wipe', 'click', async () => {
+      if (!confirm('保存された計画をすべて削除します。よろしいですか？')) return;
+      await Store.clear(); await this._loadSaved();
+    });
+    for (const k of ['queue', 'preset', 'saved']) on('plan-tab-' + k, 'click', () => this.setPlanTab(k));
+    for (const k of ['none', 'queue', 'lot']) on('plan-loop-' + k, 'click', () => this.setPlanLoop(k));
+    on('btn-log-xlsx', 'click', () => this.exportXlsx());
     on('tb-log', 'click', () => this.toggleLog());
     on('btn-log-close', 'click', () => this.toggleLog(false));
     on('btn-log-csv', 'click', async () => {
@@ -11816,6 +12279,8 @@ class UIManager {
       if (this._logPop && k === 'escape') { e.preventDefault(); this.toggleLogPop(null); return; }
       // 実績ビュワーはモーダルではないので、開いていても運転や視点のキーは効かせる
       if (k === 'g') { this.toggleLog(); return; }
+      if (k === 'q') { this.togglePlan(); return; }
+      if (k === 'escape' && this.planOpen) { this.togglePlan(false); return; }
       if (k === 'escape' && this.logOpen) { this.toggleLog(false); return; }
       if (k === ' ') { e.preventDefault(); this.toggleRun(); }
       else if (k === 'p') this.togglePause();
@@ -11868,11 +12333,205 @@ class UIManager {
       if (this.logOpen) this.renderLog(); });
     this.bus.on('STATE_RESET', () => { this.busy = false; this.paused = false; this.passIndex = -1;
       this.peak = {}; this.renderSchedule(); this._startBtn(); this._banner('idle'); this._applyVisibility(); this._summaries(); });
-    this.bus.on('STATE_FINISHED', () => { this.busy = false; this._startBtn(); this._banner('done'); this._applyVisibility(); });
-    this.bus.on('STATE_TRIP', (text) => { this.busy = false; this.tripText = text; this._startBtn(); this._banner('trip'); this._applyVisibility(); });
+    this.bus.on('STATE_FINISHED', () => {
+      this.busy = false; this._startBtn(); this._banner('done'); this._applyVisibility();
+      // 計画を流している間は、1 ロット終わるたびに次を当てて自動で続ける
+      if (this.plan.running) { clearTimeout(this.plan.t); this.plan.t = setTimeout(() => this._planStep(false), 1200); }
+    });
+    this.bus.on('STATE_TRIP', (text) => {
+      this.busy = false; this.tripText = text; this._startBtn(); this._banner('trip'); this._applyVisibility();
+      // 過負荷で止まったら計画も止める（同じ条件を繰り返しても同じところで止まるため）
+      if (this.plan.running) this._planStop('過負荷停止のため運転計画を止めました');
+    });
     this.bus.on('SYS_MESSAGE', m => this.toast(m.text, m.kind));
     this.bus.on('STATE_WARN', w => { this.warn = w; if (w) this.toast(w.text, w.kind); this._banner(); });
     this.peak = {};
+  }
+
+  /* ---- 運転計画（キュー・プリセット・保存データ）--------------------------
+   * «何を・どの順で・何回流すか» を決めてから運転する。1 ロットずつ手で条件を
+   * 入れ直す必要が無くなり、デモンストレーションでは流しっぱなしにできる。
+   * キューの中身は «ロットの条件» そのもの（＝左メニューで決めるもの）で、
+   * パススケジュールはその条件から毎回組み直される（条件が真実で、表は結果）。 */
+
+  /** いま左メニューで決めている条件を 1 ロットぶんの記録として取り出す。 */
+  _lotOf() {
+    const SC = CONFIG.MATERIAL.STRIP_COOL;
+    return { ...this.dims(), cool: SC.MODE, entry: SC.ENTRY, exit: SC.EXIT };
+  }
+  /** ロットの条件を左メニューへ流し込み、そのまま反映する（画面と運転が食い違わない）。 */
+  _applyLot(lot) {
+    const set = (id, v) => { const e = $(id); if (e && v !== undefined && v !== null) e.value = v; };
+    if (lot.alloy) set('sel-alloy', lot.alloy);
+    if (lot.cast !== undefined) {
+      this.cast = lot.cast;
+      const i = CONFIG.SLAB.CAST_TH.indexOf(lot.cast);
+      this.castBtns.forEach((b, k) => b.setAttribute('aria-pressed', k === i ? 'true' : 'false'));
+    }
+    set('rng-init-scalp', lot.scalp); set('rng-init-wid', lot.width);
+    set('rng-init-len', lot.length); set('rng-init-temp', lot.temp);
+    set('rng-trim', lot.trim); set('rng-target', lot.target); set('num-target', lot.target);
+    const SC = CONFIG.MATERIAL.STRIP_COOL;
+    if (lot.cool && SC.MODES[lot.cool]) this.bus.emit('CMD_SET_STRIP_COOL', lot.cool);
+    if (lot.entry !== undefined) SC.ENTRY = !!lot.entry;
+    if (lot.exit !== undefined) SC.EXIT = !!lot.exit;
+    this._syncStripCool(); this._coolSide();
+    this.bus.emit('CMD_SET_SLAB', this.dims());
+  }
+  togglePlan(v) {
+    this.planOpen = v === undefined ? !this.planOpen : v;
+    $('pnl-plan').hidden = !this.planOpen;
+    $('tb-plan').setAttribute('aria-pressed', String(this.planOpen));
+    if (this.planOpen) { this.setPlanTab(this.planTab || 'queue'); this._loadSaved(); }
+  }
+  setPlanTab(k) {
+    this.planTab = k;
+    for (const t of ['queue', 'preset', 'saved']) {
+      $('plan-tab-' + t).setAttribute('aria-pressed', String(t === k));
+      $('plan-pane-' + t).hidden = t !== k;
+    }
+    this.renderPlan();
+  }
+  setPlanLoop(k) {
+    this.plan.loop = k;
+    for (const t of ['none', 'queue', 'lot']) $('plan-loop-' + t).setAttribute('aria-pressed', String(t === k));
+    $('plan-hint').textContent = k === 'none' ? '1 巡したら止まります'
+      : k === 'queue' ? 'キューの最後まで流したら先頭へ戻ります（止めるまで続きます）'
+      : 'いま流しているロットだけを繰り返します（止めるまで続きます）';
+    this.renderPlan();
+  }
+  /** キューの表・プリセット・保存データを、開いている区分だけ描き直す。 */
+  renderPlan() {
+    const P = this.plan;
+    $('plan-n').textContent = P.lots.length;
+    $('tb-plan-n').textContent = P.lots.length;
+    $('btn-plan-run').disabled = !P.lots.length;
+    $('btn-plan-run').textContent = P.running ? '計画を止める' : 'この計画で実行';
+    $('plan-stat').textContent = P.running
+      ? `実行中 ${P.i + 1}/${P.lots.length}（${P.done} ロット完了）` : '';
+    if (this.planTab === 'queue') {
+      const b = $('plan-body');
+      if (!P.lots.length) {
+        b.innerHTML = '<tr><td colspan="11" style="padding:26px;text-align:center;color:var(--ink-3)">' +
+          'キューが空です。«プリセット» から選ぶか、«＋ いまの条件を追加» で足してください。</td></tr>';
+      } else {
+        b.innerHTML = P.lots.map((q, i) => {
+          const cool = CONFIG.MATERIAL.STRIP_COOL.MODES[q.cool]?.name || '–';
+          return `<tr class="${P.running && i === P.i ? 'now' : ''}"><td>${i + 1}</td><td>${q.alloy}</td>` +
+            `<td>${q.cast}</td><td>${q.scalp}</td><td>${q.width}</td><td>${q.length}</td>` +
+            `<td>${q.temp}</td><td>${(+q.target).toFixed(1)}</td>` +
+            `<td>${q.mode === 'COIL' ? 'コイル' : '板材'}</td><td>${cool}</td>` +
+            `<td class="act"><button class="ib" data-up="${i}" title="上へ">↑</button> ` +
+            `<button class="ib" data-dn="${i}" title="下へ">↓</button> ` +
+            `<button class="ib" data-del="${i}" title="外す">✕</button></td></tr>`;
+        }).join('');
+        b.querySelectorAll('button[data-up]').forEach(x => x.onclick = () => this.planMove(+x.dataset.up, -1));
+        b.querySelectorAll('button[data-dn]').forEach(x => x.onclick = () => this.planMove(+x.dataset.dn, 1));
+        b.querySelectorAll('button[data-del]').forEach(x => x.onclick = () => this.planDel(+x.dataset.del));
+      }
+    }
+    if (this.planTab === 'preset') {
+      $('plan-presets').innerHTML = PRESETS.map((q, i) =>
+        `<button class="card" data-p="${i}"><span class="tg">${q.lots.length} ロット</span>` +
+        `<span class="nm">${q.name}</span><span class="ds">${q.desc}</span></button>`).join('');
+      $('plan-presets').querySelectorAll('button[data-p]').forEach(x =>
+        x.onclick = () => this.planUsePreset(PRESETS[+x.dataset.p]));
+    }
+    if (this.planTab === 'saved') {
+      const rows = this.saved || [];
+      $('plan-saved-n').textContent = rows.length;
+      $('plan-saved').innerHTML = rows.length ? rows.map(r =>
+        `<div class="card" style="cursor:default"><span class="tg">${r.lots.length} ロット</span>` +
+        `<span class="nm">${r.name}</span>` +
+        `<span class="ds">${new Date(r.saved).toLocaleString('ja-JP')}<br>${r.lots.map(q => q.alloy).join(' / ')}</span>` +
+        `<span class="planrow"><button class="mini" data-load="${r.id}">キューへ読み込む</button>` +
+        `<button class="mini" data-rm="${r.id}">削除</button></span></div>`).join('')
+        : `<div class="empty">保存された計画はまだありません。<br>«キュー» で計画を作って «この計画を保存» を押すと、この端末（${Store.kind || 'ブラウザ'}）に残ります。</div>`;
+      $('plan-saved').querySelectorAll('button[data-load]').forEach(x =>
+        x.onclick = () => { const r = rows.find(q => q.id === x.dataset.load); if (r) this.planUsePreset(r); });
+      $('plan-saved').querySelectorAll('button[data-rm]').forEach(x =>
+        x.onclick = async () => { await Store.del(x.dataset.rm); await this._loadSaved(); });
+    }
+  }
+  async _loadSaved() { this.saved = await Store.all(); this.renderPlan(); }
+  planAdd() { this.plan.lots.push(this._lotOf()); this.setPlanTab('queue'); }
+  planClear() { this.plan.lots = []; this.renderPlan(); }
+  planDel(i) { this.plan.lots.splice(i, 1); this.renderPlan(); }
+  planMove(i, d) {
+    const L = this.plan.lots, j = i + d; if (j < 0 || j >= L.length) return;
+    [L[i], L[j]] = [L[j], L[i]]; this.renderPlan();
+  }
+  /** プリセット／保存データをキューに入れ、先頭の条件をそのまま画面へ反映する。 */
+  planUsePreset(q) {
+    this.plan.lots = q.lots.map(x => ({ ...x }));
+    if (q.loop) this.setPlanLoop(q.loop);
+    if (this.plan.lots[0]) this._applyLot(this.plan.lots[0]);
+    this.setPlanTab('queue');
+    this.bus.emit('SYS_MESSAGE', { text: `運転計画「${q.name}」を読み込みました（${q.lots.length} ロット）`, kind: 'info' });
+  }
+  async planSave() {
+    if (!this.plan.lots.length) return;
+    const name = prompt('この計画の名前', `計画 ${new Date().toLocaleString('ja-JP')}`);
+    if (!name) return;
+    await Store.put({ id: 'p' + Date.now().toString(36), name, saved: Date.now(),
+                      loop: this.plan.loop, lots: this.plan.lots.map(q => ({ ...q })) });
+    await this._loadSaved(); this.setPlanTab('saved');
+  }
+  async planExport() {
+    const rows = await Store.all();
+    saveBlob(new Blob([JSON.stringify({ app: 'HotMill', kind: 'plans', v: 1, saved: new Date().toISOString(), plans: rows }, null, 2)],
+                      { type: 'application/json' }), `hotmill-plans-${new Date().toISOString().slice(0, 10)}.json`);
+  }
+  async planImport(file) {
+    try {
+      const j = JSON.parse(await file.text());
+      const rows = Array.isArray(j) ? j : j.plans;
+      if (!Array.isArray(rows)) throw new Error('形式が違います');
+      let n = 0;
+      for (const r of rows) {
+        if (!r || !Array.isArray(r.lots)) continue;
+        await Store.put({ id: r.id || 'p' + Date.now().toString(36) + n, name: r.name || '読み込んだ計画',
+                          saved: r.saved || Date.now(), loop: r.loop || 'none', lots: r.lots });
+        n++;
+      }
+      await this._loadSaved(); this.setPlanTab('saved');
+      this.bus.emit('SYS_MESSAGE', { text: `${n} 件の計画を読み込みました`, kind: 'info' });
+    } catch (e) {
+      this.bus.emit('SYS_MESSAGE', { text: `読み込めませんでした: ${e.message}`, kind: 'warn' });
+    }
+  }
+  /** 計画の実行。開始と停止を 1 つのボタンで受ける。 */
+  planRun() {
+    const P = this.plan;
+    if (P.running) { this._planStop('計画を止めました'); return; }
+    if (!P.lots.length) return;
+    P.running = true; P.i = 0; P.done = 0;
+    this._planStep(true);
+  }
+  _planStop(msg) {
+    const P = this.plan; P.running = false; clearTimeout(P.t);
+    if (msg) this.bus.emit('SYS_MESSAGE', { text: msg, kind: 'info' });
+    this.renderPlan();
+  }
+  /** 次に流すロットを決めて、条件を当ててから運転を始める。 */
+  _planStep(first) {
+    const P = this.plan; if (!P.running) return;
+    if (!first) {
+      P.done++;
+      if (P.loop !== 'lot') {
+        P.i++;
+        if (P.i >= P.lots.length) {
+          if (P.loop !== 'queue') { this._planStop(`計画を流し終えました（${P.done} ロット）`); return; }
+          P.i = 0;
+        }
+      }
+    }
+    const lot = P.lots[P.i]; if (!lot) { this._planStop(); return; }
+    this._applyLot(lot);
+    clearTimeout(P.t);
+    // 条件の反映（CMD_SET_SLAB → リセット）が落ち着いてから始める
+    P.t = setTimeout(() => { if (P.running && !this.busy) this.toggleRun(); }, 300);
+    this.renderPlan();
   }
 
   /* ---- 操作 ---- */
@@ -11881,16 +12540,30 @@ class UIManager {
     this.busy = true; this.paused = false; this.bus.emit('CMD_PAUSE', false);
     this.bus.emit('CMD_START_AUTO'); this._startBtn(); this._applyVisibility();
   }
-  togglePause() { if (!this.busy) return; this.paused = !this.paused; this.bus.emit('CMD_PAUSE', this.paused);
-    $('btn-pause').innerHTML = (this.paused ? '<i class="fa-solid fa-play"></i>再開' : '<i class="fa-solid fa-pause"></i>一時停止') + '<span class="kbd">P</span>';
-    this._banner(); }
+  togglePause() {
+    if (!this.busy) return;
+    this.paused = !this.paused; this.bus.emit('CMD_PAUSE', this.paused);
+    this._pauseBtn(); this._banner();
+  }
+  /** 一時停止の表示（左メニューのボタンと上部のピル）。押せるかどうかも同時に出す。 */
+  _pauseBtn() {
+    const on = this.paused;
+    $('btn-pause').innerHTML = (on ? '<i class="fa-solid fa-play"></i>再開' : '<i class="fa-solid fa-pause"></i>一時停止') + '<span class="kbd">P</span>';
+    const pill = $('tb-pause');
+    pill.setAttribute('aria-pressed', String(on));
+    pill.disabled = !this.busy;
+    pill.querySelector('i').className = on ? 'fa-solid fa-play' : 'fa-solid fa-pause';
+    $('tb-pause-tx').textContent = on ? '再開' : '一時停止';
+    pill.title = this.busy ? (on ? 'シミュレーションを再開する（P）' : 'シミュレーションを一時停止する（P）')
+                           : '運転中だけ使えます（P）';
+  }
   _startBtn() {
     const b = $('btn-start');
     b.className = 'btn ' + (this.busy ? 'btn-danger' : 'btn-primary');
     b.innerHTML = this.busy
       ? '<i class="fa-solid fa-stop"></i><span>運転を中止</span><span class="kbd">Space</span>'
       : '<i class="fa-solid fa-play"></i><span>圧延サイクル開始</span><span class="kbd">Space</span>';
-    $('btn-pause').innerHTML = '<i class="fa-solid fa-pause"></i>一時停止<span class="kbd">P</span>';
+    this._pauseBtn();
   }
   selectView(i) {
     this.chips.forEach((c, k) => c.setAttribute('aria-pressed', k === i));
