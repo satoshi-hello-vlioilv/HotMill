@@ -961,6 +961,21 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.18.0', base: '53a7d40', date: '2026-09-09', title: 'ピットクレーンの移行速度を実機の定格速度で解く・板面冷却の着水蒸気', items: [
+      { t: 'ピットクレーンの速度を実測した。走行 1,007 m/min（77.21 m を 4.6 秒。加減速の山では 1,511）・巻上 145・横行 312・立てかけ降下 68 m/min。装入クレーンの一般値（走行 100〜150／横行 30〜60／巻上 10〜20）に対し走行で約 8.4 倍だった', w: 'tools/cranetrace.mjs' },
+      { t: '原因は工程の所要秒が距離を見ない固定値だったこと。ピット炉が 9 基に増えて走行域が 77 m になっても、秒数は 4.6 のまま据え置かれていた', w: 'CONFIG.SEQUENCE' },
+      { t: '所要時間と途中位置を、距離・定格速度・加減速度から台形速度線図で解く共通部品を作った。短い移動は自動的に三角形になる', w: 'Ramp.time / Ramp.s' },
+      { t: '速度の真実を 1 か所に置いた（走行 120・横行 45・巻上 15 m/min、加速度 0.4 m/s²）。所要秒・画面上の動き・材料を放したあとの戻りが、すべてここから決まる', w: 'CONFIG.CRANE.SPEED' },
+      { t: '装入工程の道順（炉の位置・吊上げ高さ・立てかけ位置・移動距離）を 1 本化した。姿勢を描く側と所要秒を決める側が同じ関数を見るので、両者が食い違えない', w: 'Layout.supplyPath / moveRamp / moveSec / moveS' },
+      { t: 'クレーンが動く工程は SEQUENCE の秒を null にし、距離から解く。材質（＝炉の位置）や板長が変われば所要秒も追従する', w: 'CONFIG.CRANE_MOVES / SupplyController._sec' },
+      { t: '加減速が入って発進・停止が瞬間ではなくなった。以前は横行・巻上が等速補間で、動き出しと止まりが階段状だった', w: 'SupplyView._pose' },
+      { t: '装入 1 サイクルが約 133 秒になったので、状態バーに «圧延開始まで約 n 秒» と、いま効いている定格速度を出した（時間倍率に追従する）', w: 'SupplyController.remainSec' },
+      // --- 板面冷却の着水蒸気 ---
+      { t: '板面冷却の着水点から蒸気を立てるようにした。433 ℃ の板に水が触れれば膜沸騰で必ず蒸発する。蒸気の放出口がロールバイトの出側 1 か所しかなく、ヘッダから水を落としているのに着水点では何も起きていなかった', w: 'SprayView.update / _acc.wetSteam' },
+      { t: '板の上面・着水点・板が真下に居るヘッダを 1 か所に集約した。噴射（strip）と蒸気（steam）が別々の板面を見てしまうことがない', w: 'SprayView.update の topY / onZones / nd' },
+      { t: '着水蒸気は水冷のときだけ立てる（空冷は送風なので蒸発しない）。先行開弁のぶんは板が無くテーブルに落ちるので蒸気にしない', w: 'STRIP_COOL.mode.spray' },
+      { t: '蒸気の場を 300 → 460 に増やし、バイトと着水点で分け合う。「水蒸気」スイッチ 1 つで両方を制御する', w: 'SprayView.steam' },
+    ] },
     { v: '1.17.0', base: 'ebc3b29', date: '2026-09-09', title: '上部メニューの見切れ・実績の導線・冷却ノズルの狙い・反りとプロファイルの計器化', items: [
       // --- 上部メニュー ---
       { t: '上部メニューの右端（区分記号・実績）が見切れていた。畳み具合を «画面の幅» の @media で決めていたが、実際に使える幅は «画面 − メニュー 372 px» なので、1,728 px の画面でメニューを開くと 134 px はみ出して overflow:hidden が黙って切っていた。使える幅を測って畳む方式に変えた', w: 'UIManager._fitToolbar / #toolbar[data-fit]' },
@@ -1782,6 +1797,13 @@ const CONFIG = {
    * 入側テーブル（Z ±1,765）とスラブヤード・炉バンクのどれにも柱を落とさないため。 */
   CRANE:   { GIRDER_Y: 12500, GIRDER_Z0: -6500, GIRDER_Z1: 27000, RUN_X0: -107000, RUN_X1: 0, COL_PITCH: 12000,
              TROLLEY: { W: 2600, H: 1400, L: 2400 }, BEAM_L: 3400, HOIST_CLEAR: 2600,
+             /* 定格速度 [m/min] と加減速度 [m/s²]。ここが «速度の唯一の真実» で、
+              * 装入シーケンスの所要秒も、画面上の動きも、材料を放したあとの戻りも
+              * すべてこの 3 つから決まる（Ramp / Layout.moveRamp / SupplyView）。
+              * 値は製鉄・非鉄圧延の装入（ソーキングピット）クレーンの一般値:
+              *   走行 100〜150、横行 30〜60、巻上 10〜20 m/min。加速度は 0.3〜0.5 m/s²。
+              * 以前はここが無く、走行 77 m を 4.6 秒（＝約 1,000 m/min）で走っていた。 */
+             SPEED: { TRAVEL: 120, TRAVERSE: 45, HOIST: 15, ACCEL: 0.4 },
              /* 巻上ワイヤ。ドラムから «トロリ下面のシーブ» を経て吊りビーム上面の
               * シーブへ降り、2 本掛け（FALLS）で戻る。ワイヤの上端＝トロリのシーブ芯、
               * 下端＝ビームのシーブ芯にすると、両端がシーブに隠れて «繋がって» 見える
@@ -1810,19 +1832,34 @@ const CONFIG = {
                ARM_T: 170, JAW_T: 180, JAW_PAD: 1300, MAST: 380, JAW_LIFT: 40,
              } },
 
-  /* 装入シーケンス。[フェーズ, 進捗キー, 所要秒, 表示文] を並べるだけで工程が決まる。 */
+  /* 装入シーケンス。[フェーズ, 進捗キー, 所要秒, 表示文] を並べるだけで工程が決まる。
+   * 所要秒が null の工程は «クレーンが動く» 工程で、秒を手で置かない ——
+   * CRANE_MOVES の距離と CRANE.SPEED の定格速度から Ramp が解く（Layout.moveSec）。
+   * こうしておくと、炉の位置や桁の高さを動かしても «速度» のほうは狂わない。 */
   SEQUENCE: [
-    ['LID',      'lid',      1.8, 'ピット炉の蓋を開けています'],
-    ['HOIST',    'hoist',    3.6, '加熱済みスラブを吊り上げています'],
-    ['TRAVEL',   'travel',   4.6, '炉バンクから転倒機まで走行しています'],
-    ['TRAVERSE', 'traverse', 3.4, '転倒機まで横行しています'],
-    ['SET',      'set',      2.6, '転倒機にスラブを立てかけています'],
-    ['TILT',     'tilt',     3.6, '転倒装置でスラブを倒しています'],
-    ['FEED',     'feed',     1.6, '転倒機ベッドのテーブルローラでスラブを受取テーブルへ送っています'],
-    ['GRAB',     'grab',     3.2, 'トランスファークレーンが倒したスラブをトングで掴んで吊り上げています'],
-    ['TRANSFER', 'transfer', 3.2, 'トランスファークレーンでミルラインへ横移動しています'],
-    ['LOWER',    'lower',    2.6, '入側テーブルへ降ろしています'],
+    ['LID',      'lid',      1.8,  'ピット炉の蓋を開けています'],
+    ['HOIST',    'hoist',    null, '加熱済みスラブを吊り上げています'],
+    ['TRAVEL',   'travel',   null, '炉バンクから転倒機まで走行しています'],
+    ['TRAVERSE', 'traverse', null, '転倒機まで横行しています'],
+    ['SET',      'set',      null, '転倒機にスラブを立てかけています'],
+    ['TILT',     'tilt',     3.6,  '転倒装置でスラブを倒しています'],
+    ['FEED',     'feed',     1.6,  '転倒機ベッドのテーブルローラでスラブを受取テーブルへ送っています'],
+    ['GRAB',     'grab',     3.2,  'トランスファークレーンが倒したスラブをトングで掴んで吊り上げています'],
+    ['TRANSFER', 'transfer', 3.2,  'トランスファークレーンでミルラインへ横移動しています'],
+    ['LOWER',    'lower',    2.6,  '入側テーブルへ降ろしています'],
   ],
+
+  /* 装入クレーンが動く工程の «距離 ⇄ 定格速度» の対応表。
+   * d は Layout.supplyPath().move の距離キー、v は CRANE.SPEED の速度キー。
+   * 所要秒（SupplyController）も途中位置（SupplyView._pose）もここを見るので、
+   * «何秒かかるか» と «どう見えるか» が原理的にずれない。
+   * SET（転倒機へ立てかける降下）は吊ったまま降ろすので巻上と同じ定格。 */
+  CRANE_MOVES: {
+    hoist:    { d: 'hoist',    v: 'HOIST'    },
+    travel:   { d: 'travel',   v: 'TRAVEL'   },
+    traverse: { d: 'traverse', v: 'TRAVERSE' },
+    set:      { d: 'set',      v: 'HOIST'    },
+  },
 
   /* 巻取機（出側リール）—— 板材放出だけでなくコイル巻取ができる。
    * 板厚 6〜10 mm、コイル巾 760〜1800、外径最大 Φ1800、内径 Φ610、最大 9000 kg、
@@ -2432,6 +2469,37 @@ const Num = {
   },
 };
 
+/**
+ * 台形速度線図（加速 → 定格速度で定速 → 減速）。クレーンのように «定格速度と加速度で
+ * 動く機械» の所要時間と途中位置を、距離 d[mm]・定格速度 v[mm/s]・加速度 a[mm/s²]
+ * «だけ» から決める。距離が短くて定格まで上がりきらないときは自動的に三角形になる。
+ *
+ * 所要秒（time）と途中位置（s）を同じ 1 か所で解くので、«カタログ上の速度» と
+ * «画面で見える速度» が食い違えない —— 秒数を手で置くやり方だと、寸法を動かした
+ * とたんに速度がおかしくなる（実際、走行 77 m を 4.6 秒＝1,000 m/min で走っていた）。
+ */
+const Ramp = {
+  /** 距離 d を定格 v・加速度 a で移動するのに要する秒 */
+  time(d, v, a) {
+    d = Math.abs(d);
+    if (d < 1e-6 || v <= 0 || a <= 0) return 0;
+    return d >= v * v / a ? v / a + d / v : 2 * Math.sqrt(d / a);
+  },
+  /** 進捗 p（0〜1・時間に比例）→ 距離比（0〜1）。time と同じ線図の上を通る。 */
+  s(p, d, v, a) {
+    d = Math.abs(d);
+    const T = Ramp.time(d, v, a);
+    if (T <= 0) return 1;
+    const t = Num.clamp(p, 0, 1) * T, tr = Math.min(v / a, T / 2);
+    const dist = t <= tr            ? a * t * t / 2
+               : t >= T - tr        ? d - a * (T - t) * (T - t) / 2
+               :                      a * tr * tr / 2 + a * tr * (t - tr);
+    return Num.clamp(dist / d, 0, 1);
+  },
+  /** m/min → mm/s */
+  mpm: (v) => v * 1000 / 60,
+};
+
 const Sim = {
   u: (mm) => mm * CONFIG.SCALE,                       // mm → scene unit
   mm: (u) => u / CONFIG.SCALE,
@@ -2529,7 +2597,13 @@ const Layout = {
    * width: 板幅 [mm]（狙い点 = AIM_FRAC × width）／ topY: 着地面のパスラインからの高さ [mm]（板厚）
    */
   nozzleAim(width = CONFIG.SLAB.WID_DEFAULT, topY = 0) {
+    /* 二分法を 2 段（角度 40 回 × 落下時間 50 回）回すので、毎フレーム素で呼ぶと重い。
+     * 引数は «板幅と板の上面» だけで、圧延中はほとんど動かないので、直前の答えを 1 つ
+     * 覚えておく（板厚が 0.5 mm 変われば解き直す＝着地は 1 mm も動かない粒度）。 */
     const H = CONFIG.TABLE.GUIDE.HEADER, g = 9810, d = H.DROP_DRAG;  // mm/s² / 1/s
+    const sig = `${H.V0}|${H.AIM_FRAC}|${d}|${H.TIP}|${H.Y}|${H.Z}`;   // 諸元を変えたら解き直す
+    const c = Layout._aim;
+    if (c && c.sig === sig && Math.abs(c.w - width) < 0.5 && Math.abs(c.t - topY) < 0.5) return c.v;
     const aim = Math.max(width * H.AIM_FRAC, 50);
     /* 液滴は空気抵抗を受ける（v' = −g − d·v）。粒の側（ParticleField）と同じ式で解くので、
      * 狙いと «実際に落ちる場所» が一致する（自由落下で解くと 35 mm ほど内へずれる）。
@@ -2554,8 +2628,11 @@ const Layout = {
     if (land(hi) > aim) { lo = hi; }                                 // 寝かせ切っても届かない ＝ 最大角
     else for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (land(mid) > aim) lo = mid; else hi = mid; }
     const tilt = (lo + hi) / 2;
-    return { z: -Math.sin(tilt), y: -Math.cos(tilt), tilt, aim, land: land(tilt) };
+    const v = { z: -Math.sin(tilt), y: -Math.cos(tilt), tilt, aim, land: land(tilt) };
+    Layout._aim = { w: width, t: topY, sig, v };
+    return v;
   },
+  _aim: null,
   /** 旧名（狙い点を既定の板幅で解いたもの）。引数を採らない呼び出しのため残す。 */
   nozzleDir() { return Layout.nozzleAim(); },
   /** 区分の世界 X 範囲 [min, max] */
@@ -2597,6 +2674,37 @@ const Layout = {
   feedDX(length) { return Math.max(CONFIG.TRANSFER.PARK_DX - length / 2, 0); },
   /** ピット炉 i 番（0 起点）の中心 X（世界）。並びの向きは PITCH の符号が持つ。 */
   pitX(i) { const F = CONFIG.FURNACE; return F.X0 + i * F.PITCH; },
+  /**
+   * 装入工程の «道順»（世界座標 mm）と、工程ごとの移動距離。
+   * 姿勢を描く側（SupplyView._pose）と所要秒を決める側（SupplyController）が
+   * この 1 か所を見るので、«どこからどこまで動くか» の解釈が 2 つに割れない。
+   *   xPit   … 材質で決まる炉の中心 X（そこから吊り上げる）
+   *   xStand … 転倒アームに立てかけたときのスラブ中心 X
+   *   xFlat  … 倒したあとトランスファークレーンへ渡す X（板長に依らない定数）
+   *   yPit / yHi / yStand … 炉底・吊上げ高さ・立てかけ高さ（いずれもスラブ中心 Y）
+   */
+  supplyPath(slab, passY) {
+    const S = CONFIG.SUPPLY, FU = CONFIG.FURNACE, CR = CONFIG.CRANE, F = CONFIG.FLIP;
+    const th = slab.thickness, L = slab.length, D = S.PIVOT_DROP;
+    const xPit = Layout.pitX(Layout.pitOf(slab.alloyKey));
+    const xStand = S.TILTER_X - F * (D + th / 2);
+    const yPit = -FU.DEPTH + L / 2, yHi = passY + CR.HOIST_CLEAR + L / 2, yStand = passY - D + L / 2;
+    return { xPit, xStand, xFlat: Layout.entryX, yPit, yHi, yStand, zPit: FU.Z, zStand: S.SIDE_Z, D,
+             move: { hoist: yHi - yPit, travel: xStand - xPit, traverse: S.SIDE_Z - FU.Z, set: yHi - yStand } };
+  },
+  /** 工程 key の台形速度線図の諸元（距離・定格速度 mm/s・加速度 mm/s²）。無ければ null。 */
+  moveRamp(key, slab, passY) {
+    const m = CONFIG.CRANE_MOVES[key]; if (!m) return null;
+    const sp = CONFIG.CRANE.SPEED;
+    return { d: Layout.supplyPath(slab, passY).move[m.d], v: Ramp.mpm(sp[m.v]), a: sp.ACCEL * 1000 };
+  },
+  /** 工程 key の所要秒（距離 ÷ 定格速度）。動かない工程は 0。 */
+  moveSec(key, slab, passY) { const r = Layout.moveRamp(key, slab, passY); return r ? Ramp.time(r.d, r.v, r.a) : 0; },
+  /** 工程 key の進捗 p（時間比）→ 距離比。moveSec と同じ線図の上を通る。 */
+  moveS(key, p, slab, passY) {
+    const r = Layout.moveRamp(key, slab, passY);
+    return r ? Ramp.s(p, r.d, r.v, r.a) : Num.clamp(p, 0, 1);
+  },
   /** 材質キー → 炉の添字（0 起点）。ALLOYS[key].pit が真実で、範囲外は 1 番炉へ落とす。 */
   pitOf(alloyKey = CONFIG.MATERIAL.ALLOY) {
     const a = CONFIG.ALLOYS[alloyKey], n = CONFIG.FURNACE.N;
@@ -4586,8 +4694,8 @@ class SupplyState {
   constructor() { this.enabled = true; this.reset(); }
   reset() {
     this.active = false; this.phase = 'IDLE'; this.step = -1;
-    this.p = {};
-    for (const [, key] of CONFIG.SEQUENCE) this.p[key] = 0;
+    this.p = {}; this.dur = {};        // dur: その工程に «実際に» 掛ける秒（距離から解いた値）
+    for (const [, key] of CONFIG.SEQUENCE) { this.p[key] = 0; this.dur[key] = 0; }
   }
 }
 
@@ -4674,22 +4782,41 @@ class FinishState {
  * 転倒 → 縦送り → 横送り の順にミルラインへ送り込む。
  */
 class SupplyController {
-  constructor(bus, state) {
-    this.bus = bus; this.s = state;
+  constructor(bus, state, slab, mill) {
+    this.bus = bus; this.s = state; this.slab = slab; this.mill = mill;
     bus.on('CMD_START_SUPPLY', () => {
       if (!this.s.enabled) { bus.emit('SYS_SUPPLY_DONE'); return; }
       this.s.reset(); this.s.active = true; this._enter(0);
     });
     bus.on('CMD_RESET', () => this.s.reset());
   }
+  /**
+   * その工程に掛ける秒。SEQUENCE が数値を持てばそれ（蓋・転倒・ローラ送りなど、
+   * クレーンの走行速度とは無関係な工程）。null なら «距離 ÷ 定格速度» を解く。
+   * 工程に入るたびに解き直すので、材質（＝炉の位置）や板長が変われば秒も追従する。
+   */
+  _sec(key) {
+    const fixed = CONFIG.SEQUENCE.find(q => q[1] === key)[2];
+    if (typeof fixed === 'number') return fixed;
+    return Math.max(0.2, Layout.moveSec(key, this.slab, this.mill.passLine));
+  }
+  /** 残り時間 [シミュレーション秒]。工程の秒は距離で決まるので、ここでも同じ _sec を数える。 */
+  get remainSec() {
+    const s = this.s; if (!s.active) return 0;
+    return CONFIG.SEQUENCE.reduce((r, q, i) => {
+      if (i < s.step) return r;
+      const T = i === s.step ? (s.dur[q[1]] || this._sec(q[1])) : this._sec(q[1]);
+      return r + (i === s.step ? T * (1 - s.p[q[1]]) : T);
+    }, 0);
+  }
   _enter(i) {
-    const seq = CONFIG.SEQUENCE, s = this.s;
-    s.step = i; s.phase = seq[i][0];
+    const seq = CONFIG.SEQUENCE, s = this.s, key = seq[i][1];
+    s.step = i; s.phase = seq[i][0]; s.dur[key] = this._sec(key);
     this.bus.emit('SYS_MESSAGE', { text: `装入 ${i + 1}/${seq.length}: ${seq[i][3]}`, kind: 'info' });
   }
   update(dt) {
     const s = this.s; if (!s.active) return;
-    const seq = CONFIG.SEQUENCE, [, key, T] = seq[s.step];
+    const seq = CONFIG.SEQUENCE, key = seq[s.step][1], T = s.dur[key] || this._sec(key);
     s.p[key] = Math.min(1, s.p[key] + dt / T);
     if (s.p[key] < 1) return;
     if (s.step + 1 < seq.length) this._enter(s.step + 1);
@@ -5920,7 +6047,7 @@ class PhysicsEngine {
     this.supply = new SupplyState(); this.finish = new FinishState();
     this.env = { coolant: true, steam: true };
     this.millCtrl   = new MillController(bus, this.mill, this.slab);
-    this.supplyCtrl = new SupplyController(bus, this.supply);
+    this.supplyCtrl = new SupplyController(bus, this.supply, this.slab, this.mill);
     this.finishCtrl = new FinishController(bus, this.finish, this.slab, this.mill);
     this.log = new RollingLog();          // 圧延実績（計器が指した値だけを残す）
     this.paused = false; this.elapsed = 0;
@@ -9635,24 +9762,24 @@ class SupplyView {
 
   /** 各フェーズにおけるスラブ中心位置（mm）と姿勢を返す */
   _pose(sup, slab, P) {
-    const S = CONFIG.SUPPLY, FU = CONFIG.FURNACE, CR = CONFIG.CRANE, TR = CONFIG.TRANSFER, F = CONFIG.FLIP;
-    const th = slab.thickness, L = slab.length, p = sup.p, D = S.PIVOT_DROP;
-    // 立てた板は転倒アームの受け面（転倒軸より D 上のベッド面が立ち上がったもの）に
-    // 寄りかかり、底面はリップ（軸より D 下）に載る。
-    const xStand = S.TILTER_X - F * (D + th / 2);        // 立てかけ時のスラブ中心 X
-    const xPit = Layout.pitX(Layout.pitOf(slab.alloyKey));  // 材質ごとの炉の X（そこから取り出す）
-    const xFlat = Layout.entryX;                         // 受け渡し位置＝ラインへ降ろす X（板長に依らない定数）
-    const yPit = -FU.DEPTH + L / 2;                      // 炉内（底に着地）
-    const yHi  = P + CR.HOIST_CLEAR + L / 2;             // 吊上げ高さ
-    const yStand = P - D + L / 2;                        // 立てかけ高さ（底面がリップ上）
+    const S = CONFIG.SUPPLY, FU = CONFIG.FURNACE, TR = CONFIG.TRANSFER, F = CONFIG.FLIP;
+    const th = slab.thickness, L = slab.length, p = sup.p;
+    /* 道順（立てかけ位置・炉の位置・吊上げ高さ…）は Layout.supplyPath が唯一の真実。
+     * 所要秒を決める SupplyController と同じ関数を見ているので、両者がずれない。
+     * 立てた板は転倒アームの受け面（転倒軸より D 上）に寄りかかり、底面はリップに載る。 */
+    const W = Layout.supplyPath(slab, P), D = W.D;
+    const { xPit, xStand, xFlat, yPit, yHi, yStand } = W;
+    // クレーンが動く工程は «時間比» ではなく «台形速度線図の距離比» で補間する。
+    // これで加速・定速・減速が付き、定格速度（CRANE.SPEED）どおりの動きになる。
+    const mv = (key) => Layout.moveS(key, p[key], slab, P);
     const ph = sup.active ? sup.phase : 'LID';
     switch (ph) {
       case 'LID':      return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: true };
-      case 'HOIST':    return { x: xPit, y: Num.lerp(yPit, yHi, p.hoist), z: FU.Z, rot: Math.PI / 2, hung: true };
+      case 'HOIST':    return { x: xPit, y: Num.lerp(yPit, yHi, mv('hoist')), z: FU.Z, rot: Math.PI / 2, hung: true };
       // 走行: 炉バンクの上を転倒機の X まで（吊ったまま。Z はまだ炉の列）
-      case 'TRAVEL':   return { x: Num.lerp(xPit, xStand, Num.smoothstep(0, 1, p.travel)), y: yHi, z: FU.Z, rot: Math.PI / 2, hung: true };
-      case 'TRAVERSE': return { x: xStand, y: yHi, z: Num.lerp(FU.Z, S.SIDE_Z, p.traverse), rot: Math.PI / 2, hung: true };
-      case 'SET':      return { x: xStand, y: Num.lerp(yHi, yStand, p.set), z: S.SIDE_Z, rot: Math.PI / 2, hung: p.set < 1 };
+      case 'TRAVEL':   return { x: Num.lerp(xPit, xStand, mv('travel')), y: yHi, z: FU.Z, rot: Math.PI / 2, hung: true };
+      case 'TRAVERSE': return { x: xStand, y: yHi, z: Num.lerp(FU.Z, S.SIDE_Z, mv('traverse')), rot: Math.PI / 2, hung: true };
+      case 'SET':      return { x: xStand, y: Num.lerp(yHi, yStand, mv('set')), z: S.SIDE_Z, rot: Math.PI / 2, hung: p.set < 1 };
       case 'TILT': {
         // 転倒中: 板はアームと一体に転倒軸まわりを回る。アームのローカル系で板の中心は
         // (L/2, D + th/2)。これを角度 tilt で回して軸位置に足すだけで、立位・倒位の両端で
@@ -9743,8 +9870,13 @@ class SupplyView {
     const beamHome = this.trolleyY - CR.TROLLEY.H / 2 - 1800, c = this._crane;
     if (c.beamY === null) { c.beamY = beamHome; c.z = CONFIG.FURNACE.Z; c.x = homeX; }
     if (hung) { c.beamY = pose.y + L / 2 + 760; c.z = pose.z; c.x = pose.x; }
-    else { c.beamY = Num.rateTo(c.beamY, beamHome, 1800, dt); c.z = Num.rateTo(c.z, CONFIG.FURNACE.Z, 2200, dt);
-           c.x = Num.rateTo(c.x, homeX, 5000, dt); }
+    else {
+      // 材料を放したあとの «空荷での戻り» も同じ定格速度で走る（速度の真実は 1 か所）。
+      const SP = CR.SPEED;
+      c.beamY = Num.rateTo(c.beamY, beamHome, Ramp.mpm(SP.HOIST), dt);
+      c.z = Num.rateTo(c.z, CONFIG.FURNACE.Z, Ramp.mpm(SP.TRAVERSE), dt);
+      c.x = Num.rateTo(c.x, homeX, Ramp.mpm(SP.TRAVEL), dt);
+    }
     this.girder.position.x = u(c.x);
     this.trolley.position.set(u(c.x), u(this.trolleyY), u(c.z));
     /* トング → マスト → トロリ の順に «下から積み上げる»。爪先の高さが決まると
@@ -10014,7 +10146,9 @@ class SprayView {
     // 周囲の空気を巻き込んで膨らみながら薄れる。
     // 粒は «スプライト1枚が塊1つ» になる大きさにする。小さい粒を多数撒くと遠景で
     // «点の集合» に見えてしまい、逆に質感が落ちる（塗り面積も増える）。
-    this.steam = new ParticleField(scene, { count: 300, map: Sprite.puff(),
+    // 蒸気は «ロールバイトの出側» と «板面冷却の着水点» の 2 か所から立つので、
+    // 1 つの場（＝1 つの「水蒸気」スイッチ）を両方で分け合う。
+    this.steam = new ParticleField(scene, { count: 460, map: Sprite.puff(),
       color: 0xffffff, color2: 0xd7e2ea, opacity: 0.62,
       buoy: 2000, drag: 0.95, swirl: 620, grow: 2.6, fadeIn: 0.22 });  // 終端上昇速度 2.1 m/s
     // 板面冷却（水冷）: ヘッダから板の上面へ落とす液滴。床＝板の上面
@@ -10026,7 +10160,7 @@ class SprayView {
       color: 0xe7eef4, color2: 0xc6d3dc, opacity: 0.14,
       buoy: -900, drag: 2.4, grow: 2.4, fadeIn: 0.12 });
     this.density = 1;
-    this._acc = { coolant: 0, steam: 0, strip: 0 };
+    this._acc = { coolant: 0, steam: 0, strip: 0, wetSteam: 0 };
   }
   /** 描画品質に合わせて放出量を落とす（粒が大きいぶん塗り面積が効くため）。 */
   setDensity(x) { this.density = x; }
@@ -10058,6 +10192,12 @@ class SprayView {
     // 板面冷却: 板がヘッダの下を通過している間だけ、そのヘッダから吹く。
     // 何を吹くかは冷却方式そのもの（水冷＝液滴 / 空冷＝送風 / なし＝吹かない）。
     const sc = CONFIG.MATERIAL.STRIP_COOL.mode, wet = sc.spray === 'DROP';
+    /* 板の上面（パスラインからの高さ）と «板が真下に居るヘッダ»。
+     * 噴射が落ちる床・着水蒸気が立つ高さ・着水点の Z は全部ここから決まるので、
+     * 噴射（strip）と蒸気（steam）が別々の板面を見てしまうことがない。 */
+    const topY = slab.onLine ? (slab.inBite ? mill.gap : slab.thickness) : 0;
+    const onZones = Layout.coolZones().filter(([x0, x1]) => slab.onLine && slab.xMax > x0 && slab.xMin < x1);
+    const nd = Layout.nozzleAim(slab.width, topY);
     if (sc.spray && running) {
       const H = CONFIG.TABLE.GUIDE.HEADER, T = CONFIG.TABLE;
       /* 実機の板面冷却バンクは «材料が来る手前で開く»（上流の熱間材検出器で開弁する）。
@@ -10072,8 +10212,7 @@ class SprayView {
        * 粒は大きめ・寿命は短めにして «幕» として読めるようにする。 */
       /* 狙い（着地点）と初速はヘッダの諸元そのもの。«いまの板» の幅と厚みで弾道を解くので、
        * 板が薄くなれば落差が増え、傾きも自動で追従する（描画のノズルと同じ 1 式）。 */
-      const topY = slab.onLine ? (slab.inBite ? mill.gap : slab.thickness) : 0;
-      const nd = Layout.nozzleAim(slab.width, topY), nn = Math.max(1, Math.round(H.LEN / H.PITCH));
+      const nn = Math.max(1, Math.round(H.LEN / H.PITCH));
       const v0 = wet ? H.V0 : H.V0 * 1.3;                  // ノズル出口速度 [mm/s]（空冷は送風なので速い）
       /* 飛行時間が短いぶん «幕» が薄くなるので、単位時間あたりの粒数を少し増やす。ただし
        * 描画コストは «生きている粒の数» に比例するので上げ過ぎない（実測: 1,200 /s では
@@ -10097,8 +10236,7 @@ class SprayView {
      * ヘッダ（入側 A-5 は板が 62 m 以上伸びるパスまで来ない）の下は «テーブルの面»。
      * ここを常に «板の上面» にしていたため、板が居ないヘッダでは液滴が数十 mm 落ちただけで
      * 消えてしまい、遠目には何も出ていないように見えていた。 */
-    const onPlate = Layout.coolZones().some(([x0, x1]) => slab.onLine && slab.xMax > x0 && slab.xMin < x1);
-    const stripFloor = CONFIG.MILL.PASS_LINE + (onPlate ? (slab.inBite ? mill.gap : slab.thickness) : 0);
+    const stripFloor = CONFIG.MILL.PASS_LINE + (onZones.length ? topY : 0);
     this.strip.update(dt, stripFloor);
     this.stripAir.update(dt, stripFloor);
 
@@ -10118,6 +10256,29 @@ class SprayView {
           (r() - .5) * (slab.width + 800),
           dir * (150 + r() * 420), 800 + r() * 900, (r() - .5) * 400,
           2.4 + r() * 1.8, 620 + r() * 520);
+      });
+    }
+    /* 板面冷却の «着水蒸気» —— 400 ℃ の板に水が触れれば必ず沸騰する。
+     * 実機の熱間圧延でいちばん白煙が立つのは、じつはロールバイトよりも板面冷却の
+     * 着水点で、板の上を «水の膜と蒸気の雲» が流れていく。今まではロールバイトから
+     * しか立てておらず、ヘッダから水を落としているのに何も起きていなかった。
+     *   立てる場所 … 噴射と同じ着水点（x はヘッダと板が重なった範囲、z は ±nd.land）
+     *   立てる条件 … 水冷のときだけ（空冷は送風なので蒸発しない）／板が真下に居るヘッダだけ
+     *                （先行開弁 LEAD のぶんは板が無くテーブルに落ちるので蒸気にならない）
+     *   立てる量   … 板温（hot）とライン速度。速いほど単位時間に濡れる面積が増える。
+     * 蒸気は板の進行方向へ流されながら立ち上るので、初速に板の向きを混ぜる。 */
+    if (env.steam && wet && running && onZones.length && hot > 0) {
+      const dir = Num.sign0(mill.currentSpeed) || 1, sp = Math.abs(mill.currentSpeed);
+      this._emit('wetSteam', (30 + sp * 0.10) * onZones.length * hot, dt, 6, r => {
+        const [x0, x1] = onZones[Math.floor(r() * onZones.length)];
+        const xa = Math.max(x0, slab.xMin), xb = Math.min(x1, slab.xMax);   // 板と重なった範囲
+        const sz = r() < 0.5 ? 1 : -1;
+        this.steam.spawn(
+          xa + (xb - xa) * r(),
+          mill.passLine + topY + 60 + r() * 180,
+          sz * nd.land + (r() - .5) * 300,
+          dir * sp * 0.10 + (r() - .5) * 260, 620 + r() * 760, sz * (100 + r() * 240),
+          2.0 + r() * 1.6, 480 + r() * 460);
       });
     }
     this.steam.update(dt);
@@ -11645,7 +11806,12 @@ class UIManager {
         const step = CONFIG.SEQUENCE[p.supply.step] ?? null;
         cls = 'is-run'; ic = 'fa-truck-ramp-box';
         st = `スラブ装入 ${p.supply.step + 1}/${CONFIG.SEQUENCE.length}`;
-        hint = step ? step[3] : '';
+        /* 装入はクレーンの定格速度で動くので «実機並みに» 時間が掛かる（走行 77 m で 44 秒）。
+         * 待ち時間を推測させないよう、残り時間と、いま効いている定格速度を出す。 */
+        const mv = step && CONFIG.CRANE_MOVES[step[1]];
+        const rest = Math.ceil(p.supplyCtrl.remainSec / Math.max(this.timeScale, 0.01));
+        hint = step ? `${step[3]}${mv ? `（定格 ${CONFIG.CRANE.SPEED[mv.v]} m/min）` : ''}`
+                      + ` ／ 圧延開始まで約 ${rest} 秒` : '';
       }
       else if (p.finish.winding) { cls = 'is-run'; ic = 'fa-arrows-spin'; st = 'コイル巻取中';
         hint = `外径 Φ${p.finish.od.toFixed(0)} mm ／ ${(p.finish.coilMass / 1000).toFixed(1)} t ／ 張力 ${(p.finish.tensionKg / 1000).toFixed(1)} t`; }
