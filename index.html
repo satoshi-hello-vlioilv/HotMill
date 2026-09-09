@@ -713,8 +713,8 @@ body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
 
         <div id="auto-controls">
           <div class="fld">
-            <div class="top"><span class="k">シミュレーション速度</span><span class="v" id="lbl-timescale">2<em>×</em></span></div>
-            <input type="range" id="rng-timescale" min="0.25" max="8" value="2" step="0.25">
+            <div class="top"><span class="k">シミュレーション速度</span><span class="v" id="lbl-timescale">5<em>×</em></span></div>
+            <input type="range" id="rng-timescale" min="0.25" max="20" value="5" step="0.25">
             <div class="derived">実時間比。実機の1サイクルは10分規模なので、早送りで通して見られます。物理計算は速度に依らず同一結果です。</div>
           </div>
         </div>
@@ -2054,7 +2054,9 @@ const CONFIG = {
    * CRANE_MOVES の距離と CRANE.SPEED の定格速度から Ramp が解く（Layout.moveSec）。
    * こうしておくと、炉の位置や桁の高さを動かしても «速度» のほうは狂わない。 */
   SEQUENCE: [
-    ['LID',      'lid',      1.8,  'ピット炉の蓋を開けています'],
+    ['LID',      'lid',      1.8,  'ピット炉の蓋を開けています（吊具は炉口の上で待機）'],
+    ['DIVE',     'dive',     null, '蓋が開いた炉へ吊具を降ろしています'],
+    ['GRIP',     'grip',     2.8,  'トングでスラブの長手側面を掴んでいます'],
     ['HOIST',    'hoist',    null, '加熱済みスラブを吊り上げています'],
     ['TRAVEL',   'travel',   null, '炉バンクから転倒機まで走行しています'],
     ['TRAVERSE', 'traverse', null, '転倒機まで横行しています'],
@@ -2076,6 +2078,8 @@ const CONFIG = {
    * «何秒かかるか» と «どう見えるか» が原理的にずれない。
    * SET（転倒機へ立てかける降下）は吊ったまま降ろすので巻上と同じ定格。 */
   CRANE_MOVES: {
+    // 吊具を炉へ降ろす。空荷でも巻上装置は同じ定格なので距離も速度も HOIST と同じ
+    dive:     { by: 'CRANE',    d: 'hoist',    v: 'HOIST',     win: [0, 1] },
     hoist:    { by: 'CRANE',    d: 'hoist',    v: 'HOIST',     win: [0, 1] },
     travel:   { by: 'CRANE',    d: 'travel',   v: 'TRAVEL',    win: [0, 1] },
     traverse: { by: 'CRANE',    d: 'traverse', v: 'TRAVERSE',  win: [0, 1] },
@@ -2187,13 +2191,22 @@ const CONFIG = {
       LEG_Z: 1265, LEG_W: 260, LEG_T: 120, CLEAR_Y: 1345,
     },
     COIL_SEG: 72,                            // コイル形状の周方向分割数
-    // コイル押え。サイドトリマー架構の上部梁から出したアームの先端に金属コロ（Φ200 ×
-    // 面長 600）を付け、コイル外周に当てて巻き広がり（テレスコープ）を抑える。
-    // コイルは «下巻き»（板は下から入り、奥→上→手前と回る）なので、押えは巻き終わり側の
-    // 上寄り（コイル中心から見て 105〜125°、真上が 90°）を狙う。支点はトリマー中心から
-    // 下流へ PIVOT_DX・パスライン上 PIVOT_DY。アームは支点まわりの揺動で、コイルが
-    // 太るほど起き上がる。駆動は梁上の受けから吊るシリンダ。※各寸法は推定値。
-    HOLD: { PIVOT_DX: 700, PIVOT_DY: 1700, ARM_L: 1550, ROLL_D: 200, ROLL_W: 600, CYL_DX: 1000, CYL_DY: 3300 },
+    /* コイル押え。金属コロ（Φ200 × 面長 600）をコイル外周に当てて
+     * 巻き広がり（テレスコープ）を抑える。
+     *
+     * 機構は «半径方向のラム»。シリンダーの軸をコイルの中心軸へ真っすぐ向け、
+     * ロッドの先にコロを付ける。こうするとシリンダーの推力がそのまま押さえ力になる
+     * （揺動アームだと、力はアームに直角にしか出ないうえ、姿勢で向きが変わる）。
+     * コイルが太るとロッドが押し戻されるだけなので、当たる向きは最後まで変わらない。
+     *
+     *   ANGLE  … 押さえる極角 [deg]（コイル中心から見て。真上が 90°）。
+     *            コイルは «下巻き»（板は下から入り、奥→上→手前と回る）なので、
+     *            巻き終わり側の上寄りを狙う。X の向きはトリマー側（上流）へ倒す。
+     *   BASE_R … シリンダー胴の «内端» のコイル軸からの距離。ロッドはここから出る
+     *   YOKE   … コロの軸受（ロッド先端の股）の長さ
+     * ※各寸法は推定値。 */
+    HOLD: { ANGLE: 118, BASE_R: 1500, CYL_L: 1100, CYL_D: 320, ROD_D: 160, YOKE: 240,
+            ROLL_D: 200, ROLL_W: 600, MOUNT: 320 },
   },
 
   /* 75 mm クロップシャー。出側のかなり遠方に置かれ、板厚が 75 mm 以下になった
@@ -8072,10 +8085,17 @@ const Parts = {
         add(sz, G.at(G.cyl(320, 800, 'x', 12), 0, P + 470, zc));
       }
       add(0, G.at(G.box(800, 450, 2 * zp + 800), 0, hp + 225, 0));                   // 上部梁（柱の上）
-      // コイル押えアームの支点ブラケット（梁の下流側面）と、駆動シリンダの受け（梁の上）
-      add(0, G.at(G.box(800, 400, 500), F * 500, hp, 0));
-      add(0, G.at(G.box(900, 300, 500), F * 650, hp + 600, 0));
-      add(0, G.at(G.box(300, 900, 500), F * H.CYL_DX, hp + 750 + 450, 0));
+      /* コイル押えラムの受け。押えは «コイル軸へ真っすぐ向いたシリンダー» なので、
+       * 受けはその軸線の上に来る。軸線は コイル中心（COILER.X, パスライン + Y_ABOVE）から
+       * 極角 ANGLE を上流側へ倒した直線で、胴の架台（BASE_R + CYL_L の中ほど）を抱く。 */
+      const CO = CONFIG.COILER, hh = H.ANGLE * Math.PI / 180;
+      const upx = Math.sign(T.X - CO.X) || -1;
+      const rMid = H.BASE_R + H.CYL_L * 0.62;
+      const mx = CO.X + upx * Math.abs(Math.cos(hh)) * rMid;                          // 受けの X（世界）
+      const my = P + CO.Y_ABOVE + Math.sin(hh) * rMid;                                // 受けの Y
+      add(0, G.at(G.box(800, 400, 500), F * 500, hp, 0));                             // 梁の下流側面のブラケット
+      add(0, G.at(G.box(360, Math.max(my - hp - 450, 200), 620), mx - T.X, (hp + 450 + my) / 2, 0));  // 受け柱
+      add(0, G.at(G.box(520, 260, 700), mx - T.X, my, 0));                            // 受け（シリンダーの架台を抱く）
     });
   },
   /**
@@ -8172,10 +8192,6 @@ const Parts = {
     geo.translate(0, 0, -u(W + 260) / 2);
     return geo;
   },
-  /** 押えアームの駆動シリンダ（単位長 1000 mm、+X 方向）。scale.x で伸縮する。 */
-  holdDownCyl() {
-    return G.merge([G.at(G.cyl(280, 560, 'x', 12), 280, 0, 0), G.at(G.cyl(150, 1000, 'x', 10), 500, 0, 0)]);
-  },
   /** 押えロール（面長 600 mm）。コイル外周に当てて巻き広がりを抑える。 */
   holdDownRoll() {
     const H = CONFIG.COILER.HOLD;
@@ -8185,13 +8201,28 @@ const Parts = {
       G.at(G.cyl(H.ROLL_D * 0.45, 220, 'z', 8), 0, 0, -(H.ROLL_W + 200) / 2),
     ]);
   },
-  /** 押えロールのアーム。単位長さ 1000 mm（+X 方向）で作り、scale.x で伸ばす。 */
-  holdDownArm() {
+  /**
+   * コイル押えの «ラム»（シリンダー胴と架台）。単位ベクトルの向きは View が回す。
+   * 原点＝胴の内端（ロッドが出る側）で、胴は +X（コイル軸から遠ざかる向き）へ伸びる。
+   */
+  holdDownRam() {
+    const H = CONFIG.COILER.HOLD, L = H.CYL_L;
+    return G.merge([
+      G.at(G.cyl(H.CYL_D, L, 'x', 16), L / 2, 0, 0),                       // 胴
+      G.at(G.cyl(H.CYL_D + 90, 120, 'x', 16), 60, 0, 0),                   // 前蓋（ロッド案内）
+      G.at(G.cyl(H.CYL_D + 60, 110, 'x', 16), L - 55, 0, 0),               // 後蓋
+      G.at(G.box(180, H.MOUNT + 260, H.CYL_D + 380), L * 0.62, 0, 0),      // 架台（梁へ留める耳）
+      // 給排の配管（前後 2 ポート）。胴から «上» へ抜く
+      ...[L * 0.18, L * 0.82].map(dx => G.at(G.cyl(70, H.CYL_D + 220, 'y', 8), dx, (H.CYL_D + 220) / 2 - 40, 0)),
+    ]);
+  },
+  /** 押えロッド。単位長さ 1000 mm（+X 方向）で作り、View が scale.x で伸ばす。 */
+  holdDownRod() {
     const H = CONFIG.COILER.HOLD;
     return G.merge([
-      G.at(G.box(1000, 220, 180), 500, 0, 0),
-      G.cyl(360, 420, 'z', 12),                              // 支点ボス
-      G.at(G.cyl(260, H.ROLL_W + 300, 'z', 10), 1000, 0, 0), // ロール軸受
+      G.at(G.cyl(H.ROD_D, 1000, 'x', 12), 500, 0, 0),
+      G.at(G.box(200, H.ROLL_W + 40, 200), 0, 0, 0),                        // コロ側のヨーク（股）
+      ...[-1, 1].map(sz => G.at(G.box(H.YOKE, 220, 150), -H.YOKE / 2, 0, sz * (H.ROLL_W + 190) / 2)),
     ]);
   },
 
@@ -9753,16 +9784,22 @@ class FinishView {
     this.coil.visible = false; this.coil.frustumCulled = false; this.coiler.add(this.coil);
     // コイル押え: サイドトリマー架構の梁から出したアームの先端の金属コロをコイル外周に当てる。
     // アームは支点まわりに揺動し、梁上の受けから吊るシリンダで押し付ける。
-    const H = C.HOLD;
-    this.holdPivot = { x: T.X + F * H.PIVOT_DX - C.X, y: P + H.PIVOT_DY };   // 支点（コイラー基準の座標）
-    this.holdCylPin = { x: T.X + F * H.CYL_DX - C.X, y: P + H.CYL_DY };
-    this.holdArm = new THREE.Mesh(Parts.holdDownArm(), MAT.hydraulic); this.holdArm.name = '押えアーム';
-    this.holdArm.position.set(u(this.holdPivot.x), u(this.holdPivot.y), 0);
-    this.holdArm.castShadow = true; this.coiler.add(this.holdArm);
+    /* 押さえる向きの単位ベクトル。極角 ANGLE を «上流（トリマー側）へ倒す» 向きに取るので、
+     * 入側・出側を左右反転しても押えは必ずコイルの巻き終わり側に立つ。
+     * シリンダーの軸はこの直線そのもの ＝ 推力がそのまま押さえ力になる。 */
+    const H = C.HOLD, hth = H.ANGLE * Math.PI / 180;
+    const up = Math.sign(T.X - C.X) || -1;                    // コイラーから見てトリマーの側
+    this.holdDir = { x: up * Math.abs(Math.cos(hth)), y: Math.sin(hth) };
+    this.holdAng = Math.atan2(this.holdDir.y, this.holdDir.x);
     this.holdRoll = new THREE.Mesh(Parts.holdDownRoll(), MAT.rollFace); this.holdRoll.name = '押えコロ';
     this.holdRoll.castShadow = true; this.coiler.add(this.holdRoll);
-    this.holdCyl = new THREE.Mesh(Parts.holdDownCyl(), MAT.hydraulic); this.holdCyl.name = '押えシリンダ';
-    this.holdCyl.castShadow = true; this.coiler.add(this.holdCyl);
+    this.holdRod = new THREE.Mesh(Parts.holdDownRod(), MAT.rod); this.holdRod.name = '押えロッド';
+    this.holdRod.castShadow = true; this.coiler.add(this.holdRod);
+    // 胴は動かないので、位置と向きはここで 1 度だけ決める（コイル軸から BASE_R の点）
+    this.holdRam = new THREE.Mesh(Parts.holdDownRam(), MAT.hydraulic);
+    this.holdRam.name = '押えシリンダ'; this.holdRam.castShadow = true;
+    this.holdRam.position.set(u(this.holdDir.x * H.BASE_R), u(this.mandrelY + this.holdDir.y * H.BASE_R), 0);
+    this.holdRam.rotation.z = this.holdAng; this.coiler.add(this.holdRam);
     // --- ベルトラッパー: 常設。C 型キャリッジを左上からシリンダーで押し込んで抱かせる ---
     // マンドレルは板を掴まないので、巻き始めはこのベルトが先端をマンドレルへ押し付ける。
     // 使わないときは押し込みを戻すだけで、設備そのものは常に見えている。
@@ -9983,33 +10020,24 @@ class FinishView {
     this.coil.visible = wound;
     const h = slab.inBite ? mill.gap : slab.thickness, w = fin.finishedWidth(slab.width), r0 = C.MANDREL_D / 2;
     if (wound) this.coilGeo.update(r0 + (fin.expand - 1) * C.SEG_STROKE, fin.r1, h, w, fin.frac, fin.entry, fin.windSign);
-    // 押えコロ: 支点からアーム長 L、コイル中心から（外周半径 + コロ半径）の交点のうち上側。
-    // コロが当たる極角の位置に巻きかけの層があれば 1 枚ぶん外側に乗る（1 周ごとの段を拾う）。
+    /* 押えコロ: コイル軸から «外周半径 ＋ コロ半径» の点へ、押さえの直線上を進退する。
+     * コロの «外周» がコイルの外周にちょうど接する（中心を外周に置くと半径ぶん食い込む）。
+     * コロが当たる極角の位置に巻きかけの層があれば 1 枚ぶん外側に乗る（1 周ごとの段を拾う）。 */
     {
-      const H = C.HOLD, pv = this.holdPivot, my = this.mandrelY, active = fin.mode === 'COIL' && fin.expand > 0;
+      const H = C.HOLD, d = this.holdDir, my = this.mandrelY, active = fin.mode === 'COIL' && fin.expand > 0;
       let rOut = C.OD_MAX / 2;                                   // 待機: 最大コイル径に合わせた退避位置
       if (active) {
         rOut = r0;
-        if (wound) {
-          const th = Math.atan2(this.holdRoll.position.y / CONFIG.SCALE - my, this.holdRoll.position.x / CONFIG.SCALE);
-          rOut = Rolling.coilRadiusAt(th, h, fin.turns, fin.entry, fin.windSign);
-        }
+        if (wound) rOut = Rolling.coilRadiusAt(this.holdAng, h, fin.turns, fin.entry, fin.windSign);
       }
-      const need = rOut + H.ROLL_D / 2;
-      const a = Num.circleHit(pv.x, pv.y, H.ARM_L, 0, my, need, 1), b = Num.circleHit(pv.x, pv.y, H.ARM_L, 0, my, need, -1);
-      const hit = a && b ? (a.y > b.y ? a : b) : (a || b);
-      if (hit) {
-        const dx = hit.x - pv.x, dy = hit.y - pv.y;
-        this.holdArm.rotation.z = Math.atan2(dy, dx);
-        this.holdArm.scale.x = Math.hypot(dx, dy) / 1000;
-        this.holdRoll.position.set(u(hit.x), u(hit.y), 0);
-        this.holdRoll.rotation.z = -fin.mandrelAngle * (2 * rOut / H.ROLL_D);
-        // 駆動シリンダ: 梁上の受けピンからアームの 62 % 点へ
-        const ax = pv.x + dx * 0.62, ay = pv.y + dy * 0.62, q = this.holdCylPin;
-        this.holdCyl.position.set(u(q.x), u(q.y), 0);
-        this.holdCyl.rotation.z = Math.atan2(ay - q.y, ax - q.x);
-        this.holdCyl.scale.x = Math.hypot(ax - q.x, ay - q.y) / 1000;
-      }
+      const rc = rOut + H.ROLL_D / 2;                            // コロ中心のコイル軸からの距離
+      this.holdRoll.position.set(u(d.x * rc), u(my + d.y * rc), 0);
+      this.holdRoll.rotation.z = -fin.mandrelAngle * (2 * rOut / H.ROLL_D);
+      // ロッド: ヨークの根元（コロ中心から YOKE 外）から胴の内端（BASE_R）まで
+      const r1 = rc + H.YOKE, len = Math.max(H.BASE_R - r1, 80);
+      this.holdRod.position.set(u(d.x * r1), u(my + d.y * r1), 0);
+      this.holdRod.rotation.z = this.holdAng;
+      this.holdRod.scale.x = len / 1000;
     }
 
     // --- ベルトラッパー: キャリッジを押し込み、その上でロールがコイル外周に当たる ---
@@ -10331,9 +10359,24 @@ class SupplyView {
     // クレーンが動く工程は «時間比» ではなく «台形速度線図の距離比» で補間する。
     // これで加速・定速・減速が付き、定格速度（CRANE.SPEED）どおりの動きになる。
     const mv = (key) => Layout.moveS(key, p[key], slab, P);
+    /* 吊具の «爪先» の高さ。掴むのは板の上端から GRIP_DOWN 下なので、
+     *   jawTop … 吊り上げ切った位置（＝運転前の待機の高さ。炉口より上）
+     *   jawPit … 炉の中に立っているスラブを掴む高さ
+     * どちらも板長から決まるので、ロットが変わっても «刺さる» ことがない。 */
+    const jawTop = yHi + L / 2 - CONFIG.CRANE.TONG.GRIP_DOWN;
+    const jawPit = yPit + L / 2 - CONFIG.CRANE.TONG.GRIP_DOWN;
     const ph = sup.active ? sup.phase : 'LID';
     switch (ph) {
-      case 'LID':      return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: true };
+      /* 蓋開け → 降下 → 掴む の 3 工程は «スラブは炉の中で動かず、吊具だけが動く»。
+       * 以前は蓋を開ける間も吊具がスラブに付いていたため、運転前の待機姿勢が
+       * «炉の中にトングが刺さったまま» になっていた（画面で見て分かる誤り）。
+       * pit を返す工程では、View は吊具を pit.jawY へ置き、pit.grip で爪を閉じる。 */
+      case 'LID':      return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: false,
+                                pit: { jawY: jawTop, grip: 0 } };
+      case 'DIVE':     return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: false,
+                                pit: { jawY: Num.lerp(jawTop, jawPit, mv('dive')), grip: 0 } };
+      case 'GRIP':     return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: false,
+                                pit: { jawY: jawPit, grip: Num.smoothstep(0, 1, p.grip) } };
       case 'HOIST':    return { x: xPit, y: Num.lerp(yPit, yHi, mv('hoist')), z: FU.Z, rot: Math.PI / 2, hung: true };
       // 走行: 炉バンクの上を転倒機の X まで（吊ったまま。Z はまだ炉の列）
       case 'TRAVEL':   return { x: Num.lerp(xPit, xStand, mv('travel')), y: yHi, z: FU.Z, rot: Math.PI / 2, hung: true };
@@ -10426,11 +10469,13 @@ class SupplyView {
     // --- 装入クレーン（トロリ・吊具・ワイヤ）: 吊っている間は材料に追従、離したら速度制限で炉へ戻る ---
     const CR = CONFIG.CRANE;
     const hung = active && pose.hung;
+    const pit = active ? pose.pit : null;                 // 炉の上で待機／降下／掴む工程
     // クレーンは X（走行）も追う。炉が材質ごとに違うので «どの炉の上に居るか» が動く。
     const homeX = Layout.pitX(Layout.pitOf(slab.alloyKey));
     const beamHome = this.trolleyY - CR.TROLLEY.H / 2 - 1800, c = this._crane;
     if (c.beamY === null) { c.beamY = beamHome; c.z = CONFIG.FURNACE.Z; c.x = homeX; }
     if (hung) { c.beamY = pose.y + L / 2 + 760; c.z = pose.z; c.x = pose.x; }
+    else if (pit) { c.beamY = pit.jawY + 1400; c.z = pose.z; c.x = pose.x; }
     else {
       // 材料を放したあとの «空荷での戻り» も同じ定格速度で走る（速度の真実は 1 か所）。
       const SP = CR.SPEED;
@@ -10446,7 +10491,8 @@ class SupplyView {
     const TGP = CR.TONG;
     /* 掴むのは長手側面なので開き幅は «板幅の半分»。掴む高さは板の上端から GRIP_DOWN 下
      * —— 上のほうを掴むので、ボディもシリンダも板の頭より上に収まる。 */
-    const gripPit = hung ? w / 2 : TGP.W_MAX / 2 - TGP.JAW_T;           // 放しているときは全開
+    const openPit = TGP.W_MAX / 2 - TGP.JAW_T;                          // 放しているときは全開
+    const gripPit = hung ? w / 2 : pit ? Num.lerp(openPit, w / 2, pit.grip) : openPit;
     const jawY = (hung ? pose.y + L / 2 - TGP.GRIP_DOWN : c.beamY - 1400) + TGP.JAW_LIFT;
     const tp = this.pitTong.set(c.x, jawY, c.z, gripPit);
     /* 吊り上げは «トングの吊りピン → 旋回装置 → 下部シーブブロック → ワイヤ → トロリ»
@@ -11324,7 +11370,7 @@ class UIManager {
     /* 既定の時間倍率。5× は «100 m のラインを通しで眺める» には良いが、板の動き・噛み込み・
      * 計器の変化を «読む» には速すぎた。2× なら実機の 1 サイクル 11 分が 5 分半で、
      * 動きを追いながら数字も読める。物理計算は倍率に依らず同じ結果になる。 */
-    this.timeScale = 2; this.passIndex = -1; this.cutaway = 'half'; this.labelsOn = true; this.zonesOn = false; this.quality = 'auto';
+    this.timeScale = 5; this.passIndex = -1; this.cutaway = 'half'; this.labelsOn = true; this.zonesOn = false; this.quality = 'auto';
     /* 運転計画。lots は «ロットの条件» の並び、loop は none / queue / lot。
      * running のあいだは 1 ロット終わるたびに次を当てて自動で走り出す。 */
     this.plan = { lots: [], loop: 'none', i: 0, done: 0, running: false, t: null };
