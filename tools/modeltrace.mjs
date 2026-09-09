@@ -98,7 +98,10 @@ const out = await page.evaluate(async () => {
     ok('摩擦係数が状態（温度・速度）で変わる', has, has ? 'Rolling.friction' : '未実装（μ 一定）');
     if (has) {
       const m1 = R.friction(350, 30), m2 = R.friction(500, 30), m3 = R.friction(450, 300);
-      ok('温度が上がると摩擦係数が下がる', m2 < m1, `350 ℃ ${m1.toFixed(3)} → 500 ℃ ${m2.toFixed(3)}`);
+      // 温度依存は向きが定まらない（アルミは凝着で上がるとする測定もある）ので、係数の符号どおりに動くことだけを見る
+      const kt = window.__CFG.PROCESS.MU_KT;
+      ok('摩擦係数の温度依存が係数 MU_KT の符号どおり（0 なら中立）', kt > 0 ? m2 < m1 : kt < 0 ? m2 > m1 : Math.abs(m2 - m1) < 1e-9,
+         `350 ℃ ${m1.toFixed(3)} → 500 ℃ ${m2.toFixed(3)}（MU_KT ${kt}）`);
       ok('速度が上がると摩擦係数が下がる', m3 < R.friction(450, 30),
          `30 mpm ${R.friction(450, 30).toFixed(3)} → 300 mpm ${m3.toFixed(3)}`);
       const all = [m1, m2, m3];
@@ -116,7 +119,10 @@ const out = await page.evaluate(async () => {
       window.__startAuto(false);
       window.__ff(p => p.mill.passIndex >= 4, 120 * 1500);
       const t1 = P.mill.rollTemp;
-      ok('圧延を重ねるとロール温度が上がる', t1 > t0 + 2, `${t0.toFixed(1)} → ${t1.toFixed(1)} ℃`);
+      /* 上がり幅は小さい: 界面と内部の抵抗を直列にした実効熱伝達率（Rolling.rollHTC）と軽い初パス
+       * （10 mm 圧下）では、1 パスのロール抜熱が 0.3〜0.6 K・ロール 2 本の熱容量が板の 1.7 倍なので
+       * 4 パスで +1 K 弱。«上がる向き» を問う（閾値 0.5 K）。 */
+      ok('圧延を重ねるとロール温度が上がる', t1 > t0 + 0.5, `${t0.toFixed(1)} → ${t1.toFixed(1)} ℃`);
       ok('ロール温度が現実的な範囲に収まる（〜200 ℃）', t1 < 200, `${t1.toFixed(1)} ℃`);
       A.bus.emit('CMD_RESET');
     }

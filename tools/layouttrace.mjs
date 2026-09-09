@@ -199,7 +199,9 @@ const out = await page.evaluate(() => {
          `門型 ${st.map(Math.round).join(' / ')} mm ／ サイドガイド ±${K.TABLE.GUIDE.X} mm`);
       ok('入側と出側にそれぞれ 1 基ずつある', st.filter(x => x > 0).length === 1 && st.filter(x => x < 0).length === 1,
          `入側 ${st.filter(x => x > 0).map(Math.round).join('')} / 出側 ${st.filter(x => x < 0).map(Math.round).join('')} mm`);
-      const hx = L.coolStations(true), gx = [];      // ヘッダは 1 ステーションに OS / DS の 2 本（X は同じ）
+      // ヘッダは 1 ステーションに OS / DS の 2 本（X は同じ）。描画は ON/OFF に関わらず全ステーション
+      // （既定は入側 OFF）なので、位置の突き合わせは全ステーションと行い、効いている本数は別に問う
+      const hx = L.coolStations(), gx = [];
       gv.headers.mesh.updateWorldMatrix(true, false);
       const m4 = new T.Matrix4();
       for (let i = 0; i < gv.headers.mesh.count; i++) {
@@ -207,7 +209,7 @@ const out = await page.evaluate(() => {
         gx.push(m4.elements[12] / sc);
       }
       const worst = Math.max(...hx.map(x => Math.min(...gx.map(g => Math.abs(g - x)))));
-      ok('描画したヘッダの位置と熱計算が見る位置が一致', hx.length * 2 === gx.length && worst < 1,
+      ok('描画したヘッダの位置と熱計算が見る位置が一致（全ステーション）', hx.length * 2 === gx.length && worst < 1,
          `${gx.length} 本 / 最大のずれ ${worst.toFixed(1)} mm`);
 
       /* «移したのに見えない» を二度と起こさないための 3 点。設備として立っていること、

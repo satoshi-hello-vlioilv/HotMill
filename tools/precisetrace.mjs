@@ -50,7 +50,7 @@ const out = await page.evaluate(async () => {
     const hOut = p.gap, w = P.slab.width || 1500, T = p.tEnd ?? 450;
     if (!(hIn > hOut)) return;
     // 独立に数値微分して «真値» を作る（実装が使う plasticCoef とは別に解く）
-    const eps = Math.max(hOut * 0.005, 5e-4);
+    const eps = Math.max(Math.min(hOut * 0.005, (hIn - hOut) * 0.02), 5e-4);   // 軽圧下では圧下量に対しても小さく取る
     const f1 = R.solve(hIn, hOut, w, 60, T, 0, P.slab.alloy);
     const f2 = R.solve(hIn, hOut + eps, w, 60, T, 0, P.slab.alloy);
     const Qtrue = (f1.forceTon - f2.forceTon) / eps;
@@ -71,9 +71,13 @@ const out = await page.evaluate(async () => {
   ok('フィードフォワード利得が真値どおりになった',
      qRows.every(r => Math.abs(gain(r.Q) / gain(r.真値) - 1) < 0.06),
      `旧の利得比 ${gRows.join(' / ')} → いまは 1.00`);
-  ok('Q は板が薄いほど大きい（同じ δ でも出側が動きにくくなる）',
-     qRows.every((r, i) => i === 0 || r.Q > qRows[i - 1].Q),
-     `${qRows[0].Q} → ${qRows[qRows.length - 1].Q} t/mm`);
+  /* «薄いほど大きい» は同じ圧下率で比べて初めて言える性質。実機の配分（初パス軽圧下・
+   * 定圧下 30 mm → 圧下率 19 %）を並べると圧下量の変わり目で Q が下がる箇所があるので、
+   * 圧下率 20 % を固定した系列で問う。 */
+  const qSeries = [400, 200, 100, 50, 25, 12].map(h => R.plasticCoef(h / 0.8, h, P.slab.width || 1500, 60, 420, P.slab.alloy).Q);
+  ok('Q は板が薄いほど大きい（同じ圧下率で比べて。同じ δ でも出側が動きにくくなる）',
+     qSeries.every((q, i) => i === 0 || q > qSeries[i - 1]),
+     `圧下率 20 %: ${qSeries.map(q => q.toFixed(1)).join(' → ')} t/mm`);
 
   /* --- 3) 加工発熱の長手分布 -------------------------------------------------
    * 加工発熱は «その材料点» に付く。頭は AGC が収束しておらず厚い＝圧下が大きく、

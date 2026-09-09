@@ -86,7 +86,8 @@ const out = await page.evaluate(({ alloy, target }) => {
     // 指摘(1): 板面は膜沸騰（ライデンフロスト）域にあり、熱の受け手は蒸気膜の飽和温度
     {
       const CO = K.MATERIAL.COOLANT, hot = P.constructor.boiling(450), cold = P.constructor.boiling(60);
-      ok('400 ℃ 級の板面は膜沸騰（熱伝達率が核沸騰の 1/10 以下）', hot.h <= CO.H_NB / 10 && hot.h === CO.H_FILM,
+      // 膜沸騰の熱伝達率はサブクール度で H_FILM·SUB_K〜H_FILM の間を動く（液温 64 ℃ で 0.79 倍）
+      ok('400 ℃ 級の板面は膜沸騰（熱伝達率が核沸騰の 1/10 以下）', hot.h <= CO.H_NB / 10 && hot.h <= CO.H_FILM + 1e-9 && hot.h >= CO.H_FILM * CO.SUB_K - 1e-9,
          `450 ℃: ${hot.h} W/m²K ／ 60 ℃: ${cold.h} W/m²K`);
       ok('膜沸騰では熱の受け手が液温でなく蒸気膜の飽和温度', Math.abs(hot.T - CO.T_SAT) < 1 && Math.abs(cold.T - CO.T_BULK) < 1,
          `450 ℃ → ${hot.T.toFixed(0)} ℃（液温 ${CO.T_BULK} ℃ ではなく飽和 ${CO.T_SAT} ℃）`);
