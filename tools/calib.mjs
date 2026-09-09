@@ -14,8 +14,8 @@ await installHelpers(page);
 const out = await runReal(page, { temp: TEMP, sets });
 await browser.close();
 
-// soft: 合否に数えない «参考» 項目。実機の数値と本アプリの物理が両立しないと分かっている点を、
-//       隠さずに毎回表示するためのもの（下の 26 → 16 mm）。実機の再確認が取れたら通常の項目に戻す。
+// soft: 合否に数えない «参考» 項目。実機の数値と本アプリの物理が両立しないと分かった点を、
+//       隠さずに毎回表示するためのもの。実機の再確認が取れたら通常の項目に戻す（26 → 16 mm がその例だった）。
 const checks = [], ok = (n, p, d = '', soft = false) => checks.push({ name: n, pass: !!p, detail: d, soft });
 const f0 = (x, w = 6) => (x == null || !Number.isFinite(x) ? '–' : Math.round(x)).toString().padStart(w);
 const f1 = (x, w = 6) => (x == null || !Number.isFinite(x) ? '–' : (+x).toFixed(1)).toString().padStart(w);
@@ -31,10 +31,9 @@ for (const sg of out.segs) {
   // 帯は «定常の読み» なので平均で比べる。頭・尻・噛み込みの峰は別の評価器（loadtrace）が見る
   const bad = rows.filter(r => r.fAvg < lo * 0.9 || r.fAvg > hi * 1.1);
   const rng = rows.length ? `${f0(Math.min(...rows.map(r => r.fAvg)), 0)}〜${f0(Math.max(...rows.map(r => r.fAvg)), 0)} t（最大 ${f0(Math.max(...rows.map(r => r.fMax)), 0)} t）` : 'データ無し';
-  /* 26 → 16 mm（80 mpm）の実機値 750〜900 t は、その前の 36 → 26 mm（800〜1,200 t）より軽く、
-   * 摩擦ゼロで解いても 400 ℃・A5052 の変形抵抗（≈ 90 MPa）から 1,000 t を下回れない。
-   * 実機の読みか条件（温度・材質・板幅）に本アプリの前提と合わない何かがあるので、合否に数えず
-   * 参考として出し続ける（tools/reallot.mjs の注記も参照）。 */
+  /* soft は «実機の値と本アプリの物理が両立しない» と分かった区間を、合否に数えずに表示し続けるための
+   * 印（reallot.mjs の seg[].soft）。26 → 16 mm がその例だったが、実機側の誤記（750〜900 → 1,530〜2,000 t）と
+   * 確認されて通常項目に戻した。いまは使っていないが、次のデータで同じことが起きたときのために残す。 */
   ok(`荷重 ${sg.name}: 実機 ${lo}〜${hi} t${sg.soft ? '（参考・要確認）' : ''}`, rows.length && bad.length === 0,
      `本アプリ 平均 ${rng}${bad.length ? ' / 外れ: ' + bad.map(r => `#${r.no} ${f0(r.fAvg, 0)}/${f0(r.fMax, 0)} t`).join(', ') : ''}`, !!sg.soft);
 }
