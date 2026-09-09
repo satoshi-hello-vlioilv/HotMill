@@ -542,10 +542,37 @@ body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
   padding:0 3px; line-height:1.3; }
 .tb-pill[aria-pressed="true"] b { background:rgba(255,255,255,.25); color:#fff; }
 .tb-pill[aria-pressed="true"] .kbd { color:#fff; border-color:rgba(255,255,255,.5); }
-/* 一時停止ピル: 押している間（＝停止中）は琥珀。運転していないときは薄く出す（押せないことが分かる） */
-#tb-pause[aria-pressed="true"] { background:var(--warn,#c98a00); color:#fff; border-color:var(--warn,#c98a00); }
-#tb-pause[aria-pressed="true"] i { color:#fff; }
-#tb-pause[disabled] { opacity:.45; pointer-events:none; }
+/* 運転バー: 開始・一時停止・リセット・速度を «再生機の並び» に集約する。
+   左メニューを畳んでも、いちばんよく使う操作が同じ場所に常に出ている。 */
+.tb-run { display:inline-flex; align-items:center; padding:0 5px; gap:3px; }
+.tb-run .rb { height:26px; min-width:30px; padding:0 9px; border-radius:7px; border:1px solid transparent;
+  background:transparent; color:var(--ink-2); font:inherit; font-size:11px; font-weight:700; cursor:pointer;
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.tb-run .rb:hover { background:var(--s-2); color:var(--ink-1); }
+.tb-run .rb i { color:var(--ink-3); }
+.tb-run .rb.go { background:var(--accent); color:#fff; }
+.tb-run .rb.go i { color:#fff; }
+.tb-run .rb.go:hover { background:#174d90; }
+.tb-run .rb.stop { background:var(--crit); color:#fff; }
+.tb-run .rb.stop i { color:#fff; }
+.tb-run .rb[aria-pressed="true"] { background:var(--warn,#c98a00); color:#fff; }
+.tb-run .rb[aria-pressed="true"] i { color:#fff; }
+.tb-run .rb[disabled] { opacity:.4; pointer-events:none; }
+.tb-run .rsep { width:1px; align-self:stretch; margin:5px 3px; background:var(--line); }
+.tb-run .spd b { font-variant-numeric:tabular-nums; font-weight:800; color:var(--accent); }
+.tb-run .pop { position:relative; }
+.tb-run .popmenu { position:absolute; top:calc(100% + 8px); right:0; z-index:70; width:270px; padding:12px;
+  background:var(--s-1); border:1px solid var(--line); border-radius:var(--r-l); box-shadow:var(--shadow-2); }
+.tb-run .popmenu[hidden] { display:none; }
+.tb-run .pophd { display:flex; align-items:center; justify-content:space-between; font-size:11px;
+  font-weight:800; color:var(--ink-2); margin-bottom:9px; }
+.tb-run .pophd .v { color:var(--accent); font-variant-numeric:tabular-nums; }
+.tb-run .chips { display:flex; gap:5px; margin-top:9px; }
+.tb-run .chips button { flex:1; height:25px; border-radius:7px; border:1px solid var(--line); background:var(--s-1);
+  font:inherit; font-size:10.5px; font-weight:700; color:var(--ink-2); cursor:pointer; font-variant-numeric:tabular-nums; }
+.tb-run .chips button[aria-pressed="true"] { background:var(--accent-soft); border-color:var(--accent-2); color:var(--accent); }
+.tb-run .pophint { margin-top:9px; font-size:10px; color:var(--ink-3); line-height:1.6; }
+body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
 /* 運転計画パネルの中身 */
 .pnl .pane { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:9px; }
 .pnl .pane[hidden] { display:none; }
@@ -583,6 +610,51 @@ body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
 .apply-slot { min-height:40px; display:flex; align-items:center; }
 .apply-slot .btn { margin:0; }
 .sec table.sched td:first-child { color:var(--ink-3); }
+
+/* --- 圧延条件の登録・編集モーダル ------------------------------------------
+   決める順（材料 → 仕上げ → 冷却）に区切り、下に «この条件の見積り» を常に出す。
+   入れた値がどんなロットになるかを見ながら決められるので、推測させない。 */
+#dlg-lot { border:none; padding:0; border-radius:var(--r-l); background:var(--s-1); color:var(--ink-1);
+  width:min(740px,94vw); max-height:90vh; box-shadow:var(--shadow-2); }
+#dlg-lot::backdrop { background:rgba(12,18,26,.42); backdrop-filter:blur(2px); }
+#dlg-lot form { display:flex; flex-direction:column; max-height:90vh; }
+#dlg-lot header { flex:none; display:flex; align-items:center; gap:12px; padding:15px 18px;
+  border-bottom:1px solid var(--line); }
+#dlg-lot h2 { margin:0; font-size:14px; font-weight:800; letter-spacing:.04em; }
+#dlg-lot h2 i { opacity:.6; margin-right:5px; }
+#dlg-lot .x { margin-left:auto; width:30px; height:30px; border-radius:8px; border:1px solid var(--line);
+  background:var(--s-1); color:var(--ink-3); cursor:pointer; }
+#dlg-lot .x:hover { color:var(--ink-1); border-color:var(--ink-3); }
+#dlg-lot .lot-body { flex:1 1 auto; overflow:auto; padding:16px 18px; display:flex; flex-direction:column; gap:15px; }
+#dlg-lot .lot-grp h3 { margin:0 0 9px; font-size:11px; font-weight:800; color:var(--ink-2);
+  display:flex; align-items:center; gap:7px; letter-spacing:.06em; }
+#dlg-lot .lot-grp h3 .n { width:17px; height:17px; border-radius:50%; background:var(--accent); color:#fff;
+  font-size:9.5px; display:inline-flex; align-items:center; justify-content:center; }
+#dlg-lot .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px 14px; }
+#dlg-lot .f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+#dlg-lot .f > .lb { font-size:10.5px; font-weight:700; color:var(--ink-3); display:flex; justify-content:space-between; gap:8px; }
+#dlg-lot .f > .lb em { font-style:normal; color:var(--ink-3); opacity:.75; font-weight:600; }
+#dlg-lot input[type=number], #dlg-lot select { height:32px; border:1px solid var(--line); border-radius:8px;
+  background:var(--s-1); color:var(--ink-1); font:inherit; font-size:12px; padding:0 9px; width:100%;
+  font-variant-numeric:tabular-nums; }
+#dlg-lot input[type=number]:focus, #dlg-lot select:focus { outline:2px solid var(--accent-2); outline-offset:-1px; }
+#dlg-lot .segf { display:flex; gap:4px; background:var(--s-3); border-radius:8px; padding:3px; }
+#dlg-lot .segf button { flex:1; height:26px; border:0; border-radius:6px; background:transparent; cursor:pointer;
+  font:inherit; font-size:11px; font-weight:700; color:var(--ink-2); }
+#dlg-lot .segf button[aria-pressed="true"] { background:var(--s-1); color:var(--accent); box-shadow:var(--shadow-1); }
+#dlg-lot .lot-est { border:1px solid var(--line); border-radius:var(--r-m); background:var(--s-2); padding:11px 13px;
+  font-size:11px; line-height:1.85; color:var(--ink-2); }
+#dlg-lot .lot-est b { color:var(--ink-1); font-variant-numeric:tabular-nums; }
+#dlg-lot .lot-est .warn { color:var(--crit); font-weight:700; }
+#dlg-lot .lot-est .note { color:#8a5b00; }
+#dlg-lot footer { flex:none; display:flex; justify-content:flex-end; gap:9px; padding:13px 18px;
+  border-top:1px solid var(--line); background:var(--s-2); }
+#dlg-lot footer .btn { width:auto; padding:0 18px; height:34px; }
+.pnl .planrow.hint { font-size:10.5px; color:var(--ink-3); gap:6px; }
+.pnl .mini.pri { background:var(--accent); color:#fff; border-color:var(--accent); }
+.pnl .mini.pri:hover { background:#174d90; color:#fff; }
+.pnl table.plan tbody tr { cursor:pointer; }
+.pnl table.plan tbody tr:hover td { background:var(--s-2); }
 </style>
 </head>
 <body>
@@ -606,16 +678,8 @@ body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
     <button id="btn-collapse" title="メニューをたたむ（M）" aria-label="メニューをたたむ"><i class="fa-solid fa-chevron-left"></i></button>
   </header>
 
-  <!-- 主操作。位置は状態やメッセージに依らず固定（メッセージは画面下の状態行へ分離した） -->
-  <div id="action-bar">
-    <button class="btn btn-primary" id="btn-start">
-      <i class="fa-solid fa-play"></i><span id="btn-start-tx">圧延サイクル開始</span><span class="kbd">Space</span>
-    </button>
-    <div class="btn-row">
-      <button class="btn btn-ghost" id="btn-pause"><i class="fa-solid fa-pause"></i>一時停止<span class="kbd">P</span></button>
-      <button class="btn btn-danger" id="btn-reset"><i class="fa-solid fa-rotate-left"></i>リセット<span class="kbd">R</span></button>
-    </div>
-  </div>
+  <!-- 主操作（開始・一時停止・リセット・速度）は画面上部の運転バーへ移した。
+       左メニューは «条件と設備の設定» に専念させ、既定では畳んでおく。 -->
 
   <!-- 区分は 4 つのタブ。«作業の流れ»（準備 → 運転）と «見え方・設備» を分け、
        タブの下段にその区分の要約を出して、開かなくても今の状態が読めるようにする -->
@@ -712,11 +776,7 @@ body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
         </div>
 
         <div id="auto-controls">
-          <div class="fld">
-            <div class="top"><span class="k">シミュレーション速度</span><span class="v" id="lbl-timescale">2<em>×</em></span></div>
-            <input type="range" id="rng-timescale" min="0.25" max="8" value="2" step="0.25">
-            <div class="derived">実時間比。実機の1サイクルは10分規模なので、早送りで通して見られます。物理計算は速度に依らず同一結果です。</div>
-          </div>
+          <div class="derived">シミュレーション速度は画面上部の運転バー（速度）で変えられます。物理計算は速度に依らず同一結果です。</div>
         </div>
 
         <div id="manual-controls" style="display:none;">
@@ -881,15 +941,30 @@ body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
       <button class="tb-btn" id="tb-labels" aria-pressed="true" title="設備ラベル（L）"><i class="fa-solid fa-tag"></i><span class="nm">ラベル</span></button>
       <button class="tb-btn" id="tb-zones" aria-pressed="false" title="テーブル区分の記号（Z）"><i class="fa-solid fa-list-ol"></i><span class="nm">区分記号</span></button></div>
   </div>
-  <!-- 右端のピル 3 つ。«計画 → 運転 → 実績» の順に並べる（作業の流れと同じ順）。
+  <!-- 右端のピル。«運転（再生機の並び）→ 計画 → 実績» の順に並べる。
        ツールバーの畳み具合に関わらず位置が動かないので、探さずに手が届く。 -->
+  <div class="tb-pill tb-run" id="tb-run" role="group" aria-label="運転">
+    <button id="btn-start" class="rb go" type="button" title="圧延サイクルを開始する（Space）">
+      <i class="fa-solid fa-play"></i><span class="nm" id="btn-start-tx">開始</span></button>
+    <button id="btn-pause" class="rb" type="button" aria-pressed="false" disabled
+      title="一時停止／再開する（P）"><i class="fa-solid fa-pause"></i><span class="nm" id="tb-pause-tx">一時停止</span></button>
+    <button id="btn-reset" class="rb" type="button" title="初期状態へ戻す（R）"><i class="fa-solid fa-rotate-left"></i></button>
+    <span class="rsep"></span>
+    <div class="pop">
+      <button class="rb spd" id="tb-speed" type="button" aria-expanded="false" aria-haspopup="true"
+        title="シミュレーション速度を変える"><i class="fa-solid fa-gauge-high"></i><b id="lbl-timescale">5×</b></button>
+      <div class="popmenu" id="tb-speed-pop" hidden>
+        <div class="pophd"><span>シミュレーション速度</span><span class="v" id="lbl-timescale2">5×</span></div>
+        <input type="range" id="rng-timescale" min="0.25" max="20" value="5" step="0.25" aria-label="シミュレーション速度">
+        <div class="chips" id="speed-presets"></div>
+        <div class="pophint">実時間比。物理計算は速度に依らず同一結果です。</div>
+      </div>
+    </div>
+  </div>
   <button class="tb-btn tb-pill" id="tb-plan" aria-pressed="false"
     title="運転計画を開く（Q）。プリセットを選ぶか、いまの条件をキューに足して、順に流します">
     <i class="fa-solid fa-list-ol"></i><span class="nm">運転計画</span>
     <b id="tb-plan-n" title="キューに入っているロット数">0</b><span class="kbd">Q</span></button>
-  <button class="tb-btn tb-pill" id="tb-pause" aria-pressed="false" disabled
-    title="シミュレーションを一時停止／再開する（P）">
-    <i class="fa-solid fa-pause"></i><span class="nm" id="tb-pause-tx">一時停止</span><span class="kbd">P</span></button>
   <button class="tb-btn tb-pill tb-log" id="tb-log" aria-pressed="false"
     title="圧延実績ビュワーを開く（G）。パスごとの荷重・温度・形状と時系列グラフを、3D を見ながら読めます">
     <i class="fa-solid fa-chart-line"></i><span class="nm">実績</span>
@@ -931,10 +1006,14 @@ body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
     <!-- キュー -->
     <div class="pane" id="plan-pane-queue">
       <div class="planrow">
-        <button class="mini" id="btn-plan-add" type="button" title="左メニューでいま決めている条件をキューの末尾へ足します">＋ いまの条件を追加</button>
+        <button class="mini pri" id="btn-plan-new" type="button" title="条件を決めてキューへ足します">＋ 新規登録</button>
+        <button class="mini" id="btn-plan-add" type="button" title="左メニューでいま決めている条件をそのままキューの末尾へ足します">いまの条件を追加</button>
         <button class="mini" id="btn-plan-clear" type="button">キューを空にする</button>
         <span class="grow"></span>
         <button class="mini" id="btn-plan-save" type="button" title="キューに名前を付けてブラウザへ保存します">この計画を保存</button>
+      </div>
+      <div class="planrow hint"><i class="fa-solid fa-circle-info"></i>
+        行をダブルクリックすると条件を編集できます。✕ で外せます。
       </div>
       <div class="tblwrap"><table class="plan" id="plan-table"><thead><tr>
         <th>#</th><th>材質</th><th>鋳造厚<i>mm</i></th><th>面削<i>mm</i></th><th>板幅<i>mm</i></th>
@@ -1021,6 +1100,28 @@ body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
 </section>
 
 <!-- 版数と変更履歴。«今どの版か» と «その版で何が入ったか» を 1 画面で見せる -->
+<!-- 圧延条件の登録・編集。«材料 → 仕上げ → 冷却» の順に並べ、下に «この条件の見積り» を
+     常に出す。決めた値がどんなロットになるか（質量・パス数・最終長・成立するか）を
+     見ながら決められるので、登録してから «流してみたら止まった» にならない。 -->
+<dialog id="dlg-lot" aria-labelledby="dlg-lot-ttl">
+  <form method="dialog" id="lot-form">
+    <header>
+      <h2 id="dlg-lot-ttl"><i class="fa-solid fa-clipboard-list"></i> <span id="lot-ttl">圧延条件の新規登録</span></h2>
+      <button class="x" value="cancel" type="submit" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+    <div class="lot-body">
+      <section class="lot-grp"><h3><span class="n">1</span> 材料</h3><div class="grid" id="lot-f-mat"></div></section>
+      <section class="lot-grp"><h3><span class="n">2</span> 仕上げ</h3><div class="grid" id="lot-f-fin"></div></section>
+      <section class="lot-grp"><h3><span class="n">3</span> 板面冷却</h3><div class="grid" id="lot-f-cool"></div></section>
+      <section class="lot-est" id="lot-est"></section>
+    </div>
+    <footer>
+      <button class="btn btn-ghost" value="cancel" type="submit">キャンセル</button>
+      <button class="btn btn-primary" id="lot-ok" value="ok" type="submit">登録する</button>
+    </footer>
+  </form>
+</dialog>
+
 <dialog id="dlg-ver">
   <header>
     <div>
@@ -1071,6 +1172,22 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.20.0', base: '37696c7', date: '2026-09-09', title: '装入は蓋を開けてから・コイル押えを半径方向のラムに・圧延計画の条件登録と上部の運転バー', items: [
+      { t: '装入の工程を LID → DIVE → GRIP → HOIST に分けた。蓋を開ける間はスラブを炉の中で動かさず、吊具だけを炉口の上で待たせる。以前は蓋開けの間も吊具がスラブに付いていたため、運転前の姿勢が «炉の中にトングが刺さったまま» だった', w: 'CONFIG.SEQUENCE / SupplyView._pose' },
+      { t: '吊具の待機の高さを板長から決めるようにした。ロットが変わっても炉へ刺さらない', w: 'SupplyView._pose jawTop / jawPit' },
+      { t: 'コイル押えを揺動アームから «半径方向のラム» に作り替えた。シリンダーの軸をコイルの中心軸へ真っすぐ向けるので、推力がそのまま押さえ力になり、コイルが太っても当たる向きが変わらない', w: 'CONFIG.COILER.HOLD / Parts.holdDownRam / holdDownRod' },
+      { t: 'コロは «外周» がコイル外周に接する位置に置く（中心を外周に置くと半径ぶん食い込む）。実測で食い込み −0.7 mm・隙間 1.7 mm', w: 'CoilerView 押えコロ' },
+      { t: 'サイドトリマー架構のコイル押えの受けを、押えの軸線の上に来るよう作り直した', w: 'Parts.trimmerFrame' },
+      { t: '圧延条件の登録・編集モーダルを作った。材料 → 仕上げ → 板面冷却 の順に区切り、下に «この条件の見積り»（圧延前厚・質量・パス数・最終長・警告）を常に出す', w: '#dlg-lot / UIManager.openLotDialog' },
+      { t: '入力欄を仕様表から組み立てるようにした。項目が増えても表に 1 行足すだけで、読み書きも見積りも付いてくる', w: 'UIManager.lotFields / _buildLotForm' },
+      { t: 'キューの行をダブルクリックで編集できるようにした（見出しとボタンが «更新する» に変わる）', w: 'UIManager.renderPlan / _lotCommit' },
+      { t: '主操作を画面上部の «運転バー» に集約した。開始・一時停止・リセット・速度を再生機の並びで置き、左メニューを畳んでも同じ場所にある', w: '#tb-run' },
+      { t: '速度をポップオーバーに畳み、1 / 2 / 5 / 10 / 20 倍を 1 押しで選べるようにした。スライダはその間を選ぶためのもの', w: 'UIManager.setTimeScale / toggleSpeedPop' },
+      { t: '左メニューの主操作と速度スライダを撤去した。同じ操作が 2 か所にあると «どちらを使うのか» を考えさせる', w: '#action-bar 撤去' },
+      { t: '左メニューは畳んだ状態を既定にした。条件は «運転計画» で決めるので、左メニューは設備と表示の設定に専念させる', w: 'UIManager.setSidebar(false)' },
+      { t: 'シミュレーション倍率の既定を 2 → 5 倍、上限を 8 → 20 倍にした', w: 'UIManager.timeScale / #rng-timescale' },
+      { t: '見切れ検査が «畳まれているポップオーバーの中身» まで切れていると数えていた。見えていないものは切れようがないので除外する', w: 'tools/uicheck.mjs' },
+    ] },
     { v: '1.19.0', base: 'a907600', date: '2026-09-09', title: 'ピットクレーンをワイヤー仕様へ・運転計画（キュー／プリセット／ループ）・保存と入出力・Excel 書き出し', items: [
       // --- ピットクレーン ---
       { t: '吊具を剛体の伸縮マストからワイヤ 4 本掛けにした。トロリのシーブ → 下部シーブブロック → 旋回装置 → トング の順に下から積み上げるので、どの姿勢でも繋がって見える', w: 'Parts.pitRopeBlock / pitSlewUnit / SupplyView.ropesP' },
@@ -2054,7 +2171,9 @@ const CONFIG = {
    * CRANE_MOVES の距離と CRANE.SPEED の定格速度から Ramp が解く（Layout.moveSec）。
    * こうしておくと、炉の位置や桁の高さを動かしても «速度» のほうは狂わない。 */
   SEQUENCE: [
-    ['LID',      'lid',      1.8,  'ピット炉の蓋を開けています'],
+    ['LID',      'lid',      1.8,  'ピット炉の蓋を開けています（吊具は炉口の上で待機）'],
+    ['DIVE',     'dive',     null, '蓋が開いた炉へ吊具を降ろしています'],
+    ['GRIP',     'grip',     2.8,  'トングでスラブの長手側面を掴んでいます'],
     ['HOIST',    'hoist',    null, '加熱済みスラブを吊り上げています'],
     ['TRAVEL',   'travel',   null, '炉バンクから転倒機まで走行しています'],
     ['TRAVERSE', 'traverse', null, '転倒機まで横行しています'],
@@ -2076,6 +2195,8 @@ const CONFIG = {
    * «何秒かかるか» と «どう見えるか» が原理的にずれない。
    * SET（転倒機へ立てかける降下）は吊ったまま降ろすので巻上と同じ定格。 */
   CRANE_MOVES: {
+    // 吊具を炉へ降ろす。空荷でも巻上装置は同じ定格なので距離も速度も HOIST と同じ
+    dive:     { by: 'CRANE',    d: 'hoist',    v: 'HOIST',     win: [0, 1] },
     hoist:    { by: 'CRANE',    d: 'hoist',    v: 'HOIST',     win: [0, 1] },
     travel:   { by: 'CRANE',    d: 'travel',   v: 'TRAVEL',    win: [0, 1] },
     traverse: { by: 'CRANE',    d: 'traverse', v: 'TRAVERSE',  win: [0, 1] },
@@ -2187,13 +2308,22 @@ const CONFIG = {
       LEG_Z: 1265, LEG_W: 260, LEG_T: 120, CLEAR_Y: 1345,
     },
     COIL_SEG: 72,                            // コイル形状の周方向分割数
-    // コイル押え。サイドトリマー架構の上部梁から出したアームの先端に金属コロ（Φ200 ×
-    // 面長 600）を付け、コイル外周に当てて巻き広がり（テレスコープ）を抑える。
-    // コイルは «下巻き»（板は下から入り、奥→上→手前と回る）なので、押えは巻き終わり側の
-    // 上寄り（コイル中心から見て 105〜125°、真上が 90°）を狙う。支点はトリマー中心から
-    // 下流へ PIVOT_DX・パスライン上 PIVOT_DY。アームは支点まわりの揺動で、コイルが
-    // 太るほど起き上がる。駆動は梁上の受けから吊るシリンダ。※各寸法は推定値。
-    HOLD: { PIVOT_DX: 700, PIVOT_DY: 1700, ARM_L: 1550, ROLL_D: 200, ROLL_W: 600, CYL_DX: 1000, CYL_DY: 3300 },
+    /* コイル押え。金属コロ（Φ200 × 面長 600）をコイル外周に当てて
+     * 巻き広がり（テレスコープ）を抑える。
+     *
+     * 機構は «半径方向のラム»。シリンダーの軸をコイルの中心軸へ真っすぐ向け、
+     * ロッドの先にコロを付ける。こうするとシリンダーの推力がそのまま押さえ力になる
+     * （揺動アームだと、力はアームに直角にしか出ないうえ、姿勢で向きが変わる）。
+     * コイルが太るとロッドが押し戻されるだけなので、当たる向きは最後まで変わらない。
+     *
+     *   ANGLE  … 押さえる極角 [deg]（コイル中心から見て。真上が 90°）。
+     *            コイルは «下巻き»（板は下から入り、奥→上→手前と回る）なので、
+     *            巻き終わり側の上寄りを狙う。X の向きはトリマー側（上流）へ倒す。
+     *   BASE_R … シリンダー胴の «内端» のコイル軸からの距離。ロッドはここから出る
+     *   YOKE   … コロの軸受（ロッド先端の股）の長さ
+     * ※各寸法は推定値。 */
+    HOLD: { ANGLE: 118, BASE_R: 1500, CYL_L: 1100, CYL_D: 320, ROD_D: 160, YOKE: 240,
+            ROLL_D: 200, ROLL_W: 600, MOUNT: 320 },
   },
 
   /* 75 mm クロップシャー。出側のかなり遠方に置かれ、板厚が 75 mm 以下になった
@@ -8072,10 +8202,25 @@ const Parts = {
         add(sz, G.at(G.cyl(320, 800, 'x', 12), 0, P + 470, zc));
       }
       add(0, G.at(G.box(800, 450, 2 * zp + 800), 0, hp + 225, 0));                   // 上部梁（柱の上）
-      // コイル押えアームの支点ブラケット（梁の下流側面）と、駆動シリンダの受け（梁の上）
-      add(0, G.at(G.box(800, 400, 500), F * 500, hp, 0));
-      add(0, G.at(G.box(900, 300, 500), F * 650, hp + 600, 0));
-      add(0, G.at(G.box(300, 900, 500), F * H.CYL_DX, hp + 750 + 450, 0));
+      /* コイル押えラムの受け。押えは «コイル軸へ真っすぐ向いたシリンダー» なので、
+       * 受けはその軸線の上に来る。軸線は コイル中心（COILER.X, パスライン + Y_ABOVE）から
+       * 極角 ANGLE を上流側へ倒した直線で、胴の架台（BASE_R + CYL_L の中ほど）を抱く。 */
+      const CO = CONFIG.COILER, hh = H.ANGLE * Math.PI / 180;
+      const upx = Math.sign(T.X - CO.X) || -1;
+      // 受けは «胴の後ろ»（クレビス）の位置。胴の途中を抱くと部材が部材の中に入る。
+      const rEnd = H.BASE_R + H.CYL_L + 300;
+      const mx = CO.X + upx * Math.abs(Math.cos(hh)) * rEnd;                          // 受けの X（世界）
+      const my = P + CO.Y_ABOVE + Math.sin(hh) * rEnd;                                // 受けの Y
+      /* クレビスの下に柱を立て、その上でラムの後端を受ける。
+       * 天端はラムの下端（軸から MOUNT/2 + 150）よりさらに下げて触れないようにする。 */
+      /* 柱は細くする（幅 200）。ラムは斜めに寝ているので、柱が太いほど «柱の幅の端で»
+       * ラムの下面が下がってきて当たる。天端も、その傾きぶん余分に下げておく。 */
+      const capW = 200, capH = 200;
+      const capY = my - (H.MOUNT / 2 + 150) - capW / 2 * Math.abs(Math.tan(hh)) - 260;
+      add(0, G.at(G.box(800, 400, 500), F * 500, hp, 0));                             // 梁の下流側面のブラケット
+      add(0, G.at(G.box(capW, Math.max(capY - capH / 2 - hp - 450, 200), 620),
+                  mx - T.X, (hp + 450 + capY - capH / 2) / 2, 0));                     // 受け柱
+      add(0, G.at(G.box(capW + 180, capH, 700), mx - T.X, capY, 0));                   // 受け（ラムの後端を下から支える）
     });
   },
   /**
@@ -8172,10 +8317,6 @@ const Parts = {
     geo.translate(0, 0, -u(W + 260) / 2);
     return geo;
   },
-  /** 押えアームの駆動シリンダ（単位長 1000 mm、+X 方向）。scale.x で伸縮する。 */
-  holdDownCyl() {
-    return G.merge([G.at(G.cyl(280, 560, 'x', 12), 280, 0, 0), G.at(G.cyl(150, 1000, 'x', 10), 500, 0, 0)]);
-  },
   /** 押えロール（面長 600 mm）。コイル外周に当てて巻き広がりを抑える。 */
   holdDownRoll() {
     const H = CONFIG.COILER.HOLD;
@@ -8185,13 +8326,31 @@ const Parts = {
       G.at(G.cyl(H.ROLL_D * 0.45, 220, 'z', 8), 0, 0, -(H.ROLL_W + 200) / 2),
     ]);
   },
-  /** 押えロールのアーム。単位長さ 1000 mm（+X 方向）で作り、scale.x で伸ばす。 */
-  holdDownArm() {
+  /**
+   * コイル押えの «ラム»（シリンダー胴と架台）。単位ベクトルの向きは View が回す。
+   * 原点＝胴の内端（ロッドが出る側）で、胴は +X（コイル軸から遠ざかる向き）へ伸びる。
+   */
+  holdDownRam() {
+    const H = CONFIG.COILER.HOLD, L = H.CYL_L;
+    return G.merge([
+      G.at(G.cyl(H.CYL_D, L, 'x', 16), L / 2, 0, 0),                       // 胴
+      G.at(G.cyl(H.CYL_D + 90, 120, 'x', 16), 60, 0, 0),                   // 前蓋（ロッド案内）
+      G.at(G.cyl(H.CYL_D + 60, 110, 'x', 16), L - 55, 0, 0),               // 後蓋
+      // 後部支持（クレビス）。押すだけのラムなので «胴の後ろ» で受けるのが素直で、
+      // 胴の途中に耳を出して抱かせるより、架構と部材が取り合わない。
+      G.at(G.cyl(H.CYL_D + 120, 220, 'x', 16), L + 110, 0, 0),
+      G.at(G.box(240, H.MOUNT + 300, H.CYL_D + 420), L + 300, 0, 0),
+      // 給排の配管（前後 2 ポート）。胴から «上» へ抜く
+      ...[L * 0.18, L * 0.82].map(dx => G.at(G.cyl(70, H.CYL_D + 220, 'y', 8), dx, (H.CYL_D + 220) / 2 - 40, 0)),
+    ]);
+  },
+  /** 押えロッド。単位長さ 1000 mm（+X 方向）で作り、View が scale.x で伸ばす。 */
+  holdDownRod() {
     const H = CONFIG.COILER.HOLD;
     return G.merge([
-      G.at(G.box(1000, 220, 180), 500, 0, 0),
-      G.cyl(360, 420, 'z', 12),                              // 支点ボス
-      G.at(G.cyl(260, H.ROLL_W + 300, 'z', 10), 1000, 0, 0), // ロール軸受
+      G.at(G.cyl(H.ROD_D, 1000, 'x', 12), 500, 0, 0),
+      G.at(G.box(200, H.ROLL_W + 40, 200), 0, 0, 0),                        // コロ側のヨーク（股）
+      ...[-1, 1].map(sz => G.at(G.box(H.YOKE, 220, 150), -H.YOKE / 2, 0, sz * (H.ROLL_W + 190) / 2)),
     ]);
   },
 
@@ -9753,16 +9912,22 @@ class FinishView {
     this.coil.visible = false; this.coil.frustumCulled = false; this.coiler.add(this.coil);
     // コイル押え: サイドトリマー架構の梁から出したアームの先端の金属コロをコイル外周に当てる。
     // アームは支点まわりに揺動し、梁上の受けから吊るシリンダで押し付ける。
-    const H = C.HOLD;
-    this.holdPivot = { x: T.X + F * H.PIVOT_DX - C.X, y: P + H.PIVOT_DY };   // 支点（コイラー基準の座標）
-    this.holdCylPin = { x: T.X + F * H.CYL_DX - C.X, y: P + H.CYL_DY };
-    this.holdArm = new THREE.Mesh(Parts.holdDownArm(), MAT.hydraulic); this.holdArm.name = '押えアーム';
-    this.holdArm.position.set(u(this.holdPivot.x), u(this.holdPivot.y), 0);
-    this.holdArm.castShadow = true; this.coiler.add(this.holdArm);
+    /* 押さえる向きの単位ベクトル。極角 ANGLE を «上流（トリマー側）へ倒す» 向きに取るので、
+     * 入側・出側を左右反転しても押えは必ずコイルの巻き終わり側に立つ。
+     * シリンダーの軸はこの直線そのもの ＝ 推力がそのまま押さえ力になる。 */
+    const H = C.HOLD, hth = H.ANGLE * Math.PI / 180;
+    const up = Math.sign(T.X - C.X) || -1;                    // コイラーから見てトリマーの側
+    this.holdDir = { x: up * Math.abs(Math.cos(hth)), y: Math.sin(hth) };
+    this.holdAng = Math.atan2(this.holdDir.y, this.holdDir.x);
     this.holdRoll = new THREE.Mesh(Parts.holdDownRoll(), MAT.rollFace); this.holdRoll.name = '押えコロ';
     this.holdRoll.castShadow = true; this.coiler.add(this.holdRoll);
-    this.holdCyl = new THREE.Mesh(Parts.holdDownCyl(), MAT.hydraulic); this.holdCyl.name = '押えシリンダ';
-    this.holdCyl.castShadow = true; this.coiler.add(this.holdCyl);
+    this.holdRod = new THREE.Mesh(Parts.holdDownRod(), MAT.rod); this.holdRod.name = '押えロッド';
+    this.holdRod.castShadow = true; this.coiler.add(this.holdRod);
+    // 胴は動かないので、位置と向きはここで 1 度だけ決める（コイル軸から BASE_R の点）
+    this.holdRam = new THREE.Mesh(Parts.holdDownRam(), MAT.hydraulic);
+    this.holdRam.name = '押えシリンダ'; this.holdRam.castShadow = true;
+    this.holdRam.position.set(u(this.holdDir.x * H.BASE_R), u(this.mandrelY + this.holdDir.y * H.BASE_R), 0);
+    this.holdRam.rotation.z = this.holdAng; this.coiler.add(this.holdRam);
     // --- ベルトラッパー: 常設。C 型キャリッジを左上からシリンダーで押し込んで抱かせる ---
     // マンドレルは板を掴まないので、巻き始めはこのベルトが先端をマンドレルへ押し付ける。
     // 使わないときは押し込みを戻すだけで、設備そのものは常に見えている。
@@ -9983,33 +10148,24 @@ class FinishView {
     this.coil.visible = wound;
     const h = slab.inBite ? mill.gap : slab.thickness, w = fin.finishedWidth(slab.width), r0 = C.MANDREL_D / 2;
     if (wound) this.coilGeo.update(r0 + (fin.expand - 1) * C.SEG_STROKE, fin.r1, h, w, fin.frac, fin.entry, fin.windSign);
-    // 押えコロ: 支点からアーム長 L、コイル中心から（外周半径 + コロ半径）の交点のうち上側。
-    // コロが当たる極角の位置に巻きかけの層があれば 1 枚ぶん外側に乗る（1 周ごとの段を拾う）。
+    /* 押えコロ: コイル軸から «外周半径 ＋ コロ半径» の点へ、押さえの直線上を進退する。
+     * コロの «外周» がコイルの外周にちょうど接する（中心を外周に置くと半径ぶん食い込む）。
+     * コロが当たる極角の位置に巻きかけの層があれば 1 枚ぶん外側に乗る（1 周ごとの段を拾う）。 */
     {
-      const H = C.HOLD, pv = this.holdPivot, my = this.mandrelY, active = fin.mode === 'COIL' && fin.expand > 0;
+      const H = C.HOLD, d = this.holdDir, my = this.mandrelY, active = fin.mode === 'COIL' && fin.expand > 0;
       let rOut = C.OD_MAX / 2;                                   // 待機: 最大コイル径に合わせた退避位置
       if (active) {
         rOut = r0;
-        if (wound) {
-          const th = Math.atan2(this.holdRoll.position.y / CONFIG.SCALE - my, this.holdRoll.position.x / CONFIG.SCALE);
-          rOut = Rolling.coilRadiusAt(th, h, fin.turns, fin.entry, fin.windSign);
-        }
+        if (wound) rOut = Rolling.coilRadiusAt(this.holdAng, h, fin.turns, fin.entry, fin.windSign);
       }
-      const need = rOut + H.ROLL_D / 2;
-      const a = Num.circleHit(pv.x, pv.y, H.ARM_L, 0, my, need, 1), b = Num.circleHit(pv.x, pv.y, H.ARM_L, 0, my, need, -1);
-      const hit = a && b ? (a.y > b.y ? a : b) : (a || b);
-      if (hit) {
-        const dx = hit.x - pv.x, dy = hit.y - pv.y;
-        this.holdArm.rotation.z = Math.atan2(dy, dx);
-        this.holdArm.scale.x = Math.hypot(dx, dy) / 1000;
-        this.holdRoll.position.set(u(hit.x), u(hit.y), 0);
-        this.holdRoll.rotation.z = -fin.mandrelAngle * (2 * rOut / H.ROLL_D);
-        // 駆動シリンダ: 梁上の受けピンからアームの 62 % 点へ
-        const ax = pv.x + dx * 0.62, ay = pv.y + dy * 0.62, q = this.holdCylPin;
-        this.holdCyl.position.set(u(q.x), u(q.y), 0);
-        this.holdCyl.rotation.z = Math.atan2(ay - q.y, ax - q.x);
-        this.holdCyl.scale.x = Math.hypot(ax - q.x, ay - q.y) / 1000;
-      }
+      const rc = rOut + H.ROLL_D / 2;                            // コロ中心のコイル軸からの距離
+      this.holdRoll.position.set(u(d.x * rc), u(my + d.y * rc), 0);
+      this.holdRoll.rotation.z = -fin.mandrelAngle * (2 * rOut / H.ROLL_D);
+      // ロッド: ヨークの根元（コロ中心から YOKE 外）から胴の内端（BASE_R）まで
+      const r1 = rc + H.YOKE, len = Math.max(H.BASE_R - r1, 80);
+      this.holdRod.position.set(u(d.x * r1), u(my + d.y * r1), 0);
+      this.holdRod.rotation.z = this.holdAng;
+      this.holdRod.scale.x = len / 1000;
     }
 
     // --- ベルトラッパー: キャリッジを押し込み、その上でロールがコイル外周に当たる ---
@@ -10331,9 +10487,24 @@ class SupplyView {
     // クレーンが動く工程は «時間比» ではなく «台形速度線図の距離比» で補間する。
     // これで加速・定速・減速が付き、定格速度（CRANE.SPEED）どおりの動きになる。
     const mv = (key) => Layout.moveS(key, p[key], slab, P);
+    /* 吊具の «爪先» の高さ。掴むのは板の上端から GRIP_DOWN 下なので、
+     *   jawTop … 吊り上げ切った位置（＝運転前の待機の高さ。炉口より上）
+     *   jawPit … 炉の中に立っているスラブを掴む高さ
+     * どちらも板長から決まるので、ロットが変わっても «刺さる» ことがない。 */
+    const jawTop = yHi + L / 2 - CONFIG.CRANE.TONG.GRIP_DOWN;
+    const jawPit = yPit + L / 2 - CONFIG.CRANE.TONG.GRIP_DOWN;
     const ph = sup.active ? sup.phase : 'LID';
     switch (ph) {
-      case 'LID':      return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: true };
+      /* 蓋開け → 降下 → 掴む の 3 工程は «スラブは炉の中で動かず、吊具だけが動く»。
+       * 以前は蓋を開ける間も吊具がスラブに付いていたため、運転前の待機姿勢が
+       * «炉の中にトングが刺さったまま» になっていた（画面で見て分かる誤り）。
+       * pit を返す工程では、View は吊具を pit.jawY へ置き、pit.grip で爪を閉じる。 */
+      case 'LID':      return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: false,
+                                pit: { jawY: jawTop, grip: 0 } };
+      case 'DIVE':     return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: false,
+                                pit: { jawY: Num.lerp(jawTop, jawPit, mv('dive')), grip: 0 } };
+      case 'GRIP':     return { x: xPit, y: yPit, z: FU.Z, rot: Math.PI / 2, hung: false,
+                                pit: { jawY: jawPit, grip: Num.smoothstep(0, 1, p.grip) } };
       case 'HOIST':    return { x: xPit, y: Num.lerp(yPit, yHi, mv('hoist')), z: FU.Z, rot: Math.PI / 2, hung: true };
       // 走行: 炉バンクの上を転倒機の X まで（吊ったまま。Z はまだ炉の列）
       case 'TRAVEL':   return { x: Num.lerp(xPit, xStand, mv('travel')), y: yHi, z: FU.Z, rot: Math.PI / 2, hung: true };
@@ -10426,11 +10597,13 @@ class SupplyView {
     // --- 装入クレーン（トロリ・吊具・ワイヤ）: 吊っている間は材料に追従、離したら速度制限で炉へ戻る ---
     const CR = CONFIG.CRANE;
     const hung = active && pose.hung;
+    const pit = active ? pose.pit : null;                 // 炉の上で待機／降下／掴む工程
     // クレーンは X（走行）も追う。炉が材質ごとに違うので «どの炉の上に居るか» が動く。
     const homeX = Layout.pitX(Layout.pitOf(slab.alloyKey));
     const beamHome = this.trolleyY - CR.TROLLEY.H / 2 - 1800, c = this._crane;
     if (c.beamY === null) { c.beamY = beamHome; c.z = CONFIG.FURNACE.Z; c.x = homeX; }
     if (hung) { c.beamY = pose.y + L / 2 + 760; c.z = pose.z; c.x = pose.x; }
+    else if (pit) { c.beamY = pit.jawY + 1400; c.z = pose.z; c.x = pose.x; }
     else {
       // 材料を放したあとの «空荷での戻り» も同じ定格速度で走る（速度の真実は 1 か所）。
       const SP = CR.SPEED;
@@ -10446,7 +10619,8 @@ class SupplyView {
     const TGP = CR.TONG;
     /* 掴むのは長手側面なので開き幅は «板幅の半分»。掴む高さは板の上端から GRIP_DOWN 下
      * —— 上のほうを掴むので、ボディもシリンダも板の頭より上に収まる。 */
-    const gripPit = hung ? w / 2 : TGP.W_MAX / 2 - TGP.JAW_T;           // 放しているときは全開
+    const openPit = TGP.W_MAX / 2 - TGP.JAW_T;                          // 放しているときは全開
+    const gripPit = hung ? w / 2 : pit ? Num.lerp(openPit, w / 2, pit.grip) : openPit;
     const jawY = (hung ? pose.y + L / 2 - TGP.GRIP_DOWN : c.beamY - 1400) + TGP.JAW_LIFT;
     const tp = this.pitTong.set(c.x, jawY, c.z, gripPit);
     /* 吊り上げは «トングの吊りピン → 旋回装置 → 下部シーブブロック → ワイヤ → トロリ»
@@ -11324,7 +11498,7 @@ class UIManager {
     /* 既定の時間倍率。5× は «100 m のラインを通しで眺める» には良いが、板の動き・噛み込み・
      * 計器の変化を «読む» には速すぎた。2× なら実機の 1 サイクル 11 分が 5 分半で、
      * 動きを追いながら数字も読める。物理計算は倍率に依らず同じ結果になる。 */
-    this.timeScale = 2; this.passIndex = -1; this.cutaway = 'half'; this.labelsOn = true; this.zonesOn = false; this.quality = 'auto';
+    this.timeScale = 5; this.passIndex = -1; this.cutaway = 'half'; this.labelsOn = true; this.zonesOn = false; this.quality = 'auto';
     /* 運転計画。lots は «ロットの条件» の並び、loop は none / queue / lot。
      * running のあいだは 1 ロット終わるたびに次を当てて自動で走り出す。 */
     this.plan = { lots: [], loop: 'none', i: 0, done: 0, running: false, t: null };
@@ -11339,7 +11513,8 @@ class UIManager {
     this._buildVersion();
     this._bind(); this._listen(); this._logDragResize(); this._panelDrag('pnl-plan', 'plan-drag'); this._logCrosshair();
     this.dims(); this._rollState(); this._plState(); this._coolSide(); this.setLogShow('both');
-    this.setPlanLoop('none'); this.renderPlan(); this._pauseBtn();
+    this.setPlanLoop('none'); this.renderPlan(); this.setTimeScale(this.timeScale); this._startBtn();
+    this.setSidebar(false);              // 条件は «運転計画» で決めるので、左メニューは畳んで始める
     this._loadSaved();                                   // 保存データは開く前に数だけ拾っておく
     this.renderSchedule(); this._banner('idle'); this._summaries();
   }
@@ -12126,7 +12301,18 @@ class UIManager {
     on('cool-exit', 'click', () => { CONFIG.MATERIAL.STRIP_COOL.EXIT = !CONFIG.MATERIAL.STRIP_COOL.EXIT; coolSide(); });
     this._coolSide = coolSide;
 
-    on('rng-timescale', 'input', e => { this.timeScale = +e.target.value; $('lbl-timescale').innerHTML = this.timeScale.toFixed(2).replace(/0$/, '') + '<em>×</em>'; this._summaries(); });
+    on('rng-timescale', 'input', e => this.setTimeScale(+e.target.value));
+    on('tb-speed', 'click', (e) => { e.stopPropagation(); this.toggleSpeedPop(); });
+    addEventListener('click', (e) => { if (!e.target.closest('#tb-run .pop')) this.toggleSpeedPop(false); });
+    {   // よく使う倍率は 1 押しで。スライダは «その間» を選ぶためのもの
+      const host = $('speed-presets');
+      this.speedBtns = [1, 2, 5, 10, 20].map(v => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.textContent = v + '×'; b.title = `実時間の ${v} 倍で流す`;
+        b.onclick = () => this.setTimeScale(v);
+        host.appendChild(b); return { b, v };
+      });
+    }
 
     this.dims = () => {
       const FIN = CONFIG.SLAB.FINISH;
@@ -12222,10 +12408,11 @@ class UIManager {
     on('chk-supply-anim', 'change', e => { this.bus.emit('CMD_SET_SUPPLY_ANIM', e.target.checked); this._summaries(); });
 
     on('tb-plan', 'click', () => this.togglePlan());
-    on('tb-pause', 'click', () => this.togglePause());
     on('btn-plan-close', 'click', () => this.togglePlan(false));
     on('btn-plan-run', 'click', () => this.planRun());
     on('btn-plan-add', 'click', () => this.planAdd());
+    on('btn-plan-new', 'click', () => this.openLotDialog());
+    on('lot-form', 'submit', (e) => { if (e.submitter?.value === 'ok') this._lotCommit(); });
     on('btn-plan-clear', 'click', () => this.planClear());
     on('btn-plan-save', 'click', () => this.planSave());
     on('btn-plan-export', 'click', () => this.planExport());
@@ -12417,7 +12604,8 @@ class UIManager {
       } else {
         b.innerHTML = P.lots.map((q, i) => {
           const cool = CONFIG.MATERIAL.STRIP_COOL.MODES[q.cool]?.name || '–';
-          return `<tr class="${P.running && i === P.i ? 'now' : ''}"><td>${i + 1}</td><td>${q.alloy}</td>` +
+          return `<tr data-i="${i}" class="${P.running && i === P.i ? 'now' : ''}" title="ダブルクリックで編集">` +
+            `<td>${i + 1}</td><td>${q.alloy}</td>` +
             `<td>${q.cast}</td><td>${q.scalp}</td><td>${q.width}</td><td>${q.length}</td>` +
             `<td>${q.temp}</td><td>${(+q.target).toFixed(1)}</td>` +
             `<td>${q.mode === 'COIL' ? 'コイル' : '板材'}</td><td>${cool}</td>` +
@@ -12428,6 +12616,9 @@ class UIManager {
         b.querySelectorAll('button[data-up]').forEach(x => x.onclick = () => this.planMove(+x.dataset.up, -1));
         b.querySelectorAll('button[data-dn]').forEach(x => x.onclick = () => this.planMove(+x.dataset.dn, 1));
         b.querySelectorAll('button[data-del]').forEach(x => x.onclick = () => this.planDel(+x.dataset.del));
+        // 行のダブルクリックで編集（表の «その行を直す» はダブルクリックが最も素直）
+        b.querySelectorAll('tr[data-i]').forEach(tr =>
+          tr.ondblclick = () => this.openLotDialog(+tr.dataset.i));
       }
     }
     if (this.planTab === 'preset') {
@@ -12454,6 +12645,127 @@ class UIManager {
     }
   }
   async _loadSaved() { this.saved = await Store.all(); this.renderPlan(); }
+
+  /* ---- 圧延条件の登録・編集モーダル ---------------------------------------
+   * 入力欄は «仕様表» から組み立てる。欄が増えても表に 1 行足すだけで、
+   * 読み書き（_lotRead / _lotWrite）も見積りもそのまま付いてくる。 */
+  get lotFields() {
+    const S = CONFIG.SLAB, FIN = S.FINISH, T2 = CONFIG.TRIMMER, SC = CONFIG.MATERIAL.STRIP_COOL;
+    return {
+      mat: [
+        { k: 'alloy', t: '材質', kind: 'select',
+          opts: Object.entries(CONFIG.ALLOYS).map(([v, a]) => ({ v, t: a.name })) },
+        { k: 'cast', t: '呼び厚（鋳造厚）', kind: 'seg', unit: 'mm',
+          opts: S.CAST_TH.map(v => ({ v, t: v + ' mm' })) },
+        { k: 'scalp', t: '片面の面削', kind: 'num', unit: 'mm', min: S.SCALP_MIN, max: S.SCALP_MAX, step: 1 },
+        { k: 'width', t: '板幅', kind: 'num', unit: 'mm', min: S.WID_MIN, max: S.WID_MAX, step: 10 },
+        { k: 'length', t: '板長', kind: 'num', unit: 'mm', min: S.LEN_MIN, max: S.LEN_MAX, step: 50 },
+        { k: 'temp', t: '炉出し温度', kind: 'num', unit: '℃', min: S.TEMP_MIN, max: S.TEMP_MAX, step: 1 },
+      ],
+      fin: [
+        { k: 'target', t: '目標板厚', kind: 'num', unit: 'mm', min: FIN.TH_MIN, max: FIN.TH_MAX, step: 0.5 },
+        { k: 'trim', t: '両耳のトリム（片側）', kind: 'num', unit: 'mm', min: S.TRIM_MIN, max: S.TRIM_MAX, step: 1 },
+      ],
+      cool: [
+        { k: 'cool', t: '方式', kind: 'seg',
+          opts: Object.values(SC.MODES).map(m => ({ v: m.key, t: m.name })) },
+        { k: 'entry', t: '入側ヘッダ', kind: 'seg', opts: [{ v: 1, t: '使う' }, { v: 0, t: '止める' }] },
+        { k: 'exit', t: '出側ヘッダ', kind: 'seg', opts: [{ v: 1, t: '使う' }, { v: 0, t: '止める' }] },
+      ],
+    };
+  }
+  /** 仕様表から入力欄を組み立てる（初回だけ。以後は値を入れ替えるだけ） */
+  _buildLotForm() {
+    if (this._lotEls) return;
+    this._lotEls = {};
+    for (const [grp, list] of Object.entries(this.lotFields)) {
+      const host = $('lot-f-' + grp);
+      for (const f of list) {
+        const wrap = document.createElement('div'); wrap.className = 'f';
+        wrap.innerHTML = `<span class="lb">${f.t}${f.unit ? `<em>${f.unit}</em>` : ''}</span>`;
+        let read, write;
+        if (f.kind === 'select') {
+          const el = document.createElement('select');
+          el.innerHTML = f.opts.map(o => `<option value="${o.v}">${o.t}</option>`).join('');
+          el.oninput = () => this._lotPreview(); wrap.appendChild(el);
+          read = () => el.value; write = (v) => { el.value = v; };
+        } else if (f.kind === 'seg') {
+          const box = document.createElement('div'); box.className = 'segf'; box.setAttribute('role', 'group');
+          const btns = f.opts.map(o => {
+            const b = document.createElement('button');
+            b.type = 'button'; b.textContent = o.t; b.dataset.v = o.v;
+            b.onclick = () => { btns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+                                this._lotPreview(); };
+            box.appendChild(b); return b;
+          });
+          wrap.appendChild(box);
+          const isNum = typeof f.opts[0].v === 'number';
+          read = () => { const b = btns.find(x => x.getAttribute('aria-pressed') === 'true') || btns[0];
+                         return isNum ? +b.dataset.v : b.dataset.v; };
+          write = (v) => btns.forEach(b => b.setAttribute('aria-pressed', String(String(b.dataset.v) === String(v))));
+        } else {
+          const el = document.createElement('input');
+          el.type = 'number'; el.min = f.min; el.max = f.max; el.step = f.step;
+          el.oninput = () => this._lotPreview(); wrap.appendChild(el);
+          read = () => Num.clamp(+el.value || f.min, f.min, f.max); write = (v) => { el.value = v; };
+        }
+        this._lotEls[f.k] = { read, write, f };
+        host.appendChild(wrap);
+      }
+    }
+  }
+  _lotRead() {
+    const d = {};
+    for (const [k, q] of Object.entries(this._lotEls)) d[k] = q.read();
+    d.entry = !!d.entry; d.exit = !!d.exit;
+    d.mode = Rolling.finishMode(d.target);
+    return d;
+  }
+  _lotWrite(lot) {
+    for (const [k, q] of Object.entries(this._lotEls)) {
+      let v = lot[k];
+      if (k === 'entry' || k === 'exit') v = lot[k] ? 1 : 0;
+      if (v !== undefined && v !== null) q.write(v);
+    }
+  }
+  /** «この条件の見積り»。決めた値がどんなロットになるかを、登録する前に見せる。 */
+  _lotPreview() {
+    const d = this._lotRead(), AL = Rolling.alloy(d.alloy), th = d.cast - 2 * d.scalp;
+    const coil = d.mode === 'COIL';
+    const sch = Rolling.buildSchedule(th, d.target, d.width, d.temp, { coil, length: d.length, alloy: d.alloy });
+    const feas = Rolling.scheduleFeasibility(sch, AL, coil);
+    const outLen = d.length * th / d.target, mass = th * d.width * d.length * 1e-9 * AL.RHO / 1000;
+    const CR = CONFIG.CRANE, gripMax = CR.TONG.W_MAX - 2 * CR.TONG.JAW_T, warn = [];
+    if (!feas.ok) warn.push(`このラインでは成立しません: ${feas.reasons.join('、')}`);
+    if (mass > CR.RATED_T) warn.push(`スラブ質量 ${mass.toFixed(1)} t が装入クレーンの定格 ${CR.RATED_T} t を超えます`);
+    if (d.width > gripMax) warn.push(`板幅 ${d.width} mm が装入トングの最大開き ${gripMax} mm を超えます`);
+    $('lot-est').innerHTML =
+      `<div>圧延前厚 <b>${th.toFixed(0)}</b> mm ／ スラブ質量 <b>${mass.toFixed(1)}</b> t ／ ` +
+      `<b>${sch.length}</b> パス ／ 最終長 <b>${(outLen / 1000).toFixed(1)}</b> m ／ ` +
+      `仕上げ <b>${coil ? 'コイル巻取' : '板材'}</b>（仕上げ幅 ${Math.max(d.width - 2 * d.trim, 100)} mm）</div>` +
+      (feas.notes.length ? `<div class="note">△ ${feas.notes.join(' / ')}</div>` : '') +
+      (warn.length ? `<div class="warn">※ ${warn.join(' / ')}</div>` : '');
+    $('lot-ok').disabled = false;      // 成立しない条件も «登録は» できる（試せることが大事）
+    return d;
+  }
+  /** 新規登録（index 省略）／編集（index 指定）。 */
+  openLotDialog(index) {
+    this._buildLotForm();
+    this._lotIndex = (index === undefined || index === null) ? -1 : index;
+    const base = this._lotIndex >= 0 ? this.plan.lots[this._lotIndex] : { ...DEMO_LOT, ...this._lotOf() };
+    this._lotWrite(base);
+    $('lot-ttl').textContent = this._lotIndex >= 0 ? `圧延条件の編集（${this._lotIndex + 1} 番目）` : '圧延条件の新規登録';
+    $('lot-ok').textContent = this._lotIndex >= 0 ? '更新する' : '登録する';
+    this._lotPreview();
+    $('dlg-lot').showModal();
+  }
+  _lotCommit() {
+    const d = this._lotPreview();
+    if (this._lotIndex >= 0) this.plan.lots[this._lotIndex] = d;
+    else this.plan.lots.push(d);
+    this.setPlanTab('queue');
+    this._applyLot(d);                 // いま画面に出ている条件も、決めたものへ合わせる
+  }
   planAdd() { this.plan.lots.push(this._lotOf()); this.setPlanTab('queue'); }
   planClear() { this.plan.lots = []; this.renderPlan(); }
   planDel(i) { this.plan.lots.splice(i, 1); this.renderPlan(); }
@@ -12535,6 +12847,20 @@ class UIManager {
   }
 
   /* ---- 操作 ---- */
+  /** シミュレーション速度。表示（バッジ・ポップオーバー・プリセット）を 1 か所で揃える。 */
+  setTimeScale(v) {
+    this.timeScale = Num.clamp(+v || 1, 0.25, 20);
+    const tx = this.timeScale.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + '×';
+    $('rng-timescale').value = this.timeScale;
+    $('lbl-timescale').textContent = tx; $('lbl-timescale2').textContent = tx;
+    for (const q of (this.speedBtns || [])) q.b.setAttribute('aria-pressed', String(q.v === this.timeScale));
+    this._summaries();
+  }
+  toggleSpeedPop(v) {
+    const open = v === undefined ? $('tb-speed-pop').hidden : v;
+    $('tb-speed-pop').hidden = !open;
+    $('tb-speed').setAttribute('aria-expanded', String(open));
+  }
   toggleRun() {
     if (this.busy) { this.bus.emit('CMD_RESET'); return; }
     this.busy = true; this.paused = false; this.bus.emit('CMD_PAUSE', false);
@@ -12545,24 +12871,22 @@ class UIManager {
     this.paused = !this.paused; this.bus.emit('CMD_PAUSE', this.paused);
     this._pauseBtn(); this._banner();
   }
-  /** 一時停止の表示（左メニューのボタンと上部のピル）。押せるかどうかも同時に出す。 */
+  /** 一時停止の表示。押せるかどうかも同時に出す（運転していないときは薄く）。 */
   _pauseBtn() {
-    const on = this.paused;
-    $('btn-pause').innerHTML = (on ? '<i class="fa-solid fa-play"></i>再開' : '<i class="fa-solid fa-pause"></i>一時停止') + '<span class="kbd">P</span>';
-    const pill = $('tb-pause');
-    pill.setAttribute('aria-pressed', String(on));
-    pill.disabled = !this.busy;
-    pill.querySelector('i').className = on ? 'fa-solid fa-play' : 'fa-solid fa-pause';
+    const on = this.paused, b = $('btn-pause');
+    b.setAttribute('aria-pressed', String(on));
+    b.disabled = !this.busy;
+    b.querySelector('i').className = on ? 'fa-solid fa-play' : 'fa-solid fa-pause';
     $('tb-pause-tx').textContent = on ? '再開' : '一時停止';
-    pill.title = this.busy ? (on ? 'シミュレーションを再開する（P）' : 'シミュレーションを一時停止する（P）')
-                           : '運転中だけ使えます（P）';
+    b.title = this.busy ? (on ? 'シミュレーションを再開する（P）' : 'シミュレーションを一時停止する（P）')
+                        : '運転中だけ使えます（P）';
   }
   _startBtn() {
     const b = $('btn-start');
-    b.className = 'btn ' + (this.busy ? 'btn-danger' : 'btn-primary');
-    b.innerHTML = this.busy
-      ? '<i class="fa-solid fa-stop"></i><span>運転を中止</span><span class="kbd">Space</span>'
-      : '<i class="fa-solid fa-play"></i><span>圧延サイクル開始</span><span class="kbd">Space</span>';
+    b.className = 'rb ' + (this.busy ? 'stop' : 'go');
+    b.querySelector('i').className = this.busy ? 'fa-solid fa-stop' : 'fa-solid fa-play';
+    $('btn-start-tx').textContent = this.busy ? '中止' : '開始';
+    b.title = this.busy ? '運転を中止する（Space）' : '圧延サイクルを開始する（Space）';
     this._pauseBtn();
   }
   selectView(i) {

@@ -521,9 +521,18 @@ const run = async () => {
       const eHi = R2.coilEntry(K.COILER.DEFLECTOR_X + K.FLIP * C.ROLL_LO_PITCH / 2, P0 + 4, C.X, P0 + C.Y_ABOVE, C.OD_MAX / 2 - 4);
       ok('3ロール出側からコイルへの接線が最小径〜最大径で存在し、接点は下半分（下巻き）', !!eLo && !!eHi && Math.sin(eLo.phi) < 0 && Math.sin(eHi.phi) < 0,
          `接点角 Φ610: ${eLo ? (eLo.phi * 180 / Math.PI).toFixed(0) : '-'}° / Φ1900: ${eHi ? (eHi.phi * 180 / Math.PI).toFixed(0) : '-'}°`);
-      const pvx = FV.holdPivot.x + C.X, pvy = FV.holdPivot.y;
-      ok('押えアームの支点がサイドトリマー架構の梁の位置にある', Math.abs(pvx - K.TRIMMER.X) <= 1200 && pvy >= P0 + 1500 && pvy <= P0 + 2100,
-         `支点 x=${pvx.toFixed(0)}（トリマー ${K.TRIMMER.X}）/ y=パスライン上 ${(pvy - P0).toFixed(0)} mm`);
+      /* コイル押えは «半径方向のラム»。シリンダーの軸がコイルの中心軸を通ることと、
+       * 押さえる位置がコイルの上（巻き終わり側）であることを見る。 */
+      {
+        const d = FV.holdDir, ang = Math.atan2(d.y, d.x) * 180 / Math.PI;
+        ok('コイル押えの軸がコイルの中心軸を向いている（半径方向のラム）',
+           Math.abs(Math.hypot(d.x, d.y) - 1) < 1e-6, `向き ${ang.toFixed(1)}°`);
+        ok('コイル押えがコイルの «上» から当たる（巻き広がりを押さえる）', d.y > 0.5,
+           `極角 ${ang.toFixed(1)}°`);
+        const rm = FV.holdRam.position.x / sc + C.X;
+        ok('コイル押えの受けがサイドトリマー架構の側にある',
+           Math.abs(rm - K.TRIMMER.X) <= 2600, `胴 x=${rm.toFixed(0)}（トリマー ${K.TRIMMER.X}）`);
+      }
       ok('仕上げ形態は板厚で決まる（10 mm 以下はコイル、10 mm 超は板材）', R2.finishMode(10) === 'COIL' && R2.finishMode(10.5) === 'PLATE' && R2.finishMode(4) === 'COIL',
          `10 → ${R2.finishMode(10)} / 10.5 → ${R2.finishMode(10.5)}`);
     }

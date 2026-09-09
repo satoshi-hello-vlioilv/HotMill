@@ -29,7 +29,8 @@ const out = await page.evaluate((EPS) => {
   const F = W.finishView;
   for (const k of ['knives', 'lowerRolls', 'upperRoll', 'mandrel', 'coil', 'bridge', 'cropRam', 'cropBed', 'cropPiece', 'cropKnife',
                    'car', 'carBogie', 'carRods', 'chain', 'belt',
-                   'holdRoll', 'holdArm', 'holdCyl', 'knifeShafts', 'cropHold', 'cropPusher', 'segments', 'strip', 'plate',
+                   // コイル押え: コロとロッドは進退する（胴だけが固定）
+                   'holdRoll', 'holdRod', 'knifeShafts', 'cropHold', 'cropPusher', 'segments', 'strip', 'plate',
                    'convFlights', 'pieceHost', 's30Ram', 's30Hold', 'pilerLift', 'pilerCol'])
     add(F[k]);
   for (const side of (F.pilerSides ?? [])) add(side.grp);

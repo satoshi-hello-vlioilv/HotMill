@@ -24,6 +24,15 @@ const out = await page.evaluate(async () => {
   const pitZ0 = Math.abs(FU.Z) - pitHalfZ, pitZ1 = Math.abs(FU.Z) + pitHalfZ;
   const yz0 = Math.min(Math.abs(plate.z0), Math.abs(plate.z1)), yz1 = Math.max(Math.abs(plate.z0), Math.abs(plate.z1));
 
+  /* --- 運転前（待機）の姿勢。吊具が炉の中へ刺さっていないこと ---
+   * 蓋を開ける工程の間は «スラブは炉の中で動かず、吊具は炉口の上で待つ» のが正しい。 */
+  SV.update(P.supply, slab, P.mill, 1 / 60);
+  W.scene.updateMatrixWorld(true);
+  const idleBox = (() => { const b = new T.Box3(); b.setFromObject(SV.pitTong.g); return b; })();
+  const rim = 240;                                          // 炉口の縁の天端（Parts.furnacePit）
+  const idle = { tongY0: idleBox.min.y / S, phase: P.supply.phase, rim,
+                 blockY0: (() => { const b = new T.Box3(); b.setFromObject(SV.ropeBlock); return b; })().min.y / S };
+
   // --- トング: 吊り上げ切った瞬間の姿勢で測る ---
   A.bus.emit('CMD_START_SUPPLY');
   let g = 0;
@@ -84,6 +93,8 @@ const out = await page.evaluate(async () => {
             lift: L.supplyPath(slab, P.mill.passLine).move.hoist,
             span: K.CRANE.GIRDER_Z1 - K.CRANE.GIRDER_Z0,
             wire: { ropes: SV.ropesP?.length ?? 0, noMast: !SV.mastCol && !SV.mastSleeve } },
+    idle,
+    seq: K.SEQUENCE.map(q => q[0]),
   };
 });
 await browser.close();
@@ -130,6 +141,14 @@ ok(`クレーン走行路が炉バンクを覆う（${(out.runway / 1000).toFixe
 ok(`走行桁の外端が炉の外に出ている（${out.girderZ1} ≥ ${Math.round(p.z1)}）`, out.girderZ1 >= p.z1, out.girderZ1);
 
 // ③ トング
+// 運転前の待機姿勢（画面を開いた瞬間の見え方）
+ok(`運転前の工程が «蓋開け» から始まる（${out.idle.phase}）`, out.idle.phase === 'IDLE' || out.idle.phase === 'LID', out.idle.phase);
+ok('蓋を開けてから取りに行く工程がある（降下・掴むが独立している）',
+   out.seq.includes('DIVE') && out.seq.includes('GRIP'), out.seq.join('→'));
+ok(`運転前の吊具が炉口の縁より上に居る（トング下端 ${out.idle.tongY0.toFixed(0)} > ${out.idle.rim}）`,
+   out.idle.tongY0 > out.idle.rim, out.idle.tongY0.toFixed(0));
+ok(`運転前のシーブブロックも炉の外（下端 ${out.idle.blockY0.toFixed(0)}）`,
+   out.idle.blockY0 > out.idle.rim, out.idle.blockY0.toFixed(0));
 ok('爪は板幅の方向（世界 Z）に開閉する（yaw = 0）', Math.abs(t.yaw) < 1e-6, t.yaw);
 // 図面の «トング最大開き 1,900 / 最小 250»。掴める板幅は 1,900 − 爪厚 2 枚。
 ok(`爪の全開が図面どおり（外側 ${t.wMax} mm ＝ トング最大開き）`, t.wMax === 1900, t.wMax);
