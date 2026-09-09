@@ -142,6 +142,32 @@ const out = await page.evaluate(() => {
      deckErr !== null && Math.abs(deckErr) < 3, `差 ${deckErr === null ? '—' : deckErr.toFixed(1)} mm`);
   ok('搬出後のコイルがマンドレルの外（操作側）にある',
      coilZ !== null && coilZ >= C.CAR.TRAVEL_Z - 5, `コイル Z ${coilZ === null ? '—' : coilZ.toFixed(0)} mm（搬出 ${C.CAR.TRAVEL_Z}）`);
+  /* 面の «表裏» と «法線» がそろっているか。
+   * コイルは帯（外周・内周・両側面・扇形・段）を張って作るが、索引の巻き順は帯ごとに
+   * 同じで、法線だけを裏返している箇所があった。材料は両面表示（DoubleSide）で、
+   * three.js は «裏を向いた面» の法線を反転させるので、食い違った帯は反転が二重にかかり、
+   * 明暗が逆になる —— コイルに «黒い帯と白い帯» が混じって見えていた正体。
+   * 三角形ごとに «頂点の並びから出した面の向き» と «持たせた法線» の内積を見る。 */
+  {
+    const g = W.finishView.coil.geometry, pos = g.attributes.position, nrm = g.attributes.normal, idx = g.index;
+    let bad = 0, tot = 0, worst = 1;
+    for (let i = 0; i < idx.count; i += 3) {
+      const a2 = idx.getX(i), b2 = idx.getX(i + 1), c2 = idx.getX(i + 2);
+      const ax = pos.getX(a2), ay = pos.getY(a2), az = pos.getZ(a2);
+      const ux = pos.getX(b2) - ax, uy = pos.getY(b2) - ay, uz = pos.getZ(b2) - az;
+      const vx = pos.getX(c2) - ax, vy = pos.getY(c2) - ay, vz = pos.getZ(c2) - az;
+      const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+      const fl = Math.hypot(fx, fy, fz); if (fl < 1e-12) continue;         // 退化（巻きかけが無い時）
+      const nx = (nrm.getX(a2) + nrm.getX(b2) + nrm.getX(c2)) / 3;
+      const ny = (nrm.getY(a2) + nrm.getY(b2) + nrm.getY(c2)) / 3;
+      const nz = (nrm.getZ(a2) + nrm.getZ(b2) + nrm.getZ(c2)) / 3;
+      const nl = Math.hypot(nx, ny, nz); if (nl < 1e-9) continue;
+      const d = (fx * nx + fy * ny + fz * nz) / (fl * nl);
+      tot++; if (d < 0) bad++; if (d < worst) worst = d;
+    }
+    ok('コイルの面の表裏と法線がそろっている（黒い帯が出ない）', tot > 0 && bad === 0,
+       `${tot} 面中 ${bad} 面が食い違い（内積の最小 ${worst.toFixed(3)}）`);
+  }
   return { checks, n: samples.length, first: samples[0], last, turns: +f.turns.toFixed(1) };
 });
 console.log(JSON.stringify({ first: out.first, last: out.last, turns: out.turns }, null, 1));

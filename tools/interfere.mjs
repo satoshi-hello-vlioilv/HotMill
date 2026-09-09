@@ -12,6 +12,9 @@ const out = await p.evaluate(async () => {
   const A = window.__app, W = A.world, P = A.physics, K = window.__CFG, sc = K.SCALE;
   
   window.__startAuto(false);
+  /* 噴射の粒は «形» ではないので、この検査には関係しない。描画だけ止める（物理はそのまま）。
+   * 評価器のソフトウェア描画では半透明の塗りが支配的で、これだけで 1 コマ 64 → 10 ms になる。 */
+  window.__spray(false);
 
   // --- 当たってよい部材（参照で照合する） ---
   const allow = new Set();

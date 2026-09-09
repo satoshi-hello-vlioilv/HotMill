@@ -63,6 +63,20 @@ const out = await page.evaluate(async () => {
   ok('時系列が 4 系列（荷重・速度・板厚・ギャップ）を持つ',
      S.every(p => ['f', 'v', 'h', 'g'].every(k => typeof p[k] === 'number')),
      Object.keys(S[0]).join(' '));
+  /* 反りと太り。パス行（そのパスで出来上がった形）と時系列の両方に入っていること。
+   * 幅反りは長手の反りに «逆向きに» 従属するので、符号が反対であることまで見る。 */
+  ok('パスごとに 丈反り・幅反り・プロファイルカーブ値 が記録される',
+     rows.every(r => Number.isFinite(r.curlL) && Number.isFinite(r.curlW) && Number.isFinite(r.prof)),
+     rows.slice(-3).map(r => `P${r.no} 丈 ${r.curlL.toFixed(2)} / 幅 ${r.curlW.toFixed(2)} / P ${r.prof.toFixed(4)}`).join(' ／ '));
+  ok('幅反りは丈反りと逆向き（アンチクラスティック）',
+     rows.filter(r => Math.abs(r.curlL) > 0.01).every(r => r.curlL * r.curlW < 0),
+     `${rows.filter(r => Math.abs(r.curlL) > 0.01).length} パスで判定`);
+  ok('プロファイルカーブ値が 1 のまわりの現実的な範囲（0.9〜1.1）',
+     rows.every(r => r.prof > 0.9 && r.prof < 1.1),
+     `${Math.min(...rows.map(r => r.prof)).toFixed(4)} 〜 ${Math.max(...rows.map(r => r.prof)).toFixed(4)}`);
+  ok('時系列にも 丈反り・幅反り・プロファイル が入る',
+     S.every(p => ['cl', 'cw', 'pc'].every(k => typeof p[k] === 'number')),
+     `例 ${JSON.stringify({ cl: S[S.length >> 1].cl, cw: S[S.length >> 1].cw, pc: S[S.length >> 1].pc })}`);
   ok('ギャップが板厚以下（ミルばねを含めても出側が入側を超えない）',
      S.filter(p => p.f > 0).every(p => p.g <= p.h + 0.01),
      `最大の超過 ${Math.max(0, ...S.filter(p => p.f > 0).map(p => p.g - p.h)).toFixed(2)} mm`);
@@ -144,6 +158,56 @@ const out = await page.evaluate(async () => {
     document.getElementById('log-pass-all').click();
     return one;
   })(), 'クリック → 第 3 パスのみ');
+  /* 見出しと操作列が «重ならない・はみ出さない» こと。項目が増えるとチップが折り返して
+   * 下の段に重なり、読めなくなっていた（チップの高さを固定していたのが原因）。
+   * 画面幅を狭めても崩れないか、板の幅を最小まで縮めて確かめる。 */
+  {
+    const pnl = document.getElementById('pnl-log');
+    const boxes = () => [...pnl.querySelectorAll('.ctl > *, header .hd > *, header .btns > *')]
+      .map(e => ({ id: e.id || e.className, r: e.getBoundingClientRect() })).filter(q => q.r.width > 0);
+    const overlaps = () => { const b2 = boxes(), out = [];
+      for (let i = 0; i < b2.length; i++) for (let j = i + 1; j < b2.length; j++) {
+        const a2 = b2[i].r, c2 = b2[j].r;
+        if (a2.right > c2.left + 1 && c2.right > a2.left + 1 && a2.bottom > c2.top + 1 && c2.bottom > a2.top + 1)
+          out.push(`${b2[i].id} × ${b2[j].id}`);
+      } return out; };
+    const outside = () => { const p2 = pnl.getBoundingClientRect();
+      return [...pnl.querySelectorAll('.ctl *, header *')].filter(e => { const r = e.getBoundingClientRect();
+        return r.width > 0 && (r.right > p2.right + 1 || r.bottom > p2.bottom + 1 || r.left < p2.left - 1); })
+        .map(e => e.id || e.className); };
+    const wide = { over: overlaps(), out: outside() };
+    pnl.style.width = pnl.style.minWidth = '520px';           // 最小幅まで縮める
+    const narrow = { over: overlaps(), out: outside() };
+    pnl.style.width = ''; pnl.style.minWidth = '';
+    ok('見出しと操作列が重ならない', wide.over.length === 0 && narrow.over.length === 0,
+       [...wide.over, ...narrow.over].slice(0, 3).join(' / ') || '重なり 0 件（広い・狭いの両方）');
+    ok('見出しと操作列が板からはみ出さない', wide.out.length === 0 && narrow.out.length === 0,
+       [...wide.out, ...narrow.out].slice(0, 3).join(' / ') || 'はみ出し 0 件（広い・狭いの両方）');
+  }
+  /* 表示タブ（グラフ＋表 / グラフ / 表）と、選ぶものを畳むポップオーバー。 */
+  {
+    A.ui.setLogShow('chart');
+    const chartOnly = document.querySelector('#pnl-log .tblwrap').getBoundingClientRect().height === 0;
+    A.ui.setLogShow('table');
+    const tableOnly = document.querySelector('#pnl-log .chart').getBoundingClientRect().height === 0;
+    A.ui.setLogShow('both');
+    const both = document.querySelector('#pnl-log .tblwrap').getBoundingClientRect().height > 0
+              && document.querySelector('#pnl-log .chart').getBoundingClientRect().height > 0;
+    ok('表示タブでグラフだけ・表だけ・両方を切り替えられる', chartOnly && tableOnly && both,
+       `グラフのみ ${chartOnly} / 表のみ ${tableOnly} / 両方 ${both}`);
+    A.ui.toggleLogPop('log-series-pop');
+    const opened = !document.getElementById('log-series-pop').hidden;
+    A.ui.toggleLogPop('log-pass-pop');
+    const swapped = document.getElementById('log-series-pop').hidden && !document.getElementById('log-pass-pop').hidden;
+    A.ui.toggleLogPop(null);
+    const closed = document.getElementById('log-pass-pop').hidden;
+    ok('項目とパスのポップオーバーが 1 つずつ開く', opened && swapped && closed,
+       `開く ${opened} / 入れ替え ${swapped} / 閉じる ${closed}`);
+    ok('畳んでいても何を選んでいるかがボタンに出る',
+       /\d+ *\/ *\d+/.test(document.getElementById('log-series-n').textContent)
+       && document.getElementById('log-pass-n').textContent.length > 0,
+       `項目 ${document.getElementById('log-series-n').textContent} ／ パス ${document.getElementById('log-pass-n').textContent}`);
+  }
   ok('パネルはモーダルではない（3D を操作できる）',
      document.getElementById('pnl-log').tagName === 'SECTION' && !document.querySelector('dialog[open]#pnl-log'),
      document.getElementById('pnl-log').tagName);
