@@ -21,6 +21,8 @@ for (const w of widths) {
     const tbEl = document.getElementById('toolbar');
     const clipW = tbEl.scrollWidth - tbEl.clientWidth;
     const cut = [...document.querySelectorAll('#hud-top button')].filter(b => {
+      // 畳まれているポップオーバーの中身は «見えていない» のだから、切れようがない
+      if (b.closest('[hidden]')) return false;
       const q = b.getBoundingClientRect(), host = b.closest('#toolbar') || document.getElementById('hud-top');
       const h = host.getBoundingClientRect();
       return q.right > h.right + 1 || q.left < h.left - 1 || q.right > innerWidth + 1 || q.width < 1;
