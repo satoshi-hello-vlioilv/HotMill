@@ -84,7 +84,9 @@ const out = await page.evaluate((EPS) => {
 
   const log = [];
   let n = 0, last = '';
-  while (n++ < 120 * 60 && P.supply.active) {
+  // 見る時間は装入シーケンスそのものの長さから取る（工程の秒は距離と定格速度で決まる）
+  const budget = Math.ceil((P.supplyCtrl.remainSec || 60) * 1.3);
+  while (n++ < 120 * budget && P.supply.active) {
     P.step(1 / 120);
     if (n % 12 === 0) {                                     // 0.1 s ごと
       W.render(P, 0.1);
