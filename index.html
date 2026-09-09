@@ -820,7 +820,7 @@ body:not(.sb-collapsed) #sidebar { transition:transform .22s ease; }
       <th>最大荷重<i>t</i></th><th>平均荷重<i>t</i></th><th>計画<i>t</i></th>
       <th>最大速度<i>mpm</i></th><th>平均速度<i>mpm</i></th><th>計画<i>mpm</i></th>
       <th>ギャップ<i>mm</i></th><th>ミル伸び<i>mm</i></th>
-      <th>最大動力<i>MW</i></th><th>入温<i>℃</i></th><th>出温<i>℃</i></th><th>板長<i>m</i></th><th>所要<i>s</i></th>
+      <th>最大動力<i>MW</i></th><th>入温<i>℃</i></th><th>出側温<i>℃</i></th><th>出温<i>℃</i></th><th>板長<i>m</i></th><th>所要<i>s</i></th>
     </tr></thead><tbody></tbody></table></div>
   </div>
   <footer id="log-foot">パスが終わるたびに 1 行増えます。平均は «噛んでいる間» だけで取っています。</footer>
@@ -878,17 +878,36 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
-    { v: '1.16.0', base: 'ac9cc23', date: '2026-09-09', title: '実機のパススケジュールとの突き合わせ —— 圧下配分則・段取り時間・短時間過負荷・摩擦の温度依存の見直し', items: [
-      { t: '実機のスケジュール（A5052 530 → 8 mm・23 パス・120/80/50 mpm）をそのまま流し、荷重・動力・温度・所要時間をパスごとに比べる評価器を新設', w: 'tools/realsched.mjs' },
-      { t: '主機の短時間過負荷率（2.0 倍）を持たせた。実機は 30 mm 圧下を 120 mpm で通しており、定格で頭打ちにすると実機の速度が出せない。サイクル全体の実効（RMS）が定格を超えるときはスケジュールの注意書きで示す', w: 'CONFIG.DRIVE.OVERLOAD' },
-      { t: 'パス間の段取り時間を 30 → 6 s に。実機データ（530 → 65 を 17 パス 3 分）から逆算すると 1 パスあたり圧延 2〜7 s ＋ 段取り 5〜7 s', w: 'PROCESS.PASS_OVERHEAD' },
-      { t: 'パス終了の噛み出し余裕を 8,000 → 3,000 mm に。1 パスあたり往復 8 s の空走が入り、厚板段の所要が実機の 1.6 倍になっていた', w: 'CONFIG.SAFE_CLEAR' },
-      { t: '実操業の圧下配分則を入れた。厚板段は初パス軽圧下 → 30 mm 定圧下 → 圧下率 19 % でクロップ厚 65 へ、仕上げ段は目標から上へ組む（最終 50 %・その前 38 %・以後 10 mm 定圧下）。物理の上限はこの則の上から別に効く', w: 'PROCESS.PRACTICE / Rolling.buildSchedule' },
-      { t: '摩擦係数の温度依存を中立（MU_KT = 0）にした。鋼の経験式の向きで入れていたが、アルミでは向きが定まらず、実機の 16 → 8 mm が常用最大以内で通る事実と合わなかった', w: 'PROCESS.MU_KT' },
-      { t: '上下非対称の曲率にはスプリングバックを掛けない。全層が塑性域で弾性の芯が無く、出口で戻らない。除荷で戻るのは «曲げモーメントで付けた» パスライン調整の曲率だけ', w: 'PhysicsEngine._dynamics' },
-      { t: '実測: 厚板段 17 パスが実機 180 s に対し 205 s、仕上げ 4 パスが 270 s に対し 128 s、16 → 8 mm が 240 s に対し 239 s', w: 'tools/realsched.mjs' },
-      { t: '未解決: 最終パス（16 → 8 mm・50 mpm）の尻が 4,231 t で非常最大 4,200 t を超える。原因は摩擦ではなく尻の温度（パス開始時 352 ℃ → 尻 246 ℃、kf 118 → 224 MPa）。実機の尻温度か荷重実績が要る', w: 'tools/realsched.mjs' },
-      { t: '【作業中・未合格】この版は評価器 3 本が通っていない。schedtrace: 成立とした 504 通り中 24 通りで非常最大を超えるパスが残る／loadtrace: 既定ロットが 25 パスになり第 22 パスで AGC が 3 mm 振れ、最終パスが目標を 3.2 % 超える／modeltrace: 段取りが短くなった分ロール温度の上昇が 5 パスで 1.5 K に留まる／precisetrace: 塑性係数 Q の数値微分が 8.6 % ずれ、加工発熱の配分が長手の偏差を 55 → 88 K へ «広げる» 向きになる（4 項目）。main へは入れない', w: 'tools/schedtrace.mjs / loadtrace.mjs' },
+    { v: '1.16.0', base: 'ac9cc23', date: '2026-09-09', title: '実機データとの較正 —— 実機ロットを既定に、熱収支の項別検算、荷重帯・上がり温度への一致', items: [
+      // --- 実機ロットと評価器 ---
+      { t: '実機ロット（A5052 560・片面 15 面削 → 530、1,330 × 3,450、炉出し 433 ℃、8 mm コイル、入側冷却なし・出側のみ、液温 64 ℃・濃度 4.8 %）を既定にした。スライダの刻みを既定値が載る細かさ（幅 10／長さ 50／温度 1）に', w: 'SLAB.*_DEFAULT / STRIP_COOL.ENTRY / COOLANT.T_BULK・CONC' },
+      { t: '実機スケジュールをそのまま流して荷重帯・上がり温度・板長・区間時間・自動生成の一致・予測精度・予測と運転の温度整合を採点する評価器を新設（13 項目＋参考 1）。実機データと共通ランナーは reallot.mjs、パス表は realsched.mjs', w: 'tools/calib.mjs / reallot.mjs / realsched.mjs' },
+      { t: '1 パスの温度収支を項別（加工発熱／ロール抜熱／クーラント／板面ヘッダ／テーブル接触／放射・対流）に返す入口。passTempChange はその合計', w: 'Rolling.tempBudget' },
+      // --- 物理の修正 ---
+      { t: 'ロール抜熱: 界面の接触熱伝達率と、ロール・板の内部へ熱が染み込む抵抗（半無限体の過渡伝導 √(πt)/2e）を直列にした。実効 15,000 W/m²K で最終パスの抜熱 51 → 29 K。運転側と予測側が同じ 1 式を見る', w: 'Rolling.rollHTC / MILL.ROLL_K' },
+      { t: '巻取パスで巻かれた部分は放熱面を失う（コイルの中は断熱に近い）。予測は «入側厚で半分の時間»、運転は露出割合で薄め、分布は露出部だけに配る', w: 'Rolling.tempBudget(coil) / PhysicsEngine._thermal / _coilSpread' },
+      { t: '膜沸騰の熱伝達をクーラントのサブクール度（飽和温度 − 液温）で動かす。液温 64 ℃ で基準（35 ℃）の 0.79 倍', w: 'COOLANT.SUB_REF / SUB_K / PhysicsEngine.boiling' },
+      { t: 'クロップ後の端は角が立っていて薄くない。端部の薄さによる放熱の割増はクロップ前だけに効かせる', w: 'PhysicsEngine._lengthwise' },
+      { t: '自然対流を上下面の平均 6 W/m²K に（8 は上面の値）。炉出し時の端の温度落ちを 35 → 15 K（均熱後の端面 1 面ぶんは 1 K に満たない）', w: 'MATERIAL.H_AIR / END_CHILL.T0' },
+      { t: 'バイトを出た材料の温度（出側パイロメータの読み）を状態と実績に持ち、実績表・CSV に «出側温» 列を足した。実機の «上がり温度» はこの最終パスのパス平均と解釈する', w: 'SlabState.tExit / RollingLog' },
+      // --- 較正 ---
+      { t: '較正値: 界面熱伝達率 30,000 → 25,000 W/m²K、テーブル接触幅 40 → 20 mm、摩擦係数 0.25 → 0.32（エマルジョン 4.8 %・64 ℃ の条件として記録）', w: 'MATERIAL.H_ROLL / TABLE_TOUCH.BAND / PROCESS.MU' },
+      { t: '結果: 厚板段 1,064〜1,281 t（実機 1,000〜1,800）、65 → 26 mm 769〜1,095 t（800〜1,200）、16 → 8 mm 平均 2,623・頭 2,338 → 尻 3,687 t（2,400〜2,900）、出側板温 350 ℃（360 ±15）、板長 225.8 m（219.4 ±3 %）、自動生成が実機の 23 パスと一致、予測の定常荷重は運転平均に ±6 %', w: 'tools/calib.mjs' },
+      { t: '一致しない点: 26 → 16 mm（80 mpm）の実機 750〜900 t に対し 1,547 t。その前の 36 → 26 mm（800〜1,200 t）より軽く、摩擦ゼロでも 400 ℃ の変形抵抗から 1,000 t を下回れない。合わせ込まず «参考（要確認）» として毎回表示する（合否に数えない）', w: 'tools/calib.mjs / reallot.mjs' },
+      // --- 予測側 ---
+      { t: '予測荷重: 定常は «パスの平均温度» で、最大は PEAK_K で、巻取パスの峰は «パス時間いっぱい待って冷えた尻» の温度で解く。尻の峰は常用最大でなく非常最大に余裕を見て当てる（常用に収めると実機が通す 16 → 8 mm が 8.8 mm で止まる）', w: 'Rolling.peakForce / peakParts / PROCESS.TAIL_K / buildSchedule' },
+      { t: '予測パス時間に前進率を入れた（16 → 8 mm で 287 → 249 s、運転 244 s）。尻の待ち時間＝冷えを 15 % 過大にしていた', w: 'Rolling.passTime(slip)' },
+      { t: '塑性係数の数値微分の刻みを出側厚 1 % と圧下量 5 % の小さい方に。軽圧下（初パス 530 → 520）で真値から 8.4 % ずれていた', w: 'Rolling.plasticCoef' },
+      { t: '成立判定の «非常最大の 1.1 倍» の緩みを外した（成立としたスケジュールに非常最大超えのパスが 12 件残っていた）', w: 'Rolling.scheduleFeasibility' },
+      // --- 前段（作業中版で入れていたもの） ---
+      { t: '主機の短時間過負荷率（2.0 倍）。実機は 30 mm 圧下を 120 mpm で通しており、定格で頭打ちにすると実機の速度が出せない。サイクル全体の実効（RMS）が定格を超えるときは注意書きで示す', w: 'CONFIG.DRIVE.OVERLOAD' },
+      { t: 'パス間の段取り時間を 30 → 6 s、噛み出し余裕を 8,000 → 3,000 mm に（実機データ 530 → 65 を 17 パス 3 分から逆算）', w: 'PROCESS.PASS_OVERHEAD / CONFIG.SAFE_CLEAR' },
+      { t: '実操業の圧下配分則: 厚板段は初パス軽圧下 → 30 mm 定圧下 → 圧下率 19 % でクロップ厚 65 へ、仕上げ段は目標から上へ組む（最終 50 %・その前 38 %・以後 10 mm 定圧下）。物理の上限はこの則の上から別に効く', w: 'PROCESS.PRACTICE / Rolling.buildSchedule' },
+      { t: '摩擦係数の温度依存を中立（MU_KT = 0）に。アルミでは向きが定まらない', w: 'PROCESS.MU_KT' },
+      { t: '上下非対称の曲率にはスプリングバックを掛けない（全層が塑性域で弾性の芯が無い）', w: 'PhysicsEngine._dynamics' },
+      // --- 評価器 ---
+      { t: 'コイルの巻き数を «板がリールへ入る速度»（前進率込み）で数えるようにした。ロール周速で積分すると巻き数が足りず、外径が巻いた長さから求めた値と 7 % 食い違った', w: 'FinishController（coiledLen / turns）' },
+      { t: '評価器の判定を今回の物理に合わせた: クロップ後の端部効果は 2 %、巻取パスは «尻へ向かって荷重が上がる» を問う、巻取パスの張力が立つまでを過渡に含める、ロール温度の上がり幅、Q の単調性は同じ圧下率で、パスラインの最適点は基準が最適なら等しくてよい、膜沸騰の熱伝達率はサブクールで動く、板面ヘッダの位置合わせは全ステーション、切り分けの総長は板長の 0.05 %', w: 'tools/loadtrace / modeltrace / precisetrace / curlfixtrace / curltrace / layouttrace / dividetrace' },
     ] },
     { v: '1.15.0', base: '73cd172', date: '2026-09-08', title: 'メニューと上部バーの再構成・メッセージの分離・冷却ノズルとサイドガイドの作り直し・頭尾荷重の検算', items: [
       // --- UI ---
@@ -1274,6 +1293,7 @@ const CONFIG = {
     MU_RA_REF: 0.85, MU_RA_K: 0.25,
     ROLL_T0: 60,                           // クーラントと釣り合う待機温度 [℃]
     ROLL_RC: 3.6e6,                        // 鍛鋼の体積熱容量 [J/m³K]
+    ROLL_K: 40,                            // 鍛鋼の熱伝導率 [W/mK]（Rolling.rollHTC が使う）
     ROLL_TAU: 45,                          // クーラントで待機温度へ戻る時定数 [s]
 
     /* --- 幅方向の形状（クラウン・平坦度）に要る諸元 -------------------------
@@ -1897,16 +1917,17 @@ const CONFIG = {
    * 呼び厚 − 2×面削量 となり、上下面は鏡面状に仕上がっている。 */
   SLAB: {
     // 呼び厚（鋳造厚）の選択肢と既定。«既定は先頭» と暗黙に決めず、明示して 1 か所で持つ
-    CAST_TH: [406, 508, 560], CAST_DEFAULT: 560, SCALP_MIN: 8, SCALP_MAX: 15, SCALP_DEFAULT: 12,
-    /* 既定ロットは «A5052 / 呼び厚 560» で、目標 8 mm のコイルまで通す。
-     * 板長の既定を 2,400 mm にしてあるのは、この線の «テーブル長» からの従属値。
-     * 板は圧延で L0·h0/h まで伸び、巻取パス以外は入側／出側テーブルに載り切る必要がある。
-     * 536 mm × 4,200 mm では 20 mm を切ると出側テーブル（80.1 m）に載らなくなり、
-     * 残りを 1 パスで巻き取ることになって成立しない（実測 28.7 → 8.2 mm、荷重 64,586 t）。
-     * 2,400 mm なら 11 パスで 8 mm まで通り、最大荷重 3,801 t（常用最大 3,920 t）に収まる。 */
-    LEN_MIN: 2000, LEN_MAX: 4200, LEN_DEFAULT: 2400,
-    WID_MIN: 900,  WID_MAX: 2200, WID_DEFAULT: 1500,
-    TEMP_MIN: 400, TEMP_MAX: 540, TEMP_DEFAULT: 500,
+    CAST_TH: [406, 508, 560], CAST_DEFAULT: 560, SCALP_MIN: 8, SCALP_MAX: 15, SCALP_DEFAULT: 15,
+    /* 既定ロットは実機の較正ロット（2026-09、tools/reallot.mjs）そのもの:
+     *   A5052 / 呼び厚 560・片面 15 面削 → 530 / 1,330 W × 3,450 L / 炉出し 433 ℃ / 目標 8 mm コイル
+     * 実機は 530 → 65（17 パス・120 mpm）→ 26（4 パス）→ 16（80 mpm）→ 8（50 mpm・巻取）の
+     * 23 パスで通し、上がり 360 ℃・板長 219.4 m。本アプリの自動生成もこの配分を再現する
+     * （PROCESS.PRACTICE）。板は圧延で L0·h0/h まで伸び、巻取パス以外は入側／出側テーブルに
+     * 載り切る必要がある —— 3,450 mm・16 mm で 113 m（出側テーブル 80.1 m の外へ出るのは
+     * 巻取パスの前段だけで、そのパスは入側へ戻る側なので成立する）。 */
+    LEN_MIN: 2000, LEN_MAX: 4200, LEN_DEFAULT: 3450,
+    WID_MIN: 900,  WID_MAX: 2200, WID_DEFAULT: 1330,
+    TEMP_MIN: 400, TEMP_MAX: 540, TEMP_DEFAULT: 433,
     // 仕上げ形態は目標板厚から決まる: 10 mm 以下はコイルに巻き取り、10 mm 超は板材として
     // 出側へ送り出してパイラー（板積み）へ払い出す。目標板厚は TH_MIN〜TH_MAX で自由に設定できる。
     TARGET_TH: 8,
@@ -1982,10 +2003,14 @@ const CONFIG = {
   MATERIAL: {
     ALLOY: 'A5052',                                    // 選択中の材質（ALLOYS のキー）
     TREF: 450,                                         // 変形抵抗モデルの基準温度
-    // 可逆圧延で材料温度を決める主因はロール抜熱。接触熱伝達率は熱間圧延の実測域
-    // （20〜100 kW/m²K）の上側を採る。
+    // 可逆圧延で材料温度を決める主因はロール抜熱。H_ROLL は «界面の» 接触熱伝達率で、
+    // ロール・板の内部へ熱が染み込む抵抗と直列にして実効値を作る（Rolling.rollHTC）。
+    // 値は実機ロットの上がり温度（360 ℃、tools/calib.mjs）で較正した 25,000 W/m²K
+    // （アルミ熱間圧延の文献域 10〜50 kW/m²K の中央寄り。旧 30,000 では 4 K 冷えすぎた）。
     // 表面放熱: 放射（酸化した Al 面 ε≈0.18）＋ 自然対流（水平板の上下面平均 ≈ 8 W/m²K）
-    EMISSIVITY: 0.18, H_AIR: 8, H_ROLL: 30000,
+    /* H_AIR は上下面の平均。熱い水平板の上面（浮力で流れが立つ）で 8〜10、下面で 3〜4 W/m²K
+     * なので、両面に同じ値を当てるここでは中間の 6 を採る（旧 8 は上面の値を両面に当てていた）。 */
+    EMISSIVITY: 0.18, H_AIR: 6, H_ROLL: 25000,
     T_ROLL: 80, T_AMBIENT: 30,
     // 板厚方向の温度分布。板を LAYERS 層に分けて 1 次元の熱伝導を陰解法で解く。
     LAYERS: 9,
@@ -2003,11 +2028,15 @@ const CONFIG = {
      * 濡れる（WET_BOT）。側面は幅方向に一様な体積損失として全層へ入れる ——
      * 上下差を作らないので、平均温度は下げるが反りは増やさない。 */
     COOLANT: {
-      T_BULK: 35, T_SAT: 105,        // 液温（20〜50 ℃ の中央）／ 蒸気膜の温度
+      /* 液温と濃度は実機ロット（2026-09）の値: 64 ℃・4.8 %。濃度は摩擦係数（PROCESS.MU）の
+       * 較正条件として記録するもので、式の中では使わない（濃度 → μ の関係式は持っていない）。 */
+      T_BULK: 64, T_SAT: 105,        // 液温 ／ 蒸気膜の温度
+      CONC: 4.8,                     // エマルジョン濃度 [%]（諸元。μ の較正条件）
       T_NB: 130, T_LEID: 220,        // 核沸騰の上限 ／ ライデンフロスト点（これ以上は膜沸騰）
       // 膜沸騰でも «噴射» は静止プールより効く（液滴が蒸気膜を部分的に突き破る）ので、
       // プール膜沸騰の 100〜300 ではなく噴流冷却の実測域 500〜2,000 の下寄りを採る。
-      H_NB: 12000, H_FILM: 700,      // 核沸騰 ／ 膜沸騰の熱伝達率 [W/m²K]
+      H_NB: 12000, H_FILM: 700,      // 核沸騰 ／ 膜沸騰の熱伝達率 [W/m²K]（膜沸騰は基準サブクール度での値）
+      SUB_REF: 70, SUB_K: 0.5,       // 膜沸騰の基準サブクール度 [K] ／ サブクール 0 で残る割合（boiling()）
       ZONE: 2400,                    // ミル前後の噴射域。板がここを通る時間だけ効く
       WET_TOP: 1.0, WET_BOT: 0.18, WET_SIDE: 1.0,   // 各面の濡れ面積割合
       GUIDE_TOP: 1.0,                // 板面ヘッダが濡らす上面の割合
@@ -2037,7 +2066,8 @@ const CONFIG = {
        * 片側を切ると上下の温度差が変わり、反りの向きと大きさが変わる ——
        * 実機で «上面冷却を絞って反りを調整する» のと同じ操作になる。
        * 位置（正準 ∓3,400）と同じく、真実はここ 1 か所（Layout.coolHeaderXs が見る）。 */
-      ENTRY: true, EXIT: true,
+      // 既定は実機の較正ロットと同じ «入側なし・出側のみ»
+      ENTRY: false, EXIT: true,
     },
     /* テーブルローラとの接触による下面の抜熱。
      * ローラは胴端 Φ281.6 → 中央 Φ219.6 の «鼓の逆» 形なので、平らな板は自分の板幅の位置で
@@ -2046,7 +2076,11 @@ const CONFIG = {
      * しかも局所的に効く。見かけの熱伝達率は接触面積の割合で薄めて与える。 */
     // BAND / ARC は接触線の «濡れて熱が抜ける» 幅と長さ。ヘルツ接触幅そのもの（数 mm）より
     // 広く、しかし面全体からは程遠い。T はローラ表面温度（クーラントで濡れている）。
-    TABLE_TOUCH: { H: 14000, BAND: 40, ARC: 18, PITCH: 640, T: 90 },
+    /* BAND は実機ロットの上がり温度（tools/calib.mjs）で較正した値。40 では待機中の板が
+     * 放射・対流と同じだけローラへ熱を捨てる計算になり、最終パスの尻が 60 K 余計に冷えた。
+     * 止まっている板の下でローラ表面の接触点は温まって熱流が鈍る（面の更新が無い）ので、
+     * 走行中の «見かけ» より狭い接触幅が実態に近い。 */
+    TABLE_TOUCH: { H: 14000, BAND: 20, ARC: 18, PITCH: 640, T: 90 },
     CHILL_DEPTH_K: 2.0,                                // ロール抜熱の浸透深さ ＝ K·√(α·接触時間)
     /* 長手方向の端部冷却。板の端は本体より冷えやすい。理由は 2 つあって、どちらも
      * «単位体積あたりの放熱面積が大きい» に帰着する:
@@ -2061,7 +2095,11 @@ const CONFIG = {
      * （圧延中に付く冷えだけだと、厚い前段パスでは 1 K 規模にしかならない）。
      * なお 75 mm シャーの端部切断は «この冷たい端を落とす» 工程でもあるので、
      * 切断したぶんはプロファイルからも取り除く（Scrap の切断時に付け替える）。 */
-    END_CHILL: { TAPER: 0.42, ZONE: 1400, T0: 35 },
+    /* T0 は炉出し・搬送で端に付いている温度落ち。均熱炉で長時間保持したスラブの端面が搬送の
+     * 2〜3 分で余計に失う熱は 530 mm 厚では 1 K に満たない（端面 1 面ぶん）ので、35 K は
+     * 根拠の無い大きさだった。実機の最終パス（16 → 8 mm）の尻荷重の帯（〜2,900 t）とも合わず、
+     * 15 K に下げた（tools/calib.mjs で 3,826 → 3,687 t）。 */
+    END_CHILL: { TAPER: 0.42, ZONE: 1400, T0: 15 },
     // 温度下限は工程と材質で変わる: 圧延中は熱間域下限 − 30 ℃、巻取中は巻取温度 − 30 ℃
     T_MARGIN: 30,
     // 可視の白煙はエマルジョンの «水» の蒸発によるもの（油分は 6 wt% 程度）。
@@ -2104,8 +2142,17 @@ const CONFIG = {
    * 常用最大 3,920 t 以内で通っている事実に対し、旧値では μ = 0.34 → 5,400 t（張力込み 4,980 t）と
    * 非常最大を超えて止まっていた。パスごとの実測荷重で較正できるまで温度依存は中立（0）にし、
    * 速度依存（MU_KV）と粗度依存だけを残す（tools/realsched.mjs）。 */
-  PROCESS: { MU: 0.25, MU_KT: 0.0, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
+  /* MU: 実機ロット（エマルジョン 4.8 %・液温 64 ℃、入側冷却なし、tools/calib.mjs）で較正した 0.32。
+   * 厚板段（Ld/h < 1）は μ にほとんど依らず、効くのは仕上げ段以降。0.25 では 16 → 8 mm
+   * （50 mpm・張力あり）が平均 2,105 t で実機の帯 2,400〜2,900 t を下回り、0.32 で
+   * 平均 2,376 t・頭 2,300 → 尻 2,872 t と帯の両端に一致する（0.30 でも合格域: 2,235 / 2,695 t）。
+   * 65 → 26 mm も帯の内側。26 → 16 mm の実機値 750〜900 t だけは μ に依らず合わない（calib.mjs 参照）。 */
+  PROCESS: { MU: 0.32, MU_KT: 0.0, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
              TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.95, PEAK_K: 1.22,
+             /* 巻取パスの尻: «パス時間いっぱい待って冷えた» 温度で解いた荷重に掛ける係数。最後の 1 m の
+              * 端部の冷え（+5 %）と、頭尾ロック中にミルばねで尻が厚くなって圧下が減るぶん（−5 %）が
+              * 相殺するので 1.0（実測: 予測 3,887 t に対し運転の尻 3,687 t、tools/calib.mjs）。 */
+             TAIL_K: 1.0,
              /* 頭の潤滑膜。ロールバイトの潤滑膜は材料が入って初めてできるので、頭は乾いた
               * 状態で噛み、摩擦係数が高い（摩擦丘が大きく面圧が上がる）。膜が育つにつれて
               * 指数で消える: μ = μ0·(1 + K·exp(−d/LEN))（d: 頭から圧延した長さ）。
@@ -2529,14 +2576,33 @@ const Rolling = {
     return 2 * Math.PI * r * r * L * M.ROLL_RC;
   },
   /**
+   * ロールと板のあいだの «実効» 熱伝達率 [W/m²K]。
+   *
+   * 界面の接触熱伝達率 H_ROLL だけで抜熱を書くと、ロール側・板側の «内部へ熱が染み込む速さ»
+   * を無限大と置いたことになる。実際は接触時間 t のあいだに熱が入り込めるのは深さ √(α·t) まで
+   * で、その抵抗は半無限体の過渡伝導 √(π·t)/(2·e)（e = √(kρc): 熱侵入率）になる。
+   * 界面と両側の内部抵抗は直列なので
+   *   h_eff = 1 / ( 1/H_ROLL + √(π·t)/(2·e_eff) ),   e_eff = e_roll·e_al / (e_roll + e_al)
+   * 接触時間 0.06〜0.07 s（120 mpm・30 mm 圧下や 50 mpm・16 → 8 mm）では内部抵抗だけで
+   * 31,000 W/m²K 相当になり、H_ROLL = 30,000 と直列にすると実効は 15,000 —— 界面だけで
+   * 見ていた旧版は最終パスのロール抜熱を 51 K と 2 倍近く過大にし、上がり温度が実機の
+   * 360 ℃ に対し 274 ℃ になっていた（tools/calib.mjs）。
+   */
+  rollHTC(contactTime, alloy = Rolling.alloy()) {
+    const M = CONFIG.MATERIAL, MI = CONFIG.MILL;
+    const eR = Math.sqrt(MI.ROLL_K * MI.ROLL_RC), eA = Math.sqrt(alloy.K * alloy.RHO * alloy.CP);
+    const eEff = eR * eA / (eR + eA);
+    return 1 / (1 / M.H_ROLL + Math.sqrt(Math.PI * Math.max(contactTime, 1e-4)) / (2 * eEff));
+  },
+  /**
    * そのパスでロールが板から奪う «板厚平均の温度落ち» [K]。運転側（_biteThermal）と
    * 予測側（passTempChange / buildSchedule）が同じ 1 式を見るための入口。
    */
-  rollChillK(hIn, hOut, speedMpm, T, alloy, width, rollT) {
-    const M = CONFIG.MATERIAL, rc = alloy.RHO * alloy.CP;
+  rollChillK(hIn, hOut, speedMpm, T, alloy, width, rollT, solved = null) {
+    const rc = alloy.RHO * alloy.CP;
     const v = Math.max(Math.abs(speedMpm) / 60 * 1000, 1);
-    const Ld = Rolling.solve(hIn, hOut, width, speedMpm, T, 0, alloy).Ld;
-    const x = 2 * M.H_ROLL * (Ld / v) / (rc * (hOut / 1000));
+    const Ld = (solved || Rolling.solve(hIn, hOut, width, speedMpm, T, 0, alloy)).Ld, tc = Ld / v;
+    const x = 2 * Rolling.rollHTC(tc, alloy) * tc / (rc * (hOut / 1000));
     return Math.max(T - rollT, 0) * (1 - Math.exp(-x));
   },
   /**
@@ -2665,7 +2731,9 @@ const Rolling = {
               + `:${Math.round(sp / 5)}:${Math.round(Tm / 5)}:${ra ? Math.round(ra * 20) : 0}`;
     const memo = Rolling._qMemo;
     if (memo.key === key) return memo;
-    const eps = Math.max(h * 0.01, 1e-3);
+    /* 刻みは出側厚の 1 % か圧下量の 5 % の小さい方。軽圧下（初パス 530 → 520 mm）で出側厚
+     * だけから取ると刻み 5.2 mm が圧下量 10 mm の半分に達し、割線の傾きが真の微分から 8 % ずれた。 */
+    const eps = Math.max(Math.min(h * 0.01, (hIn - h) * 0.05), 1e-3);
     const ref = this.solve(hIn, h, width, sp, Tm, 0, alloy, ra);
     const up = this.solve(hIn, h + eps, width, sp, Tm, 0, alloy, ra);
     memo.key = key; memo.ref = ref;
@@ -3348,9 +3416,11 @@ const Rolling = {
     return kappa * x * x / 2 - x * x * (6 * ell * ell - 4 * ell * x + x * x) / (24 * EIq);
   },
   /** 1パスに要する時間 [s]（板長＋噛み出し余裕を速度で割る）。 */
-  passTime(lenMm, speedMpm) {
-    // 圧下設定・加減速・反転の段取り時間を一定分見込む（実測に近づけるため）
-    return (lenMm + 2 * CONFIG.SAFE_CLEAR) / Math.max(Math.abs(speedMpm) / 60 * 1000, 1) + CONFIG.PROCESS.PASS_OVERHEAD;
+  passTime(lenMm, speedMpm, slip = 0) {
+    // 圧下設定・加減速・反転の段取り時間を一定分見込む（実測に近づけるため）。
+    // slip は前進率: 板はロール周速より (1 + f) 倍速く出るので、同じ板長でも所要は短い
+    // （実測: 16 → 8 mm・50 mpm で予測 287 s に対し運転 244 s。尻の待ち時間＝冷えを 15 % 過大にしていた）
+    return (lenMm + 2 * CONFIG.SAFE_CLEAR) / Math.max(Math.abs(speedMpm) * (1 + slip) / 60 * 1000, 1) + CONFIG.PROCESS.PASS_OVERHEAD;
   },
 
   /** マンドレル軸に出せる最大トルク [N·m]（550 kW ÷ 基底 300 rpm × 減速比 8.5） */
@@ -3441,13 +3511,32 @@ const Rolling = {
     return Layout.coolZones().filter(([a, b]) => Math.abs((a + b) / 2) <= reach).reduce((t, [a, b]) => t + (b - a), 0);
   },
   passTempChange(hIn, hOut, speedMpm, T, passTime = 30, alloy = Rolling.alloy(),
-                 width = CONFIG.SLAB.WID_DEFAULT, reach = Infinity, rollT = CONFIG.MILL.ROLL_T0) {
+                 width = CONFIG.SLAB.WID_DEFAULT, reach = Infinity, rollT = CONFIG.MILL.ROLL_T0, coil = false) {
+    return Rolling.tempBudget(hIn, hOut, speedMpm, T, passTime, alloy, width, reach, rollT, coil).net;
+  },
+  /**
+   * passTempChange の内訳。1 パスの温度収支を項ごとに返す [K]:
+   *   heat（加工発熱）／ chill（ロール抜熱）／ cool（ロール周りのクーラント）／
+   *   guide（板面ヘッダ）／ touch（テーブルローラ接触）／ surface（放射・自然対流）／ net（合計）
+   * 較正（tools/calib.mjs）で «どの項が実機とずれているか» を見るための入口で、
+   * 予測はこの net だけを使う。運転側（PhysicsEngine._thermal / _biteThermal）は同じ項を
+   * 層モデルで解くので、ここで項を足し引きするときは運転側も同じ項を持っているか確かめること。
+   *
+   * coil（巻取パス）: 出側へ出た板はコイルに巻かれて放熱面を失う（巻いた板は隣の層に抱かれて
+   * 断熱に近い）。材料点が «露出して» いるのは入側で順番を待つあいだだけなので、放射・対流と
+   * テーブル接触は «入側厚 hIn で、平均してパス時間の半分» だけ効く。これを板材パスと同じ
+   * «実効板厚で全時間» にしていると、最終パス（16 → 8 mm・4 分）で 60 K ほど冷えすぎる。
+   */
+  tempBudget(hIn, hOut, speedMpm, T, passTime = 30, alloy = Rolling.alloy(),
+             width = CONFIG.SLAB.WID_DEFAULT, reach = Infinity, rollT = CONFIG.MILL.ROLL_T0, coil = false) {
     const M = CONFIG.MATERIAL, CO = M.COOLANT, TT = M.TABLE_TOUCH, rc = alloy.RHO * alloy.CP;
     const r = Rolling.solve(hIn, hOut, width, speedMpm, T, 0, alloy);
     const v = Math.max(Math.abs(speedMpm) / 60 * 1000, 1);          // mm/s
     // パス中の板は入側厚の部分と出側厚の部分が混在する。表面からの放熱に効く実効板厚は
     // 体積 ÷ 平均長さ ＝ 2·hOut/(1 + hOut/hIn)（運転時の hEff と同じ考え方）
     const hEff = 2 * hOut / (1 + hOut / hIn) / 1000;
+    // 露出している板厚と時間（巻取パスは入側厚で半分の時間。上の説明を参照）
+    const hExp = coil ? hIn / 1000 : hEff, tExp = coil ? passTime / 2 : passTime;
     /* 抜熱はすべて «集中熱容量の指数緩和» で書く —— drop(受け手温度, hA/(ρc·h) の積算) は
      * (T − T_sink)·(1 − e^−x) を返し、どれだけ長く冷やしても受け手温度を通り越さない。
      * 旧版は «hA·ΔT·時間 / ρc·h» という 1 次（陽解法）の形だったため、パス時間が長いと
@@ -3455,7 +3544,7 @@ const Rolling = {
      * 熱力学第二法則に反する値がスケジュール生成へ入り込まないよう、式の形で封じる。 */
     const drop = (Tsink, x) => (T - Tsink) * (1 - Math.exp(-Math.max(x, 0)));
     // ロール抜熱: ロールバイトを通る接触時間 Ld/v のあいだだけ、両面がロールに抱かれる
-    const chill = drop(rollT, 2 * M.H_ROLL * (r.Ld / v) / (rc * (hOut / 1000)));
+    const chill = Rolling.rollChillK(hIn, hOut, speedMpm, T, alloy, width, rollT, r);
     // クーラント: 噴射域を通過する時間だけ効く。板面は膜沸騰域なので、熱伝達率も
     // «熱の受け手温度» も PhysicsEngine.boiling() から取る（運転時と同じ前提）。
     // 濡れ面積は面ごとに違い、側面は板厚 / 板幅の比で上下面と同じ «面» 換算にする。
@@ -3472,18 +3561,46 @@ const Rolling = {
     const sf = PhysicsEngine.stripFilm(T);
     const gz = Rolling.activeCoolLength(reach);
     const guide = sf.h > 0 && gz > 0 ? drop(sf.T, sf.h * CO.GUIDE_TOP * gz / v / (rc * hEff)) : 0;
-    // テーブルローラとの接触（下面のみ、両エッジ寄りの 2 本の線）。パス中ずっと効く。
+    // テーブルローラとの接触（下面のみ、両エッジ寄りの 2 本の線）。露出しているあいだ効く。
     const touch = drop(TT.T, TT.H * Math.min(1, 2 * TT.BAND / width) * Math.min(1, TT.ARC / TT.PITCH)
-                             * passTime / (rc * hEff));
+                             * tExp / (rc * hExp));
     // 表面放熱。放射は 4 乗則なので、その場の温度差から «見かけの熱伝達率» に直して同じ形に載せる。
     const Tk = T + 273.15, Ak = M.T_AMBIENT + 273.15;
     const hRad = M.EMISSIVITY * 5.67e-8 * (Tk * Tk + Ak * Ak) * (Tk + Ak);
-    const surface = drop(M.T_AMBIENT, 2 * (hRad + M.H_AIR) * passTime / (rc * hEff));
+    const surface = drop(M.T_AMBIENT, 2 * (hRad + M.H_AIR) * tExp / (rc * hExp));
     // 受け手が複数あるので、合計が «いちばん冷たい受け手» を通り越さないところで止める
     const floor = Math.min(M.T_AMBIENT, rollT, TT.T, bo.T, sf.h > 0 ? sf.T : Infinity);
-    return Math.max(r.heat - chill - cool - guide - touch - surface, Math.min(0, floor - T));
+    const net = Math.max(r.heat - chill - cool - guide - touch - surface, Math.min(0, floor - T));
+    /* 尻の温度変化。巻取パスでは尻の材料が «パス時間いっぱい» 入側で待つので、平均（半分の時間）
+     * より冷える。荷重の峰はここで決まる（運転側の _coilSpread と同じ前提）。板材パスでは平均と同じ。 */
+    let tail = net;
+    if (coil) {
+      const touchT = drop(TT.T, TT.H * Math.min(1, 2 * TT.BAND / width) * Math.min(1, TT.ARC / TT.PITCH) * passTime / (rc * hExp));
+      const surfT = drop(M.T_AMBIENT, 2 * (hRad + M.H_AIR) * passTime / (rc * hExp));
+      tail = Math.max(r.heat - chill - cool - guide - touchT - surfT, Math.min(0, floor - T));
+    }
+    return { heat: r.heat, chill, cool, guide, touch, surface, floor, net, tail };
   },
 
+  /**
+   * 1 パスの «最大荷重» の予測 [t]。定常（パス平均温度で解いた荷重）に噛み込み衝撃と端部の冷えぶん
+   * PEAK_K を掛けたものと、巻取パスなら «パス時間いっぱい入側で待った尻» の温度で解いた荷重に
+   * TAIL_K（尻の最後の 1 m の端部効果）を掛けたものの大きい方。運転の実測は板材パスで max/avg
+   * 1.12〜1.22、巻取パス（16 → 8 mm・4 分）で 1.4 —— 後者は peakK では届かず、尻の温度そのもの
+   * で解かないと 17 % 過小になる（tools/calib.mjs）。
+   */
+  peakForce(hIn, hOut, width, speedMpm, T0, budget, coil, tensionMPa, alloy = Rolling.alloy()) {
+    const p = Rolling.peakParts(hIn, hOut, width, speedMpm, T0, budget, coil, tensionMPa, alloy);
+    return Math.max(p.steadyPeak, p.tailPeak);
+  },
+  /** peakForce の内訳 { steadyPeak, tailPeak }。上限判定は 2 つを別々の限度に当てる（buildSchedule）。 */
+  peakParts(hIn, hOut, width, speedMpm, T0, budget, coil, tensionMPa, alloy = Rolling.alloy()) {
+    const P = CONFIG.PROCESS;
+    const steady = Rolling.solve(hIn, hOut, width, speedMpm, T0 + budget.net / 2, tensionMPa, alloy).forceTon;
+    if (!coil) return { steadyPeak: steady * P.PEAK_K, tailPeak: 0 };
+    const tail = Rolling.solve(hIn, hOut, width, speedMpm, T0 + budget.tail, tensionMPa, alloy).forceTon;
+    return { steadyPeak: steady * P.PEAK_K, tailPeak: tail * P.TAIL_K };
+  },
   /**
    * パススケジュールを板厚・板幅から生成する。
    * 1パスあたりの圧下量は「噛み込み角」「圧下率」「圧延荷重」の3つで律速し、
@@ -3499,6 +3616,10 @@ const Rolling = {
     // 荷重の余裕は «モデルの不確かさ» だけを見る（常用最大の LOAD_MARGIN まで）。
     // 頭・尻の割増は予測荷重そのものへ PEAK_K で織り込む。
     const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * CONFIG.DRIVE.OVERLOAD * 0.84;
+    /* 巻取パスの尻の峰（待って冷えた最後の数 m、1〜2 s の事象）は常用最大ではなく非常最大に
+     * 余裕を見て当てる。常用最大は連続の定格で、尻の一瞬の峰まで 0.95 倍に収めると実機が
+     * 通している 16 → 8 mm（尻 3,687 t ＜ 常用 3,920 t）が 8.8 mm で止まる（tools/calib.mjs）。 */
+    const fTailLimit = M.LIMIT_FORCE_T * P.LOAD_MARGIN;
     // 圧延が進むと材料温度が下がり変形抵抗が上がる。生成時にもその推移を織り込む。
     const drafts = [], temps = [];
     let h = h0, T = temp;
@@ -3540,7 +3661,8 @@ const Rolling = {
     // 予測を «パスの最大» へそろえる係数（噛み込み衝撃＋端部の冷えぶん。実測 1.15〜1.22）
     const peakK = P.PEAK_K;
     // パス時間 ＝ 材長 / 速度。75 mm シャーをまたぐパスだけ先端切断の往復ぶんを足す。
-    const passSecs = (hIn2, hOut, v) => Rolling.passTime(L0 * h0 / hOut, v)
+    const passSecs = (hIn2, hOut, v) => Rolling.passTime(L0 * h0 / hOut, v,
+        Rolling.forwardSlip(hOut, M.WR_D / 2, Rolling.friction(T, v), hIn2 - hOut).f)
       + (hIn2 > CONFIG.CROP_SHEAR.MAX_TH && hOut <= CONFIG.CROP_SHEAR.MAX_TH ? 150 : 0);
     /* ロール表面温度は板から熱をもらって上がり、クーラントで待機温度へ戻る。
      * 運転側（PhysicsEngine._rollHeat / _rollCool）と同じ収支を、パス単位で積む。
@@ -3563,11 +3685,18 @@ const Rolling = {
       // 主機は動力律速で低温パスほど遅くなり、遅いほど通過中に冷えて硬くなる。入側温度と
       // 参照速度で組むと、薄板の後段（特に巻取パス）で実荷重が上限を超える。
       const vFor = (dd) => { let v = vRef; while (v > 10 && Rolling.solve(h, h - dd, width, v, T, 0, al).powerKW > pLimit) v -= 5; return v; };
-      const Tend = (dd) => { const v = vFor(dd);
-        return Math.min(T, T + Rolling.passTempChange(h, h - dd, v, T, passSecs(h, h - dd, v), al,
-                                                      width, L0 * h0 / (h - dd), Troll)); };
-      const forceAt = (dd) => Rolling.solve(h, h - dd, width, vFor(dd), Tend(dd), 0, al).forceTon
-                              * peakK;
+      const budget = (dd) => { const v = vFor(dd);
+        return Rolling.tempBudget(h, h - dd, v, T, passSecs(h, h - dd, v), al, width, L0 * h0 / (h - dd), Troll,
+                                  coil && dd >= dFin - 1e-6); };
+      const Tend = (dd) => Math.min(T, T + budget(dd).net);
+      /* 定常荷重は «パスの平均温度»（頭〜尻の平均 ＝ 出側パイロメータのパス平均に相当）で見る。
+       * 終端温度で見ると、巻取パスでは «尻が 4 分待って冷えた» ぶんを定常に入れたうえに peakK を
+       * 掛けることになり、尻の効果を二重に数える（実機 16 → 8 mm が 2,400〜2,900 t で通るのに
+       * 10 mm で止まっていた）。頭・尻の割増は peakK が受け持つ（実測 max/avg 1.12〜1.22）。
+       * 巻取パスの峰はそれとは別に «パス時間いっぱい待った尻» の温度で解く（Rolling.peakForce）。 */
+      const over = (dd) => { const b = budget(dd), v = vFor(dd), isC = coil && dd >= dFin - 1e-6;
+        const p = Rolling.peakParts(h, h - dd, width, v, T, b, isC, isC ? Rolling.coilTension(h - dd, width) : 0, al);
+        return p.steadyPeak > fLimit || p.tailPeak > fTailLimit; };
       /* このパスで «設備が実際に出せる» 最大圧下量。噛み込み角・圧下率・荷重の 3 つで律速する。
        * 材料やテーブルの都合ではなく «ミルの能力» なので、どのパスでも例外なく効く。
        * ここを通さない圧下量を 1 パスでも作ると、そのパスの加工発熱と荷重が非物理な値に
@@ -3575,11 +3704,11 @@ const Rolling = {
       const capacity = () => {
         let c = Math.min(dBite, h * capRatio, dFin);
         if (c <= 0) return 0;
-        if (forceAt(c) > fLimit) {
+        if (over(c)) {
           let lo = 0, hi = c;                                  // 荷重上限に収まる圧下量を二分探索
           for (let k = 0; k < 22; k++) {
             const mid = (lo + hi) / 2;
-            if (forceAt(mid) > fLimit) hi = mid; else lo = mid;
+            if (over(mid)) hi = mid; else lo = mid;
           }
           c = lo;
         }
@@ -3612,7 +3741,7 @@ const Rolling = {
       temps.push(T); drafts.push(d);
       // 温度の積み上げも «そのパスで実際に出す速度» で行う（荷重を見たときと同じ前提）
       const vUse = vFor(d);
-      T += Rolling.passTempChange(h, h - d, vUse, T, passSecs(h, h - d, vUse), al, width, L0 * h0 / (h - d), Troll);
+      T += Rolling.passTempChange(h, h - d, vUse, T, passSecs(h, h - d, vUse), al, width, L0 * h0 / (h - d), Troll, coilPass === idx);
       rollStep(h, h - d, vUse, T, passSecs(h, h - d, vUse));
       h -= d;
       if (coilPass === idx) break;
@@ -3636,14 +3765,16 @@ const Rolling = {
         let v = speeds[i];
         while (v > 10 && Rolling.solve(hh, hOut, width, v, TT, 0, al).powerKW > pLimit) v -= 5;
         const T0 = TT;
-        TT += Rolling.passTempChange(hh, hOut, v, TT, passSecs(hh, hOut, v), al, width, L0 * h0 / hOut, Troll);
-        rollStep(hh, hOut, v, TT, passSecs(hh, hOut, v));
-        // 予測荷重: パス終端温度で見た荷重（＝運転時の «平均荷重» に相当）。表示と上限判定は
-        // «パスの最大» で行いたいので peakK を掛ける。巻取パスは前方張力で荷重が下がる。
         const isCoilPass = coil && i === (coilPass >= 0 ? coilPass : drafts.length - 1);
+        const b = Rolling.tempBudget(hh, hOut, v, TT, passSecs(hh, hOut, v), al, width, L0 * h0 / hOut, Troll, isCoilPass);
+        TT += b.net;
+        rollStep(hh, hOut, v, TT, passSecs(hh, hOut, v));
+        // 予測荷重: パス平均温度で見た定常荷重（＝運転時の «平均荷重» に相当）。表示と上限判定は
+        // «パスの最大» で行いたいので Rolling.peakForce（peakK、巻取パスは尻の温度）で出す。
+        // 巻取パスは前方張力で荷重が下がる。
         const tens = isCoilPass ? Rolling.coilTension(hOut, width) : 0;
-        steadies.push(Rolling.solve(hh, hOut, width, v, Math.min(T0, TT), tens, al).forceTon);
-        forces.push(steadies[steadies.length - 1] * peakK);   // 予測は «パスの最大» にそろえる
+        steadies.push(Rolling.solve(hh, hOut, width, v, (T0 + TT) / 2, tens, al).forceTon);
+        forces.push(Rolling.peakForce(hh, hOut, width, v, T0, b, isCoilPass, tens, al));
         tEnds.push(TT);
         hh = hOut;
         return v;
@@ -3689,9 +3820,11 @@ const Rolling = {
       const rms = tt > 0 ? Math.sqrt(e2 / tt) : 0;
       if (rms > Drive.ratedPowerKW) notes.push(`主機の実効動力 ${(rms / 1000).toFixed(1)} MW がサイクル平均で定格 ${(Drive.ratedPowerKW / 1000).toFixed(1)} MW を超えます（各パスは短時間過負荷 ${CONFIG.DRIVE.OVERLOAD} 倍の範囲内）`);
     }
-    // 予測の不確かさ（±10 % 程度）を見込み、非常最大の 1.1 倍を超える場合を «成立しない» とする
-    if (maxF > M.LIMIT_FORCE_T * 1.1) {                             // 非常最大超過 → 過負荷停止する
-      const over = sch.find(q => q.force > M.LIMIT_FORCE_T * 1.1);
+    /* 予測の峰が非常最大を超える場合を «成立しない» とする。予測の不確かさは buildSchedule 側の
+     * LOAD_MARGIN（常用最大・非常最大とも 0.95）で見ており、ここに 1.1 倍の緩みを重ねると
+     * «成立» と言ったスケジュールに非常最大超えのパスが残る（tools/schedtrace.mjs で 12 件）。 */
+    if (maxF > M.LIMIT_FORCE_T) {                                   // 非常最大超過 → 過負荷停止する
+      const over = sch.find(q => q.force > M.LIMIT_FORCE_T);
       reasons.push(`第 ${over.pass} パスの予測荷重 ${fmt(maxF)} が非常最大 ${M.LIMIT_FORCE_T.toLocaleString()} t を超えます`);
     } else if (maxF > M.RATED_FORCE_T * 0.9) {                        // 常用最大に余裕が無い
       notes.push(`予測荷重 ${fmt(maxF)} は常用最大 ${M.RATED_FORCE_T.toLocaleString()} t に対して余裕がありません`);
@@ -4451,7 +4584,7 @@ class RollingLog {
     if (!this.lot) return;
     const sch = CONFIG.SCHEDULE[i] || {};
     this._cur = { no: i + 1, dir: sch.dir, gap: sch.gap, planSpeed: sch.speed, planForce: sch.force,
-                  hIn: null, hOut: null, tIn: null, tOut: null,
+                  hIn: null, hOut: null, tIn: null, tOut: null, txSum: 0, txN: 0,
                   fMax: 0, fSum: 0, fN: 0, vMax: 0, vSum: 0, vN: 0, pMax: 0, torqueMax: 0,
                   gMin: Infinity, gMax: -Infinity, springMax: 0,
                   t0: this.lot.t, t1: null, len: null, biteN: 0 };
@@ -4490,6 +4623,7 @@ class RollingLog {
       if ((s.rollTorque || 0) > c.torqueMax) c.torqueMax = s.rollTorque;
       if (s.inBite) {
         c.fSum += f; c.fN++; c.vSum += v; c.vN++; c.biteN++;
+        if (s.biteFill > 0.99 && Number.isFinite(s.tExit)) { c.txSum += s.tExit; c.txN++; }
         if (m.gap < c.gMin) c.gMin = m.gap;
         if (m.gap > c.gMax) c.gMax = m.gap;
         if (m.stretch > c.springMax) c.springMax = m.stretch;   // 荷重で開いた量（ミルばね）
@@ -4518,7 +4652,7 @@ class RollingLog {
              hIn: c.hIn, hOut: c.hOut, red: c.hIn && c.hOut ? (1 - c.hOut / c.hIn) * 100 : null,
              fMax: c.fMax, fAvg: c.fN ? c.fSum / c.fN : 0,
              vMax: c.vMax, vAvg: c.vN ? c.vSum / c.vN : 0,
-             pMax: c.pMax, tIn: c.tIn, tOut: c.tOut, len: c.len,
+             pMax: c.pMax, tIn: c.tIn, tOut: c.tOut, tExit: c.txN ? c.txSum / c.txN : null, len: c.len,
              gap: c.gap, gMin: Number.isFinite(c.gMin) ? c.gMin : null,
              gMax: Number.isFinite(c.gMax) ? c.gMax : null, spring: c.springMax,
              sec: c.t1 === null ? null : c.t1 - c.t0, planForce: c.planForce, planSpeed: c.planSpeed };
@@ -4538,11 +4672,11 @@ class RollingLog {
     const head = ['パス', '方向', '入厚[mm]', '出厚[mm]', '圧下率[%]', '最大荷重[t]', '平均荷重[t]',
                   '計画荷重[t]', '最大速度[mpm]', '平均速度[mpm]', '計画速度[mpm]',
                   '目標ギャップ[mm]', '最小ギャップ[mm]', 'ミル伸び[mm]', '最大動力[MW]',
-                  '入温[℃]', '出温[℃]', '板長[m]', '所要[s]'];
+                  '入温[℃]', '出側温[℃]', '出温[℃]', '板長[m]', '所要[s]'];
     const body = t.passes.map(c => this.row(c)).filter(r => on(r.no)).map(r =>
       [r.no, r.dir, f(r.hIn), f(r.hOut), f(r.red), f(r.fMax, 0), f(r.fAvg, 0), f(r.planForce, 0),
        f(r.vMax), f(r.vAvg), f(r.planSpeed, 0), f(r.gap, 2), f(r.gMin, 2), f(r.spring, 2),
-       f(r.pMax, 2), f(r.tIn, 0), f(r.tOut, 0), f(r.len / 1000, 2), f(r.sec)].join(','));
+       f(r.pMax, 2), f(r.tIn, 0), f(r.tExit, 0), f(r.tOut, 0), f(r.len / 1000, 2), f(r.sec)].join(','));
     const sHead = ['時刻[s]', 'パス', '荷重[t]', '速度[mpm]', '板厚[mm]', 'ギャップ[mm]',
                    '圧下位置[mm]', '動力[MW]', 'クラウン[µm]', '平坦度[I]', 'ベンディング[t]', '横ずれ[mm]', '温度[℃]', '位置[mm]'];
     const sBody = t.series.filter(p => on(p.pass)).map(p =>
@@ -5314,7 +5448,10 @@ class FinishController {
       // 先端の実厚（＝ロールギャップ）で巻き層と外径を数える。
       const h = this._headThickness(), w = s.finishedWidth(sl.width);
       s.coiledLen = Math.max(0, headPast);
-      const v = (s.winding ? CO.ROLL_SPEED_MAX : Math.abs(m.currentSpeed)) / 60 * 1000;   // mm/s
+      /* 巻き数は «板がリールへ入る速度» で数える。噛み込み中の板はロール周速より前進率ぶん速く出る
+       * （16 → 8 mm・μ 0.32 で 11〜16 %）ので、ロール周速で積分すると巻き数が足りず、外径が巻いた
+       * 長さから求めた値と 7 % 食い違った（tools/coiltrace.mjs）。 */
+      const v = (s.winding ? CO.ROLL_SPEED_MAX : sl.inBite ? sl.currentSpeed : Math.abs(m.currentSpeed)) / 60 * 1000;   // mm/s
       const L = Rolling.coilLayers(s.turns, h);
       s.turns += v * dt / (2 * Math.PI * L.layR);
       Object.assign(s, Rolling.coilLayers(s.turns, h));
@@ -5793,6 +5930,8 @@ class PhysicsEngine {
        * 材料が «頭が受けた抜熱ぶん» まで冷えて読まれる（実測: 尻の局所温度が内側より
        * 最大 51 K 低く、荷重が 1.4 倍）。発熱と抜熱は同じ点に、同じ扱いで積む。 */
       s.writeHeat(uFrom, u, res.heat - chillPt);
+      // バイトを出た材料の温度（出側パイロメータが読む値）。実績の «出側温» はこのパス平均
+      s.tExit = s.temperature + dTloc + res.heat - chillPt;
       /* --- 幅方向の形状（クラウン・平坦度）---------------------------------
        * 影響係数法は n×n を解くので毎フレームは重い。荷重・板厚・温度が «意味のある量»
        * 動いたときだけ解き直す（弧が満ちてからの 1 回目で必ず解く）。 */
@@ -5895,7 +6034,7 @@ class PhysicsEngine {
     const s = this.slab, M = CONFIG.MATERIAL, al = s.alloy, T = s.T, n = T.length;
     const rc = al.RHO * al.CP, alpha = al.K / rc;                          // m²/s
     const Troll = this.mill.rollTemp;
-    const x = 2 * M.H_ROLL * contactTime / (rc * (gap / 1000));
+    const x = 2 * Rolling.rollHTC(contactTime, al) * contactTime / (rc * (gap / 1000));
     const chillPt = (s.temperature - Troll) * (1 - Math.exp(-x));                 // 通った点 1 つの板厚平均の抜熱 [K]
     const dTavg = chillPt * passedFrac;                                            // 板全体の平均に直した抜熱 [K]
     this._rollHeat(dTavg, rc);                                                    // 奪った熱はロールへ入る
@@ -6006,7 +6145,14 @@ class PhysicsEngine {
   static boiling(Ts) {
     const C = CONFIG.MATERIAL.COOLANT;
     const g = Num.smoothstep(C.T_NB, C.T_LEID, Ts);          // 0: 核沸騰 → 1: 膜沸騰
-    return { h: Num.lerp(C.H_NB, C.H_FILM, g), T: Num.lerp(C.T_BULK, C.T_SAT, g) };
+    /* 膜沸騰の熱伝達は液の «サブクール度»（飽和温度 − 液温）でも動く。液が冷たいほど蒸気膜が
+     * 薄く保たれて熱流束が上がり、飽和に近い液では膜が厚く安定して下がる（実測では熱流束が
+     * サブクール度にほぼ線形）。H_FILM は基準サブクール度 SUB_REF での値で、液温 64 ℃
+     * （サブクール 41 K）では 0.79 倍になる。液温を変えたときに膜沸騰域の抜熱が動くのは
+     * この項だけ（受け手温度は飽和温度のままなので、温度差そのものは変わらない）。 */
+    const sub = Math.max(C.T_SAT - C.T_BULK, 0) / C.SUB_REF;
+    const hFilm = C.H_FILM * (C.SUB_K + (1 - C.SUB_K) * sub);
+    return { h: Num.lerp(C.H_NB, hFilm, g), T: Num.lerp(C.T_BULK, C.T_SAT, g) };
   }
 
   /**
@@ -6047,19 +6193,27 @@ class PhysicsEngine {
     const hRad = (Ts) => { const Tk = Ts + 273.15; return M.EMISSIVITY * 5.67e-8 * (Tk * Tk + Ak * Ak) * (Tk + Ak); };
     const cooling = this.env.coolant && s.inBite && Math.abs(this.mill.currentSpeed) > 3;
     const dil = cooling ? Math.min(CO.ZONE / Math.max(s.length, 1), 1) : 0;
-    const gFrac = this.guideCoolFrac, touchH = this.tableTouchH;
+    /* 巻き取られた部分は隣の層に抱かれて放熱面を失う（断熱に近い）。放射・対流とテーブル接触は
+     * 露出している長さの割合でだけ効く。予測側（Rolling.tempBudget の coil）と同じ前提。 */
+    const exposed = Math.max(0, 1 - (this.finish.coiledLen || 0) / Math.max(s.length, 1));
+    const gFrac = this.guideCoolFrac, touchH = this.tableTouchH * exposed;
     // 面ごとの有効熱伝達率と受け手温度（放射・対流は周囲温度へ、クーラントは沸騰の受け手温度へ、
     // ローラ接触はロール表面温度へ）。h と受け手温度の加重平均で 1 つの対流境界にまとめる。
     const surf = (j, top) => {
-      const Ts = T[j], hr = hRad(Ts) + M.H_AIR;
+      const Ts = T[j], hr = (hRad(Ts) + M.H_AIR) * exposed;
       let hs = hr, ht = hr * Ta;
       const add = (h, Tenv, frac) => { if (frac <= 0 || h <= 0) return; hs += h * frac; ht += h * frac * Tenv; };
       const wet = (frac) => { const bo = PhysicsEngine.boiling(Ts); add(bo.h, bo.T, frac); };
       wet(dil * (top ? CO.WET_TOP : CO.WET_BOT));
       if (top) { const sf = PhysicsEngine.stripFilm(Ts); add(sf.h, sf.T, gFrac * CO.GUIDE_TOP); }
       else { hs += touchH; ht += touchH * M.TABLE_TOUCH.T; }
-      return { hEff: hs, Tenv: ht / hs };
+      return { hEff: hs, Tenv: hs > 0 ? ht / hs : Ta };     // 全部巻かれて放熱面が無いときは 0/0 にしない
     };
+    /* 露出面からの放熱を «板が全部露出していたら» の量で覚えておく（下の _coilSpread が、
+     * 巻かれた部分には掛からず露出部にだけ掛かる、という分布へ直すのに使う）。 */
+    const qFull = (hRad(T[0]) + M.H_AIR) * (T[0] - Ta) + (hRad(T[n - 1]) + M.H_AIR) * (T[n - 1] - Ta)
+                + this.tableTouchH * (T[n - 1] - M.TABLE_TOUCH.T);
+    const lossFull = qFull * dt / (rc * h);
     // 側面（板厚の面）: 面積 2·h·L に対し体積は w·h·L なので、単位体積あたり 2/w [1/m]。
     // 全層に同じだけ効くので上下差は作らない（＝反りを増やさずに平均温度だけ下げる）。
     const sideCoef = dil > 0 ? dil * CO.WET_SIDE * 2 / (s.width / 1000) : 0;
@@ -6079,6 +6233,27 @@ class PhysicsEngine {
     T[n - 1] = d[n - 1] / b[n - 1];
     for (let j = n - 2; j >= 0; j--) T[j] = (d[j] - c[j] * T[j + 1]) / b[j];
     this._localCool(dt, dil > 0, gFrac > 0);
+    if (exposed < 1) this._coilSpread(lossFull, exposed);
+  }
+
+  /**
+   * 巻取パスの放熱の «分布»。層モデルは放熱を露出割合で薄めて板全体の平均へ入れるが、実際に
+   * 冷えているのは入側で順番を待つ露出部だけで、巻かれた頭はコイルの中で断熱に近い。
+   * 平均はそのまま（層モデルの持ち分）に、巻かれたセルへ +L、露出セルへ −lossFull·(1 − 露出割合)
+   * を入れて分布だけを直す（L = lossFull·露出割合 ＝ 平均に入った量）。合計は厳密にゼロ。
+   * これが無いと «4 分待った尻» が巻き上がったコイルの平均と同じ温度で読まれ、尻の荷重が
+   * 実機（16 → 8 mm で頭 2,400 → 尻 2,900 t）より軽く出る。
+   */
+  _coilSpread(lossFull, exposed) {
+    const s = this.slab, D = s.dTProf, N = D.length, fin = this.finish;
+    if (!(lossFull > 0) || !(fin.coiledLen > 0) || !(s._vol > 0)) return;
+    const uCoil = Num.clamp(fin.coiledLen * this.mill.gap / s._vol, 0, 1);   // 巻かれた材料の体積割合
+    const L = lossFull * exposed;
+    for (let i = 0; i < N; i++) {
+      const u = i / (N - 1), coiled = s.dir > 0 ? u > 1 - uCoil : u < uCoil;
+      D[i] += coiled ? L : -lossFull * (1 - exposed);
+    }
+    SlabState.zeroMean(D);
   }
 
   /**
@@ -6147,7 +6322,10 @@ class PhysicsEngine {
      * だけをここで積む（本体ぶんは _thermal がすでに全体へ入れている）。 */
     const EC = M.END_CHILL, L = Math.max(s.length, 1);
     const bulk = 2 * hEnd * (Tm - Ta) / (rc * hz) * dt;      // 上下面の冷却速度 [K]
-    for (let i = 0; i < N; i++) {
+    /* 薄い端部の割増は «舌・ワニ口の張り出し» があるあいだだけ。クロップで両端を切り落とすと
+     * 端は角の立った全厚になり、この割増は消える。切った後も残していると、仕上げ段〜巻取パスで
+     * 尻だけが 25 K 余計に冷え、最終パスの尻の荷重が実機の帯（2,400〜2,900 t）を大きく超えた。 */
+    if (!this.finish.cropDone) for (let i = 0; i < N; i++) {
       const d = Math.min(i, N - 1 - i) / (N - 1) * L;         // 端からの距離 [mm]
       const taper = EC.TAPER * Math.exp(-d / EC.ZONE);
       if (taper > 1e-4) D[i] -= bulk * (1 / (1 - taper) - 1);
@@ -10114,7 +10292,7 @@ class UIManager {
         <td class="${over ? 'over' : ''}">${f(r.fMax, 0)}</td><td>${f(r.fAvg, 0)}</td><td class="plan">${f(r.planForce, 0)}</td>
         <td>${f(r.vMax)}</td><td>${f(r.vAvg)}</td><td class="plan">${f(r.planSpeed, 0)}</td>
         <td>${f(r.gMin, 2)}</td><td>${f(r.spring, 2)}</td>
-        <td>${f(r.pMax, 2)}</td><td>${f(r.tIn, 0)}</td><td>${f(r.tOut, 0)}</td>
+        <td>${f(r.pMax, 2)}</td><td>${f(r.tIn, 0)}</td><td>${f(r.tExit, 0)}</td><td>${f(r.tOut, 0)}</td>
         <td>${f(r.len / 1000, 2)}</td><td>${f(r.sec)}</td></tr>`;
     }).join('') : '<tr><td colspan="18" class="empty">まだ記録がありません。「圧延サイクル開始」で記録が始まります。</td></tr>';
     // 表の行を押すとそのパスだけを見る（表とグラフを別々に操作させない）
@@ -10467,9 +10645,11 @@ class UIManager {
       el.value = Num.clamp(val, min, max);
     };
     set('rng-init-scalp', S.SCALP_MIN, S.SCALP_MAX, S.SCALP_DEFAULT, 1);
-    set('rng-init-wid',   S.WID_MIN,   S.WID_MAX,   S.WID_DEFAULT,  50);
-    set('rng-init-len',   S.LEN_MIN,   S.LEN_MAX,   S.LEN_DEFAULT, 100);
-    set('rng-init-temp',  S.TEMP_MIN,  S.TEMP_MAX,  S.TEMP_DEFAULT,  5);
+    /* 刻みは既定値がそのまま載る細かさにする。幅 50 / 長さ 100 / 温度 5 では実機ロットの
+     * 1,330 / 3,450 / 433 がスライダに載らず、1,350 / 3,500 / 435 へ丸まっていた（実測）。 */
+    set('rng-init-wid',   S.WID_MIN,   S.WID_MAX,   S.WID_DEFAULT,  10);
+    set('rng-init-len',   S.LEN_MIN,   S.LEN_MAX,   S.LEN_DEFAULT,  50);
+    set('rng-init-temp',  S.TEMP_MIN,  S.TEMP_MAX,  S.TEMP_DEFAULT,  1);
     set('rng-target',     F.TH_MIN,    F.TH_MAX,    S.TARGET_TH,   0.5);
     const n = $('num-target'); if (n) { n.min = F.TH_MIN; n.max = F.TH_MAX; n.value = $('rng-target').value; }
   }
@@ -10674,7 +10854,8 @@ class UIManager {
       $('der-cool-side').innerHTML =
         `板面クーラントは <b>板の上面にだけ</b> 掛かります。片側を切ると上下の温度差が変わり、`
         + `変形抵抗の差（＝反りの駆動力）が変わります。効いているヘッダ <b>${Layout.coolHeaderCount()} 本</b>`
-        + ` / 全 ${Layout.coolHeaderCount(false)} 本（OS / DS 各 1 本、クォーター狙い）。方式そのもの（水冷・空冷・なし）はパススケジュールで選びます。`;
+        + ` / 全 ${Layout.coolHeaderCount(false)} 本（OS / DS 各 1 本、クォーター狙い）。方式そのもの（水冷・空冷・なし）はパススケジュールで選びます。`
+        + `<br>クーラント: 液温 <b>${CONFIG.MATERIAL.COOLANT.T_BULK} ℃</b>・濃度 <b>${CONFIG.MATERIAL.COOLANT.CONC} %</b>（実機ロットの較正条件。膜沸騰の抜熱は液温で、摩擦係数は濃度の条件で決めています）`;
       this._slabChanged(); this._summaries();
     };
     on('cool-entry', 'click', () => { CONFIG.MATERIAL.STRIP_COOL.ENTRY = !CONFIG.MATERIAL.STRIP_COOL.ENTRY; coolSide(); });

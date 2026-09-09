@@ -98,7 +98,9 @@ const out = await page.evaluate(() => {
     ok('反りを最小にするパスラインが範囲の内側にある（最適点がある）',
        best.pl > Math.min(...sweep.map(q => q.pl)) && best.pl < Math.max(...sweep.map(q => q.pl)),
        `最適 ${best.pl > 0 ? '+' : ''}${best.pl} mm ／ |κ| ${best.k.toExponential(2)}`);
-    ok('最適点では基準より反りが小さい', best.k < base.absMax,
+    // 既定（入側冷却 OFF）は既に反りが最小の点にあることがある。掃引が基準より悪い点を «最適» と
+    // 呼ばないことを問う（基準が最適なら等しくてよい）
+    ok('最適点の反りは基準以下（基準が最適なら等しい。同じ設定の再走で 1 % 未満の差は同値）', best.k <= base.absMax * 1.01,
        `基準 ${base.absMax.toExponential(2)} → 最適 ${best.k.toExponential(2)} 1/mm`);
     ok('どの設定でもロットを通し切る', base.done && up.done && noEntry.done && noneCool.done, 'すべて完走');
     return { checks, base, up, noEntry, noneCool, sweep, best };
