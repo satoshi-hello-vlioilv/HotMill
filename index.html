@@ -939,6 +939,9 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
         <div class="top" style="margin-top:12px;"><span class="k">ロール現品（組管理）</span><span class="v" id="lbl-shop"></span></div>
         <table class="sched"><thead><tr><th>種別</th><th>組</th><th>径 mm</th><th>粗度 µmRa</th><th>研削</th><th>寿命</th></tr></thead><tbody id="shop-body"></tbody></table>
         <div class="derived" id="shop-note" style="margin-top:6px;"></div>
+        <div class="top" style="margin-top:12px;"><span class="k">ピット炉（仕様）</span><span class="v" id="lbl-pit"></span></div>
+        <table class="sched"><thead><tr><th>炉</th><th>能力 t</th><th>内法 L×W×H</th><th>段×列</th><th>燃焼</th></tr></thead><tbody id="pit-body"></tbody></table>
+        <div class="derived" id="pit-note" style="margin-top:6px;"></div>
         <div class="top" style="margin-top:12px;"><span class="k">テーブル区分（図面）</span></div>
         <table class="sched"><thead><tr><th>区分</th><th>範囲 m</th><th>本数</th><th>ピッチ</th><th>選択</th></tr></thead><tbody id="table-body"></tbody></table>
         <div class="derived" id="table-note" style="margin-top:6px;"></div>
@@ -1316,6 +1319,12 @@ const VERSION = {
       { t: 'ブラシ条件の登録モーダルを作った。材質を選び、F-5〜F の 6 行でブラシの種類・掛ける長さ・ノッチを決める。下に «除去の強さ»（既定を 100 %）と、弱すぎ／強すぎの注意を出す', w: '#dlg-brush / UIManager.openBrushDialog' },
       { t: '3D にブラシロールを上下 1 本ずつ足した。掛けるパスではワークロールに押し付け、掛けないパスでは半径方向へ 140 mm 引く。当たりはバックアップロールと板を避けた入側寄りの斜め上', w: 'Parts.brushRoll / MillStandView' },
       { t: '実測: コーティングは 1 ロットで 6.0 → 6.9 µm まで積もり、ブラシで 4.2 µm まで落ち、掛けない最終 2 パスで 6.6 µm へ戻る。摩擦係数の振れは ±2.6 % で、荷重の較正（14/14）は崩れない', w: 'tools/brushtrace.mjs' },
+      // --- ピット炉 ---
+      { t: '炉 9 基の仕様を実機の表にした。1〜6 号 90 t・3,810×4,760×4,050・半直火炉／7〜8 号 100 t・4,600×4,300×4,800・半直火炉／9 号 18 t・間接型。内法は炉ごとに違うので、床の開口・躯体・蓋・クレーンの巻上距離もそれぞれの寸法から決まる', w: 'FURNACE.SPEC / Layout.pitSpec' },
+      { t: '内法と収容能力が噛み合っている: 1〜6 号は 7 段 × 2 列 ＝ 14 本 × 6.6 t ＝ 92 t（表 90 t）、7〜8 号は 8 段 × 2 列 ＝ 16 本 ＝ 105 t（表 100 t）。段は板厚の面を突き合わせて並ぶので 内法 L ÷ 鋳造厚', w: 'tools/pitplan.mjs' },
+      { t: 'スラブの置き方（パターン A / B / C）を実装した。幅の大きい順に番号を振り、1 番と n 番・2 番と n−1 番 … の «幅の和» を組ごとに見て、2,660 mm 以下の組が何組できるかで並べ方を決める。組の和は番号順に増減しないので、途中で打ち切らず全部見る', w: 'Layout.pitPattern' },
+      { t: '図の A は 7 組・B は 3 組・C は 0 組を要るので «満たせる中でいちばん組の多いパターン» を選ぶ。組めない幅広のスラブは番号の若いほうから縦置き（幅を段の方向へ向ける）へ回す —— 図の 1, 2（B）／ 1〜4（C）がそれ', w: 'FURNACE.PATTERNS / Layout.pitSlots' },
+      { t: '諸元パネルに炉の一覧を出した。能力・内法・燃焼方式に加えて «いまのロットなら何段 × 何列で何本・何 t» を炉ごとに出す（いま使う炉を強調）', w: '#pit-body / UIManager._renderPits' },
       // --- サイドガイド ---
       { t: 'サイドガイドのコロを実機の本数にした（入側 11・出側 5）。コロ本体 380 mm ＋ シャフト 535 mm で、バーの長さは本数から（LEN ＝ N × ピッチ）、高さはシャフト長から決まる（H ＝ 535 ＋ フランジ 2×45）。長さと高さを固定値として持たない', w: 'TABLE.GUIDE.N_IN / N_OUT / Layout.guideLen / guideH' },
       { t: 'コロ本体は «パスラインから上» へ 380 mm 立てる。バーの中央に置くと薄板の耳に当たらない（従来はコロがバー中央で、下端がパスラインより 28 mm 上にあった）', w: 'Layout.guideY0' },
@@ -2353,8 +2362,46 @@ const CONFIG = {
    * いるかは炉ごとに違うので、ここは «抽出時の差» として 1 つ持つ）。
    * 抽出から圧延までの待ちでどれだけ均されるかは SlabState.pitProfile が解く。 */
   FURNACE: { SOAK_DT: 50, N: 9, X1: -121800, GROUPS: [3, 3, 2, 1], GAPS: [1200, 8000, 4000], IN_GAP: 800, Z: 9700,
-             DEPTH: 5200, W: 2600, L: 6000, SMALL_L: 1600, WALL: 500, LID_T: 380,
-             PER_PIT: 10 },
+             WALL: 500, LID_T: 380,
+             /* 炉ごとの仕様（実機の表）。L×W×H は内法 [mm]、CAP は最大収容能力 [t]。
+              *   L（X）… バンクの並び方向。スラブは板厚の面を突き合わせて «段» に並ぶ
+              *   W（Z）… ライン直角方向。スラブ 2 本を «幅方向に» 並べられる
+              *   H     … 深さ。スラブは長さを立てて入る（3,450 mm）
+              * 収容能力とも整合する: 1〜6 号は 7 段 × 2 列 ＝ 14 本 × 6.6 t ＝ 92 t（表 90 t）、
+              * 7〜8 号は 8 段 × 2 列 ＝ 16 本 ＝ 105 t（表 100 t）。
+              * 9 号はサイズが表に無いので、能力 18 t（＝ 3 本）から内法を置いた（README 残件）。 */
+             SPEC: [
+               { no: 1, cap:  90, L: 3810, W: 4760, H: 4050, fire: '半直火炉' },
+               { no: 2, cap:  90, L: 3810, W: 4760, H: 4050, fire: '半直火炉' },
+               { no: 3, cap:  90, L: 3810, W: 4760, H: 4050, fire: '半直火炉' },
+               { no: 4, cap:  90, L: 3810, W: 4760, H: 4050, fire: '半直火炉' },
+               { no: 5, cap:  90, L: 3810, W: 4760, H: 4050, fire: '半直火炉' },
+               { no: 6, cap:  90, L: 3810, W: 4760, H: 4050, fire: '半直火炉' },
+               { no: 7, cap: 100, L: 4600, W: 4300, H: 4800, fire: '半直火炉' },
+               { no: 8, cap: 100, L: 4600, W: 4300, H: 4800, fire: '半直火炉' },
+               { no: 9, cap:  18, L: 1900, W: 2600, H: 4050, fire: '間接型', est: true },
+             ],
+             /* スラブの置き方（パターン A / B / C）。
+              *
+              * ① 幅の大きい順に 1 … n と番号を振る
+              * ② 1 番（最大）と n 番（最小）を組にして幅を足す。PAIR_W 以下なら «組める»
+              * ③ 2 番と n−1 番 … と (n/2) 組まで、すべての組を個別に見る
+              *    （組の和は番号順に増減するとは限らないので、途中で打ち切らない）
+              * ④ 組める組の数で並べ方が決まる。図の A は 7 組・B は 3 組・C は 0 組を要る
+              *    ので、«満たせる中でいちばん組の多いパターン» を選ぶ
+              * ⑤ 図の数字の順にスラブを当てはめる（1 が最も幅の大きいスラブ）
+              *
+              * PAIR_W ＝ 2,660 mm は実機の運用値。何の寸法かは未確認（炉の内法 W 4,760 とは
+              * 合わない）ので、いまは «判定のしきい値» としてだけ持つ（README 残件）。
+              *
+              * ROT は «幅を段の方向（L）へ向けて立てる» 置き方（図の縦長の枠）。組めない
+              * 幅広のスラブをここへ逃がす。 */
+             PAIR_W: 2660,
+             PATTERNS: [
+               { key: 'A', pairs: 7, rot: 0, cols: 2, name: 'パターン A（2 列 × 段）' },
+               { key: 'B', pairs: 3, rot: 2, cols: 2, name: 'パターン B（3 段だけ 2 列 ＋ 縦置き 2 本）' },
+               { key: 'C', pairs: 0, rot: 4, cols: 1, name: 'パターン C（1 列 ＋ 縦置き 4 本）' },
+             ] },
 
   /* スラブヤード —— 面削（フライス）を終えてピット炉へ入るのを待つスラブの置き場。
    * 上下面は鏡面、側面と長辺の丸みは鋳肌のまま（＝圧延材と同じ Sect / MAT.slabFaces）。
@@ -3589,7 +3636,80 @@ const Layout = {
   /** 転倒直後（中心が転倒軸から L/2）から受け渡し位置までの、ローラでの送り距離 [mm]。 */
   feedDX(length) { return Math.max(CONFIG.TRANSFER.PARK_DX - length / 2, 0); },
   /** ピット炉 i 番（0 起点）の内法の長さ [mm]。図面どおり最後の 1 基（PIT9）は極小。 */
-  pitLen(i) { const F = CONFIG.FURNACE; return i === F.N - 1 ? F.SMALL_L : F.L; },
+  /**
+   * ピット炉のスラブの置き方。実機の手順どおりに解く。
+   *
+   *   ① 幅の大きい順に 1 … n と番号を振る（1 が最も幅の大きいスラブ）
+   *   ② 1 番（最大）と n 番（最小）を組にして幅を足す。PAIR_W 以下なら «組める»
+   *   ③ 2 番と n−1 番、3 番と n−2 番 …… と (n/2) 組まで、すべての組を個別に見る。
+   *      組の和は番号順に増減するとは限らないので、途中で打ち切ってはいけない
+   *   ④ «組める組の数» で並べ方が決まる。図の A は 7 組・B は 3 組・C は 0 組を要るので、
+   *      満たせる中でいちばん組の多いパターンを選ぶ
+   *
+   * 返すのは { key, name, pairs, need, rot, ok, sums } —— pairs が実際に組めた数、
+   * need がそのパターンが要る数、sums が組ごとの和（どこで外れたかが読める）。
+   */
+  pitPattern(widths) {
+    const F = CONFIG.FURNACE;
+    const w = [...widths].sort((a, b) => b - a);              // ① 幅の大きい順
+    const n = w.length, half = Math.floor(n / 2);
+    const sums = [];
+    for (let i = 0; i < half; i++) {                          // ②③ すべての組を個別に見る
+      const sum = w[i] + w[n - 1 - i];
+      sums.push({ no: i + 1, big: w[i], small: w[n - 1 - i], sum, ok: sum <= F.PAIR_W });
+    }
+    const pairs = sums.filter(q => q.ok).length;
+    // ④ 満たせる中でいちばん組の多いパターン（PATTERNS は組の多い順に並べてある）
+    const pat = F.PATTERNS.find(q => pairs >= q.pairs) || F.PATTERNS[F.PATTERNS.length - 1];
+    return { key: pat.key, name: pat.name, need: pat.pairs, rot: pat.rot, cols: pat.cols, pairs, sums, n };
+  },
+  /** その炉に入る «段» の数。スラブは板厚の面を突き合わせて並ぶので 内法 L ÷ 鋳造厚。 */
+  pitRows(i, th) {
+    return Math.max(1, Math.floor(Layout.pitSpec(i).L / Math.max(th, 1)));
+  },
+  /**
+   * 図の数字順に並べた «置き場所» を返す。炉の中心を原点とし、x は段の方向（内法 L）、
+   * z は幅方向（内法 W）。rot が true なら «幅を段の方向へ向けて立てる»（図の縦長の枠）。
+   *
+   *   パターン A —— 全段 2 列。段の下（−x 側）から 1, 2 / 3, 4 / … と振る
+   *   パターン B —— 縦置き 2 本を右列の下へ入れ、左列は全段、右列は縦置きの上だけ
+   *   パターン C —— 縦置き 4 本（2 本 × 2 段）を右側へ入れ、左列だけを段に使う
+   *
+   * 番号は «1 が最も幅の大きいスラブ»。縦置きへ回すのは組めなかった幅広のスラブなので、
+   * 図のとおり 1 番から順に縦置きへ入る。
+   */
+  pitSlots(pat, i, widths, th = CONFIG.SLAB.CAST_TH[0]) {
+    const sp = Layout.pitSpec(i);
+    const w = [...widths].sort((a, b) => b - a);
+    const rows = Layout.pitRows(i, th), zL = -sp.W / 4, zR = sp.W / 4;
+    const rowX = r => -sp.L / 2 + (r + 0.5) * th;
+    const out = [], left = [], right = [];
+    let no = 0;
+    // ① 縦置き（幅を段の方向へ向ける）。2 本ずつ «段» に積み、−x 側から詰める。
+    //    図のとおり番号の若い（幅の大きい）スラブから入る。
+    let xCur = -sp.L / 2;
+    for (let k = 0; k < pat.rot; k += 2) {
+      const pair = [w[k], w[k + 1]].filter(v => v > 0);
+      const lv = Math.max(...pair, 0) || th;                          // その段が食う長さ ＝ 幅の大きいほう
+      pair.forEach((wid, j) => out.push({ no: ++no, x: xCur + lv / 2, z: zR + (j === 0 ? -sp.W / 8 : sp.W / 8), rot: true, w: wid }));
+      xCur += lv;
+    }
+    const rotRows = pat.rot > 0 ? Math.ceil((xCur + sp.L / 2) / th) : 0;   // 縦置きが食った段数
+    // ② 段（横置き）。パターン A は下から左右 1 つずつ、B/C は左列を振ってから右列。
+    for (let r = 0; r < rows; r++) {
+      if (pat.rot === 0) { for (const z of [zL, zR]) left.push({ x: rowX(r), z, rot: false }); continue; }
+      left.push({ x: rowX(r), z: pat.cols === 1 ? 0 : zL, rot: false });
+      if (pat.cols === 2 && r >= rotRows) right.push({ x: rowX(r), z: zR, rot: false });
+    }
+    for (const q of left.concat(right)) out.push({ no: ++no, ...q });
+    return out;
+  },
+  /* 炉ごとの仕様。並びは «A-1 側の端が PIT9»、そこからミル側へ PIT8 … PIT1 と戻るので、
+   * 内部の添字 i（0 がミル側 ＝ PIT1）と炉番は i + 1 で対応する。 */
+  pitSpec(i) { const F = CONFIG.FURNACE; return F.SPEC[Num.clamp(i, 0, F.SPEC.length - 1)]; },
+  pitLen(i) { return Layout.pitSpec(i).L; },
+  pitWid(i) { return Layout.pitSpec(i).W; },
+  pitDepth(i) { return Layout.pitSpec(i).H; },
   /** 炉 j と j−1 の間 [mm]。群の境目は通路（GAPS）、群の中は炉口の縁ぶん（IN_GAP）。 */
   pitGap(j) {
     const F = CONFIG.FURNACE; let n = 0;
@@ -3628,7 +3748,8 @@ const Layout = {
     const th = slab.thickness, L = slab.length, D = S.PIVOT_DROP;
     const xPit = Layout.pitX(Layout.pitOf(slab.alloyKey));
     const xStand = S.TILTER_X - F * (D + th / 2);
-    const yPit = -FU.DEPTH + L / 2, yHi = passY + CR.HOIST_CLEAR + L / 2, yStand = passY - D + L / 2;
+    // 炉ごとに深さが違うので «その炉» の深さで底を決める
+    const yPit = -Layout.pitDepth(Layout.pitOf(slab.alloyKey)) + L / 2, yHi = passY + CR.HOIST_CLEAR + L / 2, yStand = passY - D + L / 2;
     return { xPit, xStand, xFlat: Layout.entryX, yPit, yHi, yStand, zPit: FU.Z, zStand: S.SIDE_Z, D,
              move: { hoist: yHi - yPit, travel: xStand - xPit, traverse: S.SIDE_Z - FU.Z, set: yHi - yStand,
                      lift: CONFIG.TRANSFER.LIFT, cross: S.SIDE_Z } };
@@ -10094,28 +10215,28 @@ const Parts = {
   },
 
   /* --- ピット炉（スラブを立てたまま加熱する） ----------------------------- */
-  /** 炉 1 基。内法の長さ L は炉ごとに違う（PIT9 は極小）ので引数で渡す。 */
-  furnacePit(L = CONFIG.FURNACE.L) {
+  /** 炉 1 基。内法（L×W×H）は炉ごとに違う（実機の仕様表）ので引数で渡す。 */
+  furnacePit(L = 3810, W = 4760, H = 4050) {
     const F = CONFIG.FURNACE, w = F.WALL, parts = [];
-    parts.push(G.at(G.box(L + 2 * w, F.DEPTH, w), 0, -F.DEPTH / 2, -(F.W + w) / 2));
-    parts.push(G.at(G.box(L + 2 * w, F.DEPTH, w), 0, -F.DEPTH / 2,  (F.W + w) / 2));
-    parts.push(G.at(G.box(w, F.DEPTH, F.W), -(L + w) / 2, -F.DEPTH / 2, 0));
-    parts.push(G.at(G.box(w, F.DEPTH, F.W),  (L + w) / 2, -F.DEPTH / 2, 0));
-    parts.push(G.at(G.box(L, 300, F.W), 0, -F.DEPTH - 150, 0));             // 炉底
+    parts.push(G.at(G.box(L + 2 * w, H, w), 0, -H / 2, -(W + w) / 2));
+    parts.push(G.at(G.box(L + 2 * w, H, w), 0, -H / 2,  (W + w) / 2));
+    parts.push(G.at(G.box(w, H, W), -(L + w) / 2, -H / 2, 0));
+    parts.push(G.at(G.box(w, H, W),  (L + w) / 2, -H / 2, 0));
+    parts.push(G.at(G.box(L, 300, W), 0, -H - 150, 0));                     // 炉底
     // 炉口の縁。X 方向は «炉の外形ぶん» に収める（群の中の炉は壁を共有して隣り合う）
     for (const sz of [-1, 1])
-      parts.push(G.at(G.box(L + 2 * w - 60, 240, 350), 0, 120, sz * (F.W / 2 + w + 175)));
+      parts.push(G.at(G.box(L + 2 * w - 60, 240, 350), 0, 120, sz * (W / 2 + w + 175)));
     for (const sx of [-1, 1])
-      parts.push(G.at(G.box(350, 240, F.W + 2 * w), sx * (L / 2 + w + 175), 120, 0));
+      parts.push(G.at(G.box(350, 240, W + 2 * w), sx * (L / 2 + w + 175), 120, 0));
     return G.merge(parts);
   },
   /* 蓋は «炉の外形ぶん» に収める。群の中の炉は壁を共有して隣り合うので、
    * 外形より広い蓋にすると隣の蓋と重なる（X だけ内側へ 60 mm 詰める）。 */
-  furnaceLid(L = CONFIG.FURNACE.L) {
+  furnaceLid(L = 3810, W = 4760) {
     const F = CONFIG.FURNACE, w = F.WALL, lx = L + 2 * w - 60;
     return G.merge([
-      G.at(G.box(lx, F.LID_T, F.W + 2 * w + 300), 0, 0, 0),
-      G.at(G.box(lx * 0.5, 260, F.W + 2 * w + 300), 0, F.LID_T / 2 + 130, 0),
+      G.at(G.box(lx, F.LID_T, W + 2 * w + 300), 0, 0, 0),
+      G.at(G.box(lx * 0.5, 260, W + 2 * w + 300), 0, F.LID_T / 2 + 130, 0),
     ]);
   },
 
@@ -10364,9 +10485,9 @@ const Parts = {
     /* ピット炉の開口は «炉の数だけ» 開ける。炉が 1 基だった頃の名残で転倒軸の真上に
      * 1 つだけ開いており、炉をバンク化して移したあとも穴だけが床に残っていた
      * （＝炉の無い穴）。開口の真実を Layout.pitX に一本化して取り違えを断つ。 */
-    const fz = FU.W / 2 + FU.WALL;
     for (let i = 0; i < FU.N; i++) {
-      const x = Layout.pitX(i), fx = Layout.pitLen(i) / 2 + FU.WALL;                  // 炉ごとに内法が違う
+      const x = Layout.pitX(i), sp = Layout.pitSpec(i);                               // 炉ごとに内法が違う
+      const fx = sp.L / 2 + FU.WALL, fz = sp.W / 2 + FU.WALL;
       hole(x - fx, FU.Z - fz, x + fx, FU.Z + fz);                                     // ピット炉 i 番
     }
     const PP = CONFIG.PILER, px0 = Math.min(PP.X0, PP.X1) + PP.PIT.MARGIN, px1 = Math.max(PP.X0, PP.X1) - PP.PIT.MARGIN;
@@ -11781,20 +11902,23 @@ class SupplyView {
     // «いま使う炉»（材質で決まる）の 1 枚だけ。どれが開いているかが材質と一致する。
     const FU = CONFIG.FURNACE;
     // 内法が炉ごとに違う（PIT9 は極小）ので、寸法ごとに 1 つだけ形を作って使い回す
-    const geoCache = new Map(), geoOf = (L) => {
-      if (!geoCache.has(L)) geoCache.set(L, { pit: Parts.furnacePit(L), lid: Parts.furnaceLid(L) });
-      return geoCache.get(L);
+    /* 炉ごとに内法（L×W×H）が違うので、同じ寸法の組み合わせだけ 1 つ作って使い回す。 */
+    const geoCache = new Map(), geoOf = (sp) => {
+      const k = `${sp.L}:${sp.W}:${sp.H}`;
+      if (!geoCache.has(k)) geoCache.set(k, { pit: Parts.furnacePit(sp.L, sp.W, sp.H), lid: Parts.furnaceLid(sp.L, sp.W) });
+      return geoCache.get(k);
     };
     this.pits = []; this.lids = [];
     for (let i = 0; i < FU.N; i++) {
-      const x = Layout.pitX(i), { pit: pitGeo, lid: lidGeo } = geoOf(Layout.pitLen(i));
+      const x = Layout.pitX(i), { pit: pitGeo, lid: lidGeo } = geoOf(Layout.pitSpec(i));
       const pit = near(new THREE.Mesh(pitGeo, MAT.pit), MAT.pit); pit.receiveShadow = true;
       pit.name = 'ピット炉'; pit.position.set(u(x), 0, u(FU.Z)); this.group.add(pit); this.pits.push(pit);
       const lid = near(new THREE.Mesh(lidGeo, MAT.base), MAT.base); lid.castShadow = true;
       lid.name = '炉蓋'; lid.position.set(u(x), u(FU.LID_T / 2 + 240), u(FU.Z));
       this.group.add(lid); this.lids.push(lid);
     }
-    this.lidTravel = FU.W + 2 * FU.WALL + 900;
+    // 蓋の逃げは «いちばん広い炉» に合わせる（どの炉でも開ききる）
+    this.lidTravel = Math.max(...FU.SPEC.map(q => q.W)) + 2 * FU.WALL + 900;
 
     // --- スラブヤード（面削済み・ピット入り待ち。寝かせ置き）---------------
     // 加熱前なので «冷えた色» の専用マテリアルで描く（圧延材の温度色に引きずらせない）。
@@ -13715,6 +13839,38 @@ class UIManager {
     $('spec-body').innerHTML = rows.map(([k, v]) =>
       `<tr><td style="text-align:left;color:var(--ink-3)">${k}</td><td style="font-weight:700;color:var(--ink-1)">${v}</td></tr>`).join('');
     this._renderShop();
+    this._renderPits();
+  }
+
+  /**
+   * ピット炉の一覧（仕様表）と、いまのロットの «置き方»。
+   * 段数と列数は内法とスラブの寸法から出るので、ロットを変えると本数も変わる ——
+   * «この炉に何本入るか» が推測ではなく数字で読めることが目的。
+   */
+  _renderPits() {
+    /* 寸法は «直前に読んだロット»（this._dims）から取る。this.dims は画面の初期化より
+     * あとで代入される関数なので、ここで呼ぶと諸元表の初回描画で落ちる（実測）。 */
+    const F = CONFIG.FURNACE, d = this._dims || null;
+    const th = d?.cast ?? CONFIG.SLAB.CAST_TH[0], wid = d?.width ?? CONFIG.SLAB.WID_DEFAULT;
+    const len = d?.length ?? CONFIG.SLAB.LEN_DEFAULT, AL = Rolling.alloy(d?.alloy);
+    const one = len * wid * th * 1e-9 * AL.RHO / 1000;                    // スラブ 1 本の質量 [t]
+    const cur = Layout.pitOf(d?.alloy ?? CONFIG.MATERIAL.ALLOY);
+    $('pit-body').innerHTML = F.SPEC.map((q, i) => {
+      const rows = Layout.pitRows(i, th), cols = Math.max(1, Math.floor(q.W / Math.max(wid, 1)));
+      const n = rows * cols, on = i === cur;
+      return `<tr style="${on ? 'background:var(--s-2)' : ''}">`
+        + `<td style="text-align:left;${on ? 'font-weight:800;color:var(--accent)' : 'color:var(--ink-3)'}">PIT${q.no}${on ? ' ●' : ''}</td>`
+        + `<td>${q.cap}</td><td style="color:var(--ink-2)">${q.L}×${q.W}×${q.H}${q.est ? ' <em>推定</em>' : ''}</td>`
+        + `<td>${rows}×${cols} ＝ ${n} 本<br><span style="color:var(--ink-3)">${(n * one).toFixed(0)} t</span></td>`
+        + `<td style="color:var(--ink-3)">${q.fire}</td></tr>`;
+    }).join('');
+    $('lbl-pit').innerHTML = `${F.N} 基<em>PIT${F.SPEC[cur].no} を使用</em>`;
+    // いまのロットの置き方（同じ炉に入る本数ぶんの幅で判定する）
+    const rows = Layout.pitRows(cur, th), cols = Math.max(1, Math.floor(F.SPEC[cur].W / Math.max(wid, 1)));
+    const pat = Layout.pitPattern(Array(Math.max(rows * cols, 2)).fill(wid));
+    $('pit-note').innerHTML =
+      `板幅 ${wid} mm を ${rows * cols} 本 → <b>${pat.name}</b>`
+      + `（組める ${pat.pairs} / 要る ${pat.need} 組・しきい値 ${F.PAIR_W} mm）`;
   }
 
   /**
