@@ -618,45 +618,57 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
 .apply-slot .btn { margin:0; }
 .sec table.sched td:first-child { color:var(--ink-3); }
 
-/* --- 圧延条件の登録・編集モーダル ------------------------------------------
+/* --- 圧延条件 / ブラシ条件の登録・編集モーダル（見た目は 1 式を共有する） ------
    決める順（材料 → 仕上げ → 冷却）に区切り、下に «この条件の見積り» を常に出す。
    入れた値がどんなロットになるかを見ながら決められるので、推測させない。 */
-#dlg-lot { border:none; padding:0; border-radius:var(--r-l); background:var(--s-1); color:var(--ink-1);
+#dlg-lot, #dlg-brush { border:none; padding:0; border-radius:var(--r-l); background:var(--s-1); color:var(--ink-1);
   width:min(740px,94vw); max-height:90vh; box-shadow:var(--shadow-2); }
-#dlg-lot::backdrop { background:rgba(12,18,26,.42); backdrop-filter:blur(2px); }
-#dlg-lot form { display:flex; flex-direction:column; max-height:90vh; }
-#dlg-lot header { flex:none; display:flex; align-items:center; gap:12px; padding:15px 18px;
+#dlg-lot::backdrop, #dlg-brush::backdrop { background:rgba(12,18,26,.42); backdrop-filter:blur(2px); }
+#dlg-lot form, #dlg-brush form { display:flex; flex-direction:column; max-height:90vh; }
+#dlg-lot header, #dlg-brush header { flex:none; display:flex; align-items:center; gap:12px; padding:15px 18px;
   border-bottom:1px solid var(--line); }
-#dlg-lot h2 { margin:0; font-size:14px; font-weight:800; letter-spacing:.04em; }
-#dlg-lot h2 i { opacity:.6; margin-right:5px; }
-#dlg-lot .x { margin-left:auto; width:30px; height:30px; border-radius:8px; border:1px solid var(--line);
+#dlg-lot h2, #dlg-brush h2 { margin:0; font-size:14px; font-weight:800; letter-spacing:.04em; }
+#dlg-lot h2 i, #dlg-brush h2 i { opacity:.6; margin-right:5px; }
+#dlg-lot .x, #dlg-brush .x { margin-left:auto; width:30px; height:30px; border-radius:8px; border:1px solid var(--line);
   background:var(--s-1); color:var(--ink-3); cursor:pointer; }
-#dlg-lot .x:hover { color:var(--ink-1); border-color:var(--ink-3); }
-#dlg-lot .lot-body { flex:1 1 auto; overflow:auto; padding:16px 18px; display:flex; flex-direction:column; gap:15px; }
-#dlg-lot .lot-grp h3 { margin:0 0 9px; font-size:11px; font-weight:800; color:var(--ink-2);
+#dlg-lot .x:hover, #dlg-brush .x:hover { color:var(--ink-1); border-color:var(--ink-3); }
+#dlg-lot .lot-body, #dlg-brush .lot-body { flex:1 1 auto; overflow:auto; padding:16px 18px; display:flex; flex-direction:column; gap:15px; }
+#dlg-lot .lot-grp h3, #dlg-brush .lot-grp h3 { margin:0 0 9px; font-size:11px; font-weight:800; color:var(--ink-2);
   display:flex; align-items:center; gap:7px; letter-spacing:.06em; }
-#dlg-lot .lot-grp h3 .n { width:17px; height:17px; border-radius:50%; background:var(--accent); color:#fff;
+#dlg-lot .lot-grp h3 .n, #dlg-brush .lot-grp h3 .n { width:17px; height:17px; border-radius:50%; background:var(--accent); color:#fff;
   font-size:9.5px; display:inline-flex; align-items:center; justify-content:center; }
-#dlg-lot .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px 14px; }
-#dlg-lot .f { display:flex; flex-direction:column; gap:5px; min-width:0; }
-#dlg-lot .f > .lb { font-size:10.5px; font-weight:700; color:var(--ink-3); display:flex; justify-content:space-between; gap:8px; }
-#dlg-lot .f > .lb em { font-style:normal; color:var(--ink-3); opacity:.75; font-weight:600; }
-#dlg-lot input[type=number], #dlg-lot select { height:32px; border:1px solid var(--line); border-radius:8px;
+#dlg-lot .grid, #dlg-brush .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px 14px; }
+#dlg-lot .f, #dlg-brush .f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+#dlg-lot .f > .lb, #dlg-brush .f > .lb { font-size:10.5px; font-weight:700; color:var(--ink-3); display:flex; justify-content:space-between; gap:8px; }
+#dlg-lot .f > .lb em, #dlg-brush .f > .lb em { font-style:normal; color:var(--ink-3); opacity:.75; font-weight:600; }
+#dlg-lot input[type=number], #dlg-brush input[type=number], #dlg-lot select, #dlg-brush select { height:32px; border:1px solid var(--line); border-radius:8px;
   background:var(--s-1); color:var(--ink-1); font:inherit; font-size:12px; padding:0 9px; width:100%;
   font-variant-numeric:tabular-nums; }
-#dlg-lot input[type=number]:focus, #dlg-lot select:focus { outline:2px solid var(--accent-2); outline-offset:-1px; }
-#dlg-lot .segf { display:flex; gap:4px; background:var(--s-3); border-radius:8px; padding:3px; }
-#dlg-lot .segf button { flex:1; height:26px; border:0; border-radius:6px; background:transparent; cursor:pointer;
+#dlg-lot input[type=number]:focus, #dlg-brush input[type=number]:focus, #dlg-lot select:focus, #dlg-brush select:focus { outline:2px solid var(--accent-2); outline-offset:-1px; }
+#dlg-lot .segf, #dlg-brush .segf { display:flex; gap:4px; background:var(--s-3); border-radius:8px; padding:3px; }
+#dlg-lot .segf button, #dlg-brush .segf button { flex:1; height:26px; border:0; border-radius:6px; background:transparent; cursor:pointer;
   font:inherit; font-size:11px; font-weight:700; color:var(--ink-2); }
-#dlg-lot .segf button[aria-pressed="true"] { background:var(--s-1); color:var(--accent); box-shadow:var(--shadow-1); }
-#dlg-lot .lot-est { border:1px solid var(--line); border-radius:var(--r-m); background:var(--s-2); padding:11px 13px;
+#dlg-lot .segf button[aria-pressed="true"], #dlg-brush .segf button[aria-pressed="true"] { background:var(--s-1); color:var(--accent); box-shadow:var(--shadow-1); }
+#dlg-lot .lot-est, #dlg-brush .lot-est { border:1px solid var(--line); border-radius:var(--r-m); background:var(--s-2); padding:11px 13px;
   font-size:11px; line-height:1.85; color:var(--ink-2); }
-#dlg-lot .lot-est b { color:var(--ink-1); font-variant-numeric:tabular-nums; }
-#dlg-lot .lot-est .warn { color:var(--crit); font-weight:700; }
-#dlg-lot .lot-est .note { color:#8a5b00; }
-#dlg-lot footer { flex:none; display:flex; justify-content:flex-end; gap:9px; padding:13px 18px;
+#dlg-lot .lot-est b, #dlg-brush .lot-est b { color:var(--ink-1); font-variant-numeric:tabular-nums; }
+#dlg-lot .lot-est .warn, #dlg-brush .lot-est .warn { color:var(--crit); font-weight:700; }
+#dlg-lot .lot-est .note, #dlg-brush .lot-est .note { color:#8a5b00; }
+#dlg-lot footer, #dlg-brush footer { flex:none; display:flex; justify-content:flex-end; gap:9px; padding:13px 18px;
   border-top:1px solid var(--line); background:var(--s-2); }
-#dlg-lot footer .btn { width:auto; padding:0 18px; height:34px; }
+#dlg-lot footer .btn, #dlg-brush footer .btn { width:auto; padding:0 18px; height:34px; }
+/* ブラシ条件だけの追加。表は «パス × 条件» の 4 列で、行の高さを揃えて読みやすくする */
+#dlg-brush { width:min(680px,94vw); }
+#dlg-brush .brush-note { margin:0 0 9px; font-size:10.5px; color:var(--ink-3); line-height:1.7; }
+#dlg-brush .brush-note b { color:var(--ink-2); }
+#dlg-brush table.brush-tb { width:100%; border-collapse:collapse; font-size:11.5px; }
+#dlg-brush table.brush-tb th { text-align:left; font-size:10px; font-weight:800; color:var(--ink-3);
+  padding:0 8px 7px; letter-spacing:.05em; white-space:nowrap; }
+#dlg-brush table.brush-tb td { padding:4px 8px; border-top:1px solid var(--line); vertical-align:middle; }
+#dlg-brush table.brush-tb td.pn { font-weight:800; color:var(--ink-1); font-variant-numeric:tabular-nums; width:66px; }
+#dlg-brush table.brush-tb td.pn small { display:block; font-weight:600; color:var(--ink-3); font-size:9.5px; }
+#dlg-brush table.brush-tb select { height:30px; }
+#dlg-brush table.brush-tb tr.off td { opacity:.55; }
 .pnl .planrow.hint { font-size:10.5px; color:var(--ink-3); gap:6px; }
 .pnl .mini.pri { background:var(--accent); color:#fff; border-color:var(--accent); }
 .pnl .mini.pri:hover { background:#174d90; color:#fff; }
@@ -915,6 +927,14 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <input type="range" id="rng-dd-br" min="-8" max="8" value="0" step="0.2">
           <div class="derived" id="der-diadiff"></div>
         </div>
+        <!-- ロールコーティングとブラシ。コーティングは «あると噛み込みが良く、厚すぎると板へ移着» -->
+        <div class="fld">
+          <div class="top"><span class="k">ロールコーティング</span><span class="v" id="lbl-coat">–<em>µm</em></span></div>
+          <div class="derived" id="der-coat"></div>
+          <button class="mini" id="btn-brush" type="button" style="margin-top:6px;"
+                  title="F-5〜F の各パスに掛けるブラシの種類・長さ・ノッチを材質ごとに決めます">
+            <i class="fa-solid fa-brush"></i> ブラシ条件を決める</button>
+        </div>
         <table class="sched"><tbody id="spec-body"></tbody></table>
         <div class="top" style="margin-top:12px;"><span class="k">ロール現品（組管理）</span><span class="v" id="lbl-shop"></span></div>
         <table class="sched"><thead><tr><th>種別</th><th>組</th><th>径 mm</th><th>粗度 µmRa</th><th>研削</th><th>寿命</th></tr></thead><tbody id="shop-body"></tbody></table>
@@ -1167,6 +1187,35 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   </form>
 </dialog>
 
+<dialog id="dlg-brush" aria-labelledby="dlg-brush-ttl">
+  <form method="dialog" id="brush-form">
+    <header>
+      <h2 id="dlg-brush-ttl"><i class="fa-solid fa-brush"></i> ブラシ条件（ロールコーティング）</h2>
+      <button class="x" value="cancel" type="submit" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+    <div class="lot-body">
+      <section class="lot-grp">
+        <h3><span class="n">1</span> 材質</h3>
+        <div class="grid"><div class="f"><span class="lb">この条件を使う材質</span><select id="brush-alloy"></select></div></div>
+      </section>
+      <section class="lot-grp">
+        <h3><span class="n">2</span> パスごとの条件</h3>
+        <p class="brush-note">F が最終パス。F-2 は 2 つ手前。<b>掛ける長さ</b>は板の長手方向で何割に当てるか（頭から数える）。</p>
+        <table class="brush-tb" id="brush-tb">
+          <thead><tr><th>パス</th><th>ブラシ</th><th>掛ける長さ</th><th>ノッチ（強さ）</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+      <section class="lot-est" id="brush-est"></section>
+    </div>
+    <footer>
+      <button class="btn btn-ghost" id="brush-reset" value="cancel" type="button">既定に戻す</button>
+      <button class="btn btn-ghost" value="cancel" type="submit">キャンセル</button>
+      <button class="btn btn-primary" id="brush-ok" value="ok" type="submit">登録する</button>
+    </footer>
+  </form>
+</dialog>
+
 <dialog id="dlg-ver">
   <header>
     <div>
@@ -1217,7 +1266,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
-    { v: '1.22.0', base: 'a0531ac', date: '2026-09-10', title: '図面どおりのローラを保つ・冷却モデルを上下面に分ける・沸騰曲線を液の状態で動かす・主駆動系に軸受摩擦とロール慣性', items: [
+    { v: '1.22.0', base: 'a0531ac', date: '2026-09-10', title: '図面どおりのローラを保つ・冷却モデルを上下面に分ける・沸騰曲線を液の状態で動かす・主駆動系に軸受摩擦とロール慣性・ロールコーティングとブラシ', items: [
       // --- テーブルローラ ---
       { t: 'X 線板厚計のために抜いていたローラ 3 本を戻し、図面どおりの本数とピッチにした。計器は «ローラとローラのあいだ» へ納める —— 計器の X は隣り合うローラの中点、下腕は軸受台のすきま（ピッチ 370 で 176 mm）を通す薄い断面、検出器はローラ最下点（618）より下', w: 'CONFIG.XRAY / Parts.xrayFrame' },
       { t: '腕はヘッドと同じ高さには置けない（同じ場所を取り合う）。上腕は線源の上、下腕は検出器の下に付ける', w: 'Parts.xrayFrame' },
@@ -1258,7 +1307,17 @@ const VERSION = {
       { t: '慣性が所要時間を延ばすかを測った結果は «延ばさない» —— ロールは板が来る前に定速へ達しているので、加速は死に時間と重なる。加速が主機の能力で頭打ちになるのは慣性が 731 t·m² を超えてからで、現在の 219 t·m² には 3 倍以上の余裕がある。実機の GD² が手に入れば置き換える（残件）', w: 'tools/drivetrace.mjs' },
       { t: '計器の «主機動力» が圧延ぶんだけを読んでいた（名前と中身の食い違い）。主機が出している動力に直し、軸受と慣性の割合を副表示に添えた。過負荷警告と記録も同じ値で見る', w: '#m-power / RollingLog.SCOLS' },
       { t: '主駆動系はトルクが決まったあとに回す。_actuators の中で回していたため、1 ステップ古い圧延トルクで加速を決めていた（噛み込みの瞬間に 428 kN·m ずれる）', w: 'PhysicsEngine.step' },
+      // --- ロールコーティングとブラシロール ---
+      { t: 'アルミ圧延に固有の «ロールコーティング» を実装した。ロールと材料の摩擦で高温高圧下に凝着する «アルミ ＋ その酸化物 ＋ 圧延油» の層で、あると摩擦が上がって噛み込みが良くなり、厚すぎ／不均一だと板へ移着して表面欠陥、薄すぎるとスリップ・噛み込み失敗になる（古河スカイ技術解説）', w: 'CONFIG.BRUSH / PhysicsEngine._coating' },
+      { t: '生成は «圧延した長さ» に比例し、面圧と温度で増える。板が長くなる仕上げ側のパスほど積もる —— ブラシを仕上げ側に掛ける実機の運用と噛み合う', w: 'BRUSH.K_GEN' },
+      { t: 'ワークロールのブラシロールを 3 種実装した。HN（13S-80-K・SiC・チャンネル・密度小）／ SN（10S-80-K・Al₂O₃・同）／ MN（6R-240-3H・SiC・ディスク・密度大）。番手が粗く太いほど削り、細かく密なディスク型ほど «均す»', w: 'BRUSH.SPEC' },
+      { t: 'ブラシ条件は «最終パスから数えて» 決める（F が最終、F-2 は 2 つ手前）。既定は 5000 系の実機条件 —— F-5〜F-3 は SN を全長、F-2 は SN を全長の半分。材質ごとに上書きできる', w: 'BRUSH.DEFAULT / BY_ALLOY' },
+      { t: 'ノッチは 6 段・10〜60 Hz の 10 Hz 刻みだが、5 ノッチだけ 15 Hz という実機のイレギュラー設定をそのまま表で持つ', w: 'BRUSH.NOTCH_HZ' },
+      { t: 'ブラシ条件の登録モーダルを作った。材質を選び、F-5〜F の 6 行でブラシの種類・掛ける長さ・ノッチを決める。下に «除去の強さ»（既定を 100 %）と、弱すぎ／強すぎの注意を出す', w: '#dlg-brush / UIManager.openBrushDialog' },
+      { t: '3D にブラシロールを上下 1 本ずつ足した。掛けるパスではワークロールに押し付け、掛けないパスでは半径方向へ 140 mm 引く。当たりはバックアップロールと板を避けた入側寄りの斜め上', w: 'Parts.brushRoll / MillStandView' },
+      { t: '実測: コーティングは 1 ロットで 6.0 → 6.9 µm まで積もり、ブラシで 4.2 µm まで落ち、掛けない最終 2 パスで 6.6 µm へ戻る。摩擦係数の振れは ±2.6 % で、荷重の較正（14/14）は崩れない', w: 'tools/brushtrace.mjs' },
       // --- 作業中に見つけて直したこと ---
+      { t: 'ユニバーサルジョイントに 300×300 mm の板が、コイル押えシリンダーに丸棒が 2 本、それぞれ意味のない部材として付いていた（異物に見えていた）。除去した', w: 'DriveView.spindles / Parts.holdDownRam' },
       { t: 'X 線板厚計に厚板が突き刺さっていた（板厚 530 mm で線源へ 207 mm 食い込み）。板はパスラインの «上» に載るので、内のり 640 の上半分 320 mm を超える板はそのまま通せない。粗パスでは線源側を上腕ごと «板厚 ＋ 60 mm» まで持ち上げて逃がす（サイドトリマーの上刃と同じ考え方）。逃がしている間は測れないので読みも出さない', w: 'XRAY.PARK_CLR / Layout.xrayLift / MillState.xrayLift' },
       { t: '尻抜けの一瞬のロールギャップ（8 → 4.1 mm、60 ms）でコイル全体を数え直していた。外径が Φ1,606 → 1,325 と化ける。巻いた長さで重み付けした平均厚で持つようにした', w: 'FinishController.coilTh' },
       { t: '濡れたローラの液膜を噴射域で薄めず «常に全面» に掛けていた。上がり温度が 42 K 低く出ていた', w: 'PhysicsEngine._thermal' },
@@ -2684,6 +2743,70 @@ const CONFIG = {
     SCAN_Z: 1050, SCAN_V: 15,              // 走査型: 走査範囲 ±Z [mm] と走査速度 [m/min]
   },
 
+  /* ---------------------------------------------------------------------------
+   * ロールコーティングとブラシロール
+   *
+   * アルミの熱間圧延では、ロールと材料の摩擦で «アルミ ＋ その酸化物 ＋ 圧延油» が
+   * 高温高圧下でロール表面に凝着し、層（ロールコーティング）を作る。これはアルミ圧延に
+   * 固有の現象で、次の «両刃» を持つ（古河スカイ技術解説「アルミニウム板圧延技術」）:
+   *
+   *   ある  → 摩擦係数が上がり、材料の引き込み（噛み込み性）が良くなる
+   *   厚すぎ／不均一 → コーティングが板へ移着し、表面欠陥になる
+   *   薄すぎ → 噛み込み失敗・スリップが起きて圧延が不安定になる
+   *
+   * 生成は圧延油の潤滑特性・圧延温度・圧下量・圧延速度で決まるので、«ちょうど良い» に
+   * 保つ手段が要る。それがワークロールに押し付けるブラシロールで、除去能力は
+   * 押し付け（回転数）と砥粒の選定で調整する。
+   * ------------------------------------------------------------------------ */
+  BRUSH: {
+    /* ワークロールに付く 3 種のナイロンブラシ。番手の小さい（太く粗い）ものほど削り、
+     * 細かく植毛密度の高いものほど «均す» 側に働く。
+     *   REM  …… 除去力（SN を 0.65 とした相対値）
+     *   EVEN …… 均一化の力（ムラを均す速さ。ディスク型・高密度ほど強い） */
+    SPEC: {
+      HN: { key: 'HN', label: 'HN（ハードナイロン）', code: '13S-80-K', grit: 'SiC',    type: 'チャンネル', dens: '小', REM: 1.00, EVEN: 0.60 },
+      SN: { key: 'SN', label: 'SN（ソフトナイロン）', code: '10S-80-K', grit: 'Al₂O₃', type: 'チャンネル', dens: '小', REM: 0.65, EVEN: 0.70 },
+      MN: { key: 'MN', label: 'MN（マイルドナイロン）', code: '6R-240-3H', grit: 'SiC',  type: 'ディスク',  dens: '大', REM: 0.30, EVEN: 1.00 },
+    },
+    /* ノッチ（押し付けの段）とインバータ周波数 [Hz]。1〜6 の 6 段で 10 Hz 刻みだが、
+     * 5 ノッチだけ 15 Hz という実機のイレギュラー設定。除去力は周波数に比例させる。 */
+    NOTCH_HZ: [10, 20, 30, 40, 15, 60],
+    HZ_REF: 30,                            // 除去力の基準周波数（3 ノッチ）
+    /* ブラシ条件は «最終パスから数えたパス» で持つ（F が最終、F-2 は 2 つ手前）。
+     * 既定は 5000 系の実機条件 —— F-5〜F-3 は SN を全長、F-2 は SN を全長の半分。
+     * cov は «板の長手方向で何割に掛けるか»。材質別に上書きできる（BY_ALLOY）。 */
+    DEFAULT: [
+      { at: 5, brush: 'SN', cov: 1.0,  notch: 3 },
+      { at: 4, brush: 'SN', cov: 1.0,  notch: 3 },
+      { at: 3, brush: 'SN', cov: 1.0,  notch: 3 },
+      { at: 2, brush: 'SN', cov: 0.5,  notch: 3 },
+      { at: 1, brush: null, cov: 0,    notch: 3 },
+      { at: 0, brush: null, cov: 0,    notch: 3 },
+    ],
+    BY_ALLOY: {},                          // 材質ごとの上書き（UI から入る）
+    /* コーティングの状態量 [µm]。C_NOM は «いまの摩擦係数 0.32 が成り立っている» 標準の厚み。
+     * 生成は圧延した長さに対して積み、面圧と温度で増える。除去はブラシに比例する 1 次遅れ。 */
+    C_NOM: 6.0, C_LO: 2.5, C_HI: 12.0,     // 標準／これ未満でスリップ域／これ超で移着域
+    /* 生成 [µm/(圧延 100 m)]。1 ロット（圧延した長さの合計は 700 m 前後）でブラシを掛けなければ
+     * 標準の 2 倍ほどまで積もる大きさに置いてある。積もるのは «圧延した長さ» に比例するので、
+     * 板が長くなる仕上げ側のパスほど効く —— ブラシを仕上げ側に掛ける実機の運用と噛み合う。 */
+    K_GEN: 0.90,
+    PM_REF: 120, T_REF: 450, T_K: 0.004,   // 生成の基準面圧 [MPa]・基準温度 [℃]・温度係数 [1/K]
+    /* 除去 [1/s]（SN・3 ノッチのとき）。既定のブラシ条件で掛かる長さ（F-5〜F-3 の全長 ＋
+     * F-2 の半分 ＝ 160 m 前後）で、積もったぶんをちょうど落とす大きさ。 */
+    K_REM: 0.014,
+    SD_GEN: 0.10, SD_REM: 0.35, SD_WARN: 0.6,  // ムラの生成（生成量に比例）・均一化 [1/s]・移着を疑う目安 [µm]
+    /* 摩擦係数への効き。標準の厚みからの «ずれの割合» に比例させ、上下に頭打ちを置く。
+     * 厚いほど摩擦が上がる（噛み込みが良くなる）— 古河スカイの解説どおりの向き。
+     * 係数の大きさは実測が無いので目安（README 残件）。 */
+    MU_K: 0.10, MU_MIN: 0.88, MU_MAX: 1.15,
+    /* ブラシロールの現物。ワークロールの胴長いっぱいを掃くので面長は同じ。当たりの極角は
+     * ワークロール軸から見て «バックアップロール（真上）と板（真下）を避けた入側寄りの斜め上»。
+     * 離すときは半径方向へ LIFT だけ引く（実機も掛けないパスでは離す）。
+     * 減速比は «インバータ周波数 → ブラシの回転数» の比（4 極誘導機・直結の目安）。 */
+    ROLL_D: 400, BARREL: 2500, ANGLE: 145, LIFT: 140, RPM_PER_HZ: 30,
+  },
+
   TRIMMER: {
     X: 5875, KNIFE_D: 510, KNIFE_D_MIN: 498, KNIFE_T: 40, KNIFE_T_MIN: 30,
     TRIM_MIN: 10, TRIM_MAX: 30, TRIM_DEFAULT: 15,
@@ -3084,6 +3207,7 @@ const CONFIG = {
     SLAB:        0xc9ccd1,   // 熱間アルミ (この温度域では発光しない)
     ROLL_FACE:   0xdfe3e6,
     ROLL_NECK:   0x9aa7b0,
+    BRUSH_HAIR:  0x4c4038,                 // 砥粒入りナイロンの毛（黒褐色）
     CHOCK:       0x6f7f89,
     HOUSING:     0x5b6a73,
     BASE:        0x4c5a63,
@@ -3903,6 +4027,31 @@ const Rolling = {
    * 既存の較正（μ = 0.25）を基準として保ったまま状態依存だけを足せる。
    * μ は摩擦丘 Qp に指数で効くので、接触弧が板厚より長い薄板パスで特に大きく効く。
    */
+  /** その材質のブラシ条件（最終パスから数えた 6 行。F が最終、F-5 が 5 つ手前） */
+  brushPlan(alloyKey = CONFIG.MATERIAL.ALLOY) {
+    const B = CONFIG.BRUSH;
+    return B.BY_ALLOY[alloyKey] || B.DEFAULT;
+  },
+  /** そのパスに掛かるブラシ条件。範囲外（F-6 より前）は «掛けない» ＝ null。 */
+  brushAt(passIndex, nPass, alloyKey = CONFIG.MATERIAL.ALLOY) {
+    const back = nPass - 1 - passIndex;                     // 最終パスから数えて何本手前か
+    const row = Rolling.brushPlan(alloyKey).find(r => r.at === back);
+    return row && row.brush ? row : null;
+  },
+  /** ノッチ（1〜6）のインバータ周波数 [Hz]。5 ノッチだけ 15 Hz という実機の設定。 */
+  brushHz(notch) {
+    const T = CONFIG.BRUSH.NOTCH_HZ;
+    return T[Num.clamp(Math.round(notch), 1, T.length) - 1];
+  },
+  /**
+   * ロールコーティングの厚みが摩擦係数に掛ける倍率。標準の厚み C_NOM で 1.0 になり、
+   * 厚いほど大きい（噛み込みが良くなる）。上下に頭打ちを置く。
+   */
+  coatMu(coat) {
+    const B = CONFIG.BRUSH;
+    return Num.clamp(1 + B.MU_K * (coat - B.C_NOM) / B.C_NOM, B.MU_MIN, B.MU_MAX);
+  },
+
   friction(T, speedMpm, ra = null) {
     const P = CONFIG.PROCESS, M = CONFIG.MILL, v = Math.max(Math.abs(speedMpm), 1);
     /* ロール表面の粗さも摩擦に効く。研削したてのワークロールは荒く（噛み込みが良く）、
@@ -5619,6 +5768,10 @@ class MillState {
     this._gRaw = { ENTRY: null, EXIT: null, SCAN: null };
     this.scanZ = 0; this.scanDir = 1;
     this.xrayLift = 0;                        // 線源側の «測定位置からの持ち上げ» [mm]（厚板を通すときの退避）
+    /* ロールコーティング（ワークロールに凝着したアルミ＋酸化物＋圧延油の層）。
+     * coat は厚み [µm]、coatSd はそのムラ。brush* はいまブラシが当たっているかと、その条件。 */
+    this.coat = CONFIG.BRUSH.C_NOM; this.coatSd = 0;
+    this.brushKey = null; this.brushHz = 0; this.brushOn = false; this.passLen = 0; this.brushAngle = 0;
     this.rollTemp = CONFIG.MILL.ROLL_T0;       // ワークロール表面温度 [℃]（板から温まる）
     this.brTemp = CONFIG.MILL.ROLL_T0;         // バックアップロール温度 [℃]（WR から熱をもらう）
     this.bendingForce = 0;                     // 3D 表現用（0〜1）
@@ -5866,6 +6019,7 @@ class MillController {
     }
     m._fSum = 0; m._fN = 0;
     m.trim = 0; m.gaugeH = null; m._gq.length = 0;   // 目標が変わるので板厚制御は積分をやめて出直す
+    m.passLen = 0;                                   // ブラシを «全長の何割に掛けたか» を数え直す
     m.passIndex++;
     if (m.passIndex >= CONFIG.SCHEDULE.length) {
       m.passIndex = -1; m.passPhase = 'IDLE';
@@ -6141,6 +6295,7 @@ class RollingLog {
     this.series.push({ t: +this.lot.t.toFixed(2), pass: i + 1,
                        f: +(m.forceMeas || 0).toFixed(0), v: +Math.abs(m.currentSpeed).toFixed(1),
                        p: +((m.drivePowerKW || 0) / 1000).toFixed(2), h: +s.thickness.toFixed(3),
+                       co: +m.coat.toFixed(2), cs: +m.coatSd.toFixed(3),  // ロールコーティングの厚みとムラ
                        tq: +((m.driveTorque || 0) / 1000).toFixed(1),      // 主機トルク kN·m
                        tb: +((m.bearingTorque || 0) / 1000).toFixed(1),    // うち軸受の摩擦
                        /* 板厚まわりは 1 µm 刻みで残す。熱間の実力は ±50 µm なので、
@@ -6260,6 +6415,8 @@ RollingLog.SCOLS = [
   { key: 'p',  name: '主機動力', unit: 'MW' },
   { key: 'tq', name: '主機トルク', unit: 'kN·m' },
   { key: 'tb', name: '軸受摩擦トルク', unit: 'kN·m' },
+  { key: 'co', name: 'ロールコーティング', unit: 'µm' },
+  { key: 'cs', name: 'コーティングのムラ', unit: 'µm' },
   { key: 'T',  name: '温度', unit: '℃' },
   { key: 'x',  name: '位置', unit: 'mm' },
 ];
@@ -7302,6 +7459,7 @@ class PhysicsEngine {
     this.mill.currentSpeed = this.mill.targetSpeed = 0;
     this.mill.powerCap = Drive.maxSpeed(this.mill.wrDia);
     this.mill.passIndex = -1; this.mill.passPhase = 'IDLE';
+    this.mill.coat = CONFIG.BRUSH.C_NOM; this.mill.coatSd = 0; this.mill.passLen = 0;
     this.mill.guideGap = spec.width + CONFIG.TABLE.GUIDE.OPEN_MARGIN;
     const keepMode = this.finish.mode, keepTrim = d.trim ?? this.finish.trim;
     this.finish.reset(); this.finish.mode = keepMode; this.finish.trim = keepTrim;
@@ -7347,6 +7505,7 @@ class PhysicsEngine {
     /* 主駆動系は «その時刻のトルク» を受けて速度を積分するので、圧延トルクが決まったあとに
      * 回す（_actuators の中で回すと 1 ステップ古い圧延トルクで加速を決めることになる）。 */
     this._drive(dt);
+    this._coating(dt);
     this._rollCool(dt);
     this._rollKinematics(dt);
     this._diagnose();
@@ -7621,7 +7780,9 @@ class PhysicsEngine {
       // 変形抵抗は層温度から（冷えた表層が硬い）。上下面の差が反りを生む
       // 頭の潤滑膜（未形成→形成）。頭から圧延した長さ（出側）で膜の育ちを見る
       const MH = CONFIG.PROCESS.MU_HEAD, dHeadMm = Math.max(s.dir > 0 ? s.xMax : -s.xMin, 0);
-      const muScale = 1 + MH.K * Math.exp(-dHeadMm / MH.LEN);
+      /* 頭の潤滑膜と «ロールコーティング» の両方が摩擦に掛かる。コーティングは厚いほど
+       * 摩擦が上がり、噛み込みが良くなる（薄すぎるとスリップする）。 */
+      const muScale = (1 + MH.K * Math.exp(-dHeadMm / MH.LEN)) * Rolling.coatMu(m.coat);
       const res = Rolling.solve(hLoc, gap, s.width, m.currentSpeed, Tl, tension, s.alloy, m.wrRa, muScale);
       // 弧が埋まっている割合だけ荷重・トルク・動力が立つ（投影接触長に比例）
       const fill = s.biteFill;
@@ -8197,6 +8358,45 @@ class PhysicsEngine {
     return Math.min(cover / Math.max(s.length, 1), 1);
   }
 
+  /**
+   * ロールコーティングとブラシロール。
+   *
+   * 生成 —— 圧延しているあいだ、ロールと材料の摩擦でアルミが凝着して積もる。積もる速さは
+   *   «圧延した長さ» に比例し、面圧が高いほど・温度が高いほど増える（古河スカイ技術解説）。
+   * 除去 —— ブラシロールが当たっているあいだ、いまある厚みに比例して落ちる（1 次遅れ）。
+   *   効きはブラシの砥粒（REM）× 回転数（ノッチの周波数）で決まる。
+   * ムラ —— 生成はムラを増やし、ブラシはムラを均す。均一化の力（EVEN）は砥粒が細かく
+   *   植毛密度の高いディスク型（MN）ほど強い。
+   *
+   * «掛ける長さ»（cov）は板の長手方向で何割に掛けるか。パスの頭から数えて cov を超えたら
+   * ブラシを離す —— 実機の «F-2 は全長の半分» という掛け方がそのまま形になる。
+   */
+  _coating(dt) {
+    const m = this.mill, s = this.slab, B = CONFIG.BRUSH;
+    const row = m.passIndex >= 0 ? Rolling.brushAt(m.passIndex, CONFIG.SCHEDULE.length, s.alloyKey) : null;
+    if (s.inBite) {
+      const dL = Math.abs(s.currentSpeed) / 60 * 1000 * dt;          // このステップで圧延した長さ [mm]
+      m.passLen += dL;
+      // 生成: 圧延 100 m あたり K_GEN [µm]。面圧と温度で増える
+      const pm = s.flowStress > 0 ? 1.155 * s.flowStress : B.PM_REF;
+      const kT = Math.exp(B.T_K * (s.temperature - B.T_REF));
+      const gen = B.K_GEN * (dL / 1e5) * (pm / B.PM_REF) * kT;
+      m.coat += gen;
+      m.coatSd += B.SD_GEN * gen;
+    }
+    // ブラシ: そのパスの «全長の cov» までのあいだ当てる
+    const within = row ? m.passLen <= Math.max(row.cov, 0) * Math.max(s.length, 1) : false;
+    m.brushOn = !!(row && within && s.inBite);
+    m.brushKey = m.brushOn ? row.brush : null;
+    m.brushHz  = m.brushOn ? Rolling.brushHz(row.notch) : 0;
+    if (m.brushOn) {
+      const sp = B.SPEC[row.brush];
+      const k = sp.REM * (m.brushHz / B.HZ_REF);
+      m.coat   = Math.max(0, m.coat - B.K_REM * k * m.coat * dt);
+      m.coatSd = Math.max(0, m.coatSd - B.SD_REM * sp.EVEN * (m.brushHz / B.HZ_REF) * m.coatSd * dt);
+    }
+  }
+
   _rollKinematics(dt) {
     // ロール角度は「材料表面速度」から積分する。描画側は角度を読むだけにして
     // 回転が表示フレームレートに依存しないようにする。
@@ -8210,6 +8410,8 @@ class PhysicsEngine {
     // テーブルは圧延中は板速度で、仕上げ（巻取・切り分け・払い出し）中は搬送速度で回る
     const tbl = m.passIndex < 0 && s.onLine ? (this.finish.tableSpeed || 0) : mat;
     m.tableAngle += (tbl / (CONFIG.TABLE.ROLL_D_END / 2)) * dt;
+    // ブラシはインバータ周波数で回る（当てていなければ止まる）
+    m.brushAngle += (m.brushHz * CONFIG.BRUSH.RPM_PER_HZ / 60) * 2 * Math.PI * dt;
   }
 
   /**
@@ -8238,7 +8440,7 @@ class PhysicsEngine {
   }
 
   _diagnose() {
-    const s = this.slab, m = this.mill, C = CONFIG.MILL;
+    const s = this.slab, m = this.mill, C = CONFIG.MILL, B2 = CONFIG.BRUSH;
     let w = null;
     if (!this.tripped && s.rollForceAvg > C.LIMIT_FORCE_T && m.passIndex >= 0) {
       this._trip(`過負荷停止: 圧延荷重 ${s.rollForceAvg.toFixed(0)} t が非常最大 ${C.LIMIT_FORCE_T.toLocaleString()} t を超えました（材質・板厚・炉出し温度を見直してください）`);
@@ -8249,6 +8451,14 @@ class PhysicsEngine {
     else if (s.onLine && this.stillRolling && !this.finish.winding && s.temperature < this.tempFloor)
                                                   w = { kind: 'warn', text: `材料温度が圧延下限 ${this.tempFloor} ℃ を下回りました` };
     else if (s.inBite && s.biteOk === false) w = { kind: 'warn', text: '噛み込み角が限界を超えています（圧下量過大）' };
+    /* ロールコーティングの «両刃»。薄すぎるとスリップ・噛み込み失敗、厚すぎ／ムラだと
+     * 板へ移着して表面欠陥になる（古河スカイ技術解説）。どちらもブラシ条件で作り込む。 */
+    else if (m.passIndex >= 0 && m.coat < B2.C_LO)
+      w = { kind: 'warn', text: `ロールコーティングが薄すぎます（${m.coat.toFixed(1)} µm）—— 噛み込み失敗・スリップのおそれ` };
+    else if (m.passIndex >= 0 && m.coat > B2.C_HI)
+      w = { kind: 'warn', text: `ロールコーティングが厚すぎます（${m.coat.toFixed(1)} µm）—— 板への移着による表面欠陥のおそれ` };
+    else if (m.passIndex >= 0 && m.coatSd > B2.SD_WARN)
+      w = { kind: 'warn', text: `ロールコーティングのムラが大きいです（${m.coatSd.toFixed(2)} µm）—— 板への移着による表面欠陥のおそれ` };
     if ((w && w.text) !== (this.warn && this.warn.text)) { this.warn = w; this.bus.emit('STATE_WARN', w); }
   }
 }
@@ -8296,6 +8506,7 @@ function initMaterials(envMap) {
   Object.assign(MAT, {
     rollFace:  shiny(C.ROLL_FACE, 0.88, 0.22),
     rollNeck:  shiny(C.ROLL_NECK, 0.72, 0.42),
+    brushHair: matte(C.BRUSH_HAIR, 0.05, 0.95),
     chock:     matte(C.CHOCK,     0.45, 0.60),
     housing:   matte(C.HOUSING,   0.25, 0.68),
     base:      matte(C.BASE,      0.20, 0.82),
@@ -8635,6 +8846,18 @@ const Parts = {
       G.at(G.cyl(d * 1.29, 0.16 / CONFIG.SCALE, 'z', 14), 0, 0, -0.42 / CONFIG.SCALE),
     ]);
     return g;
+  },
+
+  /** ブラシロール 1 本。芯金の外に «毛» の筒を履かせ、両端に軸受首を出す。 */
+  brushRoll() {
+    const B = CONFIG.BRUSH, D = B.ROLL_D, L = B.BARREL;
+    return {
+      core: G.merge([
+        G.cyl(D * 0.45, L + 260, 'z', 14),                                  // 芯金（毛の中を通る）
+        ...[-1, 1].map(sz => G.at(G.cyl(D * 0.30, 260, 'z', 10), 0, 0, sz * (L / 2 + 240))),  // 軸受首
+      ]),
+      hair: G.cyl(D, L, 'z', 20),                                           // 毛の筒
+    };
   },
 
   /* --- ピニオンスタンド・減速機・主電動機（駆動側の静的設備） --------------- */
@@ -9367,8 +9590,9 @@ const Parts = {
       // 胴の途中に耳を出して抱かせるより、架構と部材が取り合わない。
       G.at(G.cyl(H.CYL_D + 120, 220, 'x', 16), L + 110, 0, 0),
       G.at(G.box(240, H.MOUNT + 300, H.CYL_D + 420), L + 300, 0, 0),
-      // 給排の配管（前後 2 ポート）。胴から «上» へ抜く
-      ...[L * 0.18, L * 0.82].map(dx => G.at(G.cyl(70, H.CYL_D + 220, 'y', 8), dx, (H.CYL_D + 220) / 2 - 40, 0)),
+      /* 給排のポート。以前は胴から «上» へ長さ CYL_D + 220 mm の丸棒を 2 本立てていたが、
+       * 配管には見えず異物が生えているように見えていた。座（ボス）だけにする。 */
+      ...[L * 0.18, L * 0.82].map(dx => G.at(G.cyl(150, 90, 'y', 10), dx, H.CYL_D / 2 + 20, 0)),
     ]);
   },
   /** 押えロッド。単位長さ 1000 mm（+X 方向）で作り、View が scale.x で伸ばす。 */
@@ -10551,6 +10775,23 @@ class MillStandView {
       backupBot: mk(M.BR_D, M.BR_BARREL, M.BR_NECK_D, false, 'バックアップロール'),
     };
 
+    /* --- ブラシロール（上下のワークロールに 1 本ずつ）------------------------
+     * アルミの熱間圧延に固有の «ロールコーティング» を除去・均一化する装置。掛けるパスでは
+     * ワークロールに押し付け、掛けないパスでは半径方向へ引く。当たりは バックアップロール
+     * （真上）と板（真下）を避けた入側寄りの斜め上。 */
+    {
+      const bg = Parts.brushRoll();
+      this.brushes = [1, -1].map(sy => {
+        const g = new THREE.Group(); g.name = sy > 0 ? '上ブラシロール' : '下ブラシロール';
+        const core = new THREE.Mesh(bg.core.clone(), MAT.rollNeck);
+        const hair = new THREE.Mesh(bg.hair.clone(), MAT.brushHair);
+        hair.name = g.name; core.castShadow = hair.castShadow = true;
+        g.add(core, hair); this.group.add(g);
+        return { g, hair, sy };
+      });
+      bg.core.dispose(); bg.hair.dispose();
+    }
+
     // --- チョック / 圧下シリンダは「手前側」「奥側」に分けて保持する ---------
     //  半断面表示では手前側だけを透過させ、窓の中のロール系を見せられるようにする。
     const io = { cast: true, dynamic: true, cull: false };
@@ -10602,6 +10843,18 @@ class MillStandView {
     this.rolls.backupTop.position.y = u(bt); this.rolls.backupTop.rotation.z = -mill.rollAngle * (mill.wrDiaTop / mill.brDiaTop);
     this.rolls.backupBot.position.y = u(bb); this.rolls.backupBot.rotation.z =  mill.rollAngle * (mill.wrDiaBot / mill.brDiaBot);
 
+    /* ブラシロール: 掛けているときはワークロールに接し、掛けていないときは半径方向へ引く。
+     * 回転はインバータ周波数から（掛けていなければ止まる）。 */
+    {
+      const B = CONFIG.BRUSH, a = B.ANGLE * Math.PI / 180, rB = B.ROLL_D / 2;
+      for (const b of this.brushes) {
+        const wr = (b.sy > 0 ? mill.wrDiaTop : mill.wrDiaBot) / 2;
+        const gap = mill.brushOn ? 0 : B.LIFT;
+        const r = wr + rB + gap, cy = b.sy > 0 ? wt : wb;
+        b.g.position.set(u(Math.cos(a) * r), u(cy + b.sy * Math.sin(a) * r), 0);
+        b.g.rotation.z = -b.sy * mill.brushAngle;
+      }
+    }
     for (const [k, sz] of [['near', 1], ['far', -1]]) {
       this.chockWR[k].set(0, 0, wt, sz * zC).set(1, 0, wb, sz * zC).commit();
       this.chockBR[k].set(0, 0, bt, sz * zC).set(1, 0, bb, sz * zC).commit();
@@ -10654,7 +10907,10 @@ class DriveView {
 
     const sg = Parts.spindle();
     this.spindles = [0, 1].map(() => {
-      const m = new THREE.Mesh(G.merge([sg.clone(), G.at(G.box(u(0) + 300, 300, 0.30 / CONFIG.SCALE), 420, 0, 0)]), MAT.spindle);
+      // 自在継手はスピンドル本体だけ。以前ここに 300×300 mm の板を軸から 420 mm 外して
+      // 付けていたが、意味のある部材ではなく（u(0)+300 と単位系も混ざっていた）、
+      // 継手に異物が張り付いて見えていた
+      const m = new THREE.Mesh(sg.clone(), MAT.spindle);
       m.castShadow = true; this.group.add(m); return m;
     });
     sg.dispose();
@@ -13673,6 +13929,9 @@ class UIManager {
     on('btn-plan-add', 'click', () => this.planAdd());
     on('btn-plan-new', 'click', () => this.openLotDialog());
     on('lot-form', 'submit', (e) => { if (e.submitter?.value === 'ok') this._lotCommit(); });
+    on('brush-form', 'submit', (e) => { if (e.submitter?.value === 'ok') this._brushCommit(); });
+    on('brush-reset', 'click', () => { this._brushWrite(CONFIG.BRUSH.DEFAULT); this._brushPreview(); });
+    on('btn-brush', 'click', () => this.openBrushDialog());
     on('btn-plan-clear', 'click', () => this.planClear());
     on('btn-plan-save', 'click', () => this.planSave());
     on('btn-plan-export', 'click', () => this.planExport());
@@ -14008,6 +14267,76 @@ class UIManager {
     $('lot-ok').disabled = false;      // 成立しない条件も «登録は» できる（試せることが大事）
     return d;
   }
+  /* --- ブラシ条件（ロールコーティングの作り込み）--------------------------
+   * 実機は «最終パスから数えて» ブラシを掛ける（F が最終、F-2 は 2 つ手前）ので、
+   * 表もその並びで持つ。1 行 ＝ 1 パスで、ブラシの種類・掛ける長さ・ノッチを決める。
+   * 材質ごとに違う条件を持てるよう、上の材質を選んでから中身を書き替える。 */
+  _buildBrushForm() {
+    if (this._brushEls) return;
+    const B = CONFIG.BRUSH;
+    $('brush-alloy').innerHTML = Object.entries(CONFIG.ALLOYS).map(([v, a]) => `<option value="${v}">${a.name}</option>`).join('');
+    $('brush-alloy').oninput = () => this._brushWrite(Rolling.brushPlan($('brush-alloy').value));
+    const tb = $('brush-tb').tBodies[0];
+    this._brushEls = B.DEFAULT.map(row => {
+      const tr = document.createElement('tr');
+      const label = row.at === 0 ? 'F' : `F-${row.at}`;
+      const sub = row.at === 0 ? '最終パス' : `${row.at} つ手前`;
+      tr.innerHTML = `<td class="pn">${label}<small>${sub}</small></td>`;
+      const mk = (html) => { const td = document.createElement('td'); td.innerHTML = html; tr.appendChild(td); return td.firstElementChild; };
+      const br = mk(`<select><option value="">— 掛けない</option>`
+        + Object.values(B.SPEC).map(sp => `<option value="${sp.key}">${sp.label}　${sp.code}</option>`).join('') + `</select>`);
+      const cov = mk(`<select>` + [100, 75, 50, 25].map(v => `<option value="${v / 100}">${v} %（全長の${v === 100 ? 'すべて' : v === 50 ? '半分' : v / 100}）</option>`).join('') + `</select>`);
+      const nt = mk(`<select>` + B.NOTCH_HZ.map((hz, i) => `<option value="${i + 1}">${i + 1} ノッチ（${hz} Hz）</option>`).join('') + `</select>`);
+      const sync = () => { tr.classList.toggle('off', !br.value); cov.disabled = nt.disabled = !br.value; this._brushPreview(); };
+      br.oninput = sync; cov.oninput = () => this._brushPreview(); nt.oninput = () => this._brushPreview();
+      tb.appendChild(tr);
+      return { at: row.at, br, cov, nt, sync };
+    });
+  }
+  _brushWrite(plan) {
+    for (const e of this._brushEls) {
+      const row = plan.find(r => r.at === e.at) || { brush: null, cov: 1, notch: 3 };
+      e.br.value = row.brush || ''; e.cov.value = String(row.cov || 1); e.nt.value = String(row.notch || 3);
+      e.sync();
+    }
+  }
+  _brushRead() {
+    /* 掛けないパスは «掛ける長さ 0»。そう正規化しておかないと、画面に残っている長さの
+     * 選択のせいで «既定と同じ内容» が同じと判定されない。 */
+    return this._brushEls.map(e => ({ at: e.at, brush: e.br.value || null,
+                                      cov: e.br.value ? +e.cov.value : 0, notch: +e.nt.value }));
+  }
+  _brushPreview() {
+    const B = CONFIG.BRUSH, rows = this._brushRead().filter(r => r.brush);
+    const on = rows.map(r => `${r.at === 0 ? 'F' : 'F-' + r.at} ${B.SPEC[r.brush].key} ${r.cov * 100} % / ${Rolling.brushHz(r.notch)} Hz`);
+    // 除去の «力積»（掛ける長さ × 砥粒 × 周波数）で条件の強さを一目で比べられるようにする
+    const power = rows.reduce((a, r) => a + r.cov * B.SPEC[r.brush].REM * Rolling.brushHz(r.notch) / B.HZ_REF, 0);
+    const base = B.DEFAULT.filter(r => r.brush)
+      .reduce((a, r) => a + r.cov * B.SPEC[r.brush].REM * Rolling.brushHz(r.notch) / B.HZ_REF, 0);
+    const rel = base > 0 ? power / base : 0;
+    $('brush-est').innerHTML =
+      `<div>掛けるパス <b>${rows.length}</b> ／ ${on.join(' ・ ') || '掛けない'}</div>` +
+      `<div>除去の強さ <b>${(rel * 100).toFixed(0)} %</b>（既定 ＝ 100 %）` +
+      (rel < 0.5 ? ' <span class="note">△ 弱め: コーティングが厚くなり、板への移着が出やすくなります</span>'
+       : rel > 2 ? ' <span class="note">△ 強め: コーティングが薄くなり、スリップ・噛み込み失敗が出やすくなります</span>' : '') + `</div>`;
+  }
+  openBrushDialog() {
+    this._buildBrushForm();
+    const key = CONFIG.MATERIAL.ALLOY;
+    $('brush-alloy').value = key;
+    this._brushWrite(Rolling.brushPlan(key));
+    this._brushPreview();
+    $('dlg-brush').showModal();
+  }
+  _brushCommit() {
+    const key = $('brush-alloy').value, rows = this._brushRead();
+    // 既定と同じなら上書きを持たない（«材質ごとの違い» が一覧で見て分かるようにする）
+    const same = JSON.stringify(rows) === JSON.stringify(CONFIG.BRUSH.DEFAULT);
+    if (same) delete CONFIG.BRUSH.BY_ALLOY[key];
+    else CONFIG.BRUSH.BY_ALLOY[key] = rows;
+    this.bus.emit('SYS_MESSAGE', { text: `ブラシ条件を登録しました（${CONFIG.ALLOYS[key].name}${same ? '・既定と同じ' : ''}）`, kind: 'info' });
+  }
+
   /** 新規登録（index 省略）／編集（index 指定）。 */
   openLotDialog(index) {
     this._buildLotForm();
@@ -14232,6 +14561,18 @@ class UIManager {
      * その割合を添える —— 加速中は «板を潰していないのに動力が要る» 理由がこれで読める。 */
     const loss = m.drivePowerKW - (s.inBite ? s.rollPower : 0);
     const lossPct = m.drivePowerKW > 1 ? loss / m.drivePowerKW * 100 : 0;
+    /* ロールコーティングの «いま»。厚み・健全域のどこに居るか・当たっているブラシを 1 行で出す。
+     * 薄いとスリップ、厚いと板への移着なので、どちらへ寄っているかが読めることが大事。 */
+    {
+      const B = CONFIG.BRUSH, c = m.coat;
+      const st = c < B.C_LO ? ['薄い（スリップ）', 'var(--crit)'] : c > B.C_HI ? ['厚い（移着）', 'var(--crit)']
+               : c < B.C_NOM * 0.8 ? ['やや薄い', 'var(--warn)'] : c > B.C_NOM * 1.3 ? ['やや厚い', 'var(--warn)'] : ['適正', 'var(--ok)'];
+      $('lbl-coat').innerHTML = `${c.toFixed(1)}<em>µm</em>`;
+      const sp = m.brushKey ? CONFIG.BRUSH.SPEC[m.brushKey] : null;
+      $('der-coat').innerHTML = `<span style="color:${st[1]};font-weight:700">${st[0]}</span>`
+        + `（適正 ${B.C_NOM} µm／ムラ ${m.coatSd.toFixed(2)}）／ 摩擦 ×${Rolling.coatMu(c).toFixed(3)}<br>`
+        + (sp ? `ブラシ <b>${sp.key}</b> 当たり中（${m.brushHz} Hz）` : 'ブラシ 当てていない');
+    }
     this._meter('m-power', m.drivePowerKW / 1000, Drive.ratedPowerKW / 1000, (m.drivePowerKW / 1000).toFixed(1),
       t => `定格の ${(t * 100).toFixed(0)} % ／ ${m.motorRpm.toFixed(0)} rpm`
          + (lossPct >= 1 ? ` ／ 軸受・慣性 ${lossPct.toFixed(0)} %` : ''));
