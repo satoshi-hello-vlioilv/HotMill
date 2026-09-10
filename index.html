@@ -1316,6 +1316,9 @@ const VERSION = {
       { t: 'ブラシ条件の登録モーダルを作った。材質を選び、F-5〜F の 6 行でブラシの種類・掛ける長さ・ノッチを決める。下に «除去の強さ»（既定を 100 %）と、弱すぎ／強すぎの注意を出す', w: '#dlg-brush / UIManager.openBrushDialog' },
       { t: '3D にブラシロールを上下 1 本ずつ足した。掛けるパスではワークロールに押し付け、掛けないパスでは半径方向へ 140 mm 引く。当たりはバックアップロールと板を避けた入側寄りの斜め上', w: 'Parts.brushRoll / MillStandView' },
       { t: '実測: コーティングは 1 ロットで 6.0 → 6.9 µm まで積もり、ブラシで 4.2 µm まで落ち、掛けない最終 2 パスで 6.6 µm へ戻る。摩擦係数の振れは ±2.6 % で、荷重の較正（14/14）は崩れない', w: 'tools/brushtrace.mjs' },
+      // --- サイドガイド ---
+      { t: 'サイドガイドのコロを実機の本数にした（入側 11・出側 5）。コロ本体 380 mm ＋ シャフト 535 mm で、バーの長さは本数から（LEN ＝ N × ピッチ）、高さはシャフト長から決まる（H ＝ 535 ＋ フランジ 2×45）。長さと高さを固定値として持たない', w: 'TABLE.GUIDE.N_IN / N_OUT / Layout.guideLen / guideH' },
+      { t: 'コロ本体は «パスラインから上» へ 380 mm 立てる。バーの中央に置くと薄板の耳に当たらない（従来はコロがバー中央で、下端がパスラインより 28 mm 上にあった）', w: 'Layout.guideY0' },
       // --- ワニ口の食い込み深さ ---
       { t: 'ワニ口が «表層のめくれ» になっていた。板厚方向の開きを |ny|² で置いていたため、板厚の内側半分では開きが 25 % しかなかった。開きは不均一変形係数 Δ ＝ h̄/Ld で決まる —— Δ が大きいほど圧縮の円錐が芯へ届かず、芯の引張域（割れの駆動力）が板厚の中央まで広がるので、割れも深く入る', w: 'Rolling.gatorPow / endOffset' },
       { t: 'べき指数を p ＝ 2/√Δ（0.8〜2 で頭打ち）にした。Δ 1 で p 2（表層のめくれ）、Δ 4 で p 1（板厚いっぱいの真っ直ぐな V）、Δ 8 で p 0.8（あごがほぼ平行に離れる）。既定ロットの厚板段は Δ 7.7 なので、内側半分の開きが 25 → 57 % になる', w: 'Rolling.gatorPow' },
@@ -2142,7 +2145,14 @@ const CONFIG = {
      * 背板・上下フランジ・仕切り壁で «ポケット» を作り、各ポケットに立てコロを 1 個ずつ
      * 収める（コロは仕切りの面より RECESS だけ手前へ出て板の耳に当たる）。
      * 高さ H は最大スラブ厚 536 mm を受けるための寸法で、写真の薄板用バーより高い。 */
-    GUIDE: { X: 3400, LEN: 1900, H: 700, ROLL_D: 130, N: 9, RECESS: 20, OPEN_MARGIN: 600, RATE: 500,
+    /* サイドガイド。実機のコロは «出側 5 個・入側 11 個»（入側は板を長く受けるので多い）。
+     * コロ本体の長さ 380 mm・シャフト 535 mm は実機の値。バーの高さはシャフトの長さから
+     * 決まる（上下のフランジの中で軸受が受ける）: H ＝ SHAFT_L ＋ 2×フランジ厚。
+     * コロ本体は «パスラインから上» へ 380 mm 立つ —— 薄板でも耳に当たる必要があるため。
+     * バーの長さも本数から決まる（LEN ＝ N × PITCH）ので、LEN は固定値として持たない。
+     * ※ ROLL_D（コロ径）・SHAFT_D（シャフト径）・PITCH は実機の値が未入手のため推定値。 */
+    GUIDE: { X: 3400, N_IN: 11, N_OUT: 5, PITCH: 211, ROLL_D: 130, ROLL_L: 380, SHAFT_L: 535, SHAFT_D: 45,
+             FLANGE_T: 45, RECESS: 20, OPEN_MARGIN: 600, RATE: 500,
              BASE_Z: 2300, ARM_L: 1700, ARM_Y: 300,
              /* 板面クーラント。門型（柱 POST_X/POST_Z、梁 BEAM_Y）から、ラインに «平行» な
               * ヘッダを OS / DS に 1 本ずつ（ライン中心から ±Z、パスライン上 Y、Φ D、長さ LEN）
@@ -3533,6 +3543,14 @@ const Layout = {
   _aim: null,
   /** 旧名（狙い点を既定の板幅で解いたもの）。引数を採らない呼び出しのため残す。 */
   nozzleDir() { return Layout.nozzleAim(); },
+  /** サイドガイドのコロ本数（入側 11 / 出側 5）。正準 X の符号で入側・出側を分ける。 */
+  guideN(x) { return x * CONFIG.FLIP < 0 ? CONFIG.TABLE.GUIDE.N_IN : CONFIG.TABLE.GUIDE.N_OUT; },
+  /** そのコロ本数のバーの長さ [mm]。長さは本数から決まる（LEN を別に持たない）。 */
+  guideLen(n) { return n * CONFIG.TABLE.GUIDE.PITCH; },
+  /** バーの高さ [mm]。コロのシャフトを上下のフランジで受けるので、シャフト長から決まる。 */
+  get guideH() { const g = CONFIG.TABLE.GUIDE; return g.SHAFT_L + 2 * g.FLANGE_T; },
+  /** バーの原点（下端）からコロ本体の下端までの高さ [mm]。ここがパスラインに一致する。 */
+  get guideY0() { const g = CONFIG.TABLE.GUIDE; return g.FLANGE_T + (g.SHAFT_L - g.ROLL_L) / 2; },
   /** 区分の世界 X 範囲 [min, max] */
   range(name) {
     const s = CONFIG.TABLE.SECTIONS.find(q => q.name === name);
@@ -7943,7 +7961,8 @@ class PhysicsEngine {
     const s = this.slab, m = this.mill, G = CONFIG.TABLE.GUIDE;
     // 材料が来る側（上流）のガイドだけが板幅までクランプする。出側は開放。
     const gx = -(Num.sign0(s.dir) || CONFIG.FLIP) * G.X;
-    const near = s.xMax > gx - G.LEN / 2 && s.xMin < gx + G.LEN / 2;
+    const half = Layout.guideLen(Layout.guideN(gx)) / 2;      // 入側と出側で長さが違う
+    const near = s.xMax > gx - half && s.xMin < gx + half;
     const target = (near && Math.abs(m.currentSpeed) > 5) ? s.width + 20 : s.width + G.OPEN_MARGIN;
     m.guideGap = Num.rateTo(m.guideGap, target, G.RATE, dt);
     /* サイドガイドは蛇行を «押し戻す» 側の設備でもある。開口の半分から板幅の半分を
@@ -9020,29 +9039,30 @@ const Parts = {
    * バーはテーブルローラの上を跨ぐスライドアーム 2 本で固定架台へ繋がり、アームは
    * 架台の軸受を貫いて開閉シリンダの中へ入る（伸縮部材）。
    */
-  sideGuideBar() {
+  sideGuideBar(n = CONFIG.TABLE.GUIDE.N_IN) {
     /* 写真のバー: 背板の前に上下のフランジと仕切り壁で «ポケット» を作り、各ポケットに
      * 立てコロを 1 個ずつ収める。コロは仕切りの面より RECESS だけ手前へ出て板の耳に当たる。
      * 上面のボルト類は付けない（取付ボルトは架台側）。 */
-    const g = CONFIG.TABLE.GUIDE, pitch = g.LEN / g.N, pocketW = g.ROLL_D + 40;
+    const g = CONFIG.TABLE.GUIDE, pitch = g.PITCH, pocketW = g.ROLL_D + 40;
+    const LEN = Layout.guideLen(n), H = Layout.guideH;       // 長さは本数から、高さはシャフト長から
     const wallT = pitch - pocketW;                          // 仕切り壁の厚み
     const depth = g.ROLL_D + 30;                            // ポケット奥行き（コロ背面 + 逃げ）
     const zb = g.RECESS + depth;                            // 背板の前面
-    const flangeT = 45, backT = 120;
-    const parts = [G.at(G.box(g.LEN, g.H, backT), 0, g.H / 2, zb + backT / 2)];                 // 背板
-    parts.push(G.at(G.box(g.LEN, flangeT, depth + backT), 0, g.H - flangeT / 2, g.RECESS + (depth + backT) / 2));   // 上フランジ
-    parts.push(G.at(G.box(g.LEN, flangeT, depth + backT), 0, flangeT / 2, g.RECESS + (depth + backT) / 2));         // 下フランジ
-    for (let i = 0; i <= g.N; i++) {                                                            // 仕切り壁（両端は半分）
-      const x = -g.LEN / 2 + i * pitch, w = (i === 0 || i === g.N) ? wallT / 2 : wallT;
-      const xc = i === 0 ? x + w / 2 : i === g.N ? x - w / 2 : x;
-      parts.push(G.at(G.box(w, g.H - 2 * flangeT, depth), xc, g.H / 2, g.RECESS + depth / 2));
+    const flangeT = g.FLANGE_T, backT = 120;
+    const parts = [G.at(G.box(LEN, H, backT), 0, H / 2, zb + backT / 2)];                       // 背板
+    parts.push(G.at(G.box(LEN, flangeT, depth + backT), 0, H - flangeT / 2, g.RECESS + (depth + backT) / 2));   // 上フランジ
+    parts.push(G.at(G.box(LEN, flangeT, depth + backT), 0, flangeT / 2, g.RECESS + (depth + backT) / 2));       // 下フランジ
+    for (let i = 0; i <= n; i++) {                                                              // 仕切り壁（両端は半分）
+      const x = -LEN / 2 + i * pitch, w = (i === 0 || i === n) ? wallT / 2 : wallT;
+      const xc = i === 0 ? x + w / 2 : i === n ? x - w / 2 : x;
+      parts.push(G.at(G.box(w, H - 2 * flangeT, depth), xc, H / 2, g.RECESS + depth / 2));
     }
     // 背板から後ろへ出るスライドアーム 2 本（架台の軸受を貫いてシリンダへ）。根元に補強リブ
     const boxL = g.ARM_L - 900, zArm = zb + backT;
     for (const sx of [-1, 1]) {
-      const x = sx * (g.LEN / 2 - 300);
+      const x = sx * (LEN / 2 - 300);
       parts.push(G.at(G.box(320, 260, boxL), x, g.ARM_Y + 130, zArm + boxL / 2));                // スライドアーム
-      parts.push(G.at(G.box(60, g.H - 2 * flangeT - 60, 360), x, g.H / 2, zArm + 180));          // 補強リブ（背板 → アーム）
+      parts.push(G.at(G.box(60, H - 2 * flangeT - 60, 360), x, H / 2, zArm + 180));              // 補強リブ（背板 → アーム）
       parts.push(G.at(G.cyl(200, 900, 'z', 12), x, g.ARM_Y + 130, zArm + boxL + 450));           // シリンダロッド
     }
     return G.merge(parts);
@@ -9051,18 +9071,23 @@ const Parts = {
    * サイドガイド固定架台（片側）。テーブル架台の外側（ライン中心から BASE_Z）に床から立ち、
    * アームの軸受と開閉シリンダを持つ。原点＝架台中心（床面）、+Z がライン外側。
    */
-  sideGuideBase() {
+  sideGuideBase(n = CONFIG.TABLE.GUIDE.N_IN) {
     const g = CONFIG.TABLE.GUIDE, P = CONFIG.MILL.PASS_LINE, top = P + g.ARM_Y - 60, parts = [];
+    const LEN = Layout.guideLen(n);
     for (const sx of [-1, 1]) {
-      const x = sx * (g.LEN / 2 - 300);
+      const x = sx * (LEN / 2 - 300);
       parts.push(G.at(G.box(420, top, 520), x, top / 2, 0));                          // 柱（床から）
       parts.push(G.at(G.box(520, 460, 620), x, P + g.ARM_Y + 130, 0));                // アーム軸受
       parts.push(G.at(G.cyl(300, 1300, 'z', 14), x, P + g.ARM_Y + 130, 960));         // 開閉シリンダ
     }
-    parts.push(G.at(G.box(g.LEN - 300, 220, 420), 0, 410, 0));                        // 柱間のつなぎ
+    parts.push(G.at(G.box(Math.max(LEN - 300, 400), 220, 420), 0, 410, 0));           // 柱間のつなぎ
     return G.merge(parts);
   },
-  sideGuideRoll() { const g = CONFIG.TABLE.GUIDE; return G.cyl(g.ROLL_D, g.H * 0.92, 'y', 14); },
+  /** サイドガイドのコロ 1 個。本体 380 mm の上下へシャフト（535 mm）が出て軸受で受ける。 */
+  sideGuideRoll() {
+    const g = CONFIG.TABLE.GUIDE;
+    return G.merge([G.cyl(g.ROLL_D, g.ROLL_L, 'y', 14), G.cyl(g.SHAFT_D, g.SHAFT_L, 'y', 10)]);
+  },
   /**
    * 板面クーラントの門型架台（片側の柱 2 本）。原点＝ステーション中心（床）、+Z 側の柱。
    * 柱はテーブル架台（|z| ≤ 1,765）とサイドガイドの開閉アーム（|z| ≤ 2,300）の外に立てる。
@@ -11086,33 +11111,41 @@ class TableView {
 class GuideView {
   constructor(scene) {
     const g = CONFIG.TABLE.GUIDE, P = CONFIG.MILL.PASS_LINE;
-    const barGeo = Parts.sideGuideBar(), rollGeo = Parts.sideGuideRoll(), baseGeo = Parts.sideGuideBase();
+    /* コロの本数は入側 11・出側 5 で違うので、バーと架台は «本数ごとに 1 つ» 作って
+     * 左右で使い回す。コロの形（本体 380 ＋ シャフト 535）は共通。 */
+    const rollGeo = Parts.sideGuideRoll();
+    const geoOf = new Map();
+    const barOf = n => { if (!geoOf.has(n)) geoOf.set(n, { bar: Parts.sideGuideBar(n), base: Parts.sideGuideBase(n) }); return geoOf.get(n); };
     // 架構だけを断面表示の対象にする。板の耳に当たるローラは «当たっていること» が
     // 見えるべき部材なので、透過させず常に実体で描く。
     this.sided = { near: [], far: [] };
     this.stations = [-g.X, g.X].map(x => {
+      const n = Layout.guideN(x), LEN = Layout.guideLen(n), geo = barOf(n);
+      /* バーは «コロ本体の下端がパスラインに一致する» 高さに置く。薄板でも耳に当たる
+       * 必要があるので、コロをバーの中央に置いてはいけない。 */
+      const y0 = Layout.guideY0;
       const sides = [1, -1].map(s => {
         const grp = new THREE.Group(); grp.name = 'サイドガイド可動部';
-        const f = ghostable(new THREE.Mesh(barGeo, MAT.guide), MAT.guide);
+        const f = ghostable(new THREE.Mesh(geo.bar, MAT.guide), MAT.guide);
         f.name = 'サイドガイドバー'; f.castShadow = true;
         this.sided[s > 0 ? 'near' : 'far'].push(f);
         if (s < 0) grp.rotation.y = Math.PI;
         grp.add(f);
         // ローラ中心は開口面から半径ぶん外側 ＝ 内接面がちょうど開口面に一致する
-        const rolls = new Instances(rollGeo, MAT.rollNeck, g.N, { cull: false, name: 'サイドガイドローラ' });
-        for (let i = 0; i < g.N; i++)
-          rolls.set(i, -g.LEN / 2 + g.LEN * (i + 0.5) / g.N, g.H / 2, g.ROLL_D / 2);
+        const rolls = new Instances(rollGeo, MAT.rollNeck, n, { cull: false, name: 'サイドガイドローラ' });
+        for (let i = 0; i < n; i++)
+          rolls.set(i, -LEN / 2 + LEN * (i + 0.5) / n, y0 + g.ROLL_L / 2, g.ROLL_D / 2);
         rolls.commit(); grp.add(rolls.mesh);
-        grp.position.set(u(x), u(P), 0); scene.add(grp);
+        grp.position.set(u(x), u(P - y0), 0); scene.add(grp);
         // 固定架台。テーブル架台の外側に床から立ち、開閉に関わらず動かない
-        const base = ghostable(new THREE.Mesh(baseGeo, MAT.guide), MAT.guide);
+        const base = ghostable(new THREE.Mesh(geo.base, MAT.guide), MAT.guide);
         base.name = 'サイドガイド架台'; base.castShadow = base.receiveShadow = true;
         base.position.set(u(x), 0, u(s * g.BASE_Z)); if (s < 0) base.rotation.y = Math.PI;
         this.sided[s > 0 ? 'near' : 'far'].push(base);
         scene.add(base);
         return grp;
       });
-      return { x, sides };
+      return { x, n, len: LEN, sides };
     });
     // --- 板面クーラント: 門型架台を立て、2 本のヘッダを吊って板の上面へ噴射する ---
     //  入側・出側ともサイドガイドの上（位置は CONFIG.TABLE.GUIDE.HEADER.STATIONS）。
