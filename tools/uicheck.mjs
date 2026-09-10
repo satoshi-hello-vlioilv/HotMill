@@ -81,6 +81,36 @@ for (const w of widths) {
   ok('メニューをたたむと畳み具合がゆるむ（使える幅で決めている）',
      +c.collapsed.fit <= +c.open.fit && (c.collapsed.w >= c.open.w),
      `たたむ ${c.collapsed.fit}（${c.collapsed.w} px）／ 開く ${c.open.fit}（${c.open.w} px）`);
+  /* 計器バーは «問い» ごとの 5 枚。中身が増えても減っても外形（位置と大きさ）は
+   * 動かないこと —— 運転中に 3D の見える範囲が変わると、目で追っているものを見失う。
+   * 値をわざと «長い文字列» や «空» に振って、札の外形が動かないかを実測する。 */
+  const m = await page.evaluate(() => {
+    const box = el => { const r = el.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]; };
+    const bar = document.getElementById('metrics');
+    const cards = [...bar.children];
+    const before = { bar: box(bar), cards: cards.map(box) };
+    // 副値をすべて «とても長い文字列» にする（実運転では出ないが、外形が動かないことの上限）
+    const subs = [...bar.querySelectorAll('.mx span, .mx b, .val .mode, .val u')];
+    const keep = subs.map(e => e.textContent);
+    subs.forEach(e => { e.textContent = '長い値'.repeat(6); });
+    const longer = { bar: box(bar), cards: cards.map(box) };
+    subs.forEach(e => { e.textContent = ''; });                 // 逆に «全部空»
+    const empty = { bar: box(bar), cards: cards.map(box) };
+    subs.forEach((e, i) => { e.textContent = keep[i]; });
+    const same = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 1);
+    return { n: cards.length, before,
+             barStable: same(before.bar, longer.bar) && same(before.bar, empty.bar),
+             cardStable: cards.every((_, i) => same(before.cards[i], longer.cards[i]) && same(before.cards[i], empty.cards[i])),
+             longer, empty,
+             overflow: cards.map(c => Math.max(0, c.scrollHeight - c.clientHeight)) };
+  });
+  ok(`計器バーが «問い» ごとの ${m.n} 枚にまとまっている`, m.n === 5, `${m.n} 枚（1 枚 ${Math.round(m.before.cards[0][2])} px）`);
+  ok('値をいくら長くしても計器バーの外形が動かない', m.barStable,
+     `枠 ${m.before.bar.join(',')} ／ 長い値 ${m.longer.bar.join(',')} ／ 空 ${m.empty.bar.join(',')}`);
+  ok('値が増減しても札 1 枚ずつの外形が動かない', m.cardStable,
+     m.cardStable ? `${m.n} 枚とも同じ` : m.before.cards.map((b, i) => `${i}: ${b.join(',')} → ${m.longer.cards[i].join(',')}`).filter((_, i) => true).slice(0, 2).join(' ／ '));
+  ok('札からはみ出した中身は隠れる（外へ押し出さない）', m.overflow.every(v => v >= 0),
+     `はみ出し ${m.overflow.join(' / ')} px（隠す設計）`);
   await browser.close();
 }
 console.log(`\nRESULT: ${failed ? 'FAIL' : 'PASS'}`);

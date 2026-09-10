@@ -382,19 +382,36 @@ select.sel:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px
 .sched .load i { display:block; height:100%; background:var(--ramp-4); border-radius:2px; }
 
 /* ---------- 計測バー ---------- */
+/* 計器バーは «運転で立てる問い» ごとの 5 枚。高さは固定（--metrics-h）で、
+   中身が増えても減っても外形は動かない —— 3D の見える範囲が運転中に変わらないため。
+   負荷と品質は読む項目が多いので、そのぶん広い列を与える（1fr ではなく重みを付ける）。 */
 #metrics {
   position:fixed; bottom:16px; left:calc(var(--sb-w) + 16px); right:16px; z-index:10; height:var(--metrics-h);
-  display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); gap:10px; pointer-events:none;
+  display:grid; grid-template-columns:0.9fr 0.85fr 1.15fr 1fr 1.5fr; gap:10px; pointer-events:none;
 }
 .mc { background:rgba(255,255,255,.9); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.9);
-  border-radius:var(--r-l); padding:10px 12px 11px; box-shadow:var(--shadow-2); min-width:0;
+  border-radius:var(--r-l); padding:8px 12px 9px; overflow:hidden; box-shadow:var(--shadow-2); min-width:0;
   display:flex; flex-direction:column; min-height:0; }
 .mc .k { font-size:9.5px; font-weight:800; color:var(--ink-3); letter-spacing:.05em; text-transform:uppercase;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.mc .val { font-size:22px; font-weight:800; color:var(--ink-1); line-height:1.15; margin-top:3px;
+.mc .val { font-size:20px; font-weight:800; color:var(--ink-1); line-height:1.15; margin-top:3px;
   font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
 .mc .val u { text-decoration:none; font-size:11px; font-weight:700; color:var(--ink-3); margin-left:2px; }
 .mc .sub { font-size:9.5px; color:var(--ink-3); margin-top:auto; padding-top:4px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* 副値の枠。«見出し（小さい灰）→ 値（濃い）→ 単位» を 1 行に流し込み、行は折り返す。
+   枠は札の残り高さいっぱいを占め、はみ出すぶんは隠す —— 値が増えても札の外形は動かない。 */
+/* 副値の枠。«必ず 2 行» の固定枠にする —— 行数を内容に任せると、値が増えたときに
+   札の下で文字が切れる（実測: 3 行目が半分欠けていた）。入りきらない行は末尾を … で
+   省略し、外形は動かさない。 */
+.mc .mx { margin-top:auto; padding-top:4px; font-size:10px; color:var(--ink-3);
+  font-variant-numeric:tabular-nums; display:grid; grid-template-rows:repeat(2,14px); gap:1px; min-height:0; }
+.mc .mx .r { display:flex; align-items:baseline; gap:0 5px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.mc .mx .r > span { overflow:hidden; text-overflow:ellipsis; }
+.mc .mx b { font-weight:800; color:var(--ink-1); font-size:11.5px; }
+.mc .mx u { text-decoration:none; font-size:9px; color:var(--ink-3); margin-left:-3px; }
+/* 副値の中のバー（主機動力）。その行いっぱいに置く */
+.mc .mx .bar { flex:1 1 auto; height:4px; margin-top:4px; }
 .mc .bar { height:4px; border-radius:2px; background:var(--s-3); margin-top:6px; overflow:hidden; }
 .mc .bar i { display:block; height:100%; width:0; background:var(--ramp-4); border-radius:2px; transition:width .12s linear; }
 .mc.is-warn .bar i { background:var(--warn); } .mc.is-crit .bar i { background:var(--crit); }
@@ -451,8 +468,10 @@ kbd { background:var(--s-1); border:1px solid var(--line); border-bottom-width:2
   .mc .val { font-size:19px; }
 }
 @media (max-width:1400px) {
+  /* 幅が足りなければ 3 枚 ＋ 2 枚の 2 段にする（枚数を減らしたので 2 段で収まる）。
+     高さは 2 段ぶんに固定 —— やはり中身では動かさない。 */
   :root { --metrics-h:186px; }
-  #metrics { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  #metrics { grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); }
 }
 .mc .val .mode { font-size:10.5px; font-weight:800; color:var(--ink-3); margin-left:5px; letter-spacing:.02em; }
 .mc .val .mode.is-bad { color:var(--crit); }
@@ -964,30 +983,55 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   <div class="stat"><span id="fps">– fps</span> / <span id="dcalls">– draw</span></div>
 </div>
 
+<!-- 計器バー。«運転で立てる問い» ごとに 5 つへまとめる（10 枚の札を横に並べると
+     1 枚 150 px しか取れず、見出しが切れて読み比べが要る）。
+       進捗   …… どこまで進んだか
+       速度   …… いまどう動いているか
+       負荷   …… 設備が無理をしていないか
+       材料   …… 材料はどんな状態か
+       品質   …… 狙いに乗っているか
+     各札の中身は «主値 1 つ ＋ 副値の固定枠» で、値が増えても減っても枠は動かない
+     （枠を固定しておかないと、値が出たり消えたりするたびに札の幅が動いて読みにくい）。 -->
 <div id="metrics">
-  <div class="mc"><div class="k">パス</div><div class="val"><span id="m-pass-v">0</span></div><div class="sub" id="m-pass-s">/ 全 7 パス</div></div>
-  <div class="mc"><div class="k">板厚</div><div class="val"><span id="m-thick-v">400</span><u>mm</u></div><div class="sub" id="m-thick-s">累積圧下率 0.0 %</div></div>
-  <div class="mc"><div class="k">板長</div><div class="val"><span id="m-len-v">4.00</span><u>m</u></div><div class="sub" id="m-len-s">伸び 1.00 倍</div></div>
-  <div class="mc"><div class="k">ライン速度</div><div class="val"><span id="m-speed-v">0</span><u>mpm</u></div><div class="sub" id="m-speed-s">停止</div></div>
-  <div class="mc" id="m-force"><div class="k">圧延荷重</div><div class="val"><span id="m-force-v">0</span><u>ton</u></div><div class="sub" id="m-force-s">常用最大の 0 %</div><div class="bar"><i></i></div></div>
-  <div class="mc" id="m-power"><div class="k">主機動力</div><div class="val"><span id="m-power-v">0.0</span><u>MW</u></div><div class="sub" id="m-power-s">定格の 0 %</div><div class="bar"><i></i></div></div>
-  <div class="mc temp"><div class="k">材料温度（平均）</div><div class="val"><span id="m-temp-v">500</span><u>℃</u></div><div class="sub" id="m-temp-s">上 500 ／ 芯 500 ／ 下 500</div></div>
-  <!-- 反りは «定規を当てて測る量» で出す。丈（長手 1 m あたり）を主値、幅（板幅いっぱい）を脇に -->
-  <div class="mc"><div class="k">板反り 丈／幅</div><div class="val"><span id="m-curl-v">–</span><u>mm</u><span id="m-curl-w"
-    class="mode" title="幅方向の反り。板幅いっぱいに定規を当てたときの隙間（＋は端が上がる）">幅 –</span></div>
-    <div class="sub" id="m-curl-s">平坦</div></div>
-  <div class="mc"><div class="k">ロールギャップ</div><div class="val"><span id="m-gap-v">400</span><u>mm</u></div><div class="sub" id="m-gap-s">目標 400 mm</div></div>
-  <!-- X 線板厚計。運転で見たいのは «いくつか» ではなく «狙いから外れているか» なので、
-       主値を目標との差（µm）にして、実測値と入側・走査位置は副値へ回す。
-       熱間の実力は ±50 µm なので、そこを超えたら色で知らせる（数字を読み比べさせない）。 -->
-  <div class="mc"><div class="k">板厚偏差（出側 X 線）</div><div class="val"><span id="m-xray-v">–</span><u>µm</u>
-    <span id="m-xray-x" class="mode" title="出側 固定型 X 線板厚計の読み（実測）">– mm</span></div>
-    <div class="sub" id="m-xray-s">入側 – ／ 走査 –</div></div>
-  <!-- 幅方向の形状。«操作の判断に使うのは平坦度と判定» なので主値をそちらにし、
-       原因であるクラウン・エッジドロップ・ベンダ力は副値へ回す（1 枚にまとめて行を増やさない） -->
-  <div class="mc"><div class="k">板形状 平坦度／プロファイル</div><div class="val"><span id="m-flat-v">–</span><u>I</u>
-    <span id="m-prof-v" class="mode" title="プロファイルカーブ値 ＝ 中央の厚み ÷ エッジから 50 mm 内側の厚み。1 超で中厚">P –</span></div>
-    <div class="sub" id="m-crown-s"><span id="m-flat-m">平坦</span><span id="m-crown-rest"> ／ クラウン –</span></div></div>
+  <div class="mc"><div class="k">進捗</div>
+    <div class="val"><span id="m-pass-v">0</span><u id="m-pass-s">/ 7</u></div>
+    <div class="mx">
+      <div class="r"><span>板厚</span><b id="m-thick-v">400</b><u>mm</u><span>板長</span><b id="m-len-v">4.00</b><u>m</u></div>
+      <div class="r"><span id="m-thick-s">累積 0.0 %</span><span id="m-len-s">伸び 1.00 倍</span></div>
+    </div></div>
+
+  <div class="mc"><div class="k">速度・ギャップ</div>
+    <div class="val"><span id="m-speed-v">0</span><u>mpm</u><span id="m-speed-s" class="mode">停止</span></div>
+    <div class="mx">
+      <div class="r"><span>ギャップ</span><b id="m-gap-v">400</b><u>mm</u></div>
+      <div class="r"><span id="m-gap-s">目標 400 mm</span></div>
+    </div></div>
+
+  <div class="mc" id="m-force"><div class="k">負荷</div>
+    <div class="val"><span id="m-force-v">0</span><u>ton</u><span id="m-force-s" class="mode">0 %</span></div>
+    <div class="bar"><i></i></div>
+    <div class="mx" id="m-power">
+      <div class="r"><span>主機動力</span><b id="m-power-v">0.0</b><u>MW</u><span id="m-power-s">定格の 0 %</span></div>
+      <div class="r"><div class="bar"><i></i></div></div>
+    </div></div>
+
+  <div class="mc temp"><div class="k">材料</div>
+    <div class="val"><span id="m-temp-v">500</span><u>℃</u></div>
+    <div class="mx">
+      <div class="r"><span id="m-temp-s">上 500 ／ 芯 500 ／ 下 500</span></div>
+      <div class="r"><span>コーティング</span><b id="m-coat-v">–</b><u>µm</u><span id="m-coat-s">–</span></div>
+    </div></div>
+
+  <div class="mc"><div class="k">品質（狙いとのずれ）</div>
+    <div class="val"><span id="m-xray-v">–</span><u>µm</u><span id="m-xray-x" class="mode"
+      title="出側 固定型 X 線板厚計の読み（実測）">– mm</span></div>
+    <div class="mx">
+      <div class="r"><span>平坦度</span><b id="m-flat-v">–</b><u>I</u><span id="m-prof-v"
+        title="プロファイルカーブ値 ＝ 中央の厚み ÷ エッジから 50 mm 内側の厚み。1 超で中厚">P –</span><span>反り</span><b id="m-curl-v">–</b><span id="m-curl-w"
+        title="幅方向の反り。板幅いっぱいに定規を当てたときの隙間（＋は端が上がる）">/ –</span><u>mm</u></div>
+      <div class="r"><span id="m-xray-s">入側 – ／ 走査 –</span><span id="m-curl-s">平坦</span><span id="m-crown-s"><span id="m-flat-m">平坦</span><span id="m-crown-rest"> ／ クラウン –</span></span></div>
+    </div></div>
+</div>
 </div>
 
 <!-- 上部ツールバー: 運転中に頻繁に使う «見る» 操作だけを 1 行に収める（視点 → 断面 → 注記）。
@@ -1319,6 +1363,13 @@ const VERSION = {
       { t: 'ブラシ条件の登録モーダルを作った。材質を選び、F-5〜F の 6 行でブラシの種類・掛ける長さ・ノッチを決める。下に «除去の強さ»（既定を 100 %）と、弱すぎ／強すぎの注意を出す', w: '#dlg-brush / UIManager.openBrushDialog' },
       { t: '3D にブラシロールを上下 1 本ずつ足した。掛けるパスではワークロールに押し付け、掛けないパスでは半径方向へ 140 mm 引く。当たりはバックアップロールと板を避けた入側寄りの斜め上', w: 'Parts.brushRoll / MillStandView' },
       { t: '実測: コーティングは 1 ロットで 6.0 → 6.9 µm まで積もり、ブラシで 4.2 µm まで落ち、掛けない最終 2 パスで 6.6 µm へ戻る。摩擦係数の振れは ±2.6 % で、荷重の較正（14/14）は崩れない', w: 'tools/brushtrace.mjs' },
+      // --- 計器バー（下部）---
+      { t: '計器バーを 10 枚から «運転で立てる問い» ごとの 5 枚にまとめた —— 進捗／速度・ギャップ／負荷／材料／品質。10 枚だと 1 枚 133 px しか取れず、見出しが切れて読み比べが要っていた（1,728 px で 1 枚 214 px になった）', w: '#metrics' },
+      { t: '副値は «必ず 2 行» の固定枠にした。行数を内容に任せると、値が増えたときに札の下で文字が切れる（実測: 3 行目が半分欠けていた）。入りきらない行は末尾を … で省略し、外形は動かさない', w: '.mc .mx' },
+      { t: '値をどれだけ長くしても・空にしても、計器バーと札 1 枚ずつの外形（位置・大きさ）が動かないことを判定に足した。運転中に 3D の見える範囲が変わると、目で追っているものを見失う', w: 'tools/uicheck.mjs' },
+      { t: '長い内訳（反りの端の浮き・上下 ΔT・バイト内曲率／クラウン率・エッジドロップ・ベンダ力）はホバーへ回した。札には «判定と代表値» だけを出す', w: '#m-curl-s / #m-crown-rest' },
+      { t: '«平坦» が 2 か所に出て何が平坦か読み比べが要っていたので、«反り 平坦» と «形状 平坦» に分けた', w: '#m-curl-s / #m-flat-m' },
+      { t: 'ロールコーティングを材料の札にも出した（厚み・適正かどうか・当たっているブラシ）', w: '#m-coat-v' },
       // --- ピット炉 ---
       { t: '炉 9 基の仕様を実機の表にした。1〜6 号 90 t・3,810×4,760×4,050・半直火炉／7〜8 号 100 t・4,600×4,300×4,800・半直火炉／9 号 18 t・間接型。内法は炉ごとに違うので、床の開口・躯体・蓋・クレーンの巻上距離もそれぞれの寸法から決まる', w: 'FURNACE.SPEC / Layout.pitSpec' },
       { t: '内法と収容能力が噛み合っている: 1〜6 号は 7 段 × 2 列 ＝ 14 本 × 6.6 t ＝ 92 t（表 90 t）、7〜8 号は 8 段 × 2 列 ＝ 16 本 ＝ 105 t（表 100 t）。段は板厚の面を突き合わせて並ぶので 内法 L ÷ 鋳造厚', w: 'tools/pitplan.mjs' },
@@ -14808,7 +14859,7 @@ class UIManager {
 
     const M = CONFIG.MILL;
     $('m-pass-v').textContent  = m.passIndex >= 0 ? `${m.passIndex + 1}` : (this.finished ? '完了' : this.busy ? '–' : '0');
-    $('m-pass-s').textContent  = `/ 全 ${CONFIG.SCHEDULE.length} パス`;
+    $('m-pass-s').textContent  = `/ ${CONFIG.SCHEDULE.length}`;
     $('m-thick-v').textContent = s.thickness.toFixed(0);
     $('m-thick-s').textContent = `累積圧下率 ${(s.reduction * 100).toFixed(1)} %`;
     $('m-len-v').textContent   = (s.length / 1000).toFixed(2);
@@ -14827,8 +14878,11 @@ class UIManager {
       const B = CONFIG.BRUSH, c = m.coat;
       const st = c < B.C_LO ? ['薄い（スリップ）', 'var(--crit)'] : c > B.C_HI ? ['厚い（移着）', 'var(--crit)']
                : c < B.C_NOM * 0.8 ? ['やや薄い', 'var(--warn)'] : c > B.C_NOM * 1.3 ? ['やや厚い', 'var(--warn)'] : ['適正', 'var(--ok)'];
-      $('lbl-coat').innerHTML = `${c.toFixed(1)}<em>µm</em>`;
       const sp = m.brushKey ? CONFIG.BRUSH.SPEC[m.brushKey] : null;
+      $('lbl-coat').innerHTML = `${c.toFixed(1)}<em>µm</em>`;
+      $('m-coat-v').textContent = c.toFixed(1);
+      $('m-coat-s').innerHTML = `<span style="color:${st[1]};font-weight:700">${st[0]}</span>`
+        + (sp ? ` ／ ${sp.key} ${m.brushHz} Hz` : ' ／ ブラシ無し');
       $('der-coat').innerHTML = `<span style="color:${st[1]};font-weight:700">${st[0]}</span>`
         + `（適正 ${B.C_NOM} µm／ムラ ${m.coatSd.toFixed(2)}）／ 摩擦 ×${Rolling.coatMu(c).toFixed(3)}<br>`
         + (sp ? `ブラシ <b>${sp.key}</b> 当たり中（${m.brushHz} Hz）` : 'ブラシ 当てていない');
@@ -14848,23 +14902,30 @@ class UIManager {
       const wp = s.warp, k = wp.kappa, sp = Rolling.curlSpan(k, s.thickness, s.width, s.alloy);
       const G = (CONFIG.SHAPE.WARP_GAUGE / 1000).toFixed(0);
       $('m-curl-v').textContent = Math.abs(wp.len) > 0.005 ? wp.len.toFixed(2) : '0';
-      $('m-curl-w').textContent = `幅 ${Math.abs(wp.wid) > 0.005 ? (wp.wid > 0 ? '+' : '') + wp.wid.toFixed(2) : '0'}`;
+      $('m-curl-w').textContent = `/ ${Math.abs(wp.wid) > 0.005 ? (wp.wid > 0 ? '+' : '') + wp.wid.toFixed(2) : '0'}`;
       const kb = s.kBite || 0, kpl = Rolling.passLineCurl(m.plOffset);
       const Rm = (v) => Math.abs(v) > 1e-9 ? (1 / Math.abs(v) / 1000).toFixed(1) + ' m' : '∞';
-      $('m-curl-s').textContent = Math.abs(k) > 1e-7
-        ? `${k > 0 ? '上反り' : '下反り'}（丈は ${G} m あたり）／ R ${Rm(k)} ／ 端の浮き ${k > 0 ? sp.tip.toFixed(0) : 0} mm`
+      /* 札は 1 行ぶんしかないので «判定と半径» だけを出し、内訳（端の浮き・上下 ΔT・
+       * バイト内の曲率）はホバーへ回す。読み比べさせずに «向きと強さ» が分かればよい。 */
+      const cs = $('m-curl-s');
+      cs.textContent = Math.abs(k) > 1e-7 ? `反り ${k > 0 ? '上反り' : '下反り'} R ${Rm(k)}` : '反り 平坦';
+      cs.title = Math.abs(k) > 1e-7
+        ? `丈は ${G} m あたり ／ R ${Rm(k)} ／ 端の浮き ${k > 0 ? sp.tip.toFixed(0) : 0} mm`
           + ` ／ 上下 ΔT ${(s.tBot - s.tTop).toFixed(1)} ℃ ／ バイト内 ${Rm(kb)}（うちパスライン ${Rm(kpl)}）`
-        : (Math.abs(kb) > 1e-9 ? `平坦（バイト内 ${Rm(kb)} は除荷で戻った）` : '平坦');
+        : (Math.abs(kb) > 1e-9 ? `バイト内 ${Rm(kb)} は除荷で戻った` : '平坦');
     }
     /* 幅方向の形状。板クラウン（中央 − 端）と平坦度（I-unit）。
      * 平坦度は «クラウン率の変化» で決まるので、クラウンが大きくても比例していれば平坦。 */
     {
       const sh = s.wShape, fm = $('m-flat-m');
-      fm.textContent = sh ? sh.modeName + (sh.buckle ? '・座屈' : '') : '平坦';
+      fm.textContent = '形状 ' + (sh ? sh.modeName + (sh.buckle ? '・座屈' : '') : '平坦');
       fm.classList.toggle('is-bad', !!(sh && sh.buckle));
-      $('m-crown-rest').textContent = sh
-        ? ` ／ クラウン ${sh.crownAbs.toFixed(0)} µm（${(sh.crownRatio * 100).toFixed(3)} %）／ エッジ ${sh.edgeDrop.toFixed(0)} ／ ベンダ ${m.bendForceT.toFixed(0)} t`
-        : ' ／ クラウン –';
+      // クラウンも同じ。主値はクラウン量、内訳（率・エッジドロップ・ベンダ力）はホバーへ
+      const cr = $('m-crown-rest');
+      cr.textContent = sh ? ` ／ クラウン ${sh.crownAbs.toFixed(0)} µm` : ' ／ クラウン –';
+      cr.title = sh
+        ? `クラウン率 ${(sh.crownRatio * 100).toFixed(3)} % ／ エッジドロップ ${sh.edgeDrop.toFixed(0)} µm ／ ベンダ ${m.bendForceT.toFixed(0)} t`
+        : '';
       $('m-flat-v').textContent = sh ? sh.iUnit.toFixed(0) : '–';
       // プロファイルカーブ値（中央厚 ÷ エッジ 50 mm 内側）。1 超で中厚
       $('m-prof-v').textContent = sh ? `P ${sh.profRatio.toFixed(4)}` : 'P –';
