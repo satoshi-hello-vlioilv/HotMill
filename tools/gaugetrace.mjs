@@ -33,17 +33,33 @@ const out = await page.evaluate(async () => {
   const entry = units.filter(u => u.unit.x * F < 0), exit = units.filter(u => u.unit.x * F > 0);
   ok('入側 1 基・出側 2 基', entry.length === 1 && exit.length === 2, `入側 ${entry.length} / 出側 ${exit.length}`);
 
-  /* 据付位置: サイドガイド架構（正準 |x| 2,450〜4,350）の外、サイドトリマー架構より手前。
-   * 正準 X（＝ CONFIG の値）で見る。 */
-  /* サイドガイドの長さは入側（コロ 11）と出側（コロ 5）で違うので、計器のある側の
-   * 長さで見る。入側は正準 X が負の側。 */
+  /* 据付位置。サイドトリマー架構より手前であること、そしてサイドガイドと当たらないこと。
+   *
+   * サイドガイドとの取り合いは «X で離す» ではない —— 入側のバーは図面どおり 5,400 mm あり、
+   * 計器（|x| 4,640）はその X の範囲の «中» に入る。当たらないのは Z で逃げているから:
+   *   ・バー本体は |z| ≤ RECESS ＋ 奥行 ＋ 背板 の薄い箱で、計器の柱（|z| 2,610〜2,950）に届かない
+   *   ・柱まで届くのはスライドアームと開閉シリンダだけで、それは X が離れている
+   * 出側（バー 1,750 mm）は従来どおり X でも離れている。両方をそれぞれの条件で見る。 */
   const G = K.TABLE.GUIDE, L = window.__LAYOUT;
-  const gEndOf = x => G.X + L.guideLen(L.guideN(x)) / 2;
+  const gEndOf = x => Math.abs(L.guideCX(x)) + L.guideLen(x) / 2;
+  const barZ = G.RECESS + (G.ROLL_D + 30) + 120;             // バー本体の背面までの Z
+  const colZ0 = K.XRAY.COL_Z - K.XRAY.COL_W / 2;             // 計器の柱の内側の Z
   const trimX = Math.abs(K.TRIMMER.X);
   for (const u of units) {
     const cx = Math.abs(u.unit.x);
     const gEnd = gEndOf(u.unit.x);
-    ok(`${u.unit.name}: サイドガイド架構（|x| ≤ ${gEnd}）の外側`, cx > gEnd, `|x| = ${cx}`);
+    if (cx > gEnd) {
+      ok(`${u.unit.name}: サイドガイド架構（|x| ≤ ${gEnd}）の外側`, true, `|x| = ${cx}`);
+    } else {
+      // X の範囲に入るなら、Z で逃げていることと、アームの X と重ならないことを見る
+      const arms = L.guideArmXs(u.unit.x).map(d => Math.abs(L.guideCX(u.unit.x)) + d);
+      const need = (K.XRAY.FRAME_T + 320) / 2;
+      const near = Math.min(...arms.map(a => Math.abs(a - cx)));
+      ok(`${u.unit.name}: サイドガイドのバー本体と Z で離れている（バー ${barZ} < 柱 ${colZ0}）`,
+         barZ < colZ0, `バー本体 |z| ≤ ${barZ} ／ 計器の柱 |z| ≥ ${colZ0} mm`);
+      ok(`${u.unit.name}: サイドガイドのスライドアームと X で離れている`, near >= need,
+         `アーム ${arms.map(Math.round).join(' / ')} ／ 計器 ${cx}（いちばん近い ${Math.round(near)} mm・要 ${Math.round(need)} mm）`);
+    }
     ok(`${u.unit.name}: サイドトリマー架構（|x| ${trimX} 前後）に掛からない`, cx < trimX - 400, `|x| = ${cx}`);
   }
   /* テーブルは図面どおりのまま（ローラは抜かない）。計器は «ローラとローラのあいだ» に
