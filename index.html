@@ -1317,6 +1317,7 @@ const VERSION = {
       { t: '3D にブラシロールを上下 1 本ずつ足した。掛けるパスではワークロールに押し付け、掛けないパスでは半径方向へ 140 mm 引く。当たりはバックアップロールと板を避けた入側寄りの斜め上', w: 'Parts.brushRoll / MillStandView' },
       { t: '実測: コーティングは 1 ロットで 6.0 → 6.9 µm まで積もり、ブラシで 4.2 µm まで落ち、掛けない最終 2 パスで 6.6 µm へ戻る。摩擦係数の振れは ±2.6 % で、荷重の較正（14/14）は崩れない', w: 'tools/brushtrace.mjs' },
       // --- 作業中に見つけて直したこと ---
+      { t: '入側・出側の冷却ノズルの首が «外向き» に付いていた。噴射の粒は別に解いているので板には当たっており、実物の向きだけが左右反転していた（実測: パイプ z 1,250 に対し先端 z 1,512 ＝ 262 mm 外）。上下とも内向きに直し、実体の行列から首の向きを読む判定を足した', w: 'GuideView._aimNozzles / tools/nozzletrace.mjs' },
       { t: 'ユニバーサルジョイントに 300×300 mm の板が、コイル押えシリンダーに丸棒が 2 本、それぞれ意味のない部材として付いていた（異物に見えていた）。除去した', w: 'DriveView.spindles / Parts.holdDownRam' },
       { t: 'X 線板厚計に厚板が突き刺さっていた（板厚 530 mm で線源へ 207 mm 食い込み）。板はパスラインの «上» に載るので、内のり 640 の上半分 320 mm を超える板はそのまま通せない。粗パスでは線源側を上腕ごと «板厚 ＋ 60 mm» まで持ち上げて逃がす（サイドトリマーの上刃と同じ考え方）。逃がしている間は測れないので読みも出さない', w: 'XRAY.PARK_CLR / Layout.xrayLift / MillState.xrayLift' },
       { t: '尻抜けの一瞬のロールギャップ（8 → 4.1 mm、60 ms）でコイル全体を数え直していた。外径が Φ1,606 → 1,325 と化ける。巻いた長さで重み付けした平均厚で持つようにした', w: 'FinishController.coilTh' },
@@ -11198,8 +11199,12 @@ class GuideView {
     this._aimSig = sig;
     const H = CONFIG.TABLE.GUIDE.HEADER, P = CONFIG.MILL.PASS_LINE, nd = Layout.nozzleAim(width, topY);
     let i = 0;
+    /* ノズルは «まっすぐ下» を向いた素体を X 軸まわりに倒して置く。素体の先は (0, −r, 0) に
+     * あるので、Rx(θ) で先端は z' = −r·sinθ へ動く —— +Z 側を «内向き»（z が小さくなる向き）に
+     * 倒すには θ > 0。符号が逆だったため、噴射の粒は板に当たっているのにノズルの向きだけが
+     * 外を向いていた（実測: パイプ z 1,250 に対し先端 z 1,512 ＝ 262 mm 外）。 */
     for (const x of this.headerXs) for (const sz of [1, -1]) for (const dx of this.nozXs)
-      this.nozzles.set(i++, x + dx, P + H.Y, sz * H.Z, sz > 0 ? -nd.tilt : nd.tilt, 0, 0);
+      this.nozzles.set(i++, x + dx, P + H.Y, sz * H.Z, sz > 0 ? nd.tilt : -nd.tilt, 0, 0);
     this.nozzles.commit();
     this.aim = nd;
     /* 下面スプレーも板幅に合わせて内側へ向ける。上面と違って距離が近い（400 mm 弱）ので
@@ -11208,8 +11213,10 @@ class GuideView {
       const B = H.BOT, ba = Layout.botAim(width), bt = ba.tilt;
       this.botAim = ba;
       let j = 0;
+      // 下面ノズルは «まっすぐ上» を向いた素体（先は (0, +r, 0)）。Rx(θ) で先端は z' = +r·sinθ
+      // へ動くので、+Z 側を内向きに倒すには θ < 0（上面とは符号が逆になる）
       for (const x of this.headerXs) for (const sz of [1, -1]) for (const dx of this.botXs)
-        this.botNozzles.set(j++, x + dx, P + B.Y, sz * B.Z, sz > 0 ? bt : -bt, 0, 0);
+        this.botNozzles.set(j++, x + dx, P + B.Y, sz * B.Z, sz > 0 ? -bt : bt, 0, 0);
       this.botNozzles.commit();
     }
   }

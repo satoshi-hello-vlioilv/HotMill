@@ -81,6 +81,36 @@ const out = await page.evaluate(async () => {
   ok('エッジだけに偏っていない（着地がエッジより内側）', R.land.max < w0 / 2,
      `いちばん外 ${R.land.max} mm / エッジ ${R.land.edge} mm`);
 
+  /* ノズルの «実物の向き»。噴射の粒は別に解いているので、粒が板に当たっていても
+   * ノズルの首が外を向いていることがある（実際にそうなっていた: パイプ z 1,250 に対し
+   * 先端 z 1,512 ＝ 262 mm 外向き）。実体の行列から先端の座標を読んで確かめる。 */
+  {
+    const T = window.__T, S = K.SCALE, W2 = A.world, GV = W2.guideView;
+    const H = K.TABLE.GUIDE.HEADER, B = H.BOT;
+    W2.render(A.physics, 0.1);
+    const dirs = (inst, tipLocal) => {
+      const m = new T.Matrix4(), v = new T.Vector3(), o = new T.Vector3(), out = [];
+      for (let i = 0; i < inst.mesh.count; i++) {
+        inst.mesh.getMatrixAt(i, m);
+        o.set(0, 0, 0).applyMatrix4(m); v.copy(tipLocal).applyMatrix4(m);
+        const pipeZ = o.z / S, tipZ = v.z / S;
+        if (Math.abs(pipeZ) < 1) continue;
+        out.push({ pipeZ: Math.round(pipeZ), tipZ: Math.round(tipZ), inward: Math.abs(tipZ) < Math.abs(pipeZ) - 20 });
+      }
+      return out;
+    };
+    const top = dirs(GV.nozzles, new T.Vector3(0, -(H.D / 2 + 150 - 10 + 75) * S, 0));
+    const bot = dirs(GV.botNozzles, new T.Vector3(0, (B.D / 2 + 130 - 8 + 65) * S, 0));
+    const one = (a) => a.length ? `${a[0].pipeZ} → ${a[0].tipZ} mm` : '標本なし';
+    ok('上面ノズルの首がラインの内側を向いている', top.length > 0 && top.every(q => q.inward),
+       `${top.filter(q => q.inward).length}/${top.length} 本（${one(top)}）`);
+    ok('下面ノズルの首もラインの内側を向いている', bot.length > 0 && bot.every(q => q.inward),
+       `${bot.filter(q => q.inward).length}/${bot.length} 本（${one(bot)}）`);
+    // 首の向きと粒の着地が同じ側（首だけ反転していないこと）を «符号» で確かめる
+    const sameSide = top.every(q => Math.sign(q.tipZ) === Math.sign(q.pipeZ));
+    ok('首を倒しても反対側へ飛び出さない（倒しすぎていない）', sameSide,
+       sameSide ? '上下とも自分の側に留まる' : '反対側へ回り込んでいる');
+  }
   R.failed = R.checks.filter(q => !q.pass).length;
   return R;
 });
