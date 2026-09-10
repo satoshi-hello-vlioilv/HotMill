@@ -1361,7 +1361,8 @@ const VERSION = {
       { t: 'ブラシ条件は «最終パスから数えて» 決める（F が最終、F-2 は 2 つ手前）。既定は 5000 系の実機条件 —— F-5〜F-3 は SN を全長、F-2 は SN を全長の半分。材質ごとに上書きできる', w: 'BRUSH.DEFAULT / BY_ALLOY' },
       { t: 'ノッチは 6 段・10〜60 Hz の 10 Hz 刻みだが、5 ノッチだけ 15 Hz という実機のイレギュラー設定をそのまま表で持つ', w: 'BRUSH.NOTCH_HZ' },
       { t: 'ブラシ条件の登録モーダルを作った。材質を選び、F-5〜F の 6 行でブラシの種類・掛ける長さ・ノッチを決める。下に «除去の強さ»（既定を 100 %）と、弱すぎ／強すぎの注意を出す', w: '#dlg-brush / UIManager.openBrushDialog' },
-      { t: '3D にブラシロールを上下 1 本ずつ足した。掛けるパスではワークロールに押し付け、掛けないパスでは半径方向へ 140 mm 引く。当たりはバックアップロールと板を避けた入側寄りの斜め上', w: 'Parts.brushRoll / MillStandView' },
+      { t: '3D にブラシロールを上下 1 本ずつ足した。掛けるパスではワークロールに押し付け、掛けないパスでは半径方向へ 140 mm 引く。当たりは上が入側寄りの斜め上（145°）、下がミルピット側の斜め下（160°）—— 真横は E テーブル架構が、ほぼ真下はバックアップロールが占めていて置けない（実測）', w: 'Parts.brushRoll / BRUSH.ANGLE / ANGLE_LO' },
+      { t: 'ブラシはハウジングの窓の柱から張り出した腕に軸受で吊る。筒の中に軸を通すと «部材が部材の中に居る» ことになるので、軸は作らず腕の端の軸受箱が筒の端を受ける', w: 'Parts.brushBracket' },
       { t: '実測: コーティングは 1 ロットで 6.0 → 6.9 µm まで積もり、ブラシで 4.2 µm まで落ち、掛けない最終 2 パスで 6.6 µm へ戻る。摩擦係数の振れは ±2.6 % で、荷重の較正（14/14）は崩れない', w: 'tools/brushtrace.mjs' },
       // --- 計器バー（下部）---
       { t: '計器バーを 10 枚から «運転で立てる問い» ごとの 5 枚にまとめた —— 進捗／速度・ギャップ／負荷／材料／品質。10 枚だと 1 枚 133 px しか取れず、見出しが切れて読み比べが要っていた（1,728 px で 1 枚 214 px になった）', w: '#metrics' },
@@ -2213,7 +2214,7 @@ const CONFIG = {
      * バーの長さも本数から決まる（LEN ＝ N × PITCH）ので、LEN は固定値として持たない。
      * ※ ROLL_D（コロ径）・SHAFT_D（シャフト径）・PITCH は実機の値が未入手のため推定値。 */
     GUIDE: { X: 3400, N_IN: 11, N_OUT: 5, PITCH: 211, ROLL_D: 130, ROLL_L: 380, SHAFT_L: 535, SHAFT_D: 45,
-             FLANGE_T: 45, RECESS: 20, OPEN_MARGIN: 600, RATE: 500,
+             FLANGE_T: 45, RECESS: 20, OPEN_MARGIN: 600, RATE: 500, ARM_DX_MAX: 700,
              BASE_Z: 2300, ARM_L: 1700, ARM_Y: 300,
              /* 板面クーラント。門型（柱 POST_X/POST_Z、梁 BEAM_Y）から、ラインに «平行» な
               * ヘッダを OS / DS に 1 本ずつ（ライン中心から ±Z、パスライン上 Y、Φ D、長さ LEN）
@@ -2925,7 +2926,11 @@ const CONFIG = {
      * ワークロール軸から見て «バックアップロール（真上）と板（真下）を避けた入側寄りの斜め上»。
      * 離すときは半径方向へ LIFT だけ引く（実機も掛けないパスでは離す）。
      * 減速比は «インバータ周波数 → ブラシの回転数» の比（4 極誘導機・直結の目安）。 */
-    ROLL_D: 400, BARREL: 2500, ANGLE: 145, LIFT: 140, RPM_PER_HZ: 30,
+    /* 当たりの極角と外径。上は «バックアップロールと板を避けた入側寄りの斜め上»。
+     * 下は «ハウジングの窓の中»（入側寄りの斜め下・ミルピットの側）—— 真横は E テーブル架構が、
+     * ほぼ真下はバックアップロールが占めていて置けない（実測: 横で 97 mm・下で 99 mm 食い込み）。
+     * 径は «窓の幅（±800）に軸受ブラケットごと収まる» 大きさにする。 */
+    ROLL_D: 260, BARREL: 2500, ANGLE: 145, ANGLE_LO: 160, LIFT: 140, RPM_PER_HZ: 30,
   },
 
   TRIMMER: {
@@ -3649,6 +3654,10 @@ const Layout = {
   guideN(x) { return x * CONFIG.FLIP < 0 ? CONFIG.TABLE.GUIDE.N_IN : CONFIG.TABLE.GUIDE.N_OUT; },
   /** そのコロ本数のバーの長さ [mm]。長さは本数から決まる（LEN を別に持たない）。 */
   guideLen(n) { return n * CONFIG.TABLE.GUIDE.PITCH; },
+  /* スライドアーム（＝架台の柱）の X。バーの端から 300 mm 内側が素直だが、入側は
+   * コロ 11 本ぶん長いので、そのままだと架台が受取テーブル架構に食い込む（実測 70 mm）。
+   * 外へ出せる上限を持たせる。 */
+  guideArmDX(n) { return Math.min(Layout.guideLen(n) / 2 - 300, CONFIG.TABLE.GUIDE.ARM_DX_MAX); },
   /** バーの高さ [mm]。コロのシャフトを上下のフランジで受けるので、シャフト長から決まる。 */
   get guideH() { const g = CONFIG.TABLE.GUIDE; return g.SHAFT_L + 2 * g.FLANGE_T; },
   /** バーの原点（下端）からコロ本体の下端までの高さ [mm]。ここがパスラインに一致する。 */
@@ -9102,16 +9111,44 @@ const Parts = {
     return g;
   },
 
-  /** ブラシロール 1 本。芯金の外に «毛» の筒を履かせ、両端に軸受首を出す。 */
+  /**
+   * ブラシロール 1 本。毛の筒（面長 BARREL）と、その外へ出る軸端・軸受ブラケット。
+   * 芯金は «毛の中» には作らない —— 筒の中に軸を通すと «部材が部材の中に居る» ことになり、
+   * 構造検査（tools/structure.mjs）が食い込みとして拾う（実測 126 mm）。
+   * ブラケットはハウジングの窓の内面まで届かせる。ブラシは宙に浮いている部材ではなく、
+   * ハウジングから出た腕に軸受で吊られているため。
+   */
   brushRoll() {
-    const B = CONFIG.BRUSH, D = B.ROLL_D, L = B.BARREL;
-    return {
-      core: G.merge([
-        G.cyl(D * 0.45, L + 260, 'z', 14),                                  // 芯金（毛の中を通る）
-        ...[-1, 1].map(sz => G.at(G.cyl(D * 0.30, 260, 'z', 10), 0, 0, sz * (L / 2 + 240))),  // 軸受首
-      ]),
-      hair: G.cyl(D, L, 'z', 20),                                           // 毛の筒
-    };
+    const B = CONFIG.BRUSH;
+    /* 毛の筒だけ。軸は作らない —— 筒の中に軸を通すと «部材が部材の中に居る» ことになり、
+     * 構造検査が食い込みとして拾う。軸受は次の brushBracket の端が受け持つ。 */
+    return { hair: G.cyl(B.ROLL_D, B.BARREL, 'z', 20) };
+  },
+  /**
+   * ブラシの軸受ブラケット。ハウジングの窓の柱から窓の中へ張り出し、その先でブラシの軸端を
+   * 受ける。ブラシは押し付け／逃がしで半径方向へ 140 mm 動くので、ブラケットは «その動く
+   * 範囲を呑む» 大きさにする（動いても軸端がブラケットから外れない）。
+   * 原点＝ブラシの «押し付け位置» の軸心。dirX がブラシから見た柱の側（−1 / +1）。
+   */
+  brushBracket(dirX) {
+    const B = CONFIG.BRUSH, M = CONFIG.MILL, L = B.BARREL, H = M.HOUSING;
+    /* 窓の «実際の» 内側は WIN_X/2 より 35 mm 内（縁の丸めぶん。実測）。腕はそこへ 15 mm
+     * だけ食い込ませて柱に取り付く（架構との接触が «支持» になる）。 */
+    const len = H.WIN_X / 2 - 20;
+    /* 腕は «毛の筒の端から» ハウジングの窓の内面へ 15 mm 入るところまで。
+     * 筒の端に接するので、ブラシはこの腕を通じて架構に支持される。 */
+    /* z1 は «ハウジング板の内面»。板はライナぶん内へ出ているので、実体の内面は INNER_Z より
+     * 35 mm 内側（実測 1,365 mm）。そこへ 15 mm だけ食い込ませて柱に取り付く。
+     * INNER_Z をそのまま使うと 50 mm 食い込み、半分にすると届かずブラシが宙に浮く。 */
+    const z0 = L / 2, z1 = H.INNER_Z - 20, zl = Math.max(z1 - z0, 60);
+    /* 腕の高さは 160 mm に抑える。E テーブル架構が下ブラシのすぐ上（y 330〜）に来るので、
+     * 太くすると当たる（実測）。 */
+    const parts = [];
+    for (const sz of [-1, 1]) {
+      parts.push(G.at(G.box(len, 160, zl), dirX * len / 2, 0, sz * (z0 + zl / 2)));       // 腕
+      parts.push(G.at(G.cyl(B.ROLL_D * 0.8, zl, 'z', 12), 0, 0, sz * (z0 + zl / 2)));     // 軸受箱（筒の端を受ける）
+    }
+    return G.merge(parts);
   },
 
   /* --- ピニオンスタンド・減速機・主電動機（駆動側の静的設備） --------------- */
@@ -9253,7 +9290,7 @@ const Parts = {
     // 背板から後ろへ出るスライドアーム 2 本（架台の軸受を貫いてシリンダへ）。根元に補強リブ
     const boxL = g.ARM_L - 900, zArm = zb + backT;
     for (const sx of [-1, 1]) {
-      const x = sx * (LEN / 2 - 300);
+      const x = sx * Layout.guideArmDX(n);
       parts.push(G.at(G.box(320, 260, boxL), x, g.ARM_Y + 130, zArm + boxL / 2));                // スライドアーム
       parts.push(G.at(G.box(60, H - 2 * flangeT - 60, 360), x, H / 2, zArm + 180));              // 補強リブ（背板 → アーム）
       parts.push(G.at(G.cyl(200, 900, 'z', 12), x, g.ARM_Y + 130, zArm + boxL + 450));           // シリンダロッド
@@ -9268,12 +9305,12 @@ const Parts = {
     const g = CONFIG.TABLE.GUIDE, P = CONFIG.MILL.PASS_LINE, top = P + g.ARM_Y - 60, parts = [];
     const LEN = Layout.guideLen(n);
     for (const sx of [-1, 1]) {
-      const x = sx * (LEN / 2 - 300);
+      const x = sx * Layout.guideArmDX(n);
       parts.push(G.at(G.box(420, top, 520), x, top / 2, 0));                          // 柱（床から）
       parts.push(G.at(G.box(520, 460, 620), x, P + g.ARM_Y + 130, 0));                // アーム軸受
       parts.push(G.at(G.cyl(300, 1300, 'z', 14), x, P + g.ARM_Y + 130, 960));         // 開閉シリンダ
     }
-    parts.push(G.at(G.box(Math.max(LEN - 300, 400), 220, 420), 0, 410, 0));           // 柱間のつなぎ
+    parts.push(G.at(G.box(Math.max(2 * Layout.guideArmDX(n), 400), 220, 420), 0, 410, 0));   // 柱間のつなぎ
     return G.merge(parts);
   },
   /** サイドガイドのコロ 1 個。本体 380 mm の上下へシャフト（535 mm）が出て軸受で受ける。 */
@@ -11040,16 +11077,23 @@ class MillStandView {
      * ワークロールに押し付け、掛けないパスでは半径方向へ引く。当たりは バックアップロール
      * （真上）と板（真下）を避けた入側寄りの斜め上。 */
     {
-      const bg = Parts.brushRoll();
+      const bg = Parts.brushRoll(), Bc = CONFIG.BRUSH;
       this.brushes = [1, -1].map(sy => {
         const g = new THREE.Group(); g.name = sy > 0 ? '上ブラシロール' : '下ブラシロール';
-        const core = new THREE.Mesh(bg.core.clone(), MAT.rollNeck);
         const hair = new THREE.Mesh(bg.hair.clone(), MAT.brushHair);
-        hair.name = g.name; core.castShadow = hair.castShadow = true;
-        g.add(core, hair); this.group.add(g);
-        return { g, hair, sy };
+        hair.name = g.name; hair.castShadow = true;
+        g.add(hair); this.group.add(g);
+        /* 軸受ブラケットはハウジングの柱に付く固定部材なので、ロールとは別に置く。
+         * 位置は «押し付け位置» の軸心（ロールが逃げてもブラケットは動かない）。 */
+        const a = (sy > 0 ? Bc.ANGLE : Bc.ANGLE_LO) * Math.PI / 180;
+        const r = CONFIG.MILL.WR_D / 2 + Bc.ROLL_D / 2;
+        const bx = Math.cos(a) * r;
+        const br = new THREE.Mesh(Parts.brushBracket(Math.sign(bx) || -1), MAT.guide);
+        br.name = g.name + '軸受ブラケット'; br.castShadow = true;
+        this.group.add(br);
+        return { g, hair, sy, br, a, r };
       });
-      bg.core.dispose(); bg.hair.dispose();
+      bg.hair.dispose();
     }
 
     // --- チョック / 圧下シリンダは「手前側」「奥側」に分けて保持する ---------
@@ -11106,13 +11150,17 @@ class MillStandView {
     /* ブラシロール: 掛けているときはワークロールに接し、掛けていないときは半径方向へ引く。
      * 回転はインバータ周波数から（掛けていなければ止まる）。 */
     {
-      const B = CONFIG.BRUSH, a = B.ANGLE * Math.PI / 180, rB = B.ROLL_D / 2;
+      const B = CONFIG.BRUSH, rB = B.ROLL_D / 2;
       for (const b of this.brushes) {
+        const a = (b.sy > 0 ? B.ANGLE : B.ANGLE_LO) * Math.PI / 180;
         const wr = (b.sy > 0 ? mill.wrDiaTop : mill.wrDiaBot) / 2;
         const gap = mill.brushOn ? 0 : B.LIFT;
         const r = wr + rB + gap, cy = b.sy > 0 ? wt : wb;
         b.g.position.set(u(Math.cos(a) * r), u(cy + b.sy * Math.sin(a) * r), 0);
         b.g.rotation.z = -b.sy * mill.brushAngle;
+        // ブラケットは «押し付け位置» に固定（ロールの上下は研削で径が変わるぶんだけ追う）
+        const r0 = wr + rB;
+        b.br.position.set(u(Math.cos(a) * r0), u(cy + b.sy * Math.sin(a) * r0), 0);
       }
     }
     for (const [k, sz] of [['near', 1], ['far', -1]]) {
