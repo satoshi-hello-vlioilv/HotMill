@@ -1239,6 +1239,7 @@ const VERSION = {
       { t: '全 8 材質の b を公表の活性化エネルギーから逆算し直し、C で絶対値を保った。当てはめ Q の公表値からのずれが +24〜+40 % → −15〜+5 % に収まった。A5052 の実機一致は崩れず、むしろ良くなった（26→16 が 1,579 → 1,533 t、16→8 が 2,730 → 2,413 t。実機 1,530〜2,000 / 2,400〜2,900）', w: 'ALLOYS' },
       { t: 'b の整合を評価器で見張るようにした（b ＝ Q_ACT・m/(R・T_ref²) ±3 %、当てはめ Q は公表値の ±20 %）。これが無いと同じ取り違えがまた起きる', w: 'tools/modeltrace.mjs' },
       { t: '偏芯を上下 4 本へ分けたとき、振幅を 1/2 ずつにしたため位相差で打ち消し合っていた（長手の振れが 3σ 45 → 30 µm に落ち、偏芯を切っても変わらなくなっていた）。独立な 2 本の合成の実効値が設定値になるよう 1/√2 ずつにし、位相もロール 1 本ごとの固有値にした', w: 'MillState._disturb' },
+      { t: 'パス間の死に時間（主機の逆転・圧下の設定と確認・材料のトラッキング）を実装した。圧下シリンダの移動時間しか見ていなかったため、多パス区間の所要時間が実機より 26 % 短く出ていた。6 s/パスで 厚板段＋仕上げ 332 → 463 s（実機 450）、26→16 が 84 → 90 s（実機 90）と一致する', w: 'PROCESS.PASS_DEAD / MillController.setPhase' },
       { t: '反りの向きの判定を «曲率半径 1 km» という丸い数字から、実機と同じ測り方（1 m 定規の隙間 [mm]）へ書き直した。下面スプレーを足したぶん終盤の薄板パスで符号が反転するが、量は 0.13 mm/m で熱間板の平坦度公差（3〜5 mm/m）の 1/25。あわせて «上反りが主» であることも判定する', w: 'tools/curltrace.mjs' },
       // --- ピット炉の上下温度差 ---
       { t: '均熱中のスラブは «下ほど熱い»（ピット炉は下から加熱する）。抽出時 50 K の差が持ちかかりまでの待ち（10 分）でどこまで均されるかを層モデルに解かせた —— 530 mm 厚で 13.9 K（5 分 23.9 / 20 分 4.8 / 30 分 1.6 K）', w: 'FURNACE.SOAK_DT / SlabState.pitProfile' },
@@ -2976,7 +2977,14 @@ const CONFIG = {
    * （50 mpm・張力あり）が平均 2,105 t で実機の帯 2,400〜2,900 t を下回り、0.32 で
    * 平均 2,376 t・頭 2,300 → 尻 2,872 t と帯の両端に一致する（0.30 でも合格域: 2,235 / 2,695 t）。
    * 65 → 26 mm・26 → 16 mm（1,530〜2,000 t）も帯の内側（calib.mjs）。 */
-  PROCESS: { MU: 0.32, MU_KT: 0.0, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
+  /* パス間の死に時間 [s]。尻が抜けてラインが止まってから、次のパスで板が動き出すまで。
+   * 可逆ミルではパスごとに必ず入る時間で、中身は «主機の逆転（界磁の切替と再起動）»
+   * «圧下の設定と確認» «材料のトラッキング»。
+   * 本アプリは圧下シリンダの移動時間しか見ていなかったため、多パス区間の所要時間が
+   * 実機より短く出ていた（実測: 実機 450 s に対し 332 s ＝ −26 %）。単パスの区間では
+   * 84 s 対 90 s と 6 s だけ足りず、これがちょうど 1 パスぶんの死に時間に当たる。
+   * 実機 2 ロットからの逆算は A5052 5.6 s/パス・A1100 7.8 s/パス。 */
+  PROCESS: { PASS_DEAD: 6, MU: 0.32, MU_KT: 0.0, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
              TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.95, PEAK_K: 1.22,
              /* 巻取パスの尻: «パス時間いっぱい待って冷えた» 温度で解いた荷重に掛ける係数。最後の 1 m の
               * 端部の冷え（+5 %）と、頭尾ロック中にミルばねで尻が厚くなって圧下が減るぶん（−5 %）が
@@ -5477,6 +5485,7 @@ class MillState {
     this._gq = [];                             // 厚み計までの輸送遅れ（{t, h} の待ち行列）
     this.currentSpeed = 0; this.targetSpeed = 0;
     this.mode = 'AUTO'; this.passIndex = -1; this.passPhase = 'IDLE';
+    this.phaseT = 0;                           // いまの工程に入ってからの経過 [s]（パス間の死に時間に使う）
     this.guideGap = 2600;
     this.wrDia = CONFIG.MILL.WR_D; this.brDia = CONFIG.MILL.BR_D;  // 研削による現在径（RollShop が入れる。上下の平均）
     this.wrRa = CONFIG.MILL.ROLL_SHOP.WR.RA_NEW; this.brRa = CONFIG.MILL.ROLL_SHOP.BR.RA_NEW;   // 表面粗度 [µmRa]
@@ -5674,7 +5683,7 @@ class MillController {
   }
   begin() {
     this.slab.onLine = true;
-    this.mill.mode = 'AUTO'; this.mill.passIndex = 0; this.mill.passPhase = 'SETUP';
+    this.mill.mode = 'AUTO'; this.mill.passIndex = 0; this.setPhase('SETUP');
     this._selectTables();
     this.bus.emit('SYS_MESSAGE', { text: '圧延開始', kind: 'info' });
     this.bus.emit('STATE_PASS', 0);
@@ -5689,9 +5698,10 @@ class MillController {
     const xa = sch.dir > 0 ? s.xMin : -reach, xb = sch.dir > 0 ? reach : s.xMax;
     this.mill.tableGroup = Layout.select(Math.min(xa, xb), Math.max(xa, xb));
   }
-  update(finish) {
+  update(finish, dt = 0) {
     const m = this.mill, s = this.slab;
     if (m.mode !== 'AUTO' || m.passIndex < 0) return;
+    m.phaseT += dt;
     if (finish) {                                     // 75 mm シャーによる端部切断を優先する
       if (finish.s.cropStage !== 'IDLE' && finish.s.cropStage !== 'DONE') return;
       // クロップは通板の «途中» で始める。パス終了後だと先端がシャーを何 m も
@@ -5705,8 +5715,12 @@ class MillController {
     if (m.passPhase === 'SETUP') {
       // 圧下完了までライン停止。実機の「セットアップ→噛み込み」の順序を守る。
       m.targetSpeed = 0;
+      /* 圧下が届いていても、すぐには噛み込めない。主機の逆転・圧下の確認・材料の
+       * トラッキングに要る時間（PROCESS.PASS_DEAD）は必ず待つ —— 可逆ミルの
+       * パス間の死に時間そのもので、これが無いと多パス区間が実機より速く終わる。 */
       // 到達可能な目標（クランプ後）と比較する。装置の下限に張り付いても待ち続けない。
-      if (Math.abs(m.screw - m.screwCmd) < 0.5 && Math.abs(m.currentSpeed) < 1) m.passPhase = 'RUN';
+      if (Math.abs(m.screw - m.screwCmd) < 0.5 && Math.abs(m.currentSpeed) < 1
+          && m.phaseT >= CONFIG.PROCESS.PASS_DEAD) this.setPhase('RUN');
     } else if (m.passPhase === 'RUN') {
       m.targetSpeed = sch.dir * Math.min(sch.speed, m.powerCap);
       // 学習用: 弧が満ちて所定速度の 8 割以上で走っている間の荷重だけを平均する（頭尻の過渡は入れない）
@@ -5714,12 +5728,14 @@ class MillController {
       // 尻抜け後も «後端の切断が残っていれば» 送り続ける（そのまま板を送って後端を刃へ運ぶ）
       const cleared = (sch.dir > 0 ? s.xMin > CONFIG.SAFE_CLEAR : s.xMax < -CONFIG.SAFE_CLEAR)
                     && !(finish && finish.cropPending());
-      if (cleared) { m.passPhase = 'CLEAR'; m.targetSpeed = 0; }
+      if (cleared) { this.setPhase('CLEAR'); m.targetSpeed = 0; }
     } else if (m.passPhase === 'CLEAR') {
       m.targetSpeed = 0;
       if (Math.abs(m.currentSpeed) < 1) this.advance();
     }
   }
+  /** 工程を切り替える（経過時間を 0 に戻す。死に時間の計測はここが唯一の出どころ）。 */
+  setPhase(p) { this.mill.passPhase = p; this.mill.phaseT = 0; }
   advance() {
     const m = this.mill, AD = CONFIG.AGC.ADAPT, prev = CONFIG.SCHEDULE[m.passIndex];
     /* セットアップモデルの学習: このパスの実測平均荷重 ÷ 予測（steady）で次パスの事前設定を補正する。
@@ -5738,7 +5754,7 @@ class MillController {
       this.bus.emit('CMD_START_WIND');
       this.bus.emit('STATE_LAST_PASS_DONE');
     } else {
-      m.passPhase = 'SETUP';
+      this.setPhase('SETUP');
       this._selectTables();
       this.bus.emit('STATE_PASS', m.passIndex);
     }
@@ -7188,7 +7204,7 @@ class PhysicsEngine {
   step(dt) {
     this.elapsed += dt;
     this.supplyCtrl.update(dt);
-    this.millCtrl.update(this.finishCtrl);
+    this.millCtrl.update(this.finishCtrl, dt);
     this.finishCtrl.update(dt);
     this._actuators(dt);
     if (this.slab.onLine) { this._dynamics(dt); this._guides(dt); this._thermal(dt); this._lengthwise(dt); }
