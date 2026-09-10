@@ -1317,6 +1317,8 @@ const VERSION = {
       { t: '3D にブラシロールを上下 1 本ずつ足した。掛けるパスではワークロールに押し付け、掛けないパスでは半径方向へ 140 mm 引く。当たりはバックアップロールと板を避けた入側寄りの斜め上', w: 'Parts.brushRoll / MillStandView' },
       { t: '実測: コーティングは 1 ロットで 6.0 → 6.9 µm まで積もり、ブラシで 4.2 µm まで落ち、掛けない最終 2 パスで 6.6 µm へ戻る。摩擦係数の振れは ±2.6 % で、荷重の較正（14/14）は崩れない', w: 'tools/brushtrace.mjs' },
       // --- 作業中に見つけて直したこと ---
+      { t: 'クレーンの運転速度を仕様の定格の 3 倍にした。定格そのもの（装入: 走行 85・横行 40・巻上 14 m/min）は仕様書の値で、クレーンとして一般的（走行 60〜150・横行 20〜60・巻上 8〜25）。ただしこの規模のラインを画面で追うには遅く見えるので、«見せる速さ» だけを倍率で変える。仕様の表は残したままで、1.0 に戻せば仕様どおりに動く', w: 'CONFIG.CRANE_SPEED_K / Layout.craneV' },
+      { t: '倍率は加速度を 2 乗で上げる。そうすると台形線図の所要時間がちょうど 1/K になり «全部が K 倍速い» という素直な意味になる（速度だけ上げると加速区間が伸びて短い移動では効かない）', w: 'Layout.craneA' },
       { t: '入側・出側の冷却ノズルの首が «外向き» に付いていた。噴射の粒は別に解いているので板には当たっており、実物の向きだけが左右反転していた（実測: パイプ z 1,250 に対し先端 z 1,512 ＝ 262 mm 外）。上下とも内向きに直し、実体の行列から首の向きを読む判定を足した', w: 'GuideView._aimNozzles / tools/nozzletrace.mjs' },
       { t: 'ユニバーサルジョイントに 300×300 mm の板が、コイル押えシリンダーに丸棒が 2 本、それぞれ意味のない部材として付いていた（異物に見えていた）。除去した', w: 'DriveView.spindles / Parts.holdDownRam' },
       { t: 'X 線板厚計に厚板が突き刺さっていた（板厚 530 mm で線源へ 207 mm 食い込み）。板はパスラインの «上» に載るので、内のり 640 の上半分 320 mm を超える板はそのまま通せない。粗パスでは線源側を上腕ごと «板厚 ＋ 60 mm» まで持ち上げて逃がす（サイドトリマーの上刃と同じ考え方）。逃がしている間は測れないので読みも出さない', w: 'XRAY.PARK_CLR / Layout.xrayLift / MillState.xrayLift' },
@@ -2471,6 +2473,11 @@ const CONFIG = {
    * 所要秒（SupplyController）も途中位置（SupplyView）もここを見るので、
    * «何秒かかるか» と «どう見えるか» が原理的にずれない。
    * SET（転倒機へ立てかける降下）は吊ったまま降ろすので巻上と同じ定格。 */
+  /* クレーンの運転速度の倍率。仕様書の定格はそのまま残し、«見せる速さ» だけをここで変える。
+   * 1.0 で仕様どおり。実機の定格（装入クレーン: 走行 85・横行 40・巻上 14 m/min）は
+   * クレーンとして標準的な速さだが、この規模のラインを画面で追うには遅く見えるため 3 とする。 */
+  CRANE_SPEED_K: 3,
+
   CRANE_MOVES: {
     // 吊具を炉へ降ろす。空荷なので巻上は定格より速い（HOIST_EMPTY）
     dive:     { by: 'CRANE',    d: 'hoist',    v: 'HOIST_EMPTY', win: [0, 1] },
@@ -3604,11 +3611,20 @@ const Layout = {
              move: { hoist: yHi - yPit, travel: xStand - xPit, traverse: S.SIDE_Z - FU.Z, set: yHi - yStand,
                      lift: CONFIG.TRANSFER.LIFT, cross: S.SIDE_Z } };
   },
-  /** 工程 key の台形速度線図の諸元（距離・定格速度 mm/s・加速度 mm/s²・動く区間）。無ければ null。 */
+  /**
+   * クレーンの «運転速度» [mm/s]。仕様書の定格（CRANE.SPEED / TRANSFER.SPEED）はそのまま残し、
+   * 見せる速さだけを CONFIG.CRANE_SPEED_K で一括して変える。1.0 に戻せば仕様どおりになる。
+   * 加速度は倍率の 2 乗で上げる —— そうすると台形線図の «所要時間» がちょうど 1/K になり、
+   * 「全部が K 倍速く動く」という素直な意味になる（速度だけ上げると加速区間が長くなって
+   * 短い移動では効かない）。
+   */
+  craneV(cfg, name) { return Ramp.mpm(cfg.SPEED[name] * CONFIG.CRANE_SPEED_K); },
+  craneA(cfg) { return cfg.SPEED.ACCEL * 1000 * CONFIG.CRANE_SPEED_K * CONFIG.CRANE_SPEED_K; },
+  /** 工程 key の台形速度線図の諸元（距離・速度 mm/s・加速度 mm/s²・動く区間）。無ければ null。 */
   moveRamp(key, slab, passY) {
     const m = CONFIG.CRANE_MOVES[key]; if (!m) return null;
-    const sp = CONFIG[m.by].SPEED, w = m.win;
-    return { d: Layout.supplyPath(slab, passY).move[m.d], v: Ramp.mpm(sp[m.v]), a: sp.ACCEL * 1000,
+    const cfg = CONFIG[m.by], w = m.win;
+    return { d: Layout.supplyPath(slab, passY).move[m.d], v: Layout.craneV(cfg, m.v), a: Layout.craneA(cfg),
              win: w, win2: m.win2, span: w[1] - w[0] };
   },
   /** 工程 key の所要秒。動くのが一部だけの工程は «移動時間 ÷ その区間» に伸ばす。 */
@@ -12006,10 +12022,9 @@ class SupplyView {
     else if (pit) { c.beamY = pit.jawY + 1400; c.z = pose.z; c.x = pose.x; }
     else {
       // 材料を放したあとの «空荷での戻り» も同じ定格速度で走る（速度の真実は 1 か所）。
-      const SP = CR.SPEED;
-      c.beamY = Num.rateTo(c.beamY, beamHome, Ramp.mpm(SP.HOIST_EMPTY), dt);   // 空荷なので速い
-      c.z = Num.rateTo(c.z, CONFIG.FURNACE.Z, Ramp.mpm(SP.TRAVERSE), dt);
-      c.x = Num.rateTo(c.x, homeX, Ramp.mpm(SP.TRAVEL), dt);
+      c.beamY = Num.rateTo(c.beamY, beamHome, Layout.craneV(CR, 'HOIST_EMPTY'), dt);   // 空荷なので速い
+      c.z = Num.rateTo(c.z, CONFIG.FURNACE.Z, Layout.craneV(CR, 'TRAVERSE'), dt);
+      c.x = Num.rateTo(c.x, homeX, Layout.craneV(CR, 'TRAVEL'), dt);
     }
     this.girder.position.x = u(c.x);
     this.trolley.position.set(u(c.x), u(this.trolleyY), u(c.z));
