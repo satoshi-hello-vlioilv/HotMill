@@ -1259,6 +1259,7 @@ const VERSION = {
       { t: '計器の «主機動力» が圧延ぶんだけを読んでいた（名前と中身の食い違い）。主機が出している動力に直し、軸受と慣性の割合を副表示に添えた。過負荷警告と記録も同じ値で見る', w: '#m-power / RollingLog.SCOLS' },
       { t: '主駆動系はトルクが決まったあとに回す。_actuators の中で回していたため、1 ステップ古い圧延トルクで加速を決めていた（噛み込みの瞬間に 428 kN·m ずれる）', w: 'PhysicsEngine.step' },
       // --- 作業中に見つけて直したこと ---
+      { t: 'X 線板厚計に厚板が突き刺さっていた（板厚 530 mm で線源へ 207 mm 食い込み）。板はパスラインの «上» に載るので、内のり 640 の上半分 320 mm を超える板はそのまま通せない。粗パスでは線源側を上腕ごと «板厚 ＋ 60 mm» まで持ち上げて逃がす（サイドトリマーの上刃と同じ考え方）。逃がしている間は測れないので読みも出さない', w: 'XRAY.PARK_CLR / Layout.xrayLift / MillState.xrayLift' },
       { t: '尻抜けの一瞬のロールギャップ（8 → 4.1 mm、60 ms）でコイル全体を数え直していた。外径が Φ1,606 → 1,325 と化ける。巻いた長さで重み付けした平均厚で持つようにした', w: 'FinishController.coilTh' },
       { t: '濡れたローラの液膜を噴射域で薄めず «常に全面» に掛けていた。上がり温度が 42 K 低く出ていた', w: 'PhysicsEngine._thermal' },
       { t: '噴流の効き（JET）を «ロールから流れ落ちる» ぶんにも掛けていた。下面の抜熱が 35 % 過大だった', w: 'PhysicsEngine.surfaceCool' },
@@ -2670,6 +2671,13 @@ const CONFIG = {
     /* 線源と検出器の内のり [mm]。下側の検出器はテーブルローラの «下» に潜るので、
      * ヘッドの天端がローラ最下点（618）より下に来る値でなければならない。 */
     GAP_Y: 640,
+    /* 内のり 640 は «薄板を測るとき» の位置。板はパスラインの «上» に載るので、この内のりの
+     * 上半分（320 mm）を超える厚板はそのままでは線源に突き刺さる（実測: 板厚 530 mm で
+     * 食い込み 207 mm。tools/interfere.mjs）。粗パスでは線源側を上腕ごと «板厚 ＋ PARK_CLR»
+     * まで持ち上げて退避させる —— サイドトリマーの上刃と同じ考え方で、実機の計器も
+     * 厚板を通すときは測定位置から逃がす。柱の高さは退避しきった位置（設計最大 ＝ GAP_MAX）で決まる。
+     * 検出器側はテーブルローラの下に潜っていて板とは当たらないので動かさない。 */
+    PARK_CLR: 60, LIFT_V: 400,             // 退避のすきま [mm] と昇降速度 [mm/s]
     HEAD_D: 240, HEAD_L: 300,              // ヘッド（線源／検出器）の外形 Φ・長さ
     COL_Z: 2650, COL_W: 340,               // 柱の Z 位置と太さ。ロール胴 2,490/2 の外、サイドガイド架台 3,910 の内
     BASE_Y: -880, BASE_T: 120,             // 台板の高さ（パスライン基準 ＝ 床）と厚み
@@ -3272,6 +3280,17 @@ const Layout = {
     return { xs: xs.map(x => sec.side * x), uniform, pitchUsed: uniform ? len / n : null };
   },
   /** 全ローラ [{x, sec, g}] を X 昇順で。g は «このローラを含む最小のテーブル選択番号»。 */
+  /**
+   * X 線板厚計の線源側の «測定位置からの持ち上げ» [mm]。板はパスラインの上に載るので、
+   * 内のりの上半分を超えたぶんだけ上腕ごと逃がす。薄板（〜260 mm）では 0 ＝ 測定位置。
+   */
+  xrayLift(th) {
+    const X = CONFIG.XRAY;
+    return Math.max(0, th + X.PARK_CLR - X.GAP_Y / 2);
+  },
+  /** 退避しきった位置（設計最大の板厚）。柱と上腕の可動域はここで決まる。 */
+  get xrayLiftMax() { return Layout.xrayLift(CONFIG.MILL.GAP_MAX); },
+
   rolls() {
     const out = [];
     for (const s of CONFIG.TABLE.SECTIONS) for (const x of Layout.section(s).xs)
@@ -5599,6 +5618,7 @@ class MillState {
     this.gauge = { ENTRY: null, EXIT: null, SCAN: null };
     this._gRaw = { ENTRY: null, EXIT: null, SCAN: null };
     this.scanZ = 0; this.scanDir = 1;
+    this.xrayLift = 0;                        // 線源側の «測定位置からの持ち上げ» [mm]（厚板を通すときの退避）
     this.rollTemp = CONFIG.MILL.ROLL_T0;       // ワークロール表面温度 [℃]（板から温まる）
     this.brTemp = CONFIG.MILL.ROLL_T0;         // バックアップロール温度 [℃]（WR から熱をもらう）
     this.bendingForce = 0;                     // 3D 表現用（0〜1）
@@ -7534,7 +7554,10 @@ class PhysicsEngine {
       m.gauge[id] = m.gauge[id] === null ? raw : Num.approach(m.gauge[id], raw, E.MEAS_TAU, dt);
     };
     const v = Math.abs(m.currentSpeed) / 60 * 1000;              // mm/s
-    if (!s.inBite) { m._gq.length = 0; m.gaugeH = null; for (const g of X.UNITS) read(g.id, null); return; }
+    /* 線源側の退避。厚板は内のりの上半分を超えるので、上腕ごと «板厚 ＋ すきま» まで逃がす。
+     * 逃がしている間は測れない（実機の計器も測定位置から外れれば読みは出ない）。 */
+    m.xrayLift = Num.rateTo(m.xrayLift, Layout.xrayLift(Math.max(s.thickness, m.gap)), X.LIFT_V, dt);
+    if (!s.inBite || m.xrayLift > 1) { m._gq.length = 0; m.gaugeH = null; for (const g of X.UNITS) read(g.id, null); return; }
     // 入側: 計器の位置に来ている材料点の «前のパスが残した» 板厚
     const dEntry = Math.abs(X.UNITS.find(g => g.id === 'ENTRY').x);
     const uIn = s.uAhead(m.gap, dEntry);
@@ -9160,13 +9183,22 @@ const Parts = {
     const yBase = P + X.BASE_Y;                              // 台板（＝床）
     const armZ = X.COL_Z + X.COL_W / 2;                      // 腕の長さ（柱の外面からライン中心まで）
     const az = zc + X.COL_W / 2 + armZ / 2;                  // 腕の中心 Z
+    // 柱は «上腕が退避しきった位置» まで伸ばす（上腕はこの柱を上下に滑る）
+    const yColTop = yTop + Layout.xrayLiftMax + X.ARM_H / 2;
     return G.merge([
       G.at(G.box(T + 80, X.BASE_T, X.COL_W + 260), 0, yBase + X.BASE_T / 2, zc),                  // 据付台板
-      G.at(G.box(T, yTop + X.ARM_H / 2 - yBase, X.COL_W), 0, (yBase + yTop + X.ARM_H / 2) / 2, zc), // 柱
-      G.at(G.box(T, X.ARM_H, armZ), 0, yTop, az),                                                 // 上腕（線源側）
+      G.at(G.box(T, yColTop - yBase, X.COL_W), 0, (yBase + yColTop) / 2, zc),                     // 柱
       // 下腕だけ薄いのは、テーブルローラの軸受台のすきまを通り抜けるため
       G.at(G.box(X.ARM_T, X.ARM_H_LO, armZ), 0, yBot, az),                                        // 下腕（検出器側）
     ]);
+  },
+
+  /** 上腕（線源側）。厚板を通すときは線源ごと持ち上がるので、架構とは別の部品にする。 */
+  xrayUpperArm() {
+    const X = CONFIG.XRAY, P = CONFIG.MILL.PASS_LINE;
+    const armZ = X.COL_Z + X.COL_W / 2;
+    const az = -X.COL_Z + X.COL_W / 2 + armZ / 2;
+    return G.at(G.box(X.FRAME_T, X.ARM_H, armZ), 0, 0, az);
   },
 
   /** 線源／検出器ヘッド。上腕・下腕の先端に付く筒（板を挟んで向かい合う） */
@@ -10870,14 +10902,24 @@ class GuideView {
       fr.name = g.name + '架構'; fr.castShadow = fr.receiveShadow = true;
       this.sided.far.push(fr);                 // 柱は DS 側（−Z）に立つ
       grp.add(fr);
+      const ySrc = P + X.GAP_Y / 2 + X.HEAD_L / 2;           // 線源の測定位置
+      /* 線源側（上腕・線源・上のレール）は «厚板を通すときに持ち上がる» ひとまとまり。
+       * 検出器側はテーブルローラの下に潜っていて板と当たらないので動かさない。 */
+      const up = new THREE.Group(); up.name = '線源キャリッジ';
+      const arm = new THREE.Mesh(Parts.xrayUpperArm(), MAT.guide);
+      arm.name = g.name + '上腕'; arm.castShadow = arm.receiveShadow = true;
+      arm.position.y = u(ySrc + X.HEAD_L / 2 + X.ARM_H / 2);
+      up.add(arm);
+      grp.add(up);
       // 線源（上）と検出器（下）。板を挟んで «同じ横位置で» 向かい合う
       const head = new THREE.Group(); head.name = g.scan ? '走査ヘッド' : '測定ヘッド';
-      for (const sy of [1, -1]) {
-        const m = new THREE.Mesh(headGeo, MAT.hydraulic);
-        m.name = sy > 0 ? 'X 線源' : 'X 線検出器'; m.castShadow = true;
-        m.position.y = u(P + sy * (X.GAP_Y / 2 + X.HEAD_L / 2));
-        head.add(m);
-      }
+      const src = new THREE.Mesh(headGeo, MAT.hydraulic);
+      src.name = 'X 線源'; src.castShadow = true; src.position.y = u(ySrc);
+      head.add(src);
+      const det = new THREE.Mesh(headGeo, MAT.hydraulic);
+      det.name = 'X 線検出器'; det.castShadow = true;
+      det.position.y = u(P - X.GAP_Y / 2 - X.HEAD_L / 2);
+      head.add(det);
       /* 走査型は «腕の側面を走る» ので、上下の腕それぞれにレールを 1 本添える。
        * 腕の上下に付けると、下の腕のレールが床を突き抜ける（実測 −70 mm）。 */
       if (g.scan) {
@@ -10886,11 +10928,11 @@ class GuideView {
           const r = new THREE.Mesh(G.box(70, 70, 2 * X.SCAN_Z + 400), MAT.rod);
           r.name = '走査レール';
           r.position.set(u(X.HEAD_D / 2 + 45), u(P + sy * (X.GAP_Y / 2 + X.HEAD_L / 2)), 0);
-          grp.add(r);
+          (sy > 0 ? up : grp).add(r);          // 上のレールは線源といっしょに上がる
         }
       }
       grp.add(head);
-      return { unit: g, group: grp, head };
+      return { unit: g, group: grp, head, up, src };
     });
   }
   /** ノズルの姿勢を «いまのロット» の狙いへ合わせる（板幅・板厚が変わったときだけ組み直す）。 */
@@ -10923,7 +10965,12 @@ class GuideView {
     }
     if (slab) this._aimNozzles(slab.width, slab.inBite ? mill.gap : slab.thickness);
     // 走査型の測定ヘッドは板幅の中を往復する（物理側の mill.scanZ が唯一の出どころ）
-    for (const x of this.xray) if (x.unit.scan) x.head.position.z = u(mill.scanZ);
+    for (const x of this.xray) {
+      if (x.unit.scan) x.head.position.z = u(mill.scanZ);
+      // 厚板を通すときは線源側を持ち上げて逃がす（物理側の mill.xrayLift が唯一の出どころ）
+      const ly = u(mill.xrayLift || 0);
+      x.up.position.y = ly; x.src.position.y = u(CONFIG.MILL.PASS_LINE + CONFIG.XRAY.GAP_Y / 2 + CONFIG.XRAY.HEAD_L / 2) + ly;
+    }
   }
 }
 

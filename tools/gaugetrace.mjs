@@ -80,6 +80,36 @@ const out = await page.evaluate(async () => {
     ok(`下腕（厚み ${K.XRAY.ARM_T} mm）が軸受台のすきまを通る`,
        gap.every(g => g.clr >= 20), gap.map(g => `${g.id} すきま ${g.free}／片側余裕 ${g.clr} mm`).join(' ／ '));
   }
+  /* 厚板の逃げ。板はパスラインの «上» に載るので、内のり 640 の上半分（320 mm）を超える板は
+   * そのままでは線源に突き刺さる（実測: 板厚 530 mm で食い込み 207 mm、tools/interfere.mjs）。
+   * 設計最大の板厚（GAP_MAX）まで持ち上げたとき、線源・上腕・上のレールが板の上面より
+   * 上に居ること。柱もそこまで伸びていること。 */
+  {
+    const X = K.XRAY, P = K.MILL.PASS_LINE, thMax = K.MILL.GAP_MAX;
+    /* 実体はすでに «いまの板厚» のぶん退避した姿勢で描かれているので、比べるのは差分。
+     * ここを絶対量で足すと退避量を二重に数える（実測で 270 mm ぶんずれた）。 */
+    const lift = window.__LAYOUT.xrayLift(thMax), top = P + thMax;
+    const dy = lift - (A.physics.mill.xrayLift || 0);
+    ok('厚板では線源側が退避する（薄板では測定位置のまま）',
+       lift > 0 && window.__LAYOUT.xrayLift(70) === 0 && window.__LAYOUT.xrayLift(8) === 0,
+       `板厚 ${thMax} mm で ${lift.toFixed(0)} mm 上がる ／ 70 mm・8 mm では 0`);
+    const bad = [];
+    for (const u of units) {
+      const src = u.head.children.find(c => /線源/.test(c.name));
+      const parts = [{ n: '線源', o: src, dy }].concat(
+        u.up.children.map(o => ({ n: o.name.includes('レール') ? '走査レール' : '上腕', o, dy })));
+      for (const q of parts) {
+        const b = box(q.o), lo = b.y[0] + q.dy;
+        if (lo < top) bad.push(`${u.unit.id} の ${q.n} が ${(top - lo).toFixed(0)} mm 食い込む`);
+      }
+    }
+    ok(`設計最大の板厚 ${thMax} mm でも線源側が板に当たらない`, bad.length === 0, bad.join(' ／ ') || `板上面 ${top} mm を全基がかわす`);
+    // 柱は退避しきった位置まで伸びていること（上腕が宙に浮かない）
+    const colTop = Math.max(...units.map(u => box(u.group.children.find(c => /架構/.test(c.name))).y[1]));
+    const armTop = Math.max(...units.map(u => box(u.up.children.find(c => /上腕/.test(c.name))).y[1] + dy));
+    ok('柱が退避しきった位置まで伸びている（上腕が柱から外れない）', colTop >= armTop - 1,
+       `柱の天端 ${colTop.toFixed(0)} / 退避時の上腕の天端 ${armTop.toFixed(0)} mm`);
+  }
   // 線源（上）と検出器（下）が板を挟んで向かい合う
   for (const u of units) {
     const src = u.head.children.find(c => /線源/.test(c.name)), det = u.head.children.find(c => /検出器/.test(c.name));
