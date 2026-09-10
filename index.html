@@ -398,6 +398,9 @@ select.sel:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px
 .mc .bar { height:4px; border-radius:2px; background:var(--s-3); margin-top:6px; overflow:hidden; }
 .mc .bar i { display:block; height:100%; width:0; background:var(--ramp-4); border-radius:2px; transition:width .12s linear; }
 .mc.is-warn .bar i { background:var(--warn); } .mc.is-crit .bar i { background:var(--crit); }
+/* 板厚偏差が実機の実力（±50 µm）を外れたら色で知らせる。数字だけだと «外れている» と
+   気づくのに読み比べが要る（認知コスト）ので、まず色で分かるようにする。 */
+#m-xray-v.off { color:var(--crit); }
 .mc.is-warn .sub, .mc.is-crit .sub { font-weight:700; }
 .mc.is-warn .sub { color:#8a5b00; } .mc.is-crit .sub { color:var(--crit); }
 .mc.temp .val { color:var(--hot); }
@@ -922,6 +925,12 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
     class="mode" title="幅方向の反り。板幅いっぱいに定規を当てたときの隙間（＋は端が上がる）">幅 –</span></div>
     <div class="sub" id="m-curl-s">平坦</div></div>
   <div class="mc"><div class="k">ロールギャップ</div><div class="val"><span id="m-gap-v">400</span><u>mm</u></div><div class="sub" id="m-gap-s">目標 400 mm</div></div>
+  <!-- X 線板厚計。運転で見たいのは «いくつか» ではなく «狙いから外れているか» なので、
+       主値を目標との差（µm）にして、実測値と入側・走査位置は副値へ回す。
+       熱間の実力は ±50 µm なので、そこを超えたら色で知らせる（数字を読み比べさせない）。 -->
+  <div class="mc"><div class="k">板厚偏差（出側 X 線）</div><div class="val"><span id="m-xray-v">–</span><u>µm</u>
+    <span id="m-xray-x" class="mode" title="出側 固定型 X 線板厚計の読み（実測）">– mm</span></div>
+    <div class="sub" id="m-xray-s">入側 – ／ 走査 –</div></div>
   <!-- 幅方向の形状。«操作の判断に使うのは平坦度と判定» なので主値をそちらにし、
        原因であるクラウン・エッジドロップ・ベンダ力は副値へ回す（1 枚にまとめて行を増やさない） -->
   <div class="mc"><div class="k">板形状 平坦度／プロファイル</div><div class="val"><span id="m-flat-v">–</span><u>I</u>
@@ -1179,6 +1188,36 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '1.21.0', base: '6d24036', date: '2026-09-10', title: '倍率の天井を外す・キー溝とピット蓋・長手方向の板厚変動と X 線板厚計 3 基', items: [
+      // --- 再生速度 ---
+      { t: '倍率を上げても速くならなかったのを直した。1 コマで進める物理の刻み数を 16 に固定していたため、60 fps では 0.133 s ＝ 8 倍、30 fps では 4 倍が天井だった。刻み数ではなく «1 コマに使ってよい時間»（11 ms）で止めるようにして 20 倍まで出るようにした', w: 'PHYS_BUDGET_MS / PhysicsEngine.update' },
+      { t: '実際に出ている倍率を測って表示するようにした。要求どおり出ていないときは赤い «!» と説明が出る', w: 'App._effRate / UIManager.setEffective' },
+      // --- 上部メニュー ---
+      { t: '«区分記号» が見切れていたのを直した。使える幅をツールバー自身の幅で測っていたが、ツールバーは中身の幅そのものなので «常にちょうど» になり、はみ出しが検出できなかった。親（#hud-top）の幅からピルと隙間を引いて測るようにした', w: 'UIManager._fitToolbar' },
+      { t: '一時停止ボタンをアイコンだけにして 60 px を空けた。1,728 px 幅で 43 px の余りができる', w: '.tb-run #btn-pause' },
+      // --- ロールとピット ---
+      { t: 'WR / BUR の軸端にキー溝を付けた。スピンドル側の平頭が入る駆動端だけは溝なし', w: 'Parts.keyedShaft / MILL.NECK.KEY_*' },
+      { t: 'ハウジングを収めるピットに縞鋼板の蓋を載せた。断面表示では天面として透ける', w: 'Parts.pitDeck / Tex.checker' },
+      // --- クレーン ---
+      { t: '空荷の巻上を定格の 2 倍（28 m/min）にした。実機のホイストは荷が無ければ速く上がる。炉へ吊具を降ろす工程と帰りの巻上が速くなる', w: 'CRANE.SPEED.HOIST_EMPTY' },
+      // --- コイル押え ---
+      { t: '押える位置を 1 時から 2 時へ移した（極角 30°）。受けはサイドトリマー架構の梁の上に載る', w: 'COILER.HOLD.ANGLE' },
+      // --- 長手方向の板厚変動 ---
+      { t: 'ログの板厚に長手の «振れ» が無く 1 本の線だったのを直した。実測すると本体部の σ は 0.7 µm で、ログに見えていた段差は 0.01 mm 刻みの量子化そのものだった', w: 'MILL.GAUGE_MODEL' },
+      { t: 'ロール偏芯を実装した。ロールは真円・真芯に研削できないので 1 回転ごとに実ギャップが振れる。波長は π・D（BUR 4.5 m／WR 2.9 m）で、位相はロールの現品（径）ごとに決まる', w: 'MillState._disturb / m.ecc' },
+      { t: '摩擦・潤滑の揺らぎを 1 次遅れを通した色つき雑音として足した。刻み幅に依らないよう時定数で正規化する', w: 'GAUGE_MODEL.MU_SD / MU_TAU' },
+      { t: '振れを実機の実力（±50 µm ＝ 3σ）に合わせた。仕上げ側パスの 3σ 平均は 45 µm。偏芯を切ると σ が 15.0 → 8.9 µm に落ちる（振れの主因が偏芯であることの確認）', w: 'tools/gaugetrace.mjs' },
+      { t: 'ログの板厚を 1 µm 刻みで残すようにした。0.01 mm 刻みだと ±50 µm が «5〜9 段の階段» に潰れて見えない', w: 'RollingLog.sample' },
+      // --- X 線板厚計 ---
+      { t: 'X 線板厚計を入側 1 基・出側 2 基（固定型・走査型）実装した。C 形フレームの上腕に線源、下腕に検出器を置き、板を挟んでセンター部を測る', w: 'CONFIG.XRAY / Parts.xrayFrame / GuideView._buildXray' },
+      { t: '据付はサイドガイド架構（|x| ≤ 4,350）とサイドトリマー架構（5,475〜）のあいだの隙間。下の検出器が入るよう、その位置のテーブルローラを 1 本抜いてある', w: 'XRAY.SLOT / Layout.rolls' },
+      { t: '走査型は幅方向に往復し、その位置の幅方向プロファイルを足した値を読む。センターを通る瞬間は固定型と一致する（実測 2.2 µm 差）ので校正が取れる', w: 'SlabState.wProfAt / MillState._xray' },
+      { t: 'モニタ AGC の輸送距離を計器の据付位置から取るようにした。以前は 12,000 mm と別に書いてあり、現物と制御の遅れがずれていた', w: 'CONFIG.AGC.XRAY_X' },
+      { t: '時系列の «列» の定義を 1 か所にまとめた。CSV と Excel が別々に列を並べていたため、系列を足しても書き出しに出ず、桁も丸め直して分解能を落としていた', w: 'RollingLog.SCOLS' },
+      { t: '計器盤に «板厚偏差（出側 X 線）» を足した。主値は目標との差（µm）で、±50 µm を外れたら色で知らせる', w: '#m-xray-v' },
+      // --- 作業中に見つけて直したこと ---
+      { t: '走査レールが床を突き抜けていた（−70 mm）。腕の上下ではなく側面に添えるようにした', w: 'GuideView._buildXray' },
+    ] },
     { v: '1.20.0', base: '37696c7', date: '2026-09-09', title: '装入は蓋を開けてから・コイル押えを半径方向のラムに・圧延計画の条件登録と上部の運転バー', items: [
       { t: '装入の工程を LID → DIVE → GRIP → HOIST に分けた。蓋を開ける間はスラブを炉の中で動かさず、吊具だけを炉口の上で待たせる。以前は蓋開けの間も吊具がスラブに付いていたため、運転前の姿勢が «炉の中にトングが刺さったまま» だった', w: 'CONFIG.SEQUENCE / SupplyView._pose' },
       { t: '吊具の待機の高さを板長から決めるようにした。ロットが変わっても炉へ刺さらない', w: 'SupplyView._pose jawTop / jawPit' },
@@ -1660,7 +1699,10 @@ const CONFIG = {
     /* ロールの首（図面の «チョックをはめた状態»）。胴 → 胴端の逃げ → フィレット →
      * 軸受首（チョックの中）→ 軸端、と段が付く。駆動側のワークロールだけは
      * スピンドルの平頭を受ける «二又（フォーク）» で終わる。K が付く値は首径に対する比。 */
+    /* KEY_* は軸端の «キー溝»（軸径に対する幅と深さ、軸端長に対する溝の長さ）。
+     * JIS の平行キーは 軸径の 1/4 幅・1/8 深さ あたりが目安なので、その比で置く。 */
     NECK:    { FILLET: 160, END_K: 0.72, END_L: 340, END_L_DRIVE: 320,
+               KEY_W: 0.25, KEY_H: 0.11, KEY_L: 0.72,
                FORK_T: 0.62, FORK_H: 1.06, FORK_SLOT: 0.50, FORK_BACK: 260, FORK_PRONG: 460 },
     CAPSULE: { D: 1300, BODY_L: 800 },     // 油圧圧下シリンダ
     WEDGE:   { H: 300 },                   // パスライン調整ステップウェッジ
@@ -1675,6 +1717,38 @@ const CONFIG = {
      * あらかじめ締めておく（ゲージメータ設定）ので、荷重がまだ無い噛み込みの瞬間は
      * その締めた無負荷ギャップがそのまま材料に当たる —— これが噛み込み衝撃の正体。 */
     MODULUS: 550,
+    /* --- 長手方向の板厚変動（X 線板厚計が読むもの）-----------------------------
+     * 実機のログは «きれいな 1 本の線» にはならない。板厚は長手に振れていて、熱間圧延の
+     * 実力はおよそ ±50 µm（＝ 3σ で 50 µm、σ ≒ 17 µm）。その振れの出どころは 4 つある。
+     *
+     *  ① 偏芯（ロール偏心）—— ロールは真円・真芯には研削できず、チョック軸受にも
+     *     すきまがあるので、1 回転ごとに実ギャップが振れる。波長は «1 回転で送り出す
+     *     板の長さ» ＝ π・D なので、BUR（大径）はゆっくり、WR は速い。ギャップの振れ δ は
+     *     出側板厚へ δ・M/(M+Q) だけ伝わる（残りはミルばねが呑む）。しかも周期が圧下の
+     *     応答（TAU）と同じ桁なので、荷重 FB（ゲージメータ AGC）は消すどころか
+     *     «厚くなった＝荷重が減った＝開こう» と誤って動き、偏芯を増やす向きに効く。
+     *     実機で偏芯制御（BUR 位相同期の除去フィルタ）が要るのはこのため。
+     *  ② 入側板厚の持ち回り —— 前のパスの凹凸が δ・Q/(M+Q) だけ残って出てくる。
+     *     «前のパスの模様が薄く残る» という可逆圧延特有の見え方はこれ。これは新しく
+     *     足す必要がない —— hProf（材料座標の板厚）が既にパス間で持ち回っている。
+     *  ③ 摩擦・潤滑の揺らぎ —— エマルションの膜厚もロール表面の状態も一様ではないので、
+     *     荷重が数 % 揺らぐ。荷重の揺らぎ ΔF はミルばね経由で ΔF/M だけギャップを開くので、
+     *     ここでは «等価なギャップ外乱» として与える（荷重も一緒に揺れる）。
+     *  ④ 長手の温度分布 —— 端は冷え、加工発熱は一様には入らない。これも既にある
+     *     （dTProf / END_CHILL）。なお «スキッドマーク» は鋼の連続式加熱炉の水冷支持桁が
+     *     作るものなので、ピット炉で数時間均熱するアルミのスラブには出ない。
+     *
+     * MEAS_* は X 線板厚計そのものの測定ノイズと応答（読んだ値の «なまり»）で、
+     * 板厚の «実体» ではなく «計器の見え方» の側。 */
+    GAUGE_MODEL: {
+      /* 偏芯の半振幅 [mm]。実機の全振れ（TIR）は BUR で 30〜80 µm、WR で 10〜20 µm 級。
+       * ここは半振幅なのでその半分。H2 は BUR の 2 次高調波（楕円成分）の比。 */
+      ECC_BR: 0.016, ECC_WR: 0.004, ECC_H2: 0.35,
+      MU_SD: 0.005, MU_TAU: 0.30,          // 摩擦・潤滑の揺らぎ（等価ギャップ外乱の 1σ [mm] と時定数 [s]）
+      /* X 線板厚計の測定ノイズ（1σ [mm]）と応答時定数 [s]。X 線の計数統計から来る
+       * ランダム誤差なので、板が厚いほど（透過線量が減るぶん）大きくなる。 */
+      MEAS_NOISE: 0.003, MEAS_TAU: 0.03,
+    },
     /* ロール材の弾性定数（鍛鋼）。荷重を受けたロールは平たくつぶれ、接触弧が伸びる
      * （Hitchcock）。薄板ほど支配的で、圧下量が小さいパスでは接触弧長が 2 割以上伸びる。 */
     ROLL_E: 210, ROLL_NU: 0.3,             // 縦弾性係数 [GPa] / ポアソン比
@@ -1771,7 +1845,10 @@ const CONFIG = {
      * 大きくすると残留偏差が板厚に出るので、実機の同定精度に近い数 % に留める
      * （6 % にすると最終パスの出側が目標から 5.9 % 外れた）。 */
     M_EST_ERR: 0.03,
-    XRAY_X: 12000,                         // X 線厚み計の位置（ミル中心から出側）[mm]
+    /* X 線厚み計までの距離 [mm]（＝輸送遅れの元）。値は «出側 固定型» の現物の配置から
+     * 入れる（CONFIG.XRAY。下の mirrorLayout の直後）—— 2 か所に書くと計器の位置と
+     * 制御の遅れがずれる。 */
+    XRAY_X: 0,
     /* モニタ AGC は «輸送遅れのあるループ» なので、ゲインを上げると必ず発振する
      * （実測: 0.6 / 2.5 s ではギャップが 7.9〜13.6 mm と振れた）。遅れ時間に対して
      * 積分を十分ゆっくりにし、トリムの範囲も実機並み（±2 mm）に抑える。 */
@@ -2127,7 +2204,10 @@ const CONFIG = {
               *   巻上 14（0.233 m/s）／横行 40（0.667）／走行 85（1.4167）m/min、
               *   旋回 4 rpm（0.419 rad/s）／CAB 移動 30 m/min／開閉 3 回/min。
               * 加減速度だけは仕様書に無いのでインバータ制御の一般値 0.4 m/s² を置く。 */
-             SPEED: { TRAVEL: 85, TRAVERSE: 40, HOIST: 14, ACCEL: 0.4, SLEW: 4, CAB: 30, CLOSE: 3 },
+             /* HOIST は仕様書の «定格荷重時» の巻上速度。吊具だけを上げ下げする空荷は
+              * インバータ制御の巻上装置なら定格の 1.5〜2 倍で動かせるので、炉へ降ろす
+              * 工程と材料を放したあとの戻りにはこちらを使う（実機もそう動かす）。 */
+             SPEED: { TRAVEL: 85, TRAVERSE: 40, HOIST: 14, HOIST_EMPTY: 28, ACCEL: 0.4, SLEW: 4, CAB: 30, CLOSE: 3 },
              /* 巻上ワイヤ。ドラムから «トロリ下面のシーブ» を経て吊りビーム上面の
               * シーブへ降り、2 本掛け（FALLS）で戻る。ワイヤの上端＝トロリのシーブ芯、
               * 下端＝ビームのシーブ芯にすると、両端がシーブに隠れて «繋がって» 見える
@@ -2202,8 +2282,8 @@ const CONFIG = {
    * «何秒かかるか» と «どう見えるか» が原理的にずれない。
    * SET（転倒機へ立てかける降下）は吊ったまま降ろすので巻上と同じ定格。 */
   CRANE_MOVES: {
-    // 吊具を炉へ降ろす。空荷でも巻上装置は同じ定格なので距離も速度も HOIST と同じ
-    dive:     { by: 'CRANE',    d: 'hoist',    v: 'HOIST',     win: [0, 1] },
+    // 吊具を炉へ降ろす。空荷なので巻上は定格より速い（HOIST_EMPTY）
+    dive:     { by: 'CRANE',    d: 'hoist',    v: 'HOIST_EMPTY', win: [0, 1] },
     hoist:    { by: 'CRANE',    d: 'hoist',    v: 'HOIST',     win: [0, 1] },
     travel:   { by: 'CRANE',    d: 'travel',   v: 'TRAVEL',    win: [0, 1] },
     traverse: { by: 'CRANE',    d: 'traverse', v: 'TRAVERSE',  win: [0, 1] },
@@ -2323,13 +2403,16 @@ const CONFIG = {
      * （揺動アームだと、力はアームに直角にしか出ないうえ、姿勢で向きが変わる）。
      * コイルが太るとロッドが押し戻されるだけなので、当たる向きは最後まで変わらない。
      *
-     *   ANGLE  … 押さえる極角 [deg]（コイル中心から見て。真上が 90°）。
+     *   ANGLE  … 押さえる極角 [deg]（コイル中心から見て。真上が 90° ＝ 時計の 12 時、
+     *            60° が 1 時、30° が 2 時）。ここは «2 時» を狙う。
+     *            1 時では受けがサイドトリマー架構の梁から外れて宙に浮いていた ——
+     *            2 時まで寝かせると、受けがちょうど梁の真上に載る。
      *            コイルは «下巻き»（板は下から入り、奥→上→手前と回る）なので、
      *            巻き終わり側の上寄りを狙う。X の向きはトリマー側（上流）へ倒す。
      *   BASE_R … シリンダー胴の «内端» のコイル軸からの距離。ロッドはここから出る
      *   YOKE   … コロの軸受（ロッド先端の股）の長さ
      * ※各寸法は推定値。 */
-    HOLD: { ANGLE: 118, BASE_R: 1500, CYL_L: 1100, CYL_D: 320, ROD_D: 160, YOKE: 240,
+    HOLD: { ANGLE: 150, BASE_R: 1500, CYL_L: 1100, CYL_D: 320, ROD_D: 160, YOKE: 240,
             ROLL_D: 200, ROLL_W: 600, MOUNT: 320 },
   },
 
@@ -2423,6 +2506,38 @@ const CONFIG = {
   /* サイドトリマ: スタータイプスクラップチョッパー付きクイックオープン型。
    * 刃物 Φ510〜498 × 厚 40〜30 mm、モータ 110 kW（直流）0/500/600 rpm、周速 208 mpm。
    * 被せん断材は トリム前巾 2,350 / トリム後巾 760〜2,300 / 厚 7.0 mm 連続・9.5 mm 非常最大。 */
+  /* X 線板厚計。線源（上腕）と検出器（下腕）で板を挟み、透過線量の減衰から板厚を読む。
+   * 板に触れないので熱間でも使え、実機の板厚制御（モニタ AGC）と品質記録はこれを見ている。
+   *
+   *   固定型 —— ライン中心（＝板のセンター部）に据え付けて «長手方向» の板厚を連続で取る。
+   *   走査型 —— 同じ計器を幅方向に往復させ、«幅方向» のプロファイルを取る。センターを
+   *             通過した瞬間の読みは固定型と一致するはずで、実機ではこれを校正に使う。
+   * 出側だけ 2 基なのはこのため（入側は長手の外乱を先読みできれば足りる）。
+   *
+   * 配置: C 形フレームが板を上下から挟むので、板の上に架構がある場所には置けない。
+   * サイドガイド架構（正準 |x| 2,450〜4,350）とサイドトリマー架構（5,475〜6,275）の
+   * «あいだの隙間» に、入側・出側ともサイドガイドのすぐ外側で納める。
+   * X は正準（第 1 パスが +X ＝ 出側が正）。 */
+  XRAY: {
+    UNITS: [
+      { id: 'ENTRY', x: -4810, scan: false, name: '入側 X 線板厚計' },
+      { id: 'EXIT',  x:  4810, scan: false, name: '出側 X 線板厚計（固定型）' },
+      { id: 'SCAN',  x:  5270, scan: true,  name: '出側 X 線板厚計（走査型）' },
+    ],
+    /* 計器を入れるためにテーブルのローラを 1 本抜いてある（SLOT はその切り欠きの幅）。
+     * 下側の検出器は «板の下» から見上げるので、ローラと軸受台がある所には入らない。
+     * 実機でも計器の位置だけローラを抜いてピッチを広げるのが普通の納まりで、
+     * 上の UNITS.x は «抜いたローラの中心» そのもの（Layout.rolls が SLOT で間引く）。 */
+    SLOT: 300,
+    FRAME_T: 240,                          // C 形フレームの厚み（ライン方向）[mm]
+    ARM_H: 300,                            // 上下アームの高さ [mm]
+    GAP_Y: 620,                            // 線源と検出器の内のり [mm]。下側はローラ下端（Φ281.6）より下
+    HEAD_D: 240, HEAD_L: 300,              // ヘッド（線源／検出器）の外形 Φ・長さ
+    COL_Z: 2650, COL_W: 340,               // 柱の Z 位置と太さ。ロール胴 2,490/2 の外、サイドガイド架台 3,910 の内
+    BASE_Y: -880, BASE_T: 120,             // 台板の高さ（パスライン基準 ＝ 床）と厚み
+    SCAN_Z: 1050, SCAN_V: 15,              // 走査型: 走査範囲 ±Z [mm] と走査速度 [m/min]
+  },
+
   TRIMMER: {
     X: 5875, KNIFE_D: 510, KNIFE_D_MIN: 498, KNIFE_T: 40, KNIFE_T_MIN: 30,
     TRIM_MIN: 10, TRIM_MAX: 30, TRIM_DEFAULT: 15,
@@ -2790,6 +2905,7 @@ const CONFIG = {
   [C.TABLE.X_MIN, C.TABLE.X_MAX] = [-C.TABLE.X_MAX, -C.TABLE.X_MIN];
   [C.BUILDING.X0, C.BUILDING.X1] = [-C.BUILDING.X1, -C.BUILDING.X0];
   C.TRIMMER.X = neg(C.TRIMMER.X);
+  for (const g of C.XRAY.UNITS) g.x = neg(g.x);
   C.CROP_SHEAR.X = neg(C.CROP_SHEAR.X);
   C.COILER.X = neg(C.COILER.X);
   C.COILER.DEFLECTOR_X = neg(C.COILER.DEFLECTOR_X);
@@ -2804,6 +2920,10 @@ const CONFIG = {
   for (const s of C.TABLE.SECTIONS) s.side = -s.side;
   for (const v of C.VIEWS) { v.pos[0] = neg(v.pos[0]); v.tgt[0] = neg(v.tgt[0]); }
 })(CONFIG.FLIP);
+
+/* モニタ AGC が見ているのは «出側 固定型 X 線板厚計» そのもの。輸送遅れは現物の
+ * 据付位置から決まるので、計器の配置を唯一の出どころにする。 */
+CONFIG.AGC.XRAY_X = Math.abs(CONFIG.XRAY.UNITS.find(g => g.id === 'EXIT').x);
 
 /* =============================================================================
  * 2. CORE —— 数値ユーティリティ・単位変換・イベントバス
@@ -2821,6 +2941,16 @@ const Num = {
   },
   smoothstep: (e0, e1, x) => { const t = Num.clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); },
   sign0: (v, eps = 1e-9) => (v > eps ? 1 : v < -eps ? -1 : 0),
+  /* 標準正規乱数（Box–Muller）。«実機のログの揺らぎ» は一様乱数では作れない ——
+   * 一様だと ±の端で頭打ちになり、正規なら出るはずの外れ値が出ないので、
+   * ヒストグラムの形が実機と違ってしまう。2 個作れるうち 1 個は次の呼びへ取っておく。 */
+  _g2: null,
+  gauss() {
+    if (Num._g2 !== null) { const v = Num._g2; Num._g2 = null; return v; }
+    const u = Math.max(Math.random(), 1e-12), r = Math.sqrt(-2 * Math.log(u)), th = 2 * Math.PI * Math.random();
+    Num._g2 = r * Math.sin(th);
+    return r * Math.cos(th);
+  },
   /** 2円の交点。A(ax,ay,rA) と B(bx,by,rB)。side で 2 解のどちらかを選ぶ。 */
   circleHit(ax, ay, rA, bx, by, rB, side) {
     const dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy);
@@ -2915,8 +3045,13 @@ const Layout = {
   /** 全ローラ [{x, sec, g}] を X 昇順で。g は «このローラを含む最小のテーブル選択番号»。 */
   rolls() {
     const out = [];
-    for (const s of CONFIG.TABLE.SECTIONS) for (const x of Layout.section(s).xs)
+    /* X 線板厚計の切り欠き。下側の検出器は板の下から見上げるので、そこにローラと
+     * 軸受台があっては据えられない。実機と同じくその 1 本だけ抜く（CONFIG.XRAY.SLOT）。 */
+    const slots = CONFIG.XRAY.UNITS.map(g => g.x), half = CONFIG.XRAY.SLOT / 2;
+    for (const s of CONFIG.TABLE.SECTIONS) for (const x of Layout.section(s).xs) {
+      if (!s.split && slots.some(gx => Math.abs(x - gx) < half)) continue;
       out.push({ x, sec: s.name, g: Layout.groupOf(s.name), split: !!s.split });
+    }
     return out.sort((a, b) => a.x - b.x);
   },
   /** 板面クーラントの門型を立てる世界 X。区分名ならその区分の中央、数値なら正準 X。 */
@@ -4778,6 +4913,20 @@ class SlabState {
   /** 材料座標 u の温度偏差 [K]（端部の冷え。平均からの差） */
   dTAt(u) { return this.dTProf[Math.round(Num.clamp(u, 0, 1) * (SlabState.NPROF - 1))]; }
   /**
+   * 幅位置 z [mm] の板厚の «センターとの差» [mm]（幅方向プロファイル）。
+   * 走査型 X 線板厚計はこれを足した値を読む —— センター（z = 0）では 0 になるので、
+   * 固定型と走査型の読みはセンター通過の瞬間に一致する（実機はこれを校正に使う）。
+   */
+  wProfAt(z) {
+    const w = this.wShape; if (!w) return 0;
+    const zs = w.z, x = w.x, n = zs.length; if (n < 2) return 0;
+    const mid = (n - 1) >> 1;                       // 格子は −w/2 → +w/2 の昇順。中央がセンター
+    const a = Num.clamp(z, zs[0], zs[n - 1]);
+    let i = 0; while (i < n - 2 && zs[i + 1] < a) i++;
+    const sp = zs[i + 1] - zs[i], f = sp > 1e-9 ? (a - zs[i]) / sp : 0;
+    return Num.lerp(x[i], x[i + 1], f) - x[mid];
+  }
+  /**
    * 材料座標 u の «バイトに入る前の» 温度偏差 [K]。dTProf からこのパスで積んだ正味の熱
    * （_qProf）を引いたもの。荷重・変形抵抗はこちらで解く（発熱は変形の結果であって原因ではない）。
    */
@@ -5061,6 +5210,15 @@ class MillState {
     this.powerCap = 161;                       // 駆動包絡線から決まる速度上限
     this.motorRpm = 0;
     this.rollAngle = 0; this.tableAngle = 0;
+    /* 実ギャップの外乱。ecc は偏芯（ロールの回転角で決まる）、muNoise は摩擦・潤滑の
+     * 揺らぎを «等価なギャップ外乱» に直したもの。どちらも m.gap に足されるので、
+     * 圧下量が変わり → 荷重が変わり → ロードセルにも AGC にも見える（実機と同じ経路）。 */
+    this.ecc = 0; this.muNoise = 0; this.eccPhase = [0, 0, 0];
+    /* X 線板厚計の読み [mm]（材料が入るまで null）。gauge.ENTRY / EXIT / SCAN。
+     * scanZ は走査型のヘッドのいまの横位置 [mm]、scanDir はその向き。 */
+    this.gauge = { ENTRY: null, EXIT: null, SCAN: null };
+    this._gRaw = { ENTRY: null, EXIT: null, SCAN: null };
+    this.scanZ = 0; this.scanDir = 1;
     this.rollTemp = CONFIG.MILL.ROLL_T0;       // ワークロール表面温度 [℃]（板から温まる）
     this.bendingForce = 0;                     // 3D 表現用（0〜1）
     /* ロールベンディング力 [tonf/対]。形状制御（比例クラウン制御）が動かす。
@@ -5567,10 +5725,20 @@ class RollingLog {
     const sh = s.wShape, wp = s.warp;
     this.series.push({ t: +this.lot.t.toFixed(2), pass: i + 1,
                        f: +(m.forceMeas || 0).toFixed(0), v: +Math.abs(m.currentSpeed).toFixed(1),
-                       p: +((s.rollPower || 0) / 1000).toFixed(2), h: +s.thickness.toFixed(2),
-                       g: +m.gap.toFixed(2), sc: +m.screw.toFixed(2),
+                       p: +((s.rollPower || 0) / 1000).toFixed(2), h: +s.thickness.toFixed(3),
+                       /* 板厚まわりは 1 µm 刻みで残す。熱間の実力は ±50 µm なので、
+                        * 0.01 mm 刻み（10 µm）だとログが «階段» になり、長手の振れが
+                        * 量子化に埋もれてしまう（実測: 1 パスに 5〜9 段しか出ていなかった）。 */
+                       g: +m.gap.toFixed(3), sc: +m.screw.toFixed(3),
                        // 設定（目標ギャップ）と実績（出ていった板厚）
-                       tg: +m.targetGap.toFixed(2), hd: +(s.hDeliv > 0 ? s.hDeliv : m.gap).toFixed(2),
+                       tg: +m.targetGap.toFixed(3), hd: +(s.hDeliv > 0 ? s.hDeliv : m.gap).toFixed(3),
+                       /* X 線板厚計の «読み»。hd（＝実際に出ていった板厚）とは別物で、
+                        * 計器のノイズと応答、そして出側は輸送遅れのぶんだけずれる。
+                        * he: 入側 ／ hx: 出側 固定型 ／ hs: 出側 走査型（zs はその横位置 [mm]）。 */
+                       he: m.gauge.ENTRY === null ? null : +m.gauge.ENTRY.toFixed(3),
+                       hx: m.gauge.EXIT  === null ? null : +m.gauge.EXIT.toFixed(3),
+                       hs: m.gauge.SCAN  === null ? null : +m.gauge.SCAN.toFixed(3),
+                       zs: +m.scanZ.toFixed(0),
                        // 幅方向の形状（クラウン [µm]・平坦度 [I-unit]・ベンディング力 [t]）
                        cr: sh && s.rollingActive ? +sh.crownAbs.toFixed(1) : 0,
                        fl: sh && s.rollingActive ? +sh.iUnit.toFixed(1) : 0,
@@ -5613,14 +5781,8 @@ class RollingLog {
        f(r.vMax), f(r.vAvg), f(r.planSpeed, 0), f(r.gap, 2), f(r.gMin, 2), f(r.spring, 2),
        f(r.pMax, 2), f(r.tIn, 0), f(r.tExit, 0), f(r.tOut, 0),
        f(r.curlL, 2), f(r.curlW, 2), f(r.prof, 4), f(r.len / 1000, 2), f(r.sec)].join(','));
-    const sHead = ['時刻[s]', 'パス', '荷重[t]', '速度[mpm]', '板厚[mm]', 'ギャップ[mm]',
-                   '圧下位置[mm]', '動力[MW]', '目標ギャップ[mm]', '出側板厚[mm]',
-                   'クラウン[µm]', '平坦度[I]', 'ベンディング[t]', '横ずれ[mm]',
-                   '丈反り[mm]', '幅反り[mm]', 'プロファイル[–]', '温度[℃]', '位置[mm]'];
-    const sBody = t.series.filter(p => on(p.pass)).map(p =>
-      [f(p.t, 2), p.pass, p.f, f(p.v), f(p.h, 2), f(p.g, 2), f(p.sc, 2), f(p.p, 2), f(p.tg, 2), f(p.hd, 2),
-       f(p.cr, 1), f(p.fl, 1), f(p.bd, 0), f(p.zo, 2),
-       f(p.cl, 2), f(p.cw, 2), f(p.pc, 4), p.T, p.x].join(','));
+    const sHead = RollingLog.scHead();
+    const sBody = t.series.filter(p => on(p.pass)).map(p => RollingLog.scRow(p).join(','));
     const meta = [`# ロット,${L.started.toLocaleString('ja-JP')}`,
                   `# 材質,${L.alloyKey}`,
                   `# 素材,${f(L.thick0, 0)} x ${L.width} x ${L.length} mm（呼び厚 ${L.cast} − 面削 2x${L.scalp}）`,
@@ -5657,10 +5819,33 @@ RollingLog.SERIES = [
    * «狙いにどれだけ乗っているか» がそのまま形で見える。 */
   { key: 'tg', name: '目標ギャップ（設定）', unit: 'mm', axis: 'len', color: '#64748b',  css: '#64748b' },
   { key: 'hd', name: '出側板厚（実績）',     unit: 'mm', axis: 'len', color: '#0f766e',  css: '#0f766e' },
+  /* X 線板厚計の «読み»。実績（hd）と同じ軸に載せるので、重ねると «計器が実物を
+   * どう見ているか»（測定ノイズと輸送遅れ）がそのまま形で見える。 */
+  { key: 'he', name: '入側板厚（X 線）',       unit: 'mm', axis: 'len', color: '#166534',  css: '#166534' },
+  { key: 'hx', name: '出側板厚（X 線・固定）', unit: 'mm', axis: 'len', color: '#0891b2',  css: '#0891b2' },
+  { key: 'hs', name: '出側板厚（X 線・走査）', unit: 'mm', axis: 'len', color: '#e11d48',  css: '#e11d48' },
+  { key: 'zs', name: '走査位置',   unit: 'mm', axis: 'zoff', color: '#9333ea',      css: '#9333ea' },
   { key: 'cl', name: '丈反り',     unit: 'mm', axis: 'warp', color: '#0369a1',      css: '#0369a1' },
   { key: 'cw', name: '幅反り',     unit: 'mm', axis: 'warp', color: '#7c3aed',      css: '#7c3aed' },
   { key: 'pc', name: 'プロファイル', unit: '–', axis: 'prof', color: '#be123c',     css: '#be123c' },
 ];
+
+/* 時系列の «列» の定義。グラフに出す系列（SERIES）に、グラフでは重ねない列を足したもの。
+ * CSV と Excel はこれ 1 つだけを読む —— 列を 2 か所に書いていたため、系列を足しても
+ * 書き出しに出てこない／桁を丸め直して分解能を落とす、という取り違えが起きていた
+ * （実測: 板厚を 1 µm 刻みで残しても、CSV 側が 0.01 mm に丸め直していた）。
+ * 値は RollingLog.sample が積むときに «必要な桁で» 丸めてあるので、ここでは丸め直さない。 */
+RollingLog.SCOLS = [
+  { key: 't', name: '時刻', unit: 's' },
+  { key: 'pass', name: 'パス', unit: '' },
+  ...RollingLog.SERIES,
+  { key: 'sc', name: '圧下位置', unit: 'mm' },
+  { key: 'p',  name: '動力', unit: 'MW' },
+  { key: 'T',  name: '温度', unit: '℃' },
+  { key: 'x',  name: '位置', unit: 'mm' },
+];
+RollingLog.scHead = () => RollingLog.SCOLS.map(c => c.unit ? `${c.name}[${c.unit}]` : c.name);
+RollingLog.scRow = (p) => RollingLog.SCOLS.map(c => p[c.key] ?? '');
 
 /**
  * コイルカーの V 受けの幾何。«形を作る側（Parts）» と «コイルを載せる側（CoilerView）» が
@@ -6752,6 +6937,35 @@ class PhysicsEngine {
   }
 
   /**
+   * 実ギャップの外乱（長手方向の板厚変動をつくるもの）。CONFIG.MILL.GAUGE_MODEL に
+   * 理屈と数値の根拠を置いてある。ここで足した振れは m.gap を通って «出ていく板厚»
+   * になり、同時に圧下量を変えるので荷重・ロードセル・AGC にもそのまま現れる。
+   *
+   *  偏芯 —— ロール 1 回転につき 1 周。位相はロールごとの固有値なので、研削で径が
+   *    変われば位相も変わる（現品が変わったのと同じ）。BUR は WR より遅く回る
+   *    （周速が同じで径が大きい）ので、波長 π・D は BUR のほうが長い。
+   *  摩擦・潤滑 —— 白色雑音を 1 次遅れに通した «色つき» の揺らぎ。生の白色雑音だと
+   *    刻み幅（1/120 s）が変わるだけで振幅が変わってしまうので、時定数で正規化する。
+   */
+  _disturb(dt) {
+    const m = this.mill, E = CONFIG.MILL.GAUGE_MODEL;
+    if (!this.slab.inBite) { m.ecc = 0; m.muNoise = 0; return; }
+    const frac = x => x - Math.floor(x);
+    const ph = m.eccPhase;
+    ph[0] = frac(m.wrDia * 0.0731) * Math.PI * 2;      // WR の偏芯位相（現品ごとの固有値）
+    ph[1] = frac(m.brDia * 0.0517) * Math.PI * 2;      // BUR の偏芯位相
+    ph[2] = frac(m.brDia * 0.1193) * Math.PI * 2;      // BUR の楕円（2 次）の位相
+    const aW = m.rollAngle + ph[0];
+    const aB = m.rollAngle * (m.wrDia / m.brDia) + ph[1];   // 周速が同じ ⇒ 回転角は径の逆比
+    m.ecc = E.ECC_WR * Math.sin(aW)
+          + E.ECC_BR * (Math.sin(aB) + E.ECC_H2 * Math.sin(2 * aB + ph[2] - ph[1]));
+    /* 1 次遅れフィルタ。定常の標準偏差が MU_SD になるよう √(2·dt/τ) で駆動する
+     * （Ornstein–Uhlenbeck。刻み幅に依らない）。 */
+    const a = Math.min(dt / E.MU_TAU, 1);
+    m.muNoise += (-m.muNoise + E.MU_SD * Num.gauss() * Math.sqrt(2 / a)) * a;
+  }
+
+  /**
    * 圧下（スクリュー）とミルばね、そして板厚制御（AGC）。
    *
    * 実ギャップは圧下位置そのものではなく h = S + F/M（M: ミル定数）。狙いの板厚を出すには
@@ -6799,7 +7013,7 @@ class PhysicsEngine {
      * 荷重が戻ってミルが開き、出側が大きく外れる（実測: 第 7 パスでギャップが 6.96 mm 振れ、
      * 出側 45 → 48.07 mm）。実機と同じく «噛んだまま止まっている間は制御を保持» する。 */
     const held = s.inBite && Math.abs(m.currentSpeed) < CONFIG.AGC.HOLD_SPEED;
-    if (held) { m.stretchV = 0; return void (m.gap = Num.clamp(m.screw + m.stretch, C.GAP_MIN, C.GAP_MAX)); }
+    if (held) { m.stretchV = 0; return void (m.gap = Num.clamp(m.screw + m.stretch + m.ecc + m.muNoise, C.GAP_MIN, C.GAP_MAX)); }
     /* 頭尾ロック: 頭の END_HOLD（出側長さ）と尻の END_HOLD（入側の残り）は荷重 FB を止め、
      * 圧下はその手前の位置のまま。ミルばねだけが働く区間になる。 */
     const dHead = s.dir > 0 ? s.xMax : -s.xMin, dTail = s.dir > 0 ? -s.xMin : s.xMax;
@@ -6823,21 +7037,65 @@ class PhysicsEngine {
       if (m.stretch < 0) { m.stretch = 0; m.stretchV = Math.max(m.stretchV, 0); }   // 伸びは荷重側にしか出ない
       m.forceMeas = C.MODULUS * m.stretch;                       // ロードセルはハウジングの伸びを読む
     }
-    m.gap = Num.clamp(m.screw + m.stretch, C.GAP_MIN, C.GAP_MAX);
-    // 3) モニタ AGC（X 線厚み計 FB）。出た材料が計器へ届くまでの輸送遅れをそのまま持つ。
+    this._disturb(dt);
+    m.gap = Num.clamp(m.screw + m.stretch + m.ecc + m.muNoise, C.GAP_MIN, C.GAP_MAX);
+    // 3) X 線板厚計と、その読みで動くモニタ AGC
+    this._xray(dt);
+    if (auto && !lock && m.gaugeH !== null)
+      m.trim = Num.clamp(m.trim + (m.gaugeH - m.targetGap) * G.MON_KP * dt / G.MON_TAU, -G.TRIM_MAX, G.TRIM_MAX);
+  }
+
+  /**
+   * X 線板厚計（入側 1 基・出側 2 基）の読み。
+   *
+   * 出側 —— 板は «ロールバイトを出た瞬間» に厚みが決まり、そのあと計器の位置まで運ばれる。
+   *   だから計器が読むのは «いまのギャップ» ではなく «輸送遅れ ぶん前のギャップ»。
+   *   これが板厚制御（モニタ AGC）を難しくしている当のもの（遅れのあるループ）なので、
+   *   待ち行列でそのまま持つ。
+   * 入側 —— 前のパスが残した板厚（hProf）を、計器の位置に来ている材料点について読む。
+   * 走査型 —— 同じ読みに «その横位置の幅方向プロファイル» を足す。板の外へ出ている間は
+   *   板が無いので読めない（null）。実機の走査型も端で折り返す間はデータが欠ける。
+   *
+   * どの計器も «真値» ではなく «計器の見え方» を返す —— 計数統計のランダム誤差
+   * （MEAS_NOISE）を乗せ、時定数 MEAS_TAU の 1 次遅れを通す。
+   */
+  _xray(dt) {
+    const m = this.mill, s = this.slab, E = CONFIG.MILL.GAUGE_MODEL, X = CONFIG.XRAY;
+    const read = (id, tru) => {
+      m._gRaw[id] = tru;
+      if (tru === null) return void (m.gauge[id] = null);
+      const raw = tru + E.MEAS_NOISE * Num.gauss();
+      m.gauge[id] = m.gauge[id] === null ? raw : Num.approach(m.gauge[id], raw, E.MEAS_TAU, dt);
+    };
     const v = Math.abs(m.currentSpeed) / 60 * 1000;              // mm/s
-    if (s.inBite && v > 1) {
+    if (!s.inBite) { m._gq.length = 0; m.gaugeH = null; for (const g of X.UNITS) read(g.id, null); return; }
+    // 入側: 計器の位置に来ている材料点の «前のパスが残した» 板厚
+    const dEntry = Math.abs(X.UNITS.find(g => g.id === 'ENTRY').x);
+    const uIn = s.uAhead(m.gap, dEntry);
+    read('ENTRY', s.distFromEnd(uIn) > 0 ? s.hAt(uIn) : null);
+    // 出側: 待ち行列（{t, h}）で輸送遅れを持つ。1 本の行列を 2 基が別々の遅れで読む
+    if (v > 1) {
       m._gq.push({ t: this.elapsed, h: m.gap });
-      const lag = G.XRAY_X / v;
-      let read = null;
-      while (m._gq.length && this.elapsed - m._gq[0].t >= lag) read = m._gq.shift().h;
-      if (read !== null) {
-        m.gaugeH = read;
-        if (auto && !lock) m.trim = Num.clamp(m.trim + (read - m.targetGap) * G.MON_KP * dt / G.MON_TAU,
-                                              -G.TRIM_MAX, G.TRIM_MAX);
+      if (m._gq.length > 6000) m._gq.splice(0, m._gq.length - 6000);
+      const at = d => {
+        const tw = this.elapsed - d / v;
+        if (!m._gq.length || m._gq[0].t > tw) return null;
+        let i = m._gq.length - 1;
+        while (i > 0 && m._gq[i].t > tw) i--;
+        return m._gq[i].h;
+      };
+      // 走査型のヘッドは板幅の中を往復する（端まで行ったら折り返す）
+      const half = Math.min(X.SCAN_Z, s.width / 2);
+      m.scanZ += m.scanDir * X.SCAN_V / 60 * 1000 * dt;
+      if (m.scanZ > half) { m.scanZ = half; m.scanDir = -1; }
+      if (m.scanZ < -half) { m.scanZ = -half; m.scanDir = 1; }
+      for (const g of X.UNITS) {
+        if (g.id === 'ENTRY') continue;
+        const h = at(Math.abs(g.x));
+        read(g.id, h === null ? null : h + (g.scan ? s.wProfAt(m.scanZ) : 0));
       }
-      if (m._gq.length > 4000) m._gq.splice(0, m._gq.length - 4000);
-    } else if (!s.inBite) { m._gq.length = 0; m.gaugeH = null; }
+      m.gaugeH = m.gauge.EXIT;
+    }
   }
 
   _dynamics(dt) {
@@ -7389,6 +7647,31 @@ class PhysicsEngine {
 /* =============================================================================
  * 7. MATERIALS —— 少数の共有マテリアルだけを使う（＝シェーダプログラム数を抑える）
  * ========================================================================== */
+/** 小さな絵（テクスチャ）を作る道具。模様を形で作らずに済ませるためのもの。 */
+const Tex = {
+  _cache: {},
+  /** 縞鋼板の菱形模様（1 タイル ＝ 実寸 300 mm 角のつもり）。 */
+  checker() {
+    if (Tex._cache.checker) return Tex._cache.checker;
+    const N = 128, c = document.createElement('canvas'); c.width = c.height = N;
+    const g = c.getContext('2d');
+    g.fillStyle = '#8f989f'; g.fillRect(0, 0, N, N);
+    // 菱形を 2 組（互いに直交する向き）で並べる。実物の縞鋼板と同じ市松の配置
+    const bar = (cx, cy, ang) => {
+      g.save(); g.translate(cx, cy); g.rotate(ang);
+      const grd = g.createLinearGradient(0, -5, 0, 5);
+      grd.addColorStop(0, '#b9c2c8'); grd.addColorStop(0.5, '#a2abb2'); grd.addColorStop(1, '#767f86');
+      g.fillStyle = grd; g.beginPath();
+      g.moveTo(-22, 0); g.lineTo(-14, -5); g.lineTo(14, -5); g.lineTo(22, 0); g.lineTo(14, 5); g.lineTo(-14, 5);
+      g.closePath(); g.fill(); g.restore();
+    };
+    for (const [cx, cy, a] of [[32, 32, 0.6], [96, 32, -0.6], [32, 96, -0.6], [96, 96, 0.6]]) bar(cx, cy, a);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(26, 26); t.anisotropy = 4;
+    return (Tex._cache.checker = t);
+  },
+};
+
 const MAT = {};
 /**
  * 環境反射は「磨かれた金属」の質感を決める要だが、キューブマップのサンプリングは
@@ -7432,6 +7715,11 @@ function initMaterials(envMap) {
     // 面のフラグメントコストを下げる（見た目の損失はほぼ無い）。
     floor:     new THREE.MeshLambertMaterial({ color: C.FLOOR }),
     pit:       new THREE.MeshLambertMaterial({ color: C.PIT }),
+    /* 縞鋼板（チェッカープレート）。菱形の滑り止め模様を小さなキャンバスで作り、
+     * 繰り返して貼る —— 模様を形（メッシュ）で作ると面数が跳ね上がるので、
+     * «見え方だけ» が要るものは絵で持つ。 */
+    checker:   new THREE.MeshStandardMaterial({ color: 0x8e979e, metalness: 0.55, roughness: 0.62,
+                                                map: Tex.checker(), bumpMap: Tex.checker(), bumpScale: 0.6 }),
   });
   MAT.envMap = envMap;
   // BoxGeometry のグループ順は +X, -X, +Y, -Y, +Z, -Z。+Y/-Y だけ鏡面にする。
@@ -7577,6 +7865,28 @@ const Parts = {
       parts.push(G.at(G.cyl(220, 1400, 'y', 10), sx * (soleX / 2 - 250), H.BOT_Y + 1050, sz * (outer + 380)));
     return G.merge(parts);
   },
+  /**
+   * キー溝つきの丸軸。圧延ロールの軸端には «キー溝»（軸方向の角溝）があり、
+   * 継手やスリーブをキーで回り止めする。CSG（引き算）を使わずに、
+   * «円周から溝の口だけ内側へ折り込んだ断面» を作って押し出す。
+   *   d …… 軸径、len …… 軸の長さ、kw …… キー溝の幅、kh …… 溝の深さ
+   * 溝は +Y（真上）に開ける。軸は Z 方向で、原点は軸の中央。
+   */
+  keyedShaft(d, len, kw, kh, seg = 28) {
+    const r = d / 2, half = Math.min(kw / 2, r * 0.9), ys = Math.sqrt(Math.max(r * r - half * half, 1));
+    const a0 = Math.asin(half / r);                       // 溝の口の半角（真上から）
+    const sh = new THREE.Shape();
+    sh.moveTo(u(half), u(ys));                            // 右の口
+    sh.lineTo(u(half), u(ys - kh));                       // 溝の右壁
+    sh.lineTo(u(-half), u(ys - kh));                      // 溝の底
+    sh.lineTo(u(-half), u(ys));                           // 溝の左壁
+    // 左の口から反時計回りに一周して右の口へ（溝の口ぶんだけ欠けた円）
+    sh.absarc(0, 0, u(r), Math.PI / 2 + a0, Math.PI / 2 - a0 + Math.PI * 2, false);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: u(len), bevelEnabled: false, curveSegments: seg });
+    geo.translate(0, 0, -u(len) / 2);
+    return geo;
+  },
+
   /* --- ロール（胴 + 首）。胴と首で材質が異なるため 2 ジオメトリ返す --------- */
   /**
    * 図面（チョックをはめた状態）の段付き:
@@ -7598,7 +7908,14 @@ const Parts = {
       const j0 = zb + N.FILLET, jL = zOut - j0;                                                   // 軸受首（チョックの中）
       necks.push(G.at(G.cyl(neckD, jL, 'z', 24), 0, 0, s * (j0 + jL / 2)));
       const eL = (coupling && s < 0) ? N.END_L_DRIVE : N.END_L;                                   // 軸端
-      necks.push(G.at(G.cyl(neckD * N.END_K, eL, 'z', 20), 0, 0, s * (zOut + eL / 2)));
+      /* 軸端にはキー溝を切る（実機のロールにはどれも入っている）。
+       * 駆動側のワークロールだけは二又（スペード）でトルクを受けるので溝は要らない。 */
+      const eD = neckD * N.END_K, drive = coupling && s < 0;
+      necks.push(drive
+        ? G.at(G.cyl(eD, eL, 'z', 20), 0, 0, s * (zOut + eL / 2))
+        : G.at(Parts.keyedShaft(eD, eL * N.KEY_L, eD * N.KEY_W, eD * N.KEY_H), 0, 0, s * (zOut + eL * N.KEY_L / 2)));
+      if (!drive && N.KEY_L < 1)                                                                    // 溝の無い残りの軸端
+        necks.push(G.at(G.cyl(eD, eL * (1 - N.KEY_L), 'z', 20), 0, 0, s * (zOut + eL * N.KEY_L + eL * (1 - N.KEY_L) / 2)));
     }
     if (coupling) necks.push(...Parts.rollFork(neckD, -(zOut + N.END_L_DRIVE)));
     return { face, neck: G.merge(necks) };
@@ -8209,6 +8526,38 @@ const Parts = {
   pilerLiftColumn() { return G.box(900, 1000, 900); },
   /** 板厚 75 mm 超の板置き場スキッド（駆動側）。1 本ぶん。 */
   yardSkid() { const Y = CONFIG.PILER.YARD; return G.box(400, Y.H, Y.W); },
+
+  /* --- X 線板厚計 ------------------------------------------------------------ */
+  /**
+   * X 線板厚計の C 形フレーム。板の «片側から» 腕を伸ばして上下から挟むので、
+   * ライン中心を跨ぐ門型にはしない —— そうしないと板を吊り込めないし、
+   * 上流のサイドガイドや下流のトリマーと同じ場所を取り合ってしまう。
+   * 柱は DS 側（−Z）に立て、腕はライン中心へ向かって張り出す。
+   * 戻り値は G.sided（near/far/mid/top）ではなく素の Geometry —— 柱は片側だけなので、
+   * «OS/DS の半断面切替» は呼び側（GuideView）が丸ごと 1 つとして扱う。
+   */
+  xrayFrame() {
+    const X = CONFIG.XRAY, P = CONFIG.MILL.PASS_LINE, T = X.FRAME_T;
+    const zc = -X.COL_Z;                                     // 柱の中心 Z（DS 側）
+    const yTop = P + X.GAP_Y / 2 + X.HEAD_L + X.ARM_H / 2;   // 上腕の中心 Y（ヘッドのぶん上げる）
+    const yBot = P - X.GAP_Y / 2 - X.HEAD_L - X.ARM_H / 2;   // 下腕の中心 Y
+    const yBase = P + X.BASE_Y;                              // 台板（＝床）
+    const armZ = X.COL_Z + X.COL_W / 2;                      // 腕の長さ（柱の外面からライン中心まで）
+    const az = zc + X.COL_W / 2 + armZ / 2;                  // 腕の中心 Z
+    return G.merge([
+      G.at(G.box(T + 80, X.BASE_T, X.COL_W + 260), 0, yBase + X.BASE_T / 2, zc),                  // 据付台板
+      G.at(G.box(T, yTop + X.ARM_H / 2 - yBase, X.COL_W), 0, (yBase + yTop + X.ARM_H / 2) / 2, zc), // 柱
+      G.at(G.box(T, X.ARM_H, armZ), 0, yTop, az),                                                 // 上腕（線源側）
+      G.at(G.box(T, X.ARM_H, armZ), 0, yBot, az),                                                 // 下腕（検出器側）
+    ]);
+  },
+
+  /** 線源／検出器ヘッド。上腕・下腕の先端に付く筒（板を挟んで向かい合う） */
+  xrayHead() {
+    const X = CONFIG.XRAY;
+    return G.merge([G.cyl(X.HEAD_D, X.HEAD_L, 'y', 16),
+                    G.at(G.cyl(X.HEAD_D * 0.55, 80, 'y', 16), 0, 0, 0)]);
+  },
 
   /* --- サイドトリマー。上下軸の円板刃が板の両耳を切り落として幅を仕上げる ------ */
   /**
@@ -9102,6 +9451,29 @@ const Parts = {
       G.at(G.box(L, 300, 2 * Z), xc, -D - 150, 0),
     ]);
   },
+  /**
+   * 圧延機ピットの «蓋»（縞鋼板の足場）。床面の高さでピットの開口を塞ぐ。
+   * ハウジングは床を貫いて立つので、その足元だけを開けておく（人が歩ける板と、
+   * ハウジングの通り道が同居する）。断面表示では床と同じく透ける側に入れる。
+   */
+  pitDeck() {
+    const P = CONFIG.BUILDING.PIT, H = CONFIG.MILL.HOUSING, t = 40;
+    const sh = new THREE.Shape();
+    sh.moveTo(u(-P.X), u(-P.Z)); sh.lineTo(u(P.X), u(-P.Z));
+    sh.lineTo(u(P.X), u(P.Z));   sh.lineTo(u(-P.X), u(P.Z)); sh.closePath();
+    // ハウジング（OS / DS の 2 枚）の足元を開ける。外形＋逃げぶんを抜く
+    const hx = H.POST_X + H.WIN_X / 2 + 120, hz0 = H.INNER_Z - 120, hz1 = H.INNER_Z + H.THICK_Z + 120;
+    for (const sz of [-1, 1]) {
+      const h = new THREE.Path();
+      const z0 = sz > 0 ? hz0 : -hz1, z1 = sz > 0 ? hz1 : -hz0;
+      h.moveTo(u(-hx), u(z0)); h.lineTo(u(hx), u(z0)); h.lineTo(u(hx), u(z1)); h.lineTo(u(-hx), u(z1)); h.closePath();
+      sh.holes.push(h);
+    }
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: u(t), bevelEnabled: false });
+    geo.rotateX(Math.PI / 2);            // 形状の Y → 世界 Z、押出 +Z → 世界 −Y
+    geo.translate(0, u(t), 0);           // 天端を床面に合わせる
+    return geo;
+  },
   /** 圧延機ピット。壁の天端は床面（y=0）、床版の天端は −DEPTH でソールプレート下面に一致する。 */
   pit() {
     const P = CONFIG.BUILDING.PIT, w = 400;
@@ -9844,6 +10216,47 @@ class GuideView {
     this._aimSig = '';
     scene.add(this.nozzles.mesh);
     this._aimNozzles(CONFIG.SLAB.WID_DEFAULT, 0);
+    this._buildXray(scene);
+  }
+  /**
+   * X 線板厚計（入側 1 基・出側 2 基）。据付はサイドガイドのすぐ外側の隙間なので、
+   * サイドガイドと同じビューが受け持つ（位置の根拠が 1 か所に集まる）。
+   * 走査型はヘッドが幅方向に往復するので、ヘッドだけ別のグループにして動かす。
+   */
+  _buildXray(scene) {
+    const X = CONFIG.XRAY, P = CONFIG.MILL.PASS_LINE;
+    const frameGeo = Parts.xrayFrame(), headGeo = Parts.xrayHead();
+    const armZ = X.COL_Z + X.COL_W / 2;
+    this.xray = X.UNITS.map(g => {
+      const grp = new THREE.Group(); grp.name = g.name; grp.position.x = u(g.x);
+      scene.add(grp);
+      const fr = ghostable(new THREE.Mesh(frameGeo, MAT.guide), MAT.guide);
+      fr.name = g.name + '架構'; fr.castShadow = fr.receiveShadow = true;
+      this.sided.far.push(fr);                 // 柱は DS 側（−Z）に立つ
+      grp.add(fr);
+      // 線源（上）と検出器（下）。板を挟んで «同じ横位置で» 向かい合う
+      const head = new THREE.Group(); head.name = g.scan ? '走査ヘッド' : '測定ヘッド';
+      for (const sy of [1, -1]) {
+        const m = new THREE.Mesh(headGeo, MAT.hydraulic);
+        m.name = sy > 0 ? 'X 線源' : 'X 線検出器'; m.castShadow = true;
+        m.position.y = u(P + sy * (X.GAP_Y / 2 + X.HEAD_L / 2));
+        head.add(m);
+      }
+      // 走査型は «腕の上を走る» ので、腕の先端側にレールを 1 本足して動きの根拠を見せる
+      /* 走査型は «腕の側面を走る» ので、上下の腕それぞれにレールを 1 本添える。
+       * 腕の上下に付けると、下の腕のレールが床を突き抜ける（実測 −70 mm）。 */
+      if (g.scan) {
+        for (const sy of [1, -1]) {
+          // レールはヘッドが走る範囲だけあればよい。柱まで伸ばすと据付台板と重なる
+          const r = new THREE.Mesh(G.box(70, 70, 2 * X.SCAN_Z + 400), MAT.rod);
+          r.name = '走査レール';
+          r.position.set(u(X.FRAME_T / 2 + 45), u(P + sy * (X.GAP_Y / 2 + X.HEAD_L + X.ARM_H / 2)), 0);
+          grp.add(r);
+        }
+      }
+      grp.add(head);
+      return { unit: g, group: grp, head };
+    });
   }
   /** ノズルの姿勢を «いまのロット» の狙いへ合わせる（板幅・板厚が変わったときだけ組み直す）。 */
   _aimNozzles(width, topY) {
@@ -9864,6 +10277,8 @@ class GuideView {
       st.sides[0].position.z =  u(z); st.sides[1].position.z = -u(z);
     }
     if (slab) this._aimNozzles(slab.width, slab.inBite ? mill.gap : slab.thickness);
+    // 走査型の測定ヘッドは板幅の中を往復する（物理側の mill.scanZ が唯一の出どころ）
+    for (const x of this.xray) if (x.unit.scan) x.head.position.z = u(mill.scanZ);
   }
 }
 
@@ -10636,7 +11051,7 @@ class SupplyView {
     else {
       // 材料を放したあとの «空荷での戻り» も同じ定格速度で走る（速度の真実は 1 か所）。
       const SP = CR.SPEED;
-      c.beamY = Num.rateTo(c.beamY, beamHome, Ramp.mpm(SP.HOIST), dt);
+      c.beamY = Num.rateTo(c.beamY, beamHome, Ramp.mpm(SP.HOIST_EMPTY), dt);   // 空荷なので速い
       c.z = Num.rateTo(c.z, CONFIG.FURNACE.Z, Ramp.mpm(SP.TRAVERSE), dt);
       c.x = Num.rateTo(c.x, homeX, Ramp.mpm(SP.TRAVEL), dt);
     }
@@ -11108,6 +11523,11 @@ class LabelView {
       ['出側テーブル',                   F * 18000,  1600,        0, 95000],
       ['転倒装置',                        S.TILTER_X,  3600, S.SIDE_Z,  75000],
       ['トランスファークレーン',  Layout.entryX, CONFIG.TRANSFER.FRAME.GIRDER_Y + 900, S.SIDE_Z / 2, 90000],
+      /* X 線板厚計。3 基が近いので、ラベルは «入側» と «出側 2 基» の 2 枚にまとめる
+       * —— 重なった 3 枚は読めないし、運転で意味があるのは «入側／出側» の別。 */
+      ['入側 X 線板厚計', CONFIG.XRAY.UNITS[0].x, M.PASS_LINE + 1500, -CONFIG.XRAY.COL_Z, 22000],
+      ['出側 X 線板厚計（固定型・走査型）',
+       (CONFIG.XRAY.UNITS[1].x + CONFIG.XRAY.UNITS[2].x) / 2, M.PASS_LINE + 1500, -CONFIG.XRAY.COL_Z, 22000],
       ['サイドトリマー',            CONFIG.TRIMMER.X,  4200,        0, 40000],
       ['75 mm クロップシャー',   CONFIG.CROP_SHEAR.X,  2900,        0, 95000],
       ['クロップ屑コンベア・屑箱', CONFIG.CROP_SHEAR.X + F * Scrap.convCx, 1500, 5200, 40000],
@@ -11334,7 +11754,16 @@ class World3D {
     const pit = new THREE.Mesh(Parts.pit(), MAT.pit);
     pit.name = 'ピット'; pit.receiveShadow = true; this.scene.add(pit);
 
+
+    /* ピットの蓋（縞鋼板の足場）。ハウジングの足元だけを開けて塞ぐ。
+     * 断面表示ではミルの «天面» と同じ扱いにして透けさせる —— 塞いだままだと
+     * ピットの中（ソールプレート・基礎）が見えなくなるため。 */
+    const deck = ghostable(new THREE.Mesh(Parts.pitDeck(), MAT.checker), MAT.checker);
+    deck.name = 'ピット蓋（縞鋼板）'; deck.receiveShadow = true; this.scene.add(deck);
+    this.pitDeck = deck;
+
     this.millView  = new MillStandView(this.scene);
+    (this.millView.sided.top ??= []).push(deck);
     this.driveView = new DriveView(this.scene);
     this.tableView = new TableView(this.scene);
     this.guideView = new GuideView(this.scene);
@@ -11883,11 +12312,8 @@ class UIManager {
        num(r.vMax, 1), num(r.vAvg, 1), num(r.planSpeed, 0), num(r.gap, 2), num(r.gMin, 2), num(r.spring, 2),
        num(r.pMax, 2), num(r.tIn, 0), num(r.tExit, 0), num(r.tOut, 0),
        num(r.curlL, 2), num(r.curlW, 2), num(r.prof, 4), num(r.len / 1000, 2), num(r.sec, 1)]);
-    const sHead = ['時刻[s]', 'パス', '荷重[t]', '速度[mpm]', '板厚[mm]', 'ギャップ[mm]', '圧下位置[mm]', '動力[MW]',
-                   '目標ギャップ[mm]', '出側板厚[mm]', 'クラウン[um]', '平坦度[I]', 'ベンディング[t]', '横ずれ[mm]',
-                   '丈反り[mm]', '幅反り[mm]', 'プロファイル[-]', '温度[℃]', '位置[mm]'];
-    const sRows = t.series.filter(q => on(q.pass)).map(q =>
-      [q.t, q.pass, q.f, q.v, q.h, q.g, q.sc, q.p, q.tg, q.hd, q.cr, q.fl, q.bd, q.zo, q.cl, q.cw, q.pc, q.T, q.x]);
+    const sHead = RollingLog.scHead();
+    const sRows = t.series.filter(q => on(q.pass)).map(q => RollingLog.scRow(q));
     const blob = Xlsx.book([
       { name: 'ロット諸元', rows: meta },
       { name: 'パス実績', rows: [pHead, ...pRows] },
@@ -13042,6 +13468,17 @@ class UIManager {
     $('m-gap-v').textContent   = m.gap.toFixed(m.gap < 30 ? 1 : 0);
     $('m-gap-s').textContent   = `目標 ${m.targetGap.toFixed(m.targetGap < 30 ? 1 : 0)} mm`
       + `／圧下 ${m.screw.toFixed(1)}＋伸び ${m.stretch.toFixed(2)}`;
+    /* X 線板厚計。主値は «目標との差»（µm）—— 運転が知りたいのは絶対値ではなく «外れ»。 */
+    {
+      const gx = m.gauge.EXIT, ge = m.gauge.ENTRY, gs = m.gauge.SCAN;
+      const dev = gx === null ? null : (gx - m.targetGap) * 1000;
+      const ev = $('m-xray-v');
+      ev.textContent = dev === null ? '–' : (dev > 0 ? '+' : '') + dev.toFixed(0);
+      ev.classList.toggle('off', dev !== null && Math.abs(dev) > 50);
+      $('m-xray-x').textContent = gx === null ? '– mm' : `${gx.toFixed(3)} mm`;
+      $('m-xray-s').textContent = `入側 ${ge === null ? '–' : ge.toFixed(2) + ' mm'}`
+        + ` ／ 走査 ${gs === null ? '–' : gs.toFixed(3) + ' mm'} @ ${m.scanZ.toFixed(0)} mm`;
+    }
     this._banner();
     const st = window.__world?.stats;
     if (st) {
