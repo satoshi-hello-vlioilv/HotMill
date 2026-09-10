@@ -28,6 +28,15 @@ for (const w of widths) {
       return q.right > h.right + 1 || q.left < h.left - 1 || q.right > innerWidth + 1 || q.width < 1;
     }).map(b => b.id || b.textContent.trim().slice(0, 8));
     const logPill = box('tb-log'), fit = tbEl.dataset.fit;
+    /* «使える幅» に対する余り。ツールバー自身は内容に合わせて縮む箱なので、
+     * clientWidth を見ても常にちょうどになる。上部バーの幅から右端のピルを引いて測る。 */
+    const hudEl = document.getElementById('hud-top');
+    const gapPx = parseFloat(getComputedStyle(hudEl).columnGap) || parseFloat(getComputedStyle(hudEl).gap) || 0;
+    const pills = [...hudEl.children].filter(c => c !== tbEl && !c.hidden)
+      .reduce((a, c) => a + c.getBoundingClientRect().width, 0);
+    const slack = hudEl.clientWidth - pills - gapPx * Math.max(hudEl.children.length - 1, 0) - tbEl.scrollWidth;
+    const zoneNm = document.querySelector('#tb-zones .nm');
+    const zoneLabelShown = !!zoneNm && zoneNm.getBoundingClientRect().width > 1;
     // «行» は、あるボタンの上端が別のボタンの下端より下にあるときだけ増える（高さの違いは行ではない）
     let rows = 1; for (const a of chips) for (const b of chips) if (a.top >= b.bottom - 2) { rows = 2; }
     const start0 = box('btn-start'), tabs0 = box('tabs'), st0 = box('status-banner'), met0 = box('metrics');
@@ -38,7 +47,7 @@ for (const w of widths) {
     const overflow = tb.right > innerWidth || [...document.querySelectorAll('#toolbar button')].some(b => b.getBoundingClientRect().right > tb.right + 1);
     // タブ切替で主操作の位置が動かないこと
     A.ui.selectTab('view'); const start2 = box('btn-start'); A.ui.selectTab('prep');
-    return { tbH: tb.height, rows, overflow, tbW: tb.width, clipW, cut, fit,
+    return { tbH: tb.height, rows, overflow, tbW: tb.width, clipW, cut, fit, slack: Math.round(slack), zoneLabelShown,
              logIn: logPill.right <= innerWidth - 1 && logPill.left > 0 && logPill.width > 40,
              logW: logPill.width,
              same: start0.top === start1.top && tabs0.top === tabs1.top && st0.top === st1.top && met0.top === met1.top && start0.top === start2.top,
@@ -48,6 +57,10 @@ for (const w of widths) {
   ok('ツールバーが 1 行に収まる', r.rows === 1 && !r.overflow, `${r.rows === 1 ? '1 行' : '折返しあり'} 幅 ${r.tbW.toFixed(0)} px`);
   ok('上部メニューが «見切れ» ていない（枠からはみ出す部品が無い）', r.clipW <= 1 && r.cut.length === 0,
      r.cut.length ? `切れている: ${r.cut.join(' / ')}（はみ出し ${r.clipW.toFixed(0)} px）` : `畳み段階 ${r.fit}・はみ出し 0 px`);
+  /* «ぎりぎり» を通さない。アイコンフォントの実寸は環境で数 px 変わるので、
+   * 余りが 10 px 未満なら実機では切れる（実際、右端の «区分記号» が切れていた）。 */
+  ok('上部メニューに余白がある（ぎりぎりではない）', r.slack >= 10, `余り ${r.slack} px・畳み段階 ${r.fit}`);
+  if (w >= 1728) ok('この画面幅では «区分記号» の文字が出ている', r.zoneLabelShown, r.zoneLabelShown ? '文字あり' : '記号だけ');
   ok('«実績» が常に押せる位置に出ている', r.logIn, `幅 ${r.logW.toFixed(0)} px`);
   ok('メッセージの長さで主操作・タブ・状態行・計器の位置が動かない', r.same);
   ok('状態行の高さが固定', Math.abs(r.stH - 36) < 1, `${r.stH.toFixed(0)} px`);

@@ -573,6 +573,10 @@ body[data-pill-fit="1"] .tb-pill { padding:0 9px; gap:5px; }
 .tb-run .chips button[aria-pressed="true"] { background:var(--accent-soft); border-color:var(--accent-2); color:var(--accent); }
 .tb-run .pophint { margin-top:9px; font-size:10px; color:var(--ink-3); line-height:1.6; }
 body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
+/* 一時停止は «記号だけ» にする。⏸ / ▶ は説明の要らない記号で、状態は色（琥珀）と
+   ボタンの説明（title）で分かる。文字を落としたぶんの 60 px を、意味が記号だけでは
+   伝わらない «区分記号・ラベル» の文字に回す（実測でその 2 つが切れていた）。 */
+.tb-run #btn-pause .nm { display:none; }
 /* 運転計画パネルの中身 */
 .pnl .pane { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; gap:9px; }
 .pnl .pane[hidden] { display:none; }
@@ -655,6 +659,9 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
 .pnl .mini.pri:hover { background:#174d90; color:#fff; }
 .pnl table.plan tbody tr { cursor:pointer; }
 .pnl table.plan tbody tr:hover td { background:var(--s-2); }
+/* 追いつけていないときの速度ボタン（«実効» が指定より低い） */
+.tb-run .spd.lag b { color:var(--crit); }
+.tb-run .spd.lag { background:#fdf2f2; }
 </style>
 </head>
 <body>
@@ -6600,7 +6607,15 @@ FinishController._pid = 0;
  *    update(dt) は内部で固定ステップに分割する。呼び出し側の dt（＝表示の
  *    フレームレート）が変わっても結果が変わらないことを構造的に保証する。
  * ========================================================================== */
-const PHYS_DT = 1 / 120, MAX_SUBSTEPS = 16;
+/* 物理の刻みは固定（1/120 s）。1 コマで «どれだけ進めるか» は要求された時間そのもので、
+ * 上限は «実時間の予算» で決める。
+ *
+ * 以前は 1 コマの substep 数を 16 で打ち切っていた。これは 1 コマで進める時間を
+ * 16/120 = 0.133 秒に抑えることを意味するので、60 fps では倍率 8 倍、30 fps では
+ * 4 倍が «天井» になっていた —— スライダを 20 倍にしても 8 倍より速くならない。
+ * 打ち切りを «実時間の予算»（1 コマ 11 ms）に置き換えると、要求どおり進めたうえで
+ * 重い環境では素直に «追いつけていない» ことが分かる（実効倍率を画面に出す）。 */
+const PHYS_DT = 1 / 120, PHYS_BUDGET_MS = 11, PHYS_MAX_SPAN = 5;
 
 class PhysicsEngine {
   constructor(bus) {
@@ -6684,11 +6699,25 @@ class PhysicsEngine {
     this.bus.emit('STATE_RESET');
   }
 
-  /** 任意 dt を受け取り、固定ステップに分割して積分する。 */
+  /**
+   * 任意 dt を受け取り、固定ステップに分割して積分する。
+   * 進める時間は要求どおり。ただし 1 コマに使う実時間は予算で抑え、
+   * 足りなければ «その コマぶんの遅れは捨てる»（次のコマへ持ち越して雪だるまにしない）。
+   * 追いつけなかったことは stepsLast / lagged で外へ出す（画面に実効倍率を出すため）。
+   */
   update(dt) {
-    if (this.paused || !(dt > 0)) { this.bus.emit('STATE_UPDATE', this); return; }
-    this._acc = Math.min(this._acc + dt, PHYS_DT * MAX_SUBSTEPS);
-    while (this._acc >= PHYS_DT) { this.step(PHYS_DT); this._acc -= PHYS_DT; }
+    if (this.paused || !(dt > 0)) { this.stepsLast = 0; this.bus.emit('STATE_UPDATE', this); return; }
+    const span = Math.min(dt, PHYS_MAX_SPAN);
+    this._acc = Math.min(this._acc + span, span + PHYS_DT);   // 前のコマの遅れは持ち越さない
+    const t0 = performance.now();
+    let n = 0, over = false;
+    while (this._acc >= PHYS_DT) {
+      this.step(PHYS_DT); this._acc -= PHYS_DT; n++;
+      // 予算の確認は 8 ステップごと（performance.now() 自体の呼び出しも安くはない）
+      if ((n & 7) === 0 && performance.now() - t0 > PHYS_BUDGET_MS) { over = true; break; }
+    }
+    if (over) this._acc = 0;
+    this.stepsLast = n; this.lagged = over;
     this.bus.emit('STATE_UPDATE', this);
   }
 
@@ -12014,7 +12043,17 @@ class UIManager {
    */
   _fitToolbar() {
     const tb = $('toolbar'); if (!tb) return;
-    const fits = () => tb.scrollWidth <= tb.clientWidth + 1;
+    /* 使える幅は «上部バーの幅 − 右端のピル − 隙間»。ツールバー自身は内容に合わせて
+     * 縮む箱なので clientWidth を見ると «常にちょうど» になり、余白の判定にならない
+     * （実測すると 1,728 px の画面で右端＝区分記号の余りが 9 px しかなく、
+     *   アイコンフォントの実寸が数 px 違う実機では切れていた）。 */
+    const hud = $('hud-top'); if (!hud) return;
+    const SAFE = 18;
+    const gap = parseFloat(getComputedStyle(hud).columnGap) || parseFloat(getComputedStyle(hud).gap) || 0;
+    const others = [...hud.children].filter(c => c !== tb && !c.hidden);
+    const avail = () => hud.clientWidth - SAFE - gap * Math.max(hud.children.length - 1, 0)
+                        - others.reduce((a, c) => a + c.getBoundingClientRect().width, 0);
+    const fits = () => tb.scrollWidth <= avail();
     for (const pill of ['0', '1']) {
       document.body.dataset.pillFit = pill;
       for (const lv of ['0', '1', '2']) {
@@ -12854,7 +12893,25 @@ class UIManager {
     $('rng-timescale').value = this.timeScale;
     $('lbl-timescale').textContent = tx; $('lbl-timescale2').textContent = tx;
     for (const q of (this.speedBtns || [])) q.b.setAttribute('aria-pressed', String(q.v === this.timeScale));
+    this._effTx = null; $('tb-speed').classList.remove('lag');
     this._summaries();
+  }
+  /**
+   * 実効倍率の表示。要求どおり進んでいれば «5×»、追いつけていなければ «5×（実効 3.2×）»。
+   * 一時停止中や運転していないときは判定しない（進まないのは当然なので）。
+   */
+  setEffective(v) {
+    if (!this.busy || this.paused) { this._effTx = null; }
+    else this._effTx = v < this.timeScale * 0.85 ? `（実効 ${v.toFixed(1)}×）` : null;
+    const base = this.timeScale.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + '×';
+    const el = $('lbl-timescale');
+    const tx = base + (this._effTx ? ' !' : '');
+    if (el.textContent !== tx) el.textContent = tx;
+    $('lbl-timescale2').textContent = base + (this._effTx || '');
+    $('tb-speed').classList.toggle('lag', !!this._effTx);
+    $('tb-speed').title = this._effTx
+      ? `指定 ${base} に対し実効 ${v.toFixed(1)}×。描画が重く物理が追いついていません（品質を下げると改善します）`
+      : 'シミュレーション速度を変える';
   }
   toggleSpeedPop(v) {
     const open = v === undefined ? $('tb-speed-pop').hidden : v;
@@ -13105,6 +13162,19 @@ class App {
     this.physics.update(raw * this.ui.timeScale);
     this.world.render(this.physics, raw);
     this._probeQuality(raw);
+    this._effRate(raw);
+  }
+
+  /**
+   * «実効倍率» の実測（0.7 秒窓）。要求した倍率どおりに進んでいるかを画面へ返す。
+   * 重い環境では物理が追いつかず、指定より遅く流れる —— それを黙って起こさない。
+   */
+  _effRate(raw) {
+    const e = this._eff ??= { wall: 0, sim: 0, last: this.physics.elapsed };
+    e.wall += raw; e.sim += Math.max(this.physics.elapsed - e.last, 0); e.last = this.physics.elapsed;
+    if (e.wall < 0.7) return;
+    this.ui.setEffective(e.sim / e.wall);
+    e.wall = 0; e.sim = 0;
   }
 
   /**
