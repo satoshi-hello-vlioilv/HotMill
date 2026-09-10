@@ -81,7 +81,7 @@ if (!LOT.skipGen)
      gen.length !== real.length ? `本アプリ ${gen.length} パス` : diff.length ? diff.slice(0, 4).join(', ') : '一致');
 // 7. 予測荷重の精度: 自動生成スケジュール（実機と同じ圧下配分）の予測 steady / force が
 //    運転の平均 / 最大荷重に ±15 % で一致する（仕上げ段以降。厚板段は初パスを除いて同様に見る）
-{
+if (!LOT.skipGen) {
   const cmp = P.map((r, i) => ({ no: r.no, q: out.gen[i] })).filter(x => x.q && x.no > 1 && x.q.gap === P[x.no - 1].plan?.gap)
     .map(x => ({ no: x.no, eA: x.q.steady / P[x.no - 1].fAvg - 1, eM: x.q.force / P[x.no - 1].fMax - 1 }));
   const worstA = [...cmp].sort((a, b) => Math.abs(b.eA) - Math.abs(a.eA))[0], worstM = [...cmp].sort((a, b) => Math.abs(b.eM) - Math.abs(a.eM))[0];
