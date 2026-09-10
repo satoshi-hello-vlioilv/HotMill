@@ -1316,6 +1316,10 @@ const VERSION = {
       { t: 'ブラシ条件の登録モーダルを作った。材質を選び、F-5〜F の 6 行でブラシの種類・掛ける長さ・ノッチを決める。下に «除去の強さ»（既定を 100 %）と、弱すぎ／強すぎの注意を出す', w: '#dlg-brush / UIManager.openBrushDialog' },
       { t: '3D にブラシロールを上下 1 本ずつ足した。掛けるパスではワークロールに押し付け、掛けないパスでは半径方向へ 140 mm 引く。当たりはバックアップロールと板を避けた入側寄りの斜め上', w: 'Parts.brushRoll / MillStandView' },
       { t: '実測: コーティングは 1 ロットで 6.0 → 6.9 µm まで積もり、ブラシで 4.2 µm まで落ち、掛けない最終 2 パスで 6.6 µm へ戻る。摩擦係数の振れは ±2.6 % で、荷重の較正（14/14）は崩れない', w: 'tools/brushtrace.mjs' },
+      // --- ワニ口の食い込み深さ ---
+      { t: 'ワニ口が «表層のめくれ» になっていた。板厚方向の開きを |ny|² で置いていたため、板厚の内側半分では開きが 25 % しかなかった。開きは不均一変形係数 Δ ＝ h̄/Ld で決まる —— Δ が大きいほど圧縮の円錐が芯へ届かず、芯の引張域（割れの駆動力）が板厚の中央まで広がるので、割れも深く入る', w: 'Rolling.gatorPow / endOffset' },
+      { t: 'べき指数を p ＝ 2/√Δ（0.8〜2 で頭打ち）にした。Δ 1 で p 2（表層のめくれ）、Δ 4 で p 1（板厚いっぱいの真っ直ぐな V）、Δ 8 で p 0.8（あごがほぼ平行に離れる）。既定ロットの厚板段は Δ 7.7 なので、内側半分の開きが 25 → 57 % になる', w: 'Rolling.gatorPow' },
+      { t: 'ワニ口を作った Δ を端ごとに覚えるようにした（クロップで数え直す）。深さを決めるのは «いまの板厚» ではなく «それを作ったパス» なので', w: 'SlabState.gatorDelta' },
       // --- 作業中に見つけて直したこと ---
       { t: 'クレーンの運転速度を仕様の定格の 3 倍にした。定格そのもの（装入: 走行 85・横行 40・巻上 14 m/min）は仕様書の値で、クレーンとして一般的（走行 60〜150・横行 20〜60・巻上 8〜25）。ただしこの規模のラインを画面で追うには遅く見えるので、«見せる速さ» だけを倍率で変える。仕様の表は残したままで、1.0 に戻せば仕様どおりに動く', w: 'CONFIG.CRANE_SPEED_K / Layout.craneV' },
       { t: '倍率は加速度を 2 乗で上げる。そうすると台形線図の所要時間がちょうど 1/K になり «全部が K 倍速い» という素直な意味になる（速度だけ上げると加速区間が伸びて短い移動では効かない）', w: 'Layout.craneA' },
@@ -5232,11 +5236,21 @@ const Rolling = {
    * 端の最大変位は «幅中央かつ表裏» で tongue + gator になる。
    * 描画（板・端材・シート）と先端位置の計算はすべてこの 1 式を参照する。
    */
-  endOffset(dEnd, tongue, gator, zone, ny, nz) {
+  endOffset(dEnd, tongue, gator, zone, ny, nz, gPow = 2) {
     if (!((tongue > 0 || gator > 0)) || dEnd >= zone) return 0;
     const e = 1 - dEnd / zone;
-    return e * e * (tongue * (1 - nz * nz) + gator * ny * ny);
+    return e * e * (tongue * (1 - nz * nz) + gator * Math.pow(Math.abs(ny), gPow));
   },
+  /**
+   * ワニ口の «板厚方向の広がり» を決めるべき指数。offset ∝ |ny|^p で、
+   *   p = 2   …… 表層だけがめくれる（板厚の外側 1/4 に 3/4 が集まる）
+   *   p = 1   …… 板厚いっぱいの真っ直ぐな V（芯から表面まで一様に開く）
+   *   p < 1   …… 芯のすぐ外から一気に開き、あご（ジョー）がほぼ平行に離れる
+   * 決めるのは不均一変形係数 Δ ＝ h̄/Ld。Δ が大きいほど «圧縮の円錐» が芯へ届かず、
+   * 芯の引張域が板厚の中央まで広がるので、割れも板厚を深く取る。
+   * 実機のワニ口が «表層のめくれ» ではなく «ワニの口» に見えるのはこのため。
+   */
+  gatorPow(delta) { return Num.clamp(2 / Math.sqrt(Math.max(delta, 1)), 0.8, 2); },
   /** ロールバイト内の板厚プロファイル h(x) と下面高さ。x は圧延中心からの mm。 */
   profile(x, hIn, gap, dir) {
     const R = CONFIG.MILL.WR_D / 2, dh = hIn - gap;
@@ -5301,6 +5315,9 @@ class SlabState {
     /* ワニ口が育つのは変形が表層に集中する Δ = hMean/Ld > 1 のパスだけ。Δ が 1 を切った
      * 時点の板厚を覚えておき、それより薄い側ではワニ口を伸ばさない（舌だけが伸びる）。 */
     this.hHomo = null;
+    /* ワニ口が «どれだけ深く» 入るかは、それを作ったパスの不均一変形係数 Δ で決まる。
+     * 端ごとに «最後に平らにしてからいちばん大きかった Δ» を持つ（クロップで戻す）。 */
+    this.gatorDelta = { 1: 0, '-1': 0 };
     this.tailCut = 0;                                // 尾端側の切断面（30 mm / 75 mm シャーで切り分けた面）の有無
     this.rollForce = 0; this.rollTorque = 0; this.rollPower = 0; this.contactLength = 0;
     this.rollForceAvg = 0; this.biteFill = 0;   // 過負荷保護が見る «短時間平均» の荷重
@@ -5667,16 +5684,17 @@ class SlabState {
    */
   shape(x0 = this.xMin, x1 = this.xMax, pP = this.overhangParts(1), pM = this.overhangParts(-1)) {
     const L = Math.max(x1 - x0, 1);
-    const mk = (xE, p, cut) => ({ xE, tongue: p.tongue, gator: p.gator,
-                                  zone: Rolling.endZone(p.tongue + p.gator, L), cut });
-    const ends = { 1: mk(x1, pP, this.cut[1]), '-1': mk(x0, pM, this.cut['-1']) };
+    const mk = (xE, p, cut, gp) => ({ xE, tongue: p.tongue, gator: p.gator, gPow: gp,
+                                      zone: Rolling.endZone(p.tongue + p.gator, L), cut });
+    const gp = e => Rolling.gatorPow(this.gatorDelta[e]);
+    const ends = { 1: mk(x1, pP, this.cut[1], gp(1)), '-1': mk(x0, pM, this.cut['-1'], gp(-1)) };
     return {
       x0, x1, ends,
       /** 材料点 (x, ny, nz) の張り出し込み X。切断面があればそこで打ち切る。 */
       map(x, ny, nz) {
         const e = x > (x0 + x1) / 2 ? ends[1] : ends['-1'], sgn = x > (x0 + x1) / 2 ? 1 : -1;
         const dEnd = sgn > 0 ? e.xE - x : x - e.xE;
-        let xo = x + sgn * Rolling.endOffset(Math.max(dEnd, 0), e.tongue, e.gator, e.zone, ny, nz);
+        let xo = x + sgn * Rolling.endOffset(Math.max(dEnd, 0), e.tongue, e.gator, e.zone, ny, nz, e.gPow);
         if (e.cut !== null) xo = sgn > 0 ? Math.min(xo, e.xE + e.cut) : Math.max(xo, e.xE - e.cut);
         return xo;
       },
@@ -7078,6 +7096,7 @@ class FinishController {
       if (end > 0) sl.xMax = S.X; else sl.xMin = S.X;
       sl.cut[end] = null; sl.cropped[end] = true;
       sl.hCut[end] = sl.thickness;      // ここから端部欠陥が付き直す（切り口は平ら）
+      sl.gatorDelta[end] = 0;           // ワニ口の深さを決める Δ も数え直す
       sl.length = sl.xMax - sl.xMin;
       s.cropSound = Math.abs(before - S.X);          // 健全部（板長として減る分）
       // 長手プロファイル（板厚・端部の冷え）も «落ちた端» のぶんを外して張り直す。
@@ -7314,6 +7333,7 @@ class FinishController {
     if (end > 0) sl.xMax = sx; else sl.xMin = sx;
     sl.cut[end] = null; sl.cropped[end] = true;                   // 切り分け面は平ら
     sl.hCut[end] = sl.thickness;                                  // 端部欠陥の起点もここへ
+    sl.gatorDelta[end] = 0;
     sl.length = sl.xMax - sl.xMin;
     this.bus.emit('SYS_MESSAGE', { text: `${s.divideShear === 'S30' ? '30 mm' : '75 mm'} シャー: シート ${s.sheetCount} 枚目（${(piece.len / 1000).toFixed(1)} m）を切り分けました`, kind: 'info' });
   }
@@ -7885,7 +7905,12 @@ class PhysicsEngine {
       s.forwardSlip = res.forwardSlip;
       /* 変形が «表層集中（Δ>1）» から «均一（Δ<1）» へ移った板厚を覚える。
        * これより薄い側ではワニ口は伸びない（舌だけが伸びる）。 */
-      if (s.hHomo === null && s.biteFill > 0.99 && Rolling.inhomogeneity(hLoc, gap, res.Ld) < 1) s.hHomo = gap;
+      if (s.biteFill > 0.99) {
+        const dl = Rolling.inhomogeneity(hLoc, gap, res.Ld);
+        if (s.hHomo === null && dl < 1) s.hHomo = gap;
+        // ワニ口の «深さ» を決める Δ。端ごとに、切ってからいちばん大きかった値を残す
+        if (dl > 1) for (const e of [1, -1]) s.gatorDelta[e] = Math.max(s.gatorDelta[e], dl);
+      }
     } else {
       if (s.rollingActive && (s.xMin > 0 || s.xMax < 0)) {   // 尻抜け: 板厚を確定
         /* 確定に使うのは «噛んでいた間の» ギャップ。尻が抜けた瞬間の m.gap は荷重が抜けて
@@ -12217,6 +12242,7 @@ class SlabView {
     const sig = x0 + ':' + x1 + ':' + slab.thickness + ':' + slab.width + ':'
               + mill.gap + ':' + mill.passLine + ':' + (mill.plOffset || 0) + ':' + slab.inBite + ':' + slab.dir + ':'
               + slab.hCut[1] + ':' + slab.hCut[-1] + ':' + slab.hHomo + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig
+              + ':' + Math.round(slab.gatorDelta[1] * 4) + ':' + Math.round(slab.gatorDelta[-1] * 4)
               + ':' + (slab.wShape ? slab.wShape.crownAbs.toFixed(1) : '-')
               + ':' + (slab.zOff || 0).toFixed(1) + ':' + (slab.camberVis || 0).toExponential(3);
     if (sig === this._sig) return;

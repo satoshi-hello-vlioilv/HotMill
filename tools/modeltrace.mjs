@@ -237,6 +237,20 @@ const out = await page.evaluate(async () => {
       const mx = R.endOffset(0, thin.tongue, thin.gator, z, 1, 0);
       ok('端の最大変位が 舌 + ワニ口 に一致', Math.abs(mx - (thin.tongue + thin.gator)) < 0.01,
          `${mx.toFixed(1)} mm`);
+      /* ワニ口の «板厚方向の広がり»。表層だけがめくれるのではなく板厚を取る形になるか。
+       * 決めるのは不均一変形係数 Δ で、Δ が大きいほど圧縮の円錐が芯へ届かず、
+       * 芯の引張域が板厚の中央まで広がるので割れも深く入る。 */
+      {
+        const pw = [1, 2, 4, 8].map(d => R.gatorPow(d));
+        ok('ワニ口のべき指数が Δ とともに下がる（深く入る）',
+           pw[0] > pw[1] && pw[1] > pw[2] && pw[2] >= pw[3] && pw[0] <= 2 && pw[3] >= 0.8,
+           pw.map((v, i) => `Δ${[1, 2, 4, 8][i]} → p ${v.toFixed(2)}`).join(' ／ '));
+        // 厚板の Δ（既定ロットで 7.7）では板厚の内側半分でも半分以上開いていること
+        const p8 = R.gatorPow(8), half = Math.pow(0.5, p8), old2 = Math.pow(0.5, 2);
+        ok('厚板では板厚の «内側半分» でも大きく開く（表層だけではない）', half > 0.5 && half > old2 * 2,
+           `芯から半分の位置で ${(half * 100).toFixed(0)} %（べき 2 なら ${(old2 * 100).toFixed(0)} %）`);
+        ok('芯（ny = 0）では開かない（割れの起点）', R.endOffset(0, 0, 100, 1000, 0, 0, p8) === 0, '0 mm');
+      }
       A.bus.emit('CMD_RESET');
     }
   }
