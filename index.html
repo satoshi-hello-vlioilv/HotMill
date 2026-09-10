@@ -1217,7 +1217,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
-    { v: '1.22.0', base: 'a0531ac', date: '2026-09-10', title: '図面どおりのローラを保つ・冷却モデルを上下面に分ける・沸騰曲線を液の状態で動かす', items: [
+    { v: '1.22.0', base: 'a0531ac', date: '2026-09-10', title: '図面どおりのローラを保つ・冷却モデルを上下面に分ける・沸騰曲線を液の状態で動かす・主駆動系に軸受摩擦とロール慣性', items: [
       // --- テーブルローラ ---
       { t: 'X 線板厚計のために抜いていたローラ 3 本を戻し、図面どおりの本数とピッチにした。計器は «ローラとローラのあいだ» へ納める —— 計器の X は隣り合うローラの中点、下腕は軸受台のすきま（ピッチ 370 で 176 mm）を通す薄い断面、検出器はローラ最下点（618）より下', w: 'CONFIG.XRAY / Parts.xrayFrame' },
       { t: '腕はヘッドと同じ高さには置けない（同じ場所を取り合う）。上腕は線源の上、下腕は検出器の下に付ける', w: 'Parts.xrayFrame' },
@@ -1250,7 +1250,16 @@ const VERSION = {
       // --- 上下ロールの径差 ---
       { t: '上下ロールの径差を実装した。上下のワークロールは同じ回転数で回されるので、径が大きいほうの周速が速い。速い側の面が余計に伸び、その面が外側になる向きに板が曲がる（上が大きいと下反り）', w: 'MILL.DIA_DIFF / Rolling.diaCurl' },
       { t: '偏芯も上下で波長が分かれる。バックアップロールは連れ回りなので、回転数はそれぞれのワークロールとの径の逆比', w: 'MillState._disturb' },
+      // --- 主駆動系（軸受の摩擦とロールの慣性） ---
+      { t: '主機が出すトルクを «圧延 ＋ 軸受の摩擦 ＋ 回転系の慣性» の 3 つの和にした。定常ぶん（圧延＋摩擦）で出せる速度が決まり、その余力で慣性を回すので加速度が決まる', w: 'PhysicsEngine._drive' },
+      { t: '4段ミルなので圧延荷重を受けるのはバックアップロールの首で、ワークロールの首に掛かるのはベンディング力と自重だけ（WR は BUR に支えられている）。この区別を入れないと摩擦損失を 2 倍近く見積もる。実測で圧延トルクの 2.7 %（最大 55 kN·m 対 1,863 kN·m）', w: 'Drive.bearingTorque' },
+      { t: 'ロール軸まわりの慣性を «WR ＋ BUR（回転数比の 2 乗）＋ 主機（減速比の 2 乗）» で組み立てた。合計 219 t·m² のうち 96 % が主機ぶんで、ロールは 4 % しかない。空転のロールを 110 mpm/s で加減速するだけで 864 kN·m（定格の 60 %）が要る', w: 'Drive.inertia / rotorInertia' },
+      { t: '主機が定常ぶんを賄えないときはロールが減速するようにした（噛み込みの衝撃降下）。指令の頭打ち（powerCap、時定数 2 s）より速く効くので、この 2 つは役割が違う', w: 'PhysicsEngine._drive' },
+      { t: '慣性が所要時間を延ばすかを測った結果は «延ばさない» —— ロールは板が来る前に定速へ達しているので、加速は死に時間と重なる。加速が主機の能力で頭打ちになるのは慣性が 731 t·m² を超えてからで、現在の 219 t·m² には 3 倍以上の余裕がある。実機の GD² が手に入れば置き換える（残件）', w: 'tools/drivetrace.mjs' },
+      { t: '計器の «主機動力» が圧延ぶんだけを読んでいた（名前と中身の食い違い）。主機が出している動力に直し、軸受と慣性の割合を副表示に添えた。過負荷警告と記録も同じ値で見る', w: '#m-power / RollingLog.SCOLS' },
+      { t: '主駆動系はトルクが決まったあとに回す。_actuators の中で回していたため、1 ステップ古い圧延トルクで加速を決めていた（噛み込みの瞬間に 428 kN·m ずれる）', w: 'PhysicsEngine.step' },
       // --- 作業中に見つけて直したこと ---
+      { t: '尻抜けの一瞬のロールギャップ（8 → 4.1 mm、60 ms）でコイル全体を数え直していた。外径が Φ1,606 → 1,325 と化ける。巻いた長さで重み付けした平均厚で持つようにした', w: 'FinishController.coilTh' },
       { t: '濡れたローラの液膜を噴射域で薄めず «常に全面» に掛けていた。上がり温度が 42 K 低く出ていた', w: 'PhysicsEngine._thermal' },
       { t: '噴流の効き（JET）を «ロールから流れ落ちる» ぶんにも掛けていた。下面の抜熱が 35 % 過大だった', w: 'PhysicsEngine.surfaceCool' },
       { t: '較正のノブ（--set）で «false» が文字列のまま渡り、スイッチを切る実験がすべて効いていなかった', w: 'tools/reallot.mjs parseSets' },
@@ -1873,6 +1882,7 @@ const CONFIG = {
     MU_RA_REF: 0.85, MU_RA_K: 0.25,
     ROLL_T0: 60,                           // クーラントと釣り合う待機温度 [℃]
     ROLL_RC: 3.6e6,                        // 鍛鋼の体積熱容量 [J/m³K]
+    ROLL_RHO: 7850,                        // 鍛鋼の密度 [kg/m³]（ロールの慣性モーメント）
     ROLL_K: 40,                            // 鍛鋼の熱伝導率 [W/mK]（Rolling.rollHTC が使う）
     ROLL_TAU: 45,                          // クーラントで待機温度へ戻る時定数 [s]
     /* バックアップロールへの抜熱。ワークロールが板から受けた熱は、クーラントだけでなく
@@ -1977,6 +1987,16 @@ const CONFIG = {
      * になる —— 定格で頭打ちにすると実機の速度が出せない。パス単位の上限はこの倍率で見て、
      * サイクル全体の実効（RMS）が定格内かはスケジュールの注意書きで示す。 */
     OVERLOAD: 2.0,
+    /* 駆動系の損失。主機が出すトルクは «圧延トルク ＋ 軸受の摩擦 ＋ 回転系の慣性»。
+     * MU_BEARING —— 油膜軸受（モーゴイル）の等価摩擦係数。文献の幅は 0.002〜0.005。
+     *   4段ミルなので «圧延荷重を受けるのはバックアップロールの首» で、ワークロールの首に
+     *   掛かるのはベンディング力とロール自重だけ（ワークロールはバックアップロールに
+     *   支えられている）。この区別を入れないと摩擦損失を 2 倍近く見積もる。
+     * ROTOR_* —— 主電動機の回転子慣性を外形（MOTOR_D × MOTOR_L）から出すための比。回転子を
+     *   «外形の KD 倍の径・KL 倍の長さの中実円柱、等価密度 RHO（鉄心と銅の混合）» と置く。
+     *   減速比の 2 乗でロール軸へ換算するので、加速の重さは実質ここで決まる。実機の GD² が
+     *   手に入ればこの推定を置き換える（README 残件）。 */
+    MU_BEARING: 0.003, ROTOR_KD: 0.60, ROTOR_KL: 0.45, ROTOR_RHO: 7000,
     COUPLING_Z: -3960,                      // スピンドル継手（ロール側）＝ フォークの外側の自在継手中心
     PINION_Z:   -9500,                      // ピニオンスタンド出力軸（ここからミル側へ 1,200 mm 出る）
     PINION_SPAN: 1800, STAND_L: 2200,       // ピニオン軸間 / ギヤボックス奥行
@@ -3537,6 +3557,45 @@ const Drive = {
   maxSpeed(dia = CONFIG.MILL.WR_D) {
     const D = CONFIG.DRIVE;
     return Math.PI * (dia / 1000) * (D.RPM_MAX / D.GEAR);
+  },
+  /**
+   * ロール軸まわりの慣性モーメント [kg·m²]。上下のワークロールはそのまま、
+   * バックアップロールは «周速が同じで径が大きい ＝ ゆっくり回る» ので回転数比の 2 乗、
+   * 主電動機と減速機は減速比の 2 乗でロール軸へ換算する。
+   * 換算の根拠は運動エネルギーの保存: ½Jω² を同じ ω で表し直すだけ。
+   */
+  inertia(wrDia = CONFIG.MILL.WR_D, brDia = CONFIG.MILL.BR_D) {
+    const M = CONFIG.MILL, D = CONFIG.DRIVE;
+    // 中実円柱の慣性 J = ½·m·r²、m = ρ·π·r²·L
+    const J = (dia, len) => { const r = dia / 2000; return 0.5 * M.ROLL_RHO * Math.PI * r * r * (len / 1000) * r * r; };
+    const k = wrDia / brDia;                                        // BUR の回転数比
+    return 2 * J(wrDia, M.BARREL) + 2 * J(brDia, M.BR_BARREL) * k * k
+         + Drive.rotorInertia() * D.MOTOR_N * D.GEAR * D.GEAR;
+  },
+  /** 主電動機 1 台の回転子慣性 [kg·m²]（電動機軸まわり）。外形から置いた推定値。 */
+  rotorInertia() {
+    const D = CONFIG.DRIVE, r = D.MOTOR_D * D.ROTOR_KD / 2000, L = D.MOTOR_L * D.ROTOR_KL / 1000;
+    return 0.5 * D.ROTOR_RHO * Math.PI * r * r * L * r * r;
+  },
+  /** ロール 1 本の質量 [kg]（自重が軸受に掛かる） */
+  rollMass(dia, len) { const r = dia / 2000; return CONFIG.MILL.ROLL_RHO * Math.PI * r * r * (len / 1000); },
+  /**
+   * 軸受の摩擦トルク [N·m]（ロール軸換算・上下 4 本ぶん）。
+   * 首の摩擦トルク = μ·（首に掛かる力）·（首の半径）。バックアップロールはゆっくり回るので、
+   * ワークロール軸へは回転数比 D_WR/D_BR を掛けて換算する（動力が保存するように）。
+   * @param forceN 圧延荷重 [N]（バックアップロールの首が受ける）
+   * @param bendN  ワークロールの首に掛かる力 [N]（ベンディング ＋ 自重）
+   */
+  bearingTorque(forceN, bendN = 0, wrDia = CONFIG.MILL.WR_D, brDia = CONFIG.MILL.BR_D) {
+    const M = CONFIG.MILL, mu = CONFIG.DRIVE.MU_BEARING;
+    const br = mu * Math.max(forceN, 0) * (M.BR_NECK_D / 2000) * (wrDia / brDia);
+    const wr = mu * Math.max(bendN, 0) * (M.WR_NECK_D / 2000);
+    return 2 * (br + wr);
+  },
+  /** その速度で主機が出せるトルク [N·m]（基底回転数まで定トルク、以上は定出力。短時間過負荷込み） */
+  availTorque(speedMpm, dia = CONFIG.MILL.WR_D) {
+    const D = CONFIG.DRIVE, rpm = Drive.motorRpm(speedMpm, dia);
+    return Drive.maxTorque * D.OVERLOAD * Math.min(1, D.RPM_BASE / Math.max(rpm, 1e-6));
   },
   /** 所要トルク M [N·m] を出せる最高速度 [mpm]。定出力域では速度と反比例する（短時間過負荷込み）。 */
   speedLimit(torqueNm, dia) {
@@ -5525,6 +5584,8 @@ class MillState {
     this.phaseT = 0;                           // いまの工程に入ってからの経過 [s]（パス間の死に時間に使う）
     this.guideGap = 2600;
     this.wrDia = CONFIG.MILL.WR_D; this.brDia = CONFIG.MILL.BR_D;  // 研削による現在径（RollShop が入れる。上下の平均）
+    // 主駆動系（PhysicsEngine._drive）。圧延トルクのほかに掛かるぶんと、その合計 [N·m]
+    this.bearingTorque = 0; this.inertiaTorque = 0; this.driveTorque = 0; this.drivePowerKW = 0; this.steadyPowerKW = 0; this.accelCap = CONFIG.PROCESS.ACCEL;
     this.wrRa = CONFIG.MILL.ROLL_SHOP.WR.RA_NEW; this.brRa = CONFIG.MILL.ROLL_SHOP.BR.RA_NEW;   // 表面粗度 [µmRa]
     this.powerCap = 161;                       // 駆動包絡線から決まる速度上限
     this.motorRpm = 0;
@@ -6034,7 +6095,7 @@ class RollingLog {
     const c = this._cur;
     if (c) {
       if (c.hIn === null && s.inBite) { c.hIn = s.thickness; c.tIn = s.temperature; }
-      const f = m.forceMeas || 0, v = Math.abs(m.currentSpeed), pw = (s.rollPower || 0) / 1000;
+      const f = m.forceMeas || 0, v = Math.abs(m.currentSpeed), pw = (m.drivePowerKW || 0) / 1000;
       if (f > c.fMax) c.fMax = f;
       if (v > c.vMax) c.vMax = v;
       if (pw > c.pMax) c.pMax = pw;
@@ -6059,7 +6120,9 @@ class RollingLog {
     const sh = s.wShape, wp = s.warp;
     this.series.push({ t: +this.lot.t.toFixed(2), pass: i + 1,
                        f: +(m.forceMeas || 0).toFixed(0), v: +Math.abs(m.currentSpeed).toFixed(1),
-                       p: +((s.rollPower || 0) / 1000).toFixed(2), h: +s.thickness.toFixed(3),
+                       p: +((m.drivePowerKW || 0) / 1000).toFixed(2), h: +s.thickness.toFixed(3),
+                       tq: +((m.driveTorque || 0) / 1000).toFixed(1),      // 主機トルク kN·m
+                       tb: +((m.bearingTorque || 0) / 1000).toFixed(1),    // うち軸受の摩擦
                        /* 板厚まわりは 1 µm 刻みで残す。熱間の実力は ±50 µm なので、
                         * 0.01 mm 刻み（10 µm）だとログが «階段» になり、長手の振れが
                         * 量子化に埋もれてしまう（実測: 1 パスに 5〜9 段しか出ていなかった）。 */
@@ -6174,7 +6237,9 @@ RollingLog.SCOLS = [
   { key: 'pass', name: 'パス', unit: '' },
   ...RollingLog.SERIES,
   { key: 'sc', name: '圧下位置', unit: 'mm' },
-  { key: 'p',  name: '動力', unit: 'MW' },
+  { key: 'p',  name: '主機動力', unit: 'MW' },
+  { key: 'tq', name: '主機トルク', unit: 'kN·m' },
+  { key: 'tb', name: '軸受摩擦トルク', unit: 'kN·m' },
   { key: 'T',  name: '温度', unit: '℃' },
   { key: 'x',  name: '位置', unit: 'mm' },
 ];
@@ -7259,6 +7324,9 @@ class PhysicsEngine {
     this.finishCtrl.update(dt);
     this._actuators(dt);
     if (this.slab.onLine) { this._dynamics(dt); this._guides(dt); this._thermal(dt); this._lengthwise(dt); }
+    /* 主駆動系は «その時刻のトルク» を受けて速度を積分するので、圧延トルクが決まったあとに
+     * 回す（_actuators の中で回すと 1 ステップ古い圧延トルクで加速を決めることになる）。 */
+    this._drive(dt);
     this._rollCool(dt);
     this._rollKinematics(dt);
     this._diagnose();
@@ -7272,14 +7340,47 @@ class PhysicsEngine {
     this._shapeControl(dt);
     this._levelControl(dt);
     this._rollShop(dt);
-    // 主機は定格以上のトルクを出せない。動力が定格を超えるなら速度で頭打ちにする。
-    // 実機の駆動系と同じ挙動で、重圧下・低温のパスでは自然に減速する。
-    // 主機の駆動包絡線（基底回転数まで定トルク、以上は定出力）で速度を頭打ちにする。
-    // 圧延トルクが大きいパスほど出せる速度が下がるという、直流主機そのものの挙動。
-    m.powerCap = Num.approach(m.powerCap, Drive.speedLimit(this.slab.rollTorque, m.wrDia), 0.5, dt);
-    m.motorRpm = Drive.motorRpm(m.currentSpeed, m.wrDia);
-    m.currentSpeed = Num.rateTo(m.currentSpeed, m.targetSpeed, CONFIG.PROCESS.ACCEL, dt);
     // ロールベンディングは圧延荷重に追従（形状制御の可視化用）
+  }
+
+  /**
+   * 主駆動系。主機が出すトルクは 3 つの和で、それぞれ効き方が違う。
+   *
+   *   圧延トルク —— 板を潰すぶん。パスごとに決まる（Rolling.solve）。
+   *   軸受の摩擦 —— 荷重に比例する «定常» の損失。速度の頭打ちに効く。
+   *   回転系の慣性 —— 加速中だけ立つ «過渡» のトルク。加速の鈍りに効く。
+   *
+   * 定常ぶん（圧延 ＋ 摩擦）で出せる最高速度が決まり、その残りの余力でロール系の慣性を
+   * 回すので加速度が決まる。重いパスほど遅く、しかも加速も鈍い —— 可逆ミルそのものの挙動で、
+   * 「同じ圧下でも荷重の高いパスは時間が掛かる」という実機の実感がここから出る。
+   * 制動は回生（慣性が主機を助ける）なので指令の変化率のまま落とす。
+   */
+  _drive(dt) {
+    const m = this.mill, s = this.slab, D = CONFIG.DRIVE, r = m.wrDia / 2000;
+    // ワークロールの首に掛かるのはベンディング力とロール自重（圧延荷重は BUR の首が受ける）
+    const wrNeckN = m.bendForceT * 9806.65 + Drive.rollMass(m.wrDia, CONFIG.MILL.BARREL) * 9.80665;
+    m.bearingTorque = Drive.bearingTorque((m.forceMeas || 0) * 9806.65, wrNeckN, m.wrDia, m.brDia);
+    const steady = (s.inBite ? s.rollTorque || 0 : 0) + m.bearingTorque;
+    m.powerCap = Num.approach(m.powerCap, Drive.speedLimit(steady, m.wrDia), 0.5, dt);
+    m.motorRpm = Drive.motorRpm(m.currentSpeed, m.wrDia);
+    const J = Drive.inertia(m.wrDia, m.brDia);
+    const net = Drive.availTorque(m.currentSpeed, m.wrDia) - steady;        // 慣性へ回せるトルク
+    m.accelCap = Math.min(CONFIG.PROCESS.ACCEL, Math.max(net, 0) / J * r * 60);   // rad/s² → mpm/s
+    const v0 = m.currentSpeed;
+    const vFull = Num.rateTo(v0, m.targetSpeed, CONFIG.PROCESS.ACCEL, dt);
+    // 速さが増える向きの刻みだけ余力で頭打ちにする（逆転の «まず止める» 側は制動）
+    let v1 = Math.abs(vFull) > Math.abs(v0) ? Num.rateTo(v0, m.targetSpeed, m.accelCap, dt) : vFull;
+    /* 定常ぶんを主機が賄えないときはロールが減速する —— 噛み込みの瞬間にミルの速度が落ちる
+     * «衝撃降下»。指令の頭打ち（powerCap、時定数 2 s）より速く効くので、この 2 つは役割が違う。 */
+    if (net < 0 && s.inBite && v0 !== 0) v1 = Math.sign(v0) * Math.max(Math.abs(v1) + net / J * r * 60 * dt, 0);
+    m.currentSpeed = v1;
+    m.inertiaTorque = dt > 0 ? J * ((m.currentSpeed - v0) / 60 / r) / dt : 0;
+    m.driveTorque = steady + Math.max(m.inertiaTorque, 0);
+    const w = Math.abs(m.currentSpeed) / 60 / r;                            // ロール角速度 [rad/s]
+    m.drivePowerKW = m.driveTorque * w / 1000;
+    /* 過負荷の判定が見るのは «続いている» ぶん（圧延 ＋ 軸受）。加速の慣性トルクは数秒で
+     * 消えるうえ短時間過負荷の枠内なので、これを混ぜると空転の立ち上げのたびに警告が出る。 */
+    m.steadyPowerKW = steady * w / 1000;
   }
 
   /**
@@ -8121,7 +8222,7 @@ class PhysicsEngine {
       return;
     }
     if (m.forceMeas > C.RATED_FORCE_T)            w = { kind: 'crit', text: `圧延荷重が定格 ${C.RATED_FORCE_T} t を超過しています` };
-    else if (s.rollPower > C.RATED_POWER_KW)      w = { kind: 'crit', text: `主電動機動力が定格 ${(C.RATED_POWER_KW / 1000).toFixed(1)} MW を超過しています` };
+    else if (m.steadyPowerKW > C.RATED_POWER_KW)  w = { kind: 'crit', text: `主電動機動力が定格 ${(C.RATED_POWER_KW / 1000).toFixed(1)} MW を超過しています` };
     else if (s.onLine && this.stillRolling && !this.finish.winding && s.temperature < this.tempFloor)
                                                   w = { kind: 'warn', text: `材料温度が圧延下限 ${this.tempFloor} ℃ を下回りました` };
     else if (s.inBite && s.biteOk === false) w = { kind: 'warn', text: '噛み込み角が限界を超えています（圧下量過大）' };
@@ -14079,8 +14180,14 @@ class UIManager {
     $('m-speed-v').textContent = (Math.abs(m.currentSpeed)).toFixed(0);
     $('m-speed-s').textContent = m.currentSpeed > 1 ? '前進 ▶' : m.currentSpeed < -1 ? '◀ 逆行' : '停止';
     this._meter('m-force', m.forceMeas, M.RATED_FORCE_T, m.forceMeas.toFixed(0), t => `常用最大の ${(t * 100).toFixed(0)} %`);
-    this._meter('m-power', s.rollPower / 1000, Drive.ratedPowerKW / 1000, (s.rollPower / 1000).toFixed(1),
-      t => `定格の ${(t * 100).toFixed(0)} % ／ ${m.motorRpm.toFixed(0)} rpm`);
+    /* «主機動力» が読むのは主機が出している動力（圧延 ＋ 軸受の摩擦 ＋ 回転系の慣性）。
+     * 圧延ぶんだけを出していたので、名前と中身が食い違っていた。損失が 1 % を超えたら
+     * その割合を添える —— 加速中は «板を潰していないのに動力が要る» 理由がこれで読める。 */
+    const loss = m.drivePowerKW - (s.inBite ? s.rollPower : 0);
+    const lossPct = m.drivePowerKW > 1 ? loss / m.drivePowerKW * 100 : 0;
+    this._meter('m-power', m.drivePowerKW / 1000, Drive.ratedPowerKW / 1000, (m.drivePowerKW / 1000).toFixed(1),
+      t => `定格の ${(t * 100).toFixed(0)} % ／ ${m.motorRpm.toFixed(0)} rpm`
+         + (lossPct >= 1 ? ` ／ 軸受・慣性 ${lossPct.toFixed(0)} %` : ''));
     $('m-temp-v').textContent  = s.temperature.toFixed(0);
     /* 上下差は «反りの駆動力» そのものなので数字で出す。ピット炉は下から加熱するので、
      * 炉出しの時点で下が熱い（FURNACE.SOAK_DT）。＋が下面の高い側。 */
