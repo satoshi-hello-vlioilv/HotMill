@@ -1332,6 +1332,7 @@ const VERSION = {
       { t: 'ワニ口が «表層のめくれ» になっていた。板厚方向の開きを |ny|² で置いていたため、板厚の内側半分では開きが 25 % しかなかった。開きは不均一変形係数 Δ ＝ h̄/Ld で決まる —— Δ が大きいほど圧縮の円錐が芯へ届かず、芯の引張域（割れの駆動力）が板厚の中央まで広がるので、割れも深く入る', w: 'Rolling.gatorPow / endOffset' },
       { t: 'べき指数を p ＝ 2/√Δ（0.8〜2 で頭打ち）にした。Δ 1 で p 2（表層のめくれ）、Δ 4 で p 1（板厚いっぱいの真っ直ぐな V）、Δ 8 で p 0.8（あごがほぼ平行に離れる）。既定ロットの厚板段は Δ 7.7 なので、内側半分の開きが 25 → 57 % になる', w: 'Rolling.gatorPow' },
       { t: 'ワニ口を作った Δ を端ごとに覚えるようにした（クロップで数え直す）。深さを決めるのは «いまの板厚» ではなく «それを作ったパス» なので', w: 'SlabState.gatorDelta' },
+      { t: 'ワニ口のあごが上下に開くようにした。割れは板厚中央の面で起きるので、上あごは上・下あごは下へ動く。あごは割れの先端を支点に回るので、開きは端へ向かって e² で増える。長手の張り出しと対になる量として «張り出しの 0.15 倍» を置いた（実機の実測が無いので目安。README 残件）', w: 'Rolling.endJaw / SlabState.shape().mapY' },
       // --- 作業中に見つけて直したこと ---
       { t: 'クレーンの運転速度を仕様の定格の 3 倍にした。定格そのもの（装入: 走行 85・横行 40・巻上 14 m/min）は仕様書の値で、クレーンとして一般的（走行 60〜150・横行 20〜60・巻上 8〜25）。ただしこの規模のラインを画面で追うには遅く見えるので、«見せる速さ» だけを倍率で変える。仕様の表は残したままで、1.0 に戻せば仕様どおりに動く', w: 'CONFIG.CRANE_SPEED_K / Layout.craneV' },
       { t: '倍率は加速度を 2 乗で上げる。そうすると台形線図の所要時間がちょうど 1/K になり «全部が K 倍速い» という素直な意味になる（速度だけ上げると加速区間が伸びて短い移動では効かない）', w: 'Layout.craneA' },
@@ -2931,7 +2932,10 @@ const CONFIG = {
     // 大きさを決めるのは板厚と板幅と累積圧下で、全長ではない（全長に比例させると 30 m の
     // 板で 800 mm の舌が出るという非物理な形になる）。材質係数は合金ごと（ALLOYS.end）。
     // 75 mm シャーはこの長さに余裕を足した量を切り落とす。描画と物理で同じ式を使う。
-    OVERHANG: { TH_K: 3.0, WID_K: 0.30 },
+    /* JAW_K —— ワニ口の «あごの開き»。割れた上下のあごが離れる量を、長手の張り出し（gator）
+     * に対する比で置く。0.15 なら張り出し 300 mm のとき端面で上下 ±45 mm（口の開き 90 mm）。
+     * 実機の実測が無いので目安（README 残件）。 */
+    OVERHANG: { TH_K: 3.0, WID_K: 0.30, JAW_K: 0.15 },
     /* 鋳造まま（DC 鋳造）のスラブは長辺のコーナーが丸い。上下面は圧延前に片面 SCALP だけ
      * 面削するので、丸みの «上の部分» は削り取られ、鏡面の平らな面と鋳肌の丸みが角度を
      * もって出会う（＝写真に見える稜線）。側面は面削しないので鋳肌のまま残る。
@@ -5381,6 +5385,16 @@ const Rolling = {
     return e * e * (tongue * (1 - nz * nz) + gator * Math.pow(Math.abs(ny), gPow));
   },
   /**
+   * 端部のあごの «上下の開き» [mm]。ワニ口は板厚中央の面で割れて上下のあごが開く
+   * （割れの起点は芯、口が開くのは端面）ので、上あご（ny > 0）は上へ、下あご（ny < 0）は
+   * 下へ動く。あごは割れの先端を支点に回るので、開きは端へ向かって e² で増える。
+   */
+  endJaw(dEnd, gator, zone, ny) {
+    if (!(gator > 0) || dEnd >= zone) return 0;
+    const e = 1 - dEnd / zone;
+    return CONFIG.SLAB.OVERHANG.JAW_K * gator * e * e * ny;
+  },
+  /**
    * ワニ口の «板厚方向の広がり» を決めるべき指数。offset ∝ |ny|^p で、
    *   p = 2   …… 表層だけがめくれる（板厚の外側 1/4 に 3/4 が集まる）
    *   p = 1   …… 板厚いっぱいの真っ直ぐな V（芯から表面まで一様に開く）
@@ -5836,6 +5850,13 @@ class SlabState {
         let xo = x + sgn * Rolling.endOffset(Math.max(dEnd, 0), e.tongue, e.gator, e.zone, ny, nz, e.gPow);
         if (e.cut !== null) xo = sgn > 0 ? Math.min(xo, e.xE + e.cut) : Math.max(xo, e.xE - e.cut);
         return xo;
+      },
+      /** 材料点 (x, ny) の «あごの開き» [mm]（上あごは +、下あごは −）。切った端には付かない。 */
+      mapY(x, ny) {
+        const e = x > (x0 + x1) / 2 ? ends[1] : ends['-1'], sgn = x > (x0 + x1) / 2 ? 1 : -1;
+        if (e.cut !== null) return 0;                     // クロップで切り落とした端は平ら
+        const dEnd = sgn > 0 ? e.xE - x : x - e.xE;
+        return Rolling.endJaw(Math.max(dEnd, 0), e.gator, e.zone, ny);
       },
     };
   }
@@ -12473,7 +12494,9 @@ class SlabView {
       // 板はテーブルの胴の外へは出られない（出たら落ちる）ので、そこで頭打ちにする
       const zLim = CONFIG.TABLE.BARREL / 2 - w / 2;
       const zc = Num.clamp(zOff + camb * dOut * dOut / 2, -zLim, zLim);
-      pos.setXYZ(i, u(x), u(P - plOff + plRamp(xm) - dip + ((q.y + by * wq) * sy + h / 2) + dy + yl),
+      // ワニ口のあごの開き（上あごは上へ、下あごは下へ）。長手の張り出しと対になる量
+      const jaw = shape.mapY(xm, by * 2 - 1);
+      pos.setXYZ(i, u(x), u(P - plOff + plRamp(xm) - dip + ((q.y + by * wq) * sy + h / 2) + dy + yl + jaw),
                  u(q.z + zc + dz));
     }
     pos.needsUpdate = true;
