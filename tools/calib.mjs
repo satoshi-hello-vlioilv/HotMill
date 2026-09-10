@@ -3,15 +3,19 @@
 // パスごとの温度収支の内訳（発熱／ロール抜熱／クーラント／ヘッダ／テーブル接触／表面）も出す。
 //   node tools/calib.mjs [--temp=433] [--set=PROCESS.MU=0.2] [--set=MATERIAL.H_ROLL=15000] [--quiet]
 import { openApp, installHelpers, DEFAULT_TARGET } from './harness.mjs';
-import { REAL, runReal, parseSets } from './reallot.mjs';
+import { REAL, LOT_A1100, runReal, parseSets } from './reallot.mjs';
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const a = args.find(x => x.startsWith(`--${k}=`)); return a ? a.split('=')[1] : d; };
-const TEMP = +opt('temp', REAL.lot.temp), sets = parseSets(args), quiet = args.includes('--quiet');
+/* 較正の基準データは 1 つではない（材質も板幅も違う 2 ロットが提供されている）。
+ * --lot=A1100 で切り替える。既定は A5052 のロット。 */
+const LOTS = { A5052: REAL, A1100: LOT_A1100 };
+const LOT = LOTS[opt('lot', 'A5052')] || REAL;
+const TEMP = +opt('temp', LOT.lot.temp), sets = parseSets(args), quiet = args.includes('--quiet');
 const target = args.find(a => a.endsWith('.html')) || DEFAULT_TARGET;
 const { browser, page } = await openApp({ target, viewport: { width: 900, height: 520 }, quiet: true });
 await installHelpers(page);
-const out = await runReal(page, { temp: TEMP, sets });
+const out = await runReal(page, { temp: TEMP, sets, real: LOT });
 await browser.close();
 
 // soft: 合否に数えない «参考» 項目。実機の数値と本アプリの物理が両立しないと分かった点を、
@@ -41,26 +45,40 @@ for (const sg of out.segs) {
 //    本アプリでは «バイトを出た材料の温度» のパス平均（log.tExit）と比べる。
 //    最終パスの尻は入側テーブルで 4 分待つあいだに冷えるので、巻き終えたコイルの平均（tOut）はこれより低い。
 const last = P[P.length - 1];
-ok(`上がり温度（最終パスの出側板温・パス平均）実機 ${REAL.tEnd} ℃ ±15`, last && Math.abs(last.tExit - REAL.tEnd) <= 15,
-   `本アプリ ${f0(last?.tExit, 0)} ℃（頭 ${f0(last?.Thead, 0)} → 尻 ${f0(last?.Ttail, 0)} ℃、コイル平均 ${f0(last?.tOut ?? out.outTemp, 0)} ℃）`);
+/* 上がり温度と板長は «提供されているロットだけ» 判定する。A1100 のロットは未提供なので、
+ * 数字は出すが合否には数えない（推測で基準を作らない）。 */
+if (LOT.tEnd != null)
+  ok(`上がり温度（最終パスの出側板温・パス平均）実機 ${LOT.tEnd} ℃ ±15`, last && Math.abs(last.tExit - LOT.tEnd) <= 15,
+     `本アプリ ${f0(last?.tExit, 0)} ℃（頭 ${f0(last?.Thead, 0)} → 尻 ${f0(last?.Ttail, 0)} ℃、コイル平均 ${f0(last?.tOut ?? out.outTemp, 0)} ℃）`);
+else
+  console.log(`  --   上がり温度（実機データ未提供）— 本アプリ ${f0(last?.tExit, 0)} ℃（コイル平均 ${f0(last?.tOut ?? out.outTemp, 0)} ℃）`);
 // 4. 板長
-ok(`8 mm 完了時の板長 実機 ${REAL.lenM} m ±3 %`, out.done && Math.abs(out.outLen / 1000 / REAL.lenM - 1) <= 0.03,
-   `本アプリ ${f1(out.outLen / 1000, 0)} m（尻の板厚 ${f1(out.outTh, 0)} mm）`);
+if (LOT.lenM != null)
+  ok(`${LOT.lot.target} mm 完了時の板長 実機 ${LOT.lenM} m ±3 %`, out.done && Math.abs(out.outLen / 1000 / LOT.lenM - 1) <= 0.03,
+     `本アプリ ${f1(out.outLen / 1000, 0)} m（尻の板厚 ${f1(out.outTh, 0)} mm）`);
+else
+  console.log(`  --   板長（実機データ未提供）— 本アプリ ${f1(out.outLen / 1000, 0)} m（尻の板厚 ${f1(out.outTh, 0)} mm）`);
 // 5. 区間時間（±25 %）。65 mm でのクロップは実機では仕上げ段の時間に入り、本アプリでは
 //    第 17 パスの終わり（同じパス番号のうち）に入るので、厚板段と仕上げ段は合算で比べる
 {
   const [s1, s2, ...rest] = out.segs;
   const sum = (s1.simSec ?? NaN) + (s2.simSec ?? NaN);
-  ok(`所要時間 ${s1.name} ＋ ${s2.name}（クロップ込み）: 実機 ${s1.sec + s2.sec} s ±25 %`,
-     Number.isFinite(sum) && Math.abs(sum / (s1.sec + s2.sec) - 1) <= 0.25, `本アプリ ${f0(sum, 0)} s（${f0(s1.simSec, 0)} ＋ ${f0(s2.simSec, 0)}）`);
-  for (const sg of rest) ok(`所要時間 ${sg.name}: 実機 ${sg.sec} s ±25 %`,
-     sg.simSec != null && Math.abs(sg.simSec / sg.sec - 1) <= 0.25, `本アプリ ${f0(sg.simSec, 0)} s`);
+  /* 実機の秒が «目安»（頭潰しと加減速を含む）と明示されているロットは soft 扱い。
+   * 本アプリの秒は «圧延そのもの» なので短く出るのが正しく、合否には数えない。 */
+  const st = !!LOT.softTime;
+  ok(`所要時間 ${s1.name} ＋ ${s2.name}（クロップ込み）: 実機 ${s1.sec + s2.sec} s ±25 %${st ? '（参考・目安時間）' : ''}`,
+     Number.isFinite(sum) && Math.abs(sum / (s1.sec + s2.sec) - 1) <= 0.25, `本アプリ ${f0(sum, 0)} s（${f0(s1.simSec, 0)} ＋ ${f0(s2.simSec, 0)}）`, st);
+  for (const sg of rest) ok(`所要時間 ${sg.name}: 実機 ${sg.sec} s ±25 %${st ? '（参考・目安時間）' : ''}`,
+     sg.simSec != null && Math.abs(sg.simSec / sg.sec - 1) <= 0.25, `本アプリ ${f0(sg.simSec, 0)} s`, st);
 }
 // 6. 自動生成スケジュールが実機の圧下配分・速度を再現する
 const gen = out.gen.map(q => `${q.gap}@${q.speed}`), real = out.real.map(q => `${q.gap}@${q.speed}`);
 const diff = gen.map((g, i) => g !== real[i] ? `#${i + 1} ${g}≠${real[i] ?? '–'}` : null).filter(Boolean);
-ok('自動生成スケジュールが実機の 23 パス（板厚・速度）と一致する', gen.length === real.length && diff.length === 0,
-   gen.length !== real.length ? `本アプリ ${gen.length} パス` : diff.length ? diff.slice(0, 4).join(', ') : '一致');
+/* 自動生成スケジュールの一致は «A5052 のロットで作った» 判定。別のロットは圧下配分の
+ * 設計思想そのものが違うので比べない（比べると «違って当たり前» の項目が落ち続ける）。 */
+if (!LOT.skipGen)
+  ok(`自動生成スケジュールが実機の ${real.length} パス（板厚・速度）と一致する`, gen.length === real.length && diff.length === 0,
+     gen.length !== real.length ? `本アプリ ${gen.length} パス` : diff.length ? diff.slice(0, 4).join(', ') : '一致');
 // 7. 予測荷重の精度: 自動生成スケジュール（実機と同じ圧下配分）の予測 steady / force が
 //    運転の平均 / 最大荷重に ±15 % で一致する（仕上げ段以降。厚板段は初パスを除いて同様に見る）
 {
