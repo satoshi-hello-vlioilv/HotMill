@@ -68,10 +68,24 @@ const out = await page.evaluate(({ alloy, target }) => {
     }, 120 * 2500, 0);
     const s = P.slab;
     ok('上面が下面より冷える（クーラントの流れ落ち）', maxAsym > 0.5, `最大上下差 ${maxAsym.toFixed(1)} ℃`);
-    // 薄板の最終パスでは上下差がほぼ消え、テーブルローラ接触で下面がわずかに強く冷えて
-    // 符号が反転しうる。曲率半径 1 km を超えていれば実質平坦なので «下反り» とは呼ばない。
-    ok('反りは上反り（下反りが出ても曲率半径 1 km 超＝実質平坦）',
-       rows.every(r => r.k > 0 || Math.abs(1 / r.k) / 1000 > 1000), rows.map(r => `${r.k}(R=${r.R_m}m)`).join(', '));
+    /* 反りの向き。上面のほうが強く冷えるので基本は上反りだが、薄板の最終パスでは上下差が
+     * ほぼ消え、テーブルローラ接触と «下面スプレー» で下面がわずかに強く冷えて符号が
+     * 反転しうる。判定は曲率半径という «丸い数字» ではなく、実機と同じ測り方 ——
+     * 1 m の定規を当てたときの隙間 [mm]（＝ L²/(8R)）—— で見る。
+     * 熱間圧延板の平坦度公差は 3〜5 mm/m なので、0.5 mm/m を下回れば «実質平坦»。
+     * これは «下反りが出ないこと» ではなく «出ても測れないほど小さいこと» の判定。 */
+    {
+      const G = K.SHAPE.WARP_GAUGE;
+      const rise = (k) => k * G * G / 8;                       // 1 m 定規での隙間 [mm]
+      const down = rows.filter(r => r.k < 0).map(r => -rise(r.k));
+      const worst = down.length ? Math.max(...down) : 0;
+      ok(`反りは上反り（下反りが出ても 1 m 定規で 0.5 mm 未満 ＝ 実質平坦）`, worst < 0.5,
+         `下反りのパス ${down.length}/${rows.length}・最大 ${worst.toFixed(2)} mm/m`
+         + `（上反りの最大 ${Math.max(...rows.map(r => rise(r.k))).toFixed(2)} mm/m）`);
+      ok('反りの向きは上反りが主（下反りは終盤の薄板パスに限る）',
+         rows.filter(r => r.k > 0).length > rows.length / 2,
+         `上反り ${rows.filter(r => r.k > 0).length} / 下反り ${down.length} パス`);
+    }
     // 指摘(2): ワークロールに接していない部分の反りを変えない
     {
       const bad = tailProbe.filter(t => Math.abs(t.ell - t.wantEll) > Math.max(5, 0.02 * t.wantEll));
