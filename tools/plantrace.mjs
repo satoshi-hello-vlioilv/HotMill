@@ -134,7 +134,12 @@ const out = await page.evaluate(async () => {
       parts: ['[Content_Types].xml', 'xl/workbook.xml', 'xl/worksheets/sheet1.xml',
               'xl/worksheets/sheet2.xml', 'xl/worksheets/sheet3.xml'].filter(n => txt.includes(n)).length,
       sheets: (txt.match(/<sheet name=/g) || []).length,
-      hasPassHead: txt.includes('最大荷重[t]'), hasSeriesHead: txt.includes('目標ギャップ[mm]'),
+      hasPassHead: txt.includes('最大荷重[t]'),
+      /* 時系列の見出しは «1 つの決め打ちの文字» ではなく、列の定義（RollingLog.SCOLS）が
+       * そのまま入っているかで見る。決め打ちだと «系列を足したのに書き出しに出ていない»
+       * を見逃す（実際、CSV と Excel が別々に列を並べていたときに起きていた）。 */
+      seriesCols: window.__RollingLog.scHead().length,
+      seriesMissing: window.__RollingLog.scHead().filter(h => !txt.includes(h)),
       rows: (txt.match(/<row r=/g) || []).length };
   }
   R.sampleHz = window.__RollingLog?.SAMPLE_HZ ?? null;
@@ -229,7 +234,8 @@ if (o.xlsx) {
   ok(`必要な部品がそろっている（${o.xlsx.parts}/5）`, o.xlsx.parts === 5, o.xlsx.parts);
   ok(`シートが 3 枚（諸元・パス実績・時系列）`, o.xlsx.sheets === 3, o.xlsx.sheets);
   ok('パス実績の見出しが入っている', o.xlsx.hasPassHead, o.xlsx.hasPassHead);
-  ok('時系列の見出しが入っている', o.xlsx.hasSeriesHead, o.xlsx.hasSeriesHead);
+  ok(`時系列の見出しに全 ${o.xlsx.seriesCols} 列が入っている（グラフの系列がそのまま列になる）`,
+     o.xlsx.seriesMissing.length === 0, o.xlsx.seriesMissing.join(' ') || `欠け 0 / ${o.xlsx.seriesCols} 列`);
   ok(`中身がある（${o.xlsx.rows} 行 / ${(o.xlsx.size / 1024).toFixed(0)} KB）`, o.xlsx.rows > 20, o.xlsx.rows);
 }
 ok(`時系列の分解能が 100 ms（${o.sampleHz} Hz・実測の平均 ${o.dt} s）`,

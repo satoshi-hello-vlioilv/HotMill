@@ -40,7 +40,12 @@ const out = await page.evaluate(() => {
       rodOut: +(Math.hypot(rm.x - rd.x, rm.y - rd.y)).toFixed(0),
       z: +rc.z.toFixed(0) });
   }
-  return { rows, angle: H.ANGLE, rollD: H.ROLL_D, baseR: H.BASE_R, coilerX: C.X,
+  // 受け（柱）の X と、サイドトリマー架構の上部梁の X 範囲（梁は幅 800、トリマー中心）
+  const hh = H.ANGLE * Math.PI / 180, upx = Math.sign(K.TRIMMER.X - C.X) || -1;
+  const rEnd = H.BASE_R + H.CYL_L + 300;
+  const mount = { x: Math.abs(C.X + upx * Math.abs(Math.cos(hh)) * rEnd),
+                  beam: [Math.abs(K.TRIMMER.X) - 400, Math.abs(K.TRIMMER.X) + 400] };
+  return { rows, angle: H.ANGLE, rollD: H.ROLL_D, baseR: H.BASE_R, coilerX: C.X, mount,
            done: P.finish.done, turns: P.finish.turns };
 });
 await browser.close();
@@ -71,6 +76,13 @@ if (R.length) {
      Math.abs(Math.abs(aims[0]) - out.angle) <= 1 || Math.abs(Math.abs(aims[0]) - (180 - out.angle)) <= 1,
      aims[0]);
   ok('押さえる位置がコイルの «上» にある（巻き広がりを上から押さえる）', aims.every(a => a > 20 && a < 160), aims[0]);
+  /* 時計の «2 時» ＝ 極角 30°（真上が 12 時 ＝ 90°、1 時 ＝ 60°）。 */
+  // 極角 → 時計の位置（真上 90° が 12 時、そこから時計回りに 30°/時）
+  const clock = ((3 - Math.abs(aims[0]) / 30) + 11) % 12 + 1;
+  ok(`押さえる位置が時計の 2 時（極角 ${Math.abs(aims[0]).toFixed(0)}° ＝ ${clock.toFixed(1)} 時）`,
+     Math.abs(Math.abs(aims[0]) - 30) <= 3, `${clock.toFixed(1)} 時`);
+  ok(`受けがサイドトリマー架構の梁の上に載る（柱の X ${out.mount.x.toFixed(0)} が梁 ${out.mount.beam[0].toFixed(0)}〜${out.mount.beam[1].toFixed(0)} の中）`,
+     out.mount.x >= out.mount.beam[0] && out.mount.x <= out.mount.beam[1], out.mount.x.toFixed(0));
   const rods = R.map(r => r.rodOut);
   ok(`ロッドが縮み切らない（最短 ${Math.min(...rods)} mm）`, Math.min(...rods) >= 80, Math.min(...rods));
   ok('コイルが太るとロッドが押し戻される（伸びが単調に縮む）',

@@ -15,6 +15,8 @@ const out = await page.evaluate(() => {
   const DT = 1 / 240;                                   // 速度の山を見逃さない細かさ
 
   // 工程 → 見る軸（クレーンが動かす方向）。ピットクレーンとトランスファークレーンの両方。
+  // dive（吊具だけを炉へ降ろす）はスラブが動かないので、この測り方では見えない。
+  // 所要秒だけを別に確かめる（下の diveSec）。
   const AXIS = { hoist: 'y', travel: 'x', traverse: 'z', set: 'y', grab: 'y', transfer: 'z', lower: 'y' };
   const MV = K.CRANE_MOVES;
   const RATED = Object.fromEntries(Object.keys(AXIS).map(k => [k, K[MV[k].by].SPEED[MV[k].v]]));
@@ -51,7 +53,10 @@ const out = await page.evaluate(() => {
              vStart: +mpm(vStart).toFixed(1), vEnd: +mpm(vEnd).toFixed(1),
              rated: RATED[key], by: CRANE_OF[key], predSec: +L.moveSec(key, slab, passY).toFixed(2) };
   });
-  return { rows, speed: SP, tspeed: K.TRANSFER.SPEED, totalSec: +t.toFixed(1), done: !sup.active,
+  const diveSec = +L.moveSec('dive', slab, passY).toFixed(2);
+  const hoistSec = +L.moveSec('hoist', slab, passY).toFixed(2);
+  return { rows, speed: SP, tspeed: K.TRANSFER.SPEED, diveSec, hoistSec,
+           totalSec: +t.toFixed(1), done: !sup.active,
            seq: K.SEQUENCE.map(q => ({ ph: q[0], key: q[1], fixed: q[2], dur: +(sup.dur[q[1]] || 0).toFixed(2) })) };
 });
 await browser.close();
@@ -65,6 +70,12 @@ const ok = (name, cond, got) => checks.push({ name, pass: !!cond, got });
 ok('装入シーケンスが完走する', out.done, out.done);
 for (const [k, [lo, hi]] of Object.entries(NORM))
   ok(`定格 ${k} = ${out.speed[k]} m/min が一般値 ${lo}〜${hi} の範囲`, out.speed[k] >= lo && out.speed[k] <= hi, out.speed[k]);
+// 空荷の巻上（吊具だけを降ろす）は定格より速い —— インバータ制御の巻上装置の実機どおり
+ok(`空荷の巻上が定格の 1.5〜2.5 倍（${out.speed.HOIST_EMPTY} / ${out.speed.HOIST} m/min）`,
+   out.speed.HOIST_EMPTY >= out.speed.HOIST * 1.5 && out.speed.HOIST_EMPTY <= out.speed.HOIST * 2.5,
+   out.speed.HOIST_EMPTY);
+ok(`炉へ降ろす工程が吊り上げより速い（${out.diveSec} s < ${out.hoistSec} s）`,
+   out.diveSec < out.hoistSec * 0.75, `${out.diveSec} / ${out.hoistSec}`);
 ok(`加速度 ${out.speed.ACCEL} m/s² が 0.2〜0.8 の範囲`, out.speed.ACCEL >= 0.2 && out.speed.ACCEL <= 0.8, out.speed.ACCEL);
 for (const [k, [lo, hi]] of Object.entries(NORM))
   if (out.tspeed[k] !== undefined)

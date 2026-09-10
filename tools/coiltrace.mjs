@@ -2,7 +2,7 @@
 //  1. 巻き数の積分（板の周速 ÷ 巻き付け半径）と巻いた長さが一致するか（面積式の外径との差）
 //  2. 描画される板メッシュが板の入口 A より先へ出ていないか（板がコイルと出側へ二分しない）
 //  3. 渡り板の先端がコイルの巻き付け円に接しているか（接線で入る）
-//  4. 押えコロがコイル外周（段を含む）に接し、当たりの極角が上側（95〜135°）にあるか
+//  4. 押えコロがコイル外周（段を含む）に接し、当たりが «時計の 2 時»（極角 150°）にあるか
 //  5. マンドレルセグメントが拡張時に Φ610、縮小時にそれより小さいか
 //  6. ベルトラッパー: 先端が来る前に閉じ切るか、ロールがコイル外周に接するか、
 //     所定の巻き数で開くか（マンドレルは板を掴まないので、ここが «巻き始め» を成立させる）
@@ -113,7 +113,15 @@ const out = await page.evaluate(() => {
   ok('板メッシュが入口 A より先へ出ない', samples.every(s => s.headPastA === null || s.headPastA <= 2), `最大 ${Math.max(...samples.map(s => s.headPastA ?? -1e9))} mm`);
   ok('渡り板の先端がコイルの巻き付け円に接する', samples.every(s => Math.abs(s.tipR - s.layR) < 3), `最大差 ${Math.max(...samples.map(s => Math.abs(s.tipR - s.layR))).toFixed(1)} mm`);
   ok('押えコロがコイル外周に接する（段込み）', samples.every(s => Math.abs(s.rollGap) < 3), `最大隙間 ${Math.max(...samples.map(s => Math.abs(s.rollGap))).toFixed(1)} mm`);
-  ok('押えコロの当たりは上側 95〜135°', samples.every(s => s.rollAng >= 95 && s.rollAng <= 135), `範囲 ${Math.min(...samples.map(s => s.rollAng))}〜${Math.max(...samples.map(s => s.rollAng))}°`);
+  /* 押えコロの当たりは «時計の 2 時»。極角 90° が 12 時で、そこから 30°/時 進む向きに
+   * 数える（この座標は正準へ折り返してあるので、+ 側が時計回り）。2 時 ＝ 150°。
+   * 判定はコイルが太る間ずっと同じ位置に当たること（半径方向のラムなので向きは変わらない）。
+   * 帯は ±6°（＝ ±0.2 時）—— «上側» という広い帯では 1 時と 2 時の違いが見つからない。 */
+  const clock = (a) => 12 - (a - 90) / 30 + (a > 90 ? 12 : 0);
+  ok('押えコロの当たりは時計の 2 時（極角 150°）',
+     samples.every(s => Math.abs(s.rollAng - 150) <= 6),
+     `範囲 ${Math.min(...samples.map(s => s.rollAng))}〜${Math.max(...samples.map(s => s.rollAng))}°`
+     + `（${clock(Math.min(...samples.map(s => s.rollAng))).toFixed(1)} 時）`);
   // セグメントは各自の二等分線方向にストローク分だけ引っ込む。外接径は角の頂点で決まるので
   // 縮小量は STROKE·cos45° × 2（＝ 42 mm）になる。
   const shrink = 2 * C.SEG_STROKE * Math.cos(Math.PI / 4);
