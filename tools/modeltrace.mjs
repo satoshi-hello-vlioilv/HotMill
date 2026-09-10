@@ -61,13 +61,26 @@ const out = await page.evaluate(async () => {
      * （予測と実測の突き合わせで測った不確かさが 1 割程度なのと同じ桁）。 */
     ok('熱間域では従来の実験式と 12 % 以内で一致（較正を壊さない）', worst < 0.12,
        `最大ずれ ${(worst * 100).toFixed(1)} % @ ${at}`);
-    // 当てはめた活性化エネルギーが公表値の帯に収まること（式を物理の形にした意味を保つ）
+    /* b と m は独立ではない。当てはめられる活性化エネルギーは Q_fit ＝ b・R・T_ref²/m で
+     * 決まるので、材質表の b は «公表の Q_ACT から逆算した値» でなければならない。
+     * ここを見張らないと «m だけ動かして荷重を合わせる» ができてしまい、そのとき失うのは
+     * 温度依存の正しさ（実測: A1100 で Q_fit が公表値の −37 % まで落ちていた）。 */
+    {
+      const Tref = K.MATERIAL.TREF + 273.15, RT2 = R.RGAS * Tref * Tref, bad = [];
+      for (const [k, a] of Object.entries(K.ALLOYS)) {
+        const want = a.Q_ACT * 1000 * a.m / RT2;
+        if (Math.abs(a.b / want - 1) > 0.03) bad.push(`${k} b=${a.b} / 要 ${want.toFixed(5)}`);
+      }
+      ok('材質表の b が公表の活性化エネルギーと m から逆算した値（b ＝ Q_ACT・m/(R・T_ref²)）',
+         bad.length === 0, bad.join(' ') || `${Object.keys(K.ALLOYS).length} 材質すべて一致`);
+    }
+    // 当てはめた活性化エネルギーが公表値に近いこと（式を物理の形にした意味を保つ）
     let qBad = [];
     for (const [k, a] of Object.entries(K.ALLOYS)) {
       const st = R.stParams(a), q = st.Q / 1000;
-      if (!(q >= a.Q_ACT * 0.6 - 1 && q <= a.Q_ACT * 1.4 + 1)) qBad.push(`${k} ${q.toFixed(0)}`);
+      if (!(q >= a.Q_ACT * 0.8 - 1 && q <= a.Q_ACT * 1.2 + 1)) qBad.push(`${k} ${q.toFixed(0)}/${a.Q_ACT}`);
     }
-    ok('当てはめた活性化エネルギーが公表値の帯（±40 %）に収まる', qBad.length === 0,
+    ok('当てはめた活性化エネルギーが公表値の ±20 % に収まる', qBad.length === 0,
        Object.entries(K.ALLOYS).map(([k, a]) => `${k} ${(R.stParams(a).Q / 1000).toFixed(0)}`).join(' '));
     // 低温では «室温の変形抵抗» へ漸近して発散しない
     const cold = kf(30, 1);
@@ -224,6 +237,20 @@ const out = await page.evaluate(async () => {
       const mx = R.endOffset(0, thin.tongue, thin.gator, z, 1, 0);
       ok('端の最大変位が 舌 + ワニ口 に一致', Math.abs(mx - (thin.tongue + thin.gator)) < 0.01,
          `${mx.toFixed(1)} mm`);
+      /* ワニ口の «板厚方向の広がり»。表層だけがめくれるのではなく板厚を取る形になるか。
+       * 決めるのは不均一変形係数 Δ で、Δ が大きいほど圧縮の円錐が芯へ届かず、
+       * 芯の引張域が板厚の中央まで広がるので割れも深く入る。 */
+      {
+        const pw = [1, 2, 4, 8].map(d => R.gatorPow(d));
+        ok('ワニ口のべき指数が Δ とともに下がる（深く入る）',
+           pw[0] > pw[1] && pw[1] > pw[2] && pw[2] >= pw[3] && pw[0] <= 2 && pw[3] >= 0.8,
+           pw.map((v, i) => `Δ${[1, 2, 4, 8][i]} → p ${v.toFixed(2)}`).join(' ／ '));
+        // 厚板の Δ（既定ロットで 7.7）では板厚の内側半分でも半分以上開いていること
+        const p8 = R.gatorPow(8), half = Math.pow(0.5, p8), old2 = Math.pow(0.5, 2);
+        ok('厚板では板厚の «内側半分» でも大きく開く（表層だけではない）', half > 0.5 && half > old2 * 2,
+           `芯から半分の位置で ${(half * 100).toFixed(0)} %（べき 2 なら ${(old2 * 100).toFixed(0)} %）`);
+        ok('芯（ny = 0）では開かない（割れの起点）', R.endOffset(0, 0, 100, 1000, 0, 0, p8) === 0, '0 mm');
+      }
       A.bus.emit('CMD_RESET');
     }
   }

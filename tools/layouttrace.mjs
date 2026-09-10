@@ -129,35 +129,39 @@ const out = await page.evaluate(() => {
       // 区分への割り当ては «その区分が生成した X と一致するか» で見る。区間の境界に
       // ローラが載る区分（H-1 は区間長 = ピッチの合計なので端が境界に一致する）があるため、
       // 範囲で数えると隣の区分と二重に数えてしまう。
-      /* X 線板厚計は板を上下から挟むので、その位置にローラと軸受台があっては据えられない。
-       * 実機と同じくローラを 1 本抜いてある（CONFIG.XRAY.SLOT）。図面との突き合わせは
-       * «図面 − 3 本» と数え直すのではなく、«抜けているのは計器の位置だけか» で見る ——
-       * 本数だけ合わせても «別の所が抜けている» のは見つからない。 */
-      const Lay0 = window.__LAYOUT, bad = [], gone = [], stray = [];
-      const slotOf = (x) => K.XRAY.UNITS.find(g => Math.abs(g.x - x) < K.XRAY.SLOT / 2);
+      const Lay0 = window.__LAYOUT, bad = [], stray = [];
       for (const s of SEC) {
         const gen = Lay0.section(s).xs, want = Lay0.stages(s);       // split は 1 段 2 本
         const inSec = xs.filter(x => gen.some(g => Math.abs(g - x) < 1));
         const miss = s.split ? [] : gen.filter(g => !xs.some(x => Math.abs(g - x) < 1));
-        for (const g of miss) (slotOf(g) ? gone : stray).push(`${s.name}@${g.toFixed(0)}`);
-        if (inSec.length + miss.length !== want) bad.push(`${s.name}: ${inSec.length}+欠${miss.length}/${want}`);
+        for (const g of miss) stray.push(`${s.name}@${g.toFixed(0)}`);
+        if (inSec.length !== want) bad.push(`${s.name}: ${inSec.length}/${want}`);
       }
       R.table.sections = SEC.map(s => s.name + ':' + s.n);
-      R.table.xraySlots = gone;
-      ok('図面の区分ごとのローラ本数が一致（X 線板厚計の切り欠きを含めて）', bad.length === 0,
-         bad.join(' ') || `${SEC.length} 区分すべて一致`);
-      ok('抜いてあるローラは X 線板厚計の位置だけ', stray.length === 0 && gone.length === K.XRAY.UNITS.length,
-         `切り欠き ${gone.length}/${K.XRAY.UNITS.length}（${gone.join(' ')}）／それ以外の欠け ${stray.length}`);
+      ok('図面の区分ごとのローラ本数が一致', bad.length === 0, bad.join(' ') || `${SEC.length} 区分すべて一致`);
+      /* ローラは 1 本も欠けていないこと。設備（X 線板厚計など）を足すために抜くのは
+       * «図面のピッチを崩す» ことなので、抜かずに納まっているかをここで縛る。 */
+      ok('図面のローラが 1 本も欠けていない', stray.length === 0, stray.join(' ') || '欠け 0');
       // 図面の «本数» は E-1 / E-2 が 1 段 2 本なので、段数の合計とは一致しない。
       // 段数（配置）と本数（実際に置かれたローラ）の両方を突き合わせる。
-      const slots = K.XRAY.UNITS.length;
       const stages = SEC.reduce((a, s) => a + window.__LAYOUT.stages(s), 0);
       const total = SEC.reduce((a, s) => a + s.n, 0);
       const placed = xs.length + (W.tableView.eXs ? W.tableView.eXs.length : 0);
-      ok('図面のローラ段数と一致（X 線板厚計の切り欠きを戻して）', xs.length + slots === stages,
-         `${xs.length} 段 ＋ 切り欠き ${slots} / 図面 ${stages} 段`);
-      ok('図面のローラ総数と一致（E-1 / E-2 は 1 段 OS/DS の 2 本）', placed + slots === total,
-         `${placed} ＋ 切り欠き ${slots} / 図面 ${total} 本`);
+      ok('図面のローラ段数と一致', xs.length === stages, `${xs.length} 段 / 図面 ${stages} 段`);
+      ok('図面のローラ総数と一致（E-1 / E-2 は 1 段 OS/DS の 2 本）', placed === total,
+         `${placed} / 図面 ${total} 本`);
+      /* ピッチも図面どおりであること（区分ごとの実配置を図面の指定から作った列と突き合わせる）。 */
+      const pbad = [];
+      for (const s of SEC) {
+        const gen = Lay0.section(s).xs;
+        for (let i = 1; i < gen.length; i++) {
+          const p0 = Math.abs(gen[i] - gen[i - 1]);
+          const got = xs.filter(x => gen.some(g => Math.abs(g - x) < 1)).sort((a, b) => a - b);
+          if (got.length !== gen.length) { pbad.push(s.name); break; }
+          if (Math.abs(Math.abs(got[i] - got[i - 1]) - p0) > 1) { pbad.push(`${s.name}@${i}`); break; }
+        }
+      }
+      ok('図面のローラピッチが区分ごとに一致', pbad.length === 0, pbad.join(' ') || `${SEC.length} 区分すべて一致`);
       const eN = W.tableView.eRolls ? W.tableView.eRolls.mesh.count : 0;
       ok('E-1 / E-2 のローラが OS/DS の 2 本ずつ置かれている',
          eN === (W.tableView.eXs || []).length * 2 && eN === 16,

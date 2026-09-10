@@ -10,6 +10,34 @@
 //    80 mpm  26 → 16（1 パス）                 約 1 分 30 秒   荷重 1,530〜2,000 t（当初 750〜900 と伝えられたが誤記。2026-09 訂正）
 //    50 mpm  16 →  8（1 パス・巻取）           約 4 分         荷重 2,400〜2,900 t
 //   8 mm 圧延完了時の板長 219.4 m
+/* 実機データ その 2（2026-09 提供、607T）:
+ *   材質 A1100（1000 系）、鋳造厚 560・片面 15 面削 → 530、1,070 W（火延幅 1,090）× 3,750 L
+ *   120 mpm 530 → 70（14 パス。実機は «頭潰し» のテーパー圧延を含めて 15 パス）
+ *                                          約 3 分 20 秒   荷重   287〜520 t
+ *   （70 でクロップ）
+ *   120 mpm  70 → 22（3 パス）              約 4 分         荷重   296〜967 t
+ *    94 mpm  22 → 7.9（1 パス・巻取）        約 4 分         荷重   931〜1,753 t（平均 1,064 t）
+ *   ※ 上がり温度と圧延後の板長は未提供（残件）。時間は加減速と頭潰しを含む «目安» とのこと。
+ */
+export const LOT_A1100 = {
+  lot: { cast: 560, scalp: 15, width: 1070, length: 3750, temp: 433, alloy: 'A1100', target: 7.9, trim: 15, mode: 'COIL' },
+  gaps: [493, 466, 440, 400, 360, 320, 280, 240, 200, 160, 130, 105, 85, 70, 57, 37, 22, 7.9],
+  speed: (i) => i < 17 ? 120 : 94,
+  seg: [{ a: 0, b: 14, sec: 200, band: [287, 520], name: '厚板段 530→70' },
+        { a: 14, b: 17, sec: 240, band: [296, 967], name: '仕上げ 70→22' },
+        { a: 17, b: 18, sec: 240, band: [931, 1753], name: '22→7.9 巻取 (94 mpm)' }],
+  /* このロットの秒数も «目安»（頭潰しのテーパー圧延と加減速を含む）。多パス区間は
+   * PASS_DEAD を入れて合うようになったが、最終パス（22 → 7.9 mm・94 mpm）だけは
+   * 実機 240 s に対し本アプリ 169 s と短い —— 247 m を 240 s で通すと平均 62 mpm に
+   * なるので、94 mpm は «定常の速度» で、巻取の通板と張力立ち上げに低速の助走が
+   * あるとみられる（未確認なので参考扱いのまま。README の残件）。 */
+  softTime: true,
+  /* 自動生成スケジュールの一致は A5052 のロットで作った判定（パス数が固定）。
+   * 別のロットでは «圧下配分の設計思想» が違うので比べない。 */
+  skipGen: true,
+  tEnd: null, lenM: null, coolant: { T: 64, conc: 4.8 },
+};
+
 export const REAL = {
   lot: { cast: 560, scalp: 15, width: 1330, length: 3450, temp: 433, alloy: 'A5052', target: 8, trim: 15, mode: 'COIL' },
   gaps: [520, 490, 460, 430, 400, 370, 340, 310, 280, 250, 220, 190, 160, 130, 105, 85, 65, 56, 46, 36, 26, 16, 8],
@@ -21,13 +49,21 @@ export const REAL = {
         // 指摘したところ 1,530〜2,000 t の誤記と確認された（本アプリの 1,547 t が正しかった）。通常項目に戻す
         { a: 21, b: 22, sec: 90, band: [1530, 2000], name: '26→16 (80 mpm)' },
         { a: 22, b: 23, sec: 240, band: [2400, 2900], name: '16→8 巻取 (50 mpm)' }],
+  /* 実機の秒は «目安»（頭潰しのテーパー圧延と加減速を含む）と確認済み（2026-09）。
+   * 多パス区間には頭潰しは無く、積み上がるのはパスごとの加減速と死に時間 ——
+   * それを CONFIG.PROCESS.PASS_DEAD として実装したので、通常項目として比べられる。 */
   tEnd: 360, lenM: 219.4, coolant: { T: 64, conc: 4.8 },
 };
 
 /** `--set=PATH=value` を CONFIG へ当てる（PATH は CONFIG からのドット区切り）。較正のノブ。 */
 export function parseSets(args) {
   return args.filter(a => a.startsWith('--set=')).map(a => {
-    const [k, v] = a.slice(6).split('='); return { path: k, value: isNaN(+v) ? v : +v };
+    const [k, v] = a.slice(6).split('=');
+    /* «false» を文字列のまま渡すと真になる（空でない文字列は truthy）。スイッチを切る
+     * つもりの --set=...=false が効かず、切り分けの実験がすべて同じ結果になっていた。 */
+    if (v === 'true' || v === 'false') return { path: k, value: v === 'true' };
+    if (v === 'null') return { path: k, value: null };
+    return { path: k, value: v === '' || isNaN(+v) ? v : +v };
   });
 }
 
@@ -35,7 +71,7 @@ export function parseSets(args) {
  * 実機スケジュールを本アプリで流し、パスごとの実績と温度収支の内訳を返す。
  * page には harness.installHelpers 済みのページを渡す。
  */
-export async function runReal(page, { temp = REAL.lot.temp, sets = [], useApp = false } = {}) {
+export async function runReal(page, { temp = REAL.lot.temp, sets = [], useApp = false, real = REAL } = {}) {
   return page.evaluate(async ({ REAL, temp, sets, useApp }) => {
     const A = window.__app, P = A.physics, K = window.__CFG, R = window.__ROLL, F = K.FLIP;
     for (const { path, value } of sets) {
@@ -91,6 +127,6 @@ export async function runReal(page, { temp = REAL.lot.temp, sets = [], useApp = 
     return { passes, gen, real, segs, done: P.finish.done, tripped: P.tripped, total: P.log.lot?.t,
              outTemp: s.temperature, outLen: s.length, outTh: s.thickness,
              coil: { od: P.finish.od, mass: P.finish.coilMass }, config: { MU: K.PROCESS.MU, H_ROLL: K.MATERIAL.H_ROLL } };
-  }, { REAL: { ...REAL, speed: undefined, speedTable: REAL.gaps.map((_, i) => REAL.speed(i)) }, temp, sets, useApp })
+  }, { REAL: { ...real, speed: undefined, speedTable: real.gaps.map((_, i) => real.speed(i)) }, temp, sets, useApp })
     .catch(e => { throw e; });
 }

@@ -19,7 +19,9 @@ const out = await page.evaluate(() => {
   // 所要秒だけを別に確かめる（下の diveSec）。
   const AXIS = { hoist: 'y', travel: 'x', traverse: 'z', set: 'y', grab: 'y', transfer: 'z', lower: 'y' };
   const MV = K.CRANE_MOVES;
-  const RATED = Object.fromEntries(Object.keys(AXIS).map(k => [k, K[MV[k].by].SPEED[MV[k].v]]));
+  /* 判定に使うのは «運転速度» ＝ 仕様書の定格 × CONFIG.CRANE_SPEED_K。仕様の表はそのまま
+   * 残し、見せる速さだけを倍率で変えているので、実体と突き合わせるのはこちら。 */
+  const RATED = Object.fromEntries(Object.keys(AXIS).map(k => [k, K[MV[k].by].SPEED[MV[k].v] * K.CRANE_SPEED_K]));
   const CRANE_OF = Object.fromEntries(Object.keys(AXIS).map(k => [k, MV[k].by]));
 
   P.reset();
@@ -55,7 +57,7 @@ const out = await page.evaluate(() => {
   });
   const diveSec = +L.moveSec('dive', slab, passY).toFixed(2);
   const hoistSec = +L.moveSec('hoist', slab, passY).toFixed(2);
-  return { rows, speed: SP, tspeed: K.TRANSFER.SPEED, diveSec, hoistSec,
+  return { rows, speed: SP, tspeed: K.TRANSFER.SPEED, kSpeed: K.CRANE_SPEED_K, diveSec, hoistSec,
            totalSec: +t.toFixed(1), done: !sup.active,
            seq: K.SEQUENCE.map(q => ({ ph: q[0], key: q[1], fixed: q[2], dur: +(sup.dur[q[1]] || 0).toFixed(2) })) };
 });
@@ -68,6 +70,12 @@ const checks = [];
 const ok = (name, cond, got) => checks.push({ name, pass: !!cond, got });
 
 ok('装入シーケンスが完走する', out.done, out.done);
+/* 運転速度の倍率。仕様書の定格は «一般値» の判定でそのまま見張ったうえで、画面で追える
+ * 速さにするための倍率を別に持つ。1.0 に戻せば仕様どおりの速さで動く。 */
+ok(`運転速度の倍率が ${out.kSpeed} 倍（仕様の定格はそのまま残す）`,
+   out.kSpeed >= 1 && out.kSpeed <= 5,
+   `走行 ${out.speed.TRAVEL}→${out.speed.TRAVEL * out.kSpeed} ／ 横行 ${out.speed.TRAVERSE}→${out.speed.TRAVERSE * out.kSpeed}`
+   + ` ／ 巻上 ${out.speed.HOIST}→${out.speed.HOIST * out.kSpeed} m/min`);
 for (const [k, [lo, hi]] of Object.entries(NORM))
   ok(`定格 ${k} = ${out.speed[k]} m/min が一般値 ${lo}〜${hi} の範囲`, out.speed[k] >= lo && out.speed[k] <= hi, out.speed[k]);
 // 空荷の巻上（吊具だけを降ろす）は定格より速い —— インバータ制御の巻上装置の実機どおり
@@ -83,16 +91,16 @@ for (const [k, [lo, hi]] of Object.entries(NORM))
        out.tspeed[k] >= lo && out.tspeed[k] <= hi, out.tspeed[k]);
 
 for (const r of out.rows) {
-  ok(`${r.key}: 最大速度 ${r.vMax} ≤ 定格 ${r.rated} m/min`, r.vMax <= r.rated * 1.02, r.vMax);
+  ok(`${r.key}: 最大速度 ${r.vMax} ≤ 運転速度 ${r.rated} m/min`, r.vMax <= r.rated * 1.02, r.vMax);
   // 十分に長い移動（ランプ 2 本ぶんより長い）は定格まで上がりきるはず
   const acc = (r.by === 'TRANSFER' ? out.tspeed : out.speed).ACCEL;
   const dRamp = (r.rated * 1000 / 60) ** 2 / (acc * 1000) / 1000;   // [m]
   if (r.d_m > dRamp * 1.5)
-    ok(`${r.key}: 定格まで加速しきる（最大 ${r.vMax} ≥ ${(r.rated * 0.95).toFixed(0)}）`, r.vMax >= r.rated * 0.95, r.vMax);
-  ok(`${r.key}: 発進が瞬時でない（初速 ${r.vStart} < 定格の 5 %）`, r.vStart < r.rated * 0.05, r.vStart);
-  ok(`${r.key}: 停止が瞬時でない（終速 ${r.vEnd} < 定格の 5 %）`, r.vEnd < r.rated * 0.05, r.vEnd);
+    ok(`${r.key}: 運転速度まで加速しきる（最大 ${r.vMax} ≥ ${(r.rated * 0.95).toFixed(0)}）`, r.vMax >= r.rated * 0.95, r.vMax);
+  ok(`${r.key}: 発進が瞬時でない（初速 ${r.vStart} < 運転速度の 5 %）`, r.vStart < r.rated * 0.05, r.vStart);
+  ok(`${r.key}: 停止が瞬時でない（終速 ${r.vEnd} < 運転速度の 5 %）`, r.vEnd < r.rated * 0.05, r.vEnd);
   ok(`${r.key}: 加減速がある（平均 ${r.vMean} < 最大 ${r.vMax}）`, r.vMean < r.vMax * 0.995, r.vMean);
-  ok(`${r.key}: 所要秒が距離÷定格と一致（実測 ${r.sec} / 予測 ${r.predSec}）`,
+  ok(`${r.key}: 所要秒が距離÷運転速度と一致（実測 ${r.sec} / 予測 ${r.predSec}）`,
      Math.abs(r.sec - r.predSec) <= Math.max(0.15, r.predSec * 0.03), r.sec);
 }
 

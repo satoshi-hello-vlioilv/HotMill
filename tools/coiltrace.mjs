@@ -27,7 +27,7 @@ const out = await page.evaluate(() => {
   const wv = new T.Vector3(), cyM = K.MILL.PASS_LINE + C.Y_ABOVE;
   const rollGaps = () => {                   // 閉じたときのロール面とコイル外周の隙間 [mm]
     const f = P.finish, s = P.slab;
-    const h = s.inBite ? P.mill.gap : s.thickness;
+    const h = f.coilTh || (s.inBite ? P.mill.gap : s.thickness);
     return FV.wrapRolls.map(w => {
       w.roll.getWorldPosition(wv);
       const dx = wv.x / sc - C.X, dy = wv.y / sc - cyM;
@@ -47,7 +47,7 @@ const out = await page.evaluate(() => {
     if (n % 60 === 0) W.render(P, 0.5);
     if (n % 60 === 0 && p.finish.expand <= 0) collapsedR = segR();
     if (n % 120 === 0 && p.finish.gripped && !p.finish.done && p.finish.turns > 0.5) {
-      const f = p.finish, s = p.slab, h = s.inBite ? p.mill.gap : s.thickness;
+      const f = p.finish, s = p.slab, h = f.coilTh || (s.inBite ? p.mill.gap : s.thickness);
       const cy = K.MILL.PASS_LINE + C.Y_ABOVE;
       // 2. 板メッシュの先端
       W.slabView.mesh.geometry.computeBoundingBox();
@@ -109,7 +109,15 @@ const out = await page.evaluate(() => {
   coilZ = FV.coil.position.z / sc;                               // 搬出し終えた位置は «ループを抜けたあと» に読む
   const last = samples[samples.length - 1];
   const odErr = samples.map(s => Math.abs(s.odArea - s.odLayers) / s.odArea);
-  ok('巻き数の積分と巻き長さが整合（外径差 3 % 以内）', Math.max(...odErr) < 0.03, `最大差 ${(Math.max(...odErr) * 100).toFixed(1)} %（最終 Φ${last.odArea} vs 段数から Φ${last.odLayers}）`);
+  {
+    /* 面積式の外径（巻いた長さ × 板厚 ÷ π）と、段数式の外径（マンドレル ＋ 巻き数 × 板厚）は
+     * 同じコイルの二通りの数え方なので一致していなければならない。板厚は «巻いた板の平均厚»
+     * を使う —— 尻抜けの一瞬のギャップでコイル全体を数え直さないため（index.html: coilTh）。 */
+    const iw = odErr.indexOf(Math.max(...odErr)), w = samples[iw];
+    ok('巻き数の積分と巻き長さが整合（外径差 3 % 以内）', Math.max(...odErr) < 0.03,
+       `最大差 ${(Math.max(...odErr) * 100).toFixed(1)} % @ ${w.turns} 巻（Φ${w.odArea} vs ${w.odLayers}、板厚 ${w.h}）`
+       + ` ／ 最終 Φ${last.odArea} vs ${last.odLayers}（${last.turns} 巻）`);
+  }
   ok('板メッシュが入口 A より先へ出ない', samples.every(s => s.headPastA === null || s.headPastA <= 2), `最大 ${Math.max(...samples.map(s => s.headPastA ?? -1e9))} mm`);
   ok('渡り板の先端がコイルの巻き付け円に接する', samples.every(s => Math.abs(s.tipR - s.layR) < 3), `最大差 ${Math.max(...samples.map(s => Math.abs(s.tipR - s.layR))).toFixed(1)} mm`);
   ok('押えコロがコイル外周に接する（段込み）', samples.every(s => Math.abs(s.rollGap) < 3), `最大隙間 ${Math.max(...samples.map(s => Math.abs(s.rollGap))).toFixed(1)} mm`);
