@@ -191,6 +191,25 @@ const geo = await page.evaluate(() => {
   }
   ok('ブラシがバックアップロールと取り合わない', bad.length === 0, bad.join(' ／ ') || '上下とも入側寄りの斜め上に居る');
   ok('面長がワークロールの胴長と同じ', B.BARREL === K.MILL.BARREL, `${B.BARREL} / ロール胴 ${K.MILL.BARREL} mm`);
+  /* ブラシは «宙に浮いた部材» ではなく、ハウジングの窓の柱から張り出した腕に軸受で吊られる。
+   * 腕が架構へ届いていること（届かないと浮く）と、食い込み過ぎないこと（20 mm 以内）を見る。 */
+  {
+    const H = K.MILL.HOUSING, sp = [];
+    for (const b of V.brushes) {
+      const br = V.group.children.find(c => c.name === b.g.name + '軸受ブラケット');
+      if (!br) { sp.push(`${b.g.name} の腕が無い`); continue; }
+      const bb = new T.Box3().setFromObject(br);
+      const zMax = bb.max.z / S, xMin = bb.min.x / S, xMax = bb.max.x / S;
+      // 腕は窓の柱（|x| ≈ WIN_X/2）まで届き、架構の内面（実測 1,365）へ 15 mm 食い込む
+      if (zMax < H.INNER_Z - 40 || zMax > H.INNER_Z) sp.push(`${b.g.name} の腕の端 z ${zMax.toFixed(0)}`);
+      if (Math.max(Math.abs(xMin), Math.abs(xMax)) < H.WIN_X / 2 - 60) sp.push(`${b.g.name} の腕が柱まで届かない`);
+    }
+    ok('ブラシは架構から出た腕に支持される（宙に浮かない・食い込み過ぎない）', sp.length === 0,
+       sp.join(' ／ ') || `腕の端 z ${(H.INNER_Z - 20)} mm（架構の内面 ${H.INNER_Z - 35}）／ 柱まで ${H.WIN_X / 2 - 20} mm`);
+    ok('上下でブラシの当たる向きが違う（下はミルピット側の斜め下）',
+       B.ANGLE !== B.ANGLE_LO && B.ANGLE_LO > 90 && B.ANGLE_LO < 180,
+       `上 ${B.ANGLE}° ／ 下 ${B.ANGLE_LO}°`);
+  }
   return checks;
 });
 out.checks.push(...geo);

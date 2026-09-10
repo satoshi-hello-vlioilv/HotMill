@@ -250,6 +250,17 @@ const out = await page.evaluate(async () => {
         ok('厚板では板厚の «内側半分» でも大きく開く（表層だけではない）', half > 0.5 && half > old2 * 2,
            `芯から半分の位置で ${(half * 100).toFixed(0)} %（べき 2 なら ${(old2 * 100).toFixed(0)} %）`);
         ok('芯（ny = 0）では開かない（割れの起点）', R.endOffset(0, 0, 100, 1000, 0, 0, p8) === 0, '0 mm');
+        /* あごの上下の開き。割れは板厚中央の面で起き、上あごは上・下あごは下へ動く。
+         * 割れの先端（zone）を支点に回るので、端へ向かって e² で増える。 */
+        const J = K.SLAB.OVERHANG.JAW_K, g = 300, z = 900;
+        const top = R.endJaw(0, g, z, 1), bot = R.endJaw(0, g, z, -1), mid = R.endJaw(0, g, z, 0);
+        ok('あごが上下に開く（上は上へ・下は下へ・芯は動かない）',
+           top > 0 && Math.abs(top + bot) < 1e-9 && mid === 0,
+           `端面で 上 +${top.toFixed(0)} / 下 ${bot.toFixed(0)} / 芯 ${mid} mm（張り出し ${g} mm・比 ${J}）`);
+        ok('開きは割れの先端で 0、端面で最大（e² で増える）',
+           R.endJaw(z, g, z, 1) === 0 && Math.abs(R.endJaw(z / 2, g, z, 1) - top / 4) < 1e-9,
+           `先端 0 ／ 中間 ${R.endJaw(z / 2, g, z, 1).toFixed(1)} ／ 端面 ${top.toFixed(1)} mm`);
+        ok('ワニ口が出ないパスではあごも開かない', R.endJaw(0, 0, z, 1) === 0, '0 mm');
       }
       A.bus.emit('CMD_RESET');
     }

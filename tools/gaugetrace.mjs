@@ -35,10 +35,14 @@ const out = await page.evaluate(async () => {
 
   /* 据付位置: サイドガイド架構（正準 |x| 2,450〜4,350）の外、サイドトリマー架構より手前。
    * 正準 X（＝ CONFIG の値）で見る。 */
-  const G = K.TABLE.GUIDE, gEnd = G.X + G.LEN / 2;
+  /* サイドガイドの長さは入側（コロ 11）と出側（コロ 5）で違うので、計器のある側の
+   * 長さで見る。入側は正準 X が負の側。 */
+  const G = K.TABLE.GUIDE, L = window.__LAYOUT;
+  const gEndOf = x => G.X + L.guideLen(L.guideN(x)) / 2;
   const trimX = Math.abs(K.TRIMMER.X);
   for (const u of units) {
     const cx = Math.abs(u.unit.x);
+    const gEnd = gEndOf(u.unit.x);
     ok(`${u.unit.name}: サイドガイド架構（|x| ≤ ${gEnd}）の外側`, cx > gEnd, `|x| = ${cx}`);
     ok(`${u.unit.name}: サイドトリマー架構（|x| ${trimX} 前後）に掛からない`, cx < trimX - 400, `|x| = ${cx}`);
   }

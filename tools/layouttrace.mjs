@@ -364,6 +364,43 @@ const out = await page.evaluate(() => {
        pieces.length === P.finish.cropCutsAll, `可視 ${pieces.length} / 総カット ${P.finish.cropCutsAll}`);
   }
 
+  /* --- サイドガイド: コロの本数と、そこから決まる長さ・高さ ------------------
+   * 実機のコロは «出側 5 個・入側 11 個»。コロ本体 380 mm・シャフト 535 mm。
+   * バーの長さは本数から（LEN ＝ N × PITCH）、高さはシャフト長から決まる。 */
+  {
+    const G = K.TABLE.GUIDE, L = window.__LAYOUT, S = K.SCALE, T = window.__T;
+    const st = W.guideView.stations;
+    const inSt = st.find(q => q.x * K.FLIP < 0), outSt = st.find(q => q.x * K.FLIP > 0);
+    ok('サイドガイドのコロが 入側 11 個・出側 5 個', inSt.n === 11 && outSt.n === 5,
+       `入側 ${inSt.n} / 出側 ${outSt.n} 個`);
+    ok('バーの長さがコロの本数から決まる（LEN ＝ N × ピッチ）',
+       inSt.len === 11 * G.PITCH && outSt.len === 5 * G.PITCH,
+       `入側 ${inSt.len} mm（11 × ${G.PITCH}）／ 出側 ${outSt.len} mm（5 × ${G.PITCH}）`);
+    // 実体を測る: コロの数・本体の長さ・シャフトの長さ・下端の高さ
+    const box = o => { const b = new T.Box3().setFromObject(o); return { y: [b.min.y / S, b.max.y / S], x: [b.min.x / S, b.max.x / S] }; };
+    W.render(A.physics, 0.1);
+    const bad = [];
+    for (const q of st) {
+      const rolls = q.sides[0].children.find(c => c.isInstancedMesh);
+      if (!rolls || rolls.count !== q.n) { bad.push(`${q.x < 0 ? '入側' : '出側'} の実体が ${rolls ? rolls.count : 0} 個`); continue; }
+      const bb = box(rolls), lo = bb.y[0] - K.MILL.PASS_LINE, hi = bb.y[1] - K.MILL.PASS_LINE;
+      // 実体はシャフト込みなので、外形の高さはシャフト長に一致する
+      if (Math.abs((hi - lo) - G.SHAFT_L) > 1) bad.push(`外形の高さ ${(hi - lo).toFixed(0)} ≠ シャフト ${G.SHAFT_L}`);
+      // コロ本体の下端がパスラインに一致する（薄板でも耳に当たる）
+      const bodyLo = lo + (G.SHAFT_L - G.ROLL_L) / 2;
+      if (Math.abs(bodyLo) > 1) bad.push(`本体の下端がパスラインから ${bodyLo.toFixed(0)} mm`);
+      // バーの長さも実体で確かめる
+      const bar = q.sides[0].children.find(c => /バー/.test(c.name));
+      const w = box(bar).x[1] - box(bar).x[0];
+      if (Math.abs(w - q.len) > 1) bad.push(`バーの実長 ${w.toFixed(0)} ≠ ${q.len}`);
+    }
+    ok('コロの実体が本数・寸法どおり（本体 380 ＋ シャフト 535・下端がパスライン）', bad.length === 0,
+       bad.join(' ／ ') || `本体 ${G.ROLL_L} ／ シャフト ${G.SHAFT_L} ／ 高さ ${L.guideH} mm`);
+    // 入側のバーが X 線板厚計に掛からないこと（長くしたので余裕が減る）
+    const gEnd = G.X + L.guideLen(G.N_IN) / 2, xr = Math.min(...K.XRAY.UNITS.map(u => Math.abs(u.x)));
+    ok('長くした入側バーが X 線板厚計に掛からない', gEnd < xr,
+       `バー端 ${gEnd.toFixed(0)} / いちばん近い計器 ${xr}（余裕 ${(xr - gEnd).toFixed(0)} mm）`);
+  }
   R.failed = R.checks.filter(c => !c.pass).length;
   return R;
 });
