@@ -1239,6 +1239,8 @@ const VERSION = {
       { t: '全 8 材質の b を公表の活性化エネルギーから逆算し直し、C で絶対値を保った。当てはめ Q の公表値からのずれが +24〜+40 % → −15〜+5 % に収まった。A5052 の実機一致は崩れず、むしろ良くなった（26→16 が 1,579 → 1,533 t、16→8 が 2,730 → 2,413 t。実機 1,530〜2,000 / 2,400〜2,900）', w: 'ALLOYS' },
       { t: 'b の整合を評価器で見張るようにした（b ＝ Q_ACT・m/(R・T_ref²) ±3 %、当てはめ Q は公表値の ±20 %）。これが無いと同じ取り違えがまた起きる', w: 'tools/modeltrace.mjs' },
       { t: '偏芯を上下 4 本へ分けたとき、振幅を 1/2 ずつにしたため位相差で打ち消し合っていた（長手の振れが 3σ 45 → 30 µm に落ち、偏芯を切っても変わらなくなっていた）。独立な 2 本の合成の実効値が設定値になるよう 1/√2 ずつにし、位相もロール 1 本ごとの固有値にした', w: 'MillState._disturb' },
+      { t: 'ワークロールの熱の逃げ場にバックアップロールを足した。板から受けた熱はクーラントだけでなく、接している BUR（WR の 2.3 倍の熱容量 28.3 MJ/K）へも逃げる。BUR 自身も温まり、自分のクーラントで戻る —— «無限に冷たい壁» にしないと、連続運転で BUR が飽和していく実機の挙動が出ない', w: 'MILL.BR_TAU / BR_TAU0 / Rolling.backupCapacity' },
+      { t: 'テーブルローラが板から熱をもらって温まるようにした（それまでは 90 ℃ 固定）。容器はローラの胴まるごとで、表層だけにすると 1 パスで板と同じ温度まで上がってしまう（実測）。Φ282 × 2,490 の鋼は 440 kJ/K の塊なので、周囲へ逃げる時定数は約 4 時間 —— ロット 1 本では 90 → 97 ℃ しか動かない。それが実態で、実装する意味は «連続運転で少しずつ上がる» が出せること', w: 'TABLE_TOUCH.RC / TAU / PhysicsEngine._tableHeat' },
       { t: '止まっている板のテーブルローラ抜熱を鈍らせた。走っている板は接点がたえず新しい面に更新されるが、止まると同じ点が接し続けてローラ表面が温まり、熱流は 1/√t で落ちる。パス間の死に時間を入れるまでは «板が止まっている時間» が実質ゼロだったので、この区別が要らなかった', w: 'TABLE_TOUCH.STILL_TAU / PhysicsEngine.stillT' },
       { t: 'パス間の死に時間（主機の逆転・圧下の設定と確認・材料のトラッキング）を実装した。圧下シリンダの移動時間しか見ていなかったため、多パス区間の所要時間が実機より 26 % 短く出ていた。6 s/パスで 厚板段＋仕上げ 332 → 463 s（実機 450）、26→16 が 84 → 90 s（実機 90）と一致する', w: 'PROCESS.PASS_DEAD / MillController.setPhase' },
       { t: '反りの向きの判定を «曲率半径 1 km» という丸い数字から、実機と同じ測り方（1 m 定規の隙間 [mm]）へ書き直した。下面スプレーを足したぶん終盤の薄板パスで符号が反転するが、量は 0.13 mm/m で熱間板の平坦度公差（3〜5 mm/m）の 1/25。あわせて «上反りが主» であることも判定する', w: 'tools/curltrace.mjs' },
@@ -1873,6 +1875,15 @@ const CONFIG = {
     ROLL_RC: 3.6e6,                        // 鍛鋼の体積熱容量 [J/m³K]
     ROLL_K: 40,                            // 鍛鋼の熱伝導率 [W/mK]（Rolling.rollHTC が使う）
     ROLL_TAU: 45,                          // クーラントで待機温度へ戻る時定数 [s]
+    /* バックアップロールへの抜熱。ワークロールが板から受けた熱は、クーラントだけでなく
+     * «接しているバックアップロール» にも逃げる。BUR は WR の 2.4 倍の径 ＝ 5.7 倍の
+     * 断面積を持つ大きな熱の容器で、しかも自身もクーラントで冷やされている。
+     * ここを持たないと WR の «熱の逃げ場» が実際より小さく、ロール表面温度と熱クラウンが
+     * 出過ぎる（板からの抜熱も鈍って見える）。
+     *   BR_TAU  …… WR → BUR の熱移動の時定数 [s]。接触は線接触なので界面の抵抗が大きく、
+     *               クーラント（ROLL_TAU 45 s）より遅い。
+     *   BR_TAU0 …… BUR 自身がクーラントで待機温度へ戻る時定数 [s]。質量が大きいので長い。 */
+    BR_TAU: 120, BR_TAU0: 600,
 
     /* --- 幅方向の形状（クラウン・平坦度）に要る諸元 -------------------------
      * 板の «幅方向の板厚分布» は、荷重でロール系がたわむことで決まる。
@@ -2920,7 +2931,18 @@ const CONFIG = {
      * が実質ゼロだったので、この区別が要らなかった。死に時間を入れたとたん、止まって
      * いる間も走行中と同じ熱流で下面を冷やし続け、上下温度差が消えて反りが
      * 51 → 22 mm に落ちた（実測）。 */
-    TABLE_TOUCH: { H: 14000, BAND: 20, ARC: 18, PITCH: 640, T: 90, STILL_TAU: 2 },
+    /* T は «釣り合っているときの» ローラ温度 [℃]。板が載れば熱をもらって上がり、
+     * 離れれば周囲へ逃げて戻る。容器はローラの胴まるごと（表層だけを容器にすると
+     * 1 パスで板と同じ温度まで上がってしまう —— 実測でそうなった）。
+     *   RC  …… ローラ材（鍛鋼）の体積熱容量 [J/m³K]
+     *   TAU …… 周囲（放射・対流・軸受）へ逃げて釣り合いへ戻る時定数 [s]。
+     *           Φ282 × 2,490 の鋼のローラは 440 kJ/K の塊で、表面 2 m² から
+     *           h ≒ 15 W/m²K で逃がすと C/(hA) ≒ 4 時間になる。ロット 1 本
+     *           （11 分）ではほとんど動かない —— それが実態で、T の値そのものは
+     *           «その工場の稼働率で落ち着いた水準» を表している。
+     * 実装する意味は «連続運転で少しずつ上がる» を出せること（運転計画のループ）。 */
+    TABLE_TOUCH: { H: 14000, BAND: 20, ARC: 18, PITCH: 640, T: 90, STILL_TAU: 2,
+                   RC: 3.6e6, TAU: 14400 },
     CHILL_DEPTH_K: 2.0,                                // ロール抜熱の浸透深さ ＝ K·√(α·接触時間)
     /* 長手方向の端部冷却。板の端は本体より冷えやすい。理由は 2 つあって、どちらも
      * «単位体積あたりの放熱面積が大きい» に帰着する:
@@ -3599,6 +3621,11 @@ const Rolling = {
   /** ワークロール 2 本ぶんの熱容量 [J/K]（板から受け取る熱の «容器»） */
   rollCapacity() {
     const M = CONFIG.MILL, r = M.WR_D / 2000, L = M.BARREL / 1000;
+    return 2 * Math.PI * r * r * L * M.ROLL_RC;
+  },
+  /** バックアップロール 2 本ぶんの熱容量 [J/K]（ワークロールの熱の逃げ場） */
+  backupCapacity() {
+    const M = CONFIG.MILL, r = M.BR_D / 2000, L = M.BR_BARREL / 1000;
     return 2 * Math.PI * r * r * L * M.ROLL_RC;
   },
   /**
@@ -5512,6 +5539,7 @@ class MillState {
     this._gRaw = { ENTRY: null, EXIT: null, SCAN: null };
     this.scanZ = 0; this.scanDir = 1;
     this.rollTemp = CONFIG.MILL.ROLL_T0;       // ワークロール表面温度 [℃]（板から温まる）
+    this.brTemp = CONFIG.MILL.ROLL_T0;         // バックアップロール温度 [℃]（WR から熱をもらう）
     this.bendingForce = 0;                     // 3D 表現用（0〜1）
     /* ロールベンディング力 [tonf/対]。形状制御（比例クラウン制御）が動かす。
      * 実ギャップに対する «圧下» と同じ関係で、狙いは «出側のクラウン率を入側に合わせる» こと。 */
@@ -7173,7 +7201,7 @@ class PhysicsEngine {
     this.finish.mode = Rolling.finishMode(CONFIG.SLAB.TARGET_TH);
     CONFIG.SCHEDULE = Rolling.buildSchedule(th, CONFIG.SLAB.TARGET_TH, spec.width, spec.temp,
                         { coil: this.finish.mode === 'COIL', length: spec.length });
-    this.mill.rollTemp = CONFIG.MILL.ROLL_T0;
+    this.mill.rollTemp = CONFIG.MILL.ROLL_T0; this.mill.brTemp = CONFIG.MILL.ROLL_T0;
     this.mill.gap = this.mill.targetGap = this.mill.screw = this.mill.screwCmd = th;
     this.mill.stretch = 0; this.mill.stretchV = 0; this.mill.forceMeas = 0; this.mill.trim = 0; this.mill.gaugeH = null; this.mill._gq.length = 0;
     this.mill._fSum = 0; this.mill._fN = 0;                                  // 学習係数 adapt はロットをまたいで保つ
@@ -7216,6 +7244,7 @@ class PhysicsEngine {
     /* 板が «止まっている時間»。テーブルローラの接触は接点が更新されないと鈍るので、
      * その積算をここ 1 か所で持つ（動き出したら 0 に戻る）。 */
     this.stillT = Math.abs(this.mill.currentSpeed) < 1 ? (this.stillT || 0) + dt : 0;
+    this._tableHeat(dt);
     this.supplyCtrl.update(dt);
     this.millCtrl.update(this.finishCtrl, dt);
     this.finishCtrl.update(dt);
@@ -7697,10 +7726,26 @@ class PhysicsEngine {
     this.mill.rollTemp += dTavg * rc * Vslab / Rolling.rollCapacity();
   }
 
-  /** ロール表層はクーラントで待機温度へ戻る（板が居ない間もずっと効く） */
+  /**
+   * ロールの熱の行き先。ワークロールが板から受けた熱は 2 つへ逃げる:
+   *   ・クーラント（ROLL_TAU）—— 板が居ない間もずっと効く
+   *   ・バックアップロール（BR_TAU）—— 接している大きな熱の容器。BUR 自身も温まり、
+   *     自分のクーラントで待機温度へ戻る（BR_TAU0）。
+   * BUR を «無限に冷たい壁» とせず容量を持たせるのが要点で、そうしないと連続運転で
+   * BUR が飽和していく実機の挙動（後段パスほどロールが熱い）が出ない。
+   * 熱は保存する —— WR が失った熱量がそのまま BUR の温度上昇になる。
+   */
   _rollCool(dt) {
     const M = CONFIG.MILL, m = this.mill;
+    // 1) WR → BUR。熱容量の比で温度変化を配る（熱量は保存）
+    const cW = Rolling.rollCapacity(), cB = Rolling.backupCapacity();
+    const k = 1 - Math.exp(-dt / Math.max(M.BR_TAU, 1e-6));
+    const dT = (m.rollTemp - m.brTemp) * k * cB / (cW + cB);     // WR が失う温度
+    m.rollTemp -= dT;
+    m.brTemp += dT * cW / cB;
+    // 2) それぞれのクーラントで待機温度へ
     m.rollTemp = Num.approach(m.rollTemp, M.ROLL_T0, M.ROLL_TAU, dt);
+    m.brTemp = Num.approach(m.brTemp, M.ROLL_T0, M.BR_TAU0, dt);
   }
 
   /**
@@ -7801,6 +7846,31 @@ class PhysicsEngine {
    * ローラは鼓の逆形なので接触は板の両エッジ寄りの 2 本の線だけ。面積割合は
    * （幅方向: 2·BAND / 板幅）×（長さ方向: 接触弧 ARC / ローラピッチ）で薄める。
    */
+  /**
+   * テーブルローラの表層温度。板から熱をもらって上がり、離れれば待機温度へ戻る。
+   *
+   * 板が載っている間、接触線から入る熱流 q = h·(板下面 − ローラ表面) がローラの «表層»
+   * （厚み SKIN）を温める。容器は «接触している帯の体積» —— 幅は接触帯 2·BAND、長さは
+   * 板の下にあるローラの本数 × 接触弧 ARC。ローラは回っているので温まった面は離れて
+   * いくが、板の下を出るころにはまた戻ってくるので、平均としてはこの容器が温まる。
+   * 板が離れれば TAU でクーラントと外気の釣り合い（TT.T）へ戻る。
+   */
+  _tableHeat(dt) {
+    const TT = CONFIG.MATERIAL.TABLE_TOUCH, s = this.slab;
+    if (this.tableT === undefined) this.tableT = TT.T;
+    if (s.onLine && s.length > 0) {
+      const T2 = CONFIG.TABLE, Tb = s.T[s.T.length - 1];          // 板の下面
+      const n = Math.max(s.length / TT.PITCH, 1);                 // 板の下にあるローラの本数
+      // 容器はローラの胴まるごと（1 本 Φ D_MID × 胴長）。表層だけでは板と同じ温度になる
+      const r = T2.ROLL_D_MID / 2000, cap = Math.PI * r * r * (T2.BARREL / 1000) * n * TT.RC;
+      // 熱流は «接触している帯» そのもので受ける（幅 2·BAND × 接触弧 × 本数）
+      const area = (2 * TT.BAND / 1000) * (TT.ARC / 1000) * n;
+      const q = TT.H * area * (Tb - this.tableT);                 // [W]
+      if (cap > 0) this.tableT += q * dt / cap;
+    }
+    this.tableT = Num.approach(this.tableT, TT.T, TT.TAU, dt);
+  }
+
   get tableTouchH() {
     const s = this.slab, TT = CONFIG.MATERIAL.TABLE_TOUCH;
     if (!s.onLine) return 0;
@@ -7842,7 +7912,7 @@ class PhysicsEngine {
       { const sf = PhysicsEngine.stripFilm(Ts, top);
         add(sf.h, sf.T, gFrac * (top ? CO.GUIDE_TOP : CO.SPRAY.BOT.WET)); }
       if (!top) {
-        hs += touchH; ht += touchH * M.TABLE_TOUCH.T;
+        hs += touchH; ht += touchH * (this.tableT ?? M.TABLE_TOUCH.T);
         /* 濡れたテーブルローラが運んでくる液膜。接触線からの伝導（touchH）とは別で、
          * ローラが «液を塗って» いくぶん。ローラが濡れているのは下面スプレーの噴射域
          * とその周りなので、板面冷却と同じ窓（gFrac）で薄める —— ここを薄めずに
@@ -7855,7 +7925,7 @@ class PhysicsEngine {
     /* 露出面からの放熱を «板が全部露出していたら» の量で覚えておく（下の _coilSpread が、
      * 巻かれた部分には掛からず露出部にだけ掛かる、という分布へ直すのに使う）。 */
     const qFull = (hRad(T[0]) + M.H_AIR) * (T[0] - Ta) + (hRad(T[n - 1]) + M.H_AIR) * (T[n - 1] - Ta)
-                + this.tableTouchH * (T[n - 1] - M.TABLE_TOUCH.T);
+                + this.tableTouchH * (T[n - 1] - (this.tableT ?? M.TABLE_TOUCH.T));
     const lossFull = qFull * dt / (rc * h);
     // 側面（板厚の面）: 面積 2·h·L に対し体積は w·h·L なので、単位体積あたり 2/w [1/m]。
     // 全層に同じだけ効くので上下差は作らない（＝反りを増やさずに平均温度だけ下げる）。
