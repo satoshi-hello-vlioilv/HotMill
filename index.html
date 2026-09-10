@@ -5617,6 +5617,7 @@ class FinishState {
     this.sheets = []; this.piled = 0; this.pileH = 0; this.pilerOpen = 0; this.pilerStage = 'CLOSED';
     this.sheetCount = 0;
     this.gripped = false; this.threading = false; this.thread = 0; this.coiledLen = 0; this.od = CONFIG.COILER.MANDREL_D;
+    this._hSum = 0; this.coilTh = 0;                 // 巻いた板の «長さ × 厚み» の積算と、その平均厚 [mm]
     this.tensionKg = 0;
     this.mandrelAngle = 0; this.tension = 0; this.winding = false; this.done = false;
     // 巻き層の状態。turns は板の周速から積分した巻き数（マンドレル 1 回転＝1 巻）。
@@ -6922,17 +6923,25 @@ class FinishController {
       // 巻かれているのは «圧延後» の板。噛み込み中は板全体の thickness がまだ入側厚なので、
       // 先端の実厚（＝ロールギャップ）で巻き層と外径を数える。
       const h = this._headThickness(), w = s.finishedWidth(sl.width);
+      /* コイルの «太さ» を決めるのは、いま噛んでいる板厚ではなく «これまでに巻いた板» の平均厚。
+       * 尻抜けの瞬間は荷重が抜けてハウジングの伸びが戻り、ロールギャップが 8 → 4 mm へ落ちる
+       * （実機でも起きる尻の薄み）。その一瞬の値でコイル全体を数え直すと、外径も質量も半分に
+       * 化ける。巻いた長さで重み付けした平均厚で持てば、薄い尻は «その長さぶんだけ» 効く。 */
+      const prevLen = s.coiledLen;
       s.coiledLen = Math.max(0, headPast);
+      s._hSum += h * Math.max(0, s.coiledLen - prevLen);
+      s.coilTh = s.coiledLen > 1 ? s._hSum / s.coiledLen : h;
+      const th = s.coilTh;
       /* 巻き数は «板がリールへ入る速度» で数える。噛み込み中の板はロール周速より前進率ぶん速く出る
        * （16 → 8 mm・μ 0.32 で 11〜16 %）ので、ロール周速で積分すると巻き数が足りず、外径が巻いた
        * 長さから求めた値と 7 % 食い違った（tools/coiltrace.mjs）。 */
       const v = (s.winding ? CO.ROLL_SPEED_MAX : sl.inBite ? sl.currentSpeed : Math.abs(m.currentSpeed)) / 60 * 1000;   // mm/s
-      const L = Rolling.coilLayers(s.turns, h);
+      const L = Rolling.coilLayers(s.turns, th);
       s.turns += v * dt / (2 * Math.PI * L.layR);
-      Object.assign(s, Rolling.coilLayers(s.turns, h));
-      s.od = Rolling.coilOD(s.coiledLen, h);
+      Object.assign(s, Rolling.coilLayers(s.turns, th));
+      s.od = Rolling.coilOD(s.coiledLen, th);
       s.mandrelAngle = s.windSign * s.turns * 2 * Math.PI;
-      s._mass = Rolling.coilMass(s.coiledLen, h, w);
+      s._mass = Rolling.coilMass(s.coiledLen, th, w);
       s.tension = Rolling.coilTension(h, w, s.od);
       s.tensionKg = Rolling.coilTensionKg(s.od);
       const cy = CONFIG.MILL.PASS_LINE + CO.Y_ABOVE;
@@ -11125,7 +11134,8 @@ class FinishView {
     // コイル: 完成した層の環 + 巻きかけの扇形。板は入口 A から接線でコイル外周へ入る
     const wound = (fin.gripped || fin.threading) && fin.turns > 0.002;
     this.coil.visible = wound;
-    const h = slab.inBite ? mill.gap : slab.thickness, w = fin.finishedWidth(slab.width), r0 = C.MANDREL_D / 2;
+    // コイルの段の高さは «巻いた板の平均厚»（fin.coilTh）。まだ巻いていなければ今の板厚
+    const h = fin.coilTh || (slab.inBite ? mill.gap : slab.thickness), w = fin.finishedWidth(slab.width), r0 = C.MANDREL_D / 2;
     if (wound) this.coilGeo.update(r0 + (fin.expand - 1) * C.SEG_STROKE, fin.r1, h, w, fin.frac, fin.entry, fin.windSign);
     /* 押えコロ: コイル軸から «外周半径 ＋ コロ半径» の点へ、押さえの直線上を進退する。
      * コロの «外周» がコイルの外周にちょうど接する（中心を外周に置くと半径ぶん食い込む）。
