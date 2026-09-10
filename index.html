@@ -1396,6 +1396,15 @@ const VERSION = {
       { t: '噴流の効き（JET）を «ロールから流れ落ちる» ぶんにも掛けていた。下面の抜熱が 35 % 過大だった', w: 'PhysicsEngine.surfaceCool' },
       { t: '較正のノブ（--set）で «false» が文字列のまま渡り、スイッチを切る実験がすべて効いていなかった', w: 'tools/reallot.mjs parseSets' },
       { t: '圧延で «体積が保たれるか» を素材長を変えて測る評価器を足した。出荷時のロット（530 × 1,330 × 3,450）は保たれる（ずれ −0.5 %）が、素材長 3,000 と 2,000 では板の体積が +21.2 % / +29.7 % ずれることが分かった。分かれるのは 16 mm へ入るパス 1 本で、その途中で平均板厚が出側ギャップを割り込む —— 材料の勘定は保たれているので、走っているのは幾何（xMax − xMin）の側。原因は未特定で、まだ直していない（README の 20 番）', w: 'tools/voltrace.mjs' },
+      // --- サイドガイド（図面どおりの並び）・ピット炉・ワニ口のあご（ご回答を反映）---
+      { t: 'サイドガイドのコロピッチを実機の 350 mm にした。入側のコロは «等間隔ではない» —— 拡縮シリンダーが収まる位置で間隔が空くので、図面の区分（1,570 / 2,680 / 1,150 ＝ 5,400）にコロを 3 / 6 / 2 本ずつ、区分の中央へ寄せて並べる。実測の間隔は 350/350/900/350/350/350/350/350/865/350 mm', w: 'TABLE.GUIDE.IN_SEG / IN_N / Layout.guideRollXs' },
+      { t: 'バーの長さと位置を固定値で持つのをやめた。長さは区分の和、位置は «ミル側の端（NEAR）を入側・出側で揃えて外側へ自分の長さぶん伸ばす» で決まる。入側 2,240〜7,640・出側 −3,990〜−2,240', w: 'Layout.guideLen / guideCX' },
+      { t: '拡縮シリンダーは区分の切れ目（＝ 空き）に置く。ただし外側の空き（x 6,458）には床が無い —— 受取テーブル架構が 4,400 から、クレーン走行路が 5,400 から塞いでいる。立てられない側は使わず、内側へ 1 か所足して架台の足を取る（README 残件 18）', w: 'Layout.guideArmXs / BASE_X_LIM' },
+      { t: '奥側のサイドガイドは Y 軸 180° 回して置くので、非対称な並びが前後で反転していた（手前 2,612..7,303 / 奥 2,577..7,268）。鏡像ぶんの形を作り分け、どちらの側でも同じ X にコロが来るようにした', w: 'GuideView / Parts.sideGuideBar' },
+      { t: 'X 線板厚計とサイドガイドの取り合いが «X で離す» から «Z で逃げる» に変わった。入側バーは 5,400 mm あり計器（|x| 4,640）の X をまたぐが、バー本体は |z| ≤ 300 で計器の柱（|z| ≥ 2,480）に届かない。判定もその条件に書き直した', w: 'tools/gaugetrace.mjs' },
+      { t: 'ピット炉の 2,660 mm が «炉の内法から PIT クレーンのトングの作業代を残したときにスラブへ使える合計幅» という計算値であることが分かったので、意味をコメントに残した（1〜6 号なら作業代 2,100 mm）', w: 'FURNACE.PAIR_W' },
+      { t: 'PIT9 号炉のサイズを能力 18 t から逆算した。1 本 6.94 t なので 18 t は 2.6 本 ——「2 本を 1 列・1 段」が収まる 1,900 × 2,600 × 4,050 とした', w: 'FURNACE.SPEC[8]' },
+      { t: 'ワニ口のあごの開きに «板厚の頭打ち» を入れた。開きを張り出しだけに比例させていたため、張り出しが 461 mm で飽和したあとも板だけが薄くなり続け、板厚 85 mm に対して口が 138 mm（163 %）開いていた。割れるのは板厚中央の面なのであご 1 枚は板厚の半分しかなく、口が板厚より開くには 45° 以上回る＝千切れる', w: 'Rolling.endJaw / OVERHANG.JAW_MAX' },
     ] },
     { v: '1.21.0', base: '6d24036', date: '2026-09-10', title: '倍率の天井を外す・キー溝とピット蓋・長手方向の板厚変動と X 線板厚計 3 基', items: [
       // --- 再生速度 ---
@@ -2213,12 +2222,22 @@ const CONFIG = {
      * 決まる（上下のフランジの中で軸受が受ける）: H ＝ SHAFT_L ＋ 2×フランジ厚。
      * コロ本体は «パスラインから上» へ 380 mm 立つ —— 薄板でも耳に当たる必要があるため。
      * バーの長さも本数から決まる（LEN ＝ N × PITCH）ので、LEN は固定値として持たない。
-     * ※ ROLL_D（コロ径）・SHAFT_D（シャフト径）・PITCH は実機の値が未入手のため推定値
-     *   （README 残件 13）。ピッチはバーの長さを決める（LEN ＝ N × PITCH）ので、実機の
-     *   «バーの長さ» が分かればピッチを逆算できる。いまの入側バー端は |x| 4,561 mm で、
-     *   X 線板厚計（4,640）まで 80 mm しか余裕が無い —— ピッチを上げるなら板厚計側の
-     *   置き直しが要る。 */
-    GUIDE: { X: 3400, N_IN: 11, N_OUT: 5, PITCH: 211, ROLL_D: 130, ROLL_L: 380, SHAFT_L: 535, SHAFT_D: 45,
+     * ピッチは 350 mm（実機の値）。入側は «コロが等間隔に並んでいない» —— 拡縮シリンダーが
+     * 収まる位置があり、そこだけ間隔が空く。図面の寸法（1,570 / 2,680 / 1,150、合計 5,400）で
+     * 区分を切り、各区分にコロを 3 / 6 / 2 本ずつ «区分の中央に寄せて» 並べる。
+     * 空いた 2 か所（幅 900 と 865）が拡縮シリンダーの place で、開閉アームもここに立てる。
+     * 出側は図面が無いので一様（5 本 × 350 ＝ 1,750）。
+     * ※ ROLL_D（コロ径）・SHAFT_D（シャフト径）は実機の値が未入手のため推定値（README 残件 13）。
+     * NEAR はバーの «ミル側の端» のライン中心からの距離。入側・出側でここを揃え、
+     * 外側へそれぞれの長さぶん伸ばす —— 長さが変わっても «ミルからの近さ» が動かない。 */
+    GUIDE: { NEAR: 2240, N_OUT: 5, PITCH: 350, ROLL_D: 130, ROLL_L: 380, SHAFT_L: 535, SHAFT_D: 45,
+             IN_SEG: [1570, 2680, 1150], IN_N: [3, 6, 2],
+             /* 床柱を立てられる X の外側の限界。入側は受取テーブル架構（x 4,400 から）と
+              * トランスファークレーン走行路（x 5,400 から）が床を塞いでいるので、
+              * 柱はそこまで。拡縮シリンダーとアーム軸受は «空き» の位置（＝図面どおり）に
+              * 残し、床柱だけを内側へ寄せて架台の梁で持たせる。
+              * ※ 5,400 mm のバーに対して床が足りていない —— README 残件 18。 */
+             BASE_X_LIM: 4100,
              FLANGE_T: 45, RECESS: 20, OPEN_MARGIN: 600, RATE: 500, ARM_DX_MAX: 700,
              BASE_Z: 2300, ARM_L: 1700, ARM_Y: 300,
              /* 板面クーラント。門型（柱 POST_X/POST_Z、梁 BEAM_Y）から、ラインに «平行» な
@@ -2427,7 +2446,15 @@ const CONFIG = {
               *   H     … 深さ。スラブは長さを立てて入る（3,450 mm）
               * 収容能力とも整合する: 1〜6 号は 7 段 × 2 列 ＝ 14 本 × 6.6 t ＝ 92 t（表 90 t）、
               * 7〜8 号は 8 段 × 2 列 ＝ 16 本 ＝ 105 t（表 100 t）。
-              * 9 号はサイズが表に無いので、能力 18 t（＝ 3 本）から内法を置いた（README 残件）。 */
+              * 9 号はサイズが表に無いので、能力 18 t から逆算して置いた（ご指示による）。
+              * 逆算の筋道: 1〜6 号は «7 段 × 2 列 ＝ 14 本» で 90 t ＝ 1 本あたり 6.43 t。
+              * 同じスラブ（厚 560 × 幅 1,330 × 長 3,450、アルミ 2,700 kg/m³ で 6.94 t）を
+              * 基準にすると 18 t は «2.6 本» ——「2 本を 1 列に、段は 1 段」が収まる大きさになる。
+              *   L（段の方向）＝ スラブ厚 560 × 2 本 ＋ 盤木と壁の逃げ ≒ 1,900
+              *   W（列の方向）＝ スラブ幅 2,200（最大）＋ トングの逃げ ≒ 2,600
+              *   H は 1〜6 号と同じ 4,050（同じ建屋・同じクレーンで扱うため）
+              * この置き方だと 2 本 × 6.94 ＝ 13.9 t で、表の 18 t に対しては «余る» 側。
+              * 3 本なら 20.8 t で足が出るので、«2〜3 本» の炉と読むのが妥当（est: true）。 */
              SPEC: [
                { no: 1, cap:  90, L: 3810, W: 4760, H: 4050, fire: '半直火炉' },
                { no: 2, cap:  90, L: 3810, W: 4760, H: 4050, fire: '半直火炉' },
@@ -2449,8 +2476,13 @@ const CONFIG = {
               *    ので、«満たせる中でいちばん組の多いパターン» を選ぶ
               * ⑤ 図の数字の順にスラブを当てはめる（1 が最も幅の大きいスラブ）
               *
-              * PAIR_W ＝ 2,660 mm は実機の運用値。何の寸法かは未確認（炉の内法 W 4,760 とは
-              * 合わない）ので、いまは «判定のしきい値» としてだけ持つ（README 残件）。
+              * PAIR_W ＝ 2,660 mm は «2 本を並べたときのスラブの合計幅の上限»。炉の寸法そのもの
+              * ではなく、«炉の内法から PIT クレーンのトングが入って作業できるだけの余地を
+              * 残したときに、スラブに使える合計幅» という計算値（実機の運用値）。
+              * 1〜6 号（内法 W 4,760）なら、トングの作業代として 4,760 − 2,660 ＝ 2,100 mm が
+              * 残る勘定になる。7〜8 号は内法 W 4,300 なので、同じ作業代を取ると 2,200 mm ——
+              * しきい値は炉ごとに違ってもよいはずだが、実機は 1 つの値で運用しているので
+              * ここも 1 つの値で持つ（炉別にするかは README 残件 19）。
               *
               * ROT は «幅を段の方向（L）へ向けて立てる» 置き方（図の縦長の枠）。組めない
               * 幅広のスラブをここへ逃がす。 */
@@ -2993,10 +3025,16 @@ const CONFIG = {
     // 大きさを決めるのは板厚と板幅と累積圧下で、全長ではない（全長に比例させると 30 m の
     // 板で 800 mm の舌が出るという非物理な形になる）。材質係数は合金ごと（ALLOYS.end）。
     // 75 mm シャーはこの長さに余裕を足した量を切り落とす。描画と物理で同じ式を使う。
-    /* JAW_K —— ワニ口の «あごの開き»。割れた上下のあごが離れる量を、長手の張り出し（gator）
-     * に対する比で置く。0.15 なら張り出し 300 mm のとき端面で上下 ±45 mm（口の開き 90 mm）。
-     * 実機の実測が無いので目安（README 残件）。 */
-    OVERHANG: { TH_K: 3.0, WID_K: 0.30, JAW_K: 0.15 },
+    /* JAW_K —— ワニ口の «あごの開き» の育ち方。割れた上下のあごが離れる量を、長手の
+     * 張り出し（gator ＝ 割れの進み）に対する比で置く。0.15 なら張り出し 300 mm のとき
+     * 端面で上下 ±45 mm（口の開き 90 mm）。
+     * JAW_MAX —— その頭打ち。あご 1 枚の厚みは板厚の半分しかないので、口が板厚より
+     * 大きく開くにはあごが 45° 以上回ることになり、そこまで回れば千切れる。0.25 は
+     * «口の開きが板厚の半分まで»（あごの先が元の板面のあたりまで持ち上がる）という置き方。
+     * 頂いたクロップ屑の写真は真横からではないため «比» までは読み取れない —— 開きが
+     * 目に見える大きさであることは確かめられたが、板厚に対する比は決められなかった。
+     * 真横から（スケールになる物を添えて）撮った 1 枚があれば較正できる（README 残件 17）。 */
+    OVERHANG: { TH_K: 3.0, WID_K: 0.30, JAW_K: 0.15, JAW_MAX: 0.25 },
     /* 鋳造まま（DC 鋳造）のスラブは長辺のコーナーが丸い。上下面は圧延前に片面 SCALP だけ
      * 面削するので、丸みの «上の部分» は削り取られ、鏡面の平らな面と鋳肌の丸みが角度を
      * もって出会う（＝写真に見える稜線）。側面は面削しないので鋳肌のまま残る。
@@ -3655,14 +3693,62 @@ const Layout = {
   _aim: null,
   /** 旧名（狙い点を既定の板幅で解いたもの）。引数を採らない呼び出しのため残す。 */
   nozzleDir() { return Layout.nozzleAim(); },
+  /* サイドガイドの «区分»。入側は図面どおり 3 つに分かれ（1,570 / 2,680 / 1,150 に
+   * コロ 3 / 6 / 2 本）、区分の切れ目が拡縮シリンダーの入る «空き» になる。
+   * 出側は図面が無いので一様（1 区分に 5 本）。ここが長さ・コロ位置・シリンダー位置の
+   * 単一の出どころで、バーの長さを固定値として持たない。 */
+  guideSegs(x) {
+    const g = CONFIG.TABLE.GUIDE;
+    return x * CONFIG.FLIP < 0 ? { seg: g.IN_SEG, n: g.IN_N }
+                               : { seg: [g.N_OUT * g.PITCH], n: [g.N_OUT] };
+  },
   /** サイドガイドのコロ本数（入側 11 / 出側 5）。正準 X の符号で入側・出側を分ける。 */
-  guideN(x) { return x * CONFIG.FLIP < 0 ? CONFIG.TABLE.GUIDE.N_IN : CONFIG.TABLE.GUIDE.N_OUT; },
-  /** そのコロ本数のバーの長さ [mm]。長さは本数から決まる（LEN を別に持たない）。 */
-  guideLen(n) { return n * CONFIG.TABLE.GUIDE.PITCH; },
-  /* スライドアーム（＝架台の柱）の X。バーの端から 300 mm 内側が素直だが、入側は
-   * コロ 11 本ぶん長いので、そのままだと架台が受取テーブル架構に食い込む（実測 70 mm）。
-   * 外へ出せる上限を持たせる。 */
-  guideArmDX(n) { return Math.min(Layout.guideLen(n) / 2 - 300, CONFIG.TABLE.GUIDE.ARM_DX_MAX); },
+  guideN(x) { return Layout.guideSegs(x).n.reduce((a, b) => a + b, 0); },
+  /** バーの長さ [mm]。区分の長さの和（入側 5,400 / 出側 1,750）。 */
+  guideLen(x) { return Layout.guideSegs(x).seg.reduce((a, b) => a + b, 0); },
+  /** バーの中心 X [mm]。ミル側の端（NEAR）を入側・出側で揃え、外側へ自分の長さぶん伸ばす。 */
+  guideCX(x) { return Math.sign(x || 1) * (CONFIG.TABLE.GUIDE.NEAR + Layout.guideLen(x) / 2); },
+  /** コロの X（バー中心が原点）。群の中だけが PITCH 350 で並び、群は区分の中央に寄る。 */
+  guideRollXs(x) {
+    const g = CONFIG.TABLE.GUIDE, { seg, n } = Layout.guideSegs(x);
+    const LEN = seg.reduce((a, b) => a + b, 0), xs = [];
+    let x0 = -LEN / 2;
+    for (let i = 0; i < seg.length; i++) {
+      const c = x0 + seg[i] / 2, span = (n[i] - 1) * g.PITCH;   // 区分の中央に群を寄せる
+      for (let k = 0; k < n[i]; k++) xs.push(c - span / 2 + k * g.PITCH);
+      x0 += seg[i];
+    }
+    return xs;
+  },
+  /* 開閉アーム（＝拡縮シリンダーと架台の柱）の X（バー中心が原点）。
+   * 入側は «コロが空いている場所» —— 区分の切れ目がそのままシリンダーの place なので、
+   * そこへ立てるのが図面どおり。出側は区分が 1 つで空きが無いので端から 300 mm 内側。
+   *
+   * ただし入側の外側の空き（バー中心 +1,517 ＝ 世界 6,458）には «床が無い» ——
+   * 受取テーブル架構が x 4,400 から、クレーン走行路が 5,400 から床を塞いでいる
+   * （実測。tools/structure.mjs が見つけた）。立てられない側は使わず、代わりに
+   * いちばん内側の立てられる位置へ 1 か所足して、架台の足を広く取る。
+   * ※ 5,400 mm のバーに対して床が足りていない —— README 残件 18。 */
+  guideArmXs(x) {
+    const g = CONFIG.TABLE.GUIDE, { seg, n } = Layout.guideSegs(x);
+    const cx = Layout.guideCX(x), sgn = Math.sign(cx || 1), LEN = Layout.guideLen(x);
+    let ds;
+    if (seg.length < 2) {
+      const d = Math.min(LEN / 2 - 300, g.ARM_DX_MAX);
+      ds = [-d, d];
+    } else {
+      const xs = Layout.guideRollXs(x); ds = []; let k = 0;
+      for (let i = 0; i < seg.length - 1; i++) { k += n[i]; ds.push((xs[k - 1] + xs[k]) / 2); }
+    }
+    let out = ds.filter(d => Math.abs(cx + sgn * d) <= g.BASE_X_LIM);
+    if (out.length < 2) {                                       // 足が 1 本では持たないので内側へ 1 か所
+      const dIn = -(LEN / 2 - 300);
+      if (!out.some(d => Math.abs(d - dIn) < 1)) out = [dIn, ...out];
+    }
+    return out.sort((a, b) => a - b);
+  },
+  /** 架台の «床柱» の X。いまはアームと同じ（どれも床が空いている位置にある）。 */
+  guideColXs(x) { return Layout.guideArmXs(x); },
   /** バーの高さ [mm]。コロのシャフトを上下のフランジで受けるので、シャフト長から決まる。 */
   get guideH() { const g = CONFIG.TABLE.GUIDE; return g.SHAFT_L + 2 * g.FLANGE_T; },
   /** バーの原点（下端）からコロ本体の下端までの高さ [mm]。ここがパスラインに一致する。 */
@@ -5454,10 +5540,15 @@ const Rolling = {
    * （割れの起点は芯、口が開くのは端面）ので、上あご（ny > 0）は上へ、下あご（ny < 0）は
    * 下へ動く。あごは割れの先端を支点に回るので、開きは端へ向かって e² で増える。
    */
-  endJaw(dEnd, gator, zone, ny) {
+  endJaw(dEnd, gator, zone, ny, h) {
     if (!(gator > 0) || dEnd >= zone) return 0;
-    const e = 1 - dEnd / zone;
-    return CONFIG.SLAB.OVERHANG.JAW_K * gator * e * e * ny;
+    const O = CONFIG.SLAB.OVERHANG, e = 1 - dEnd / zone;
+    /* 開きは張り出し（＝割れの進み）に比例して育つが、«板厚で頭打ち» になる。
+     * 割れるのは板厚の中央の面なので、あご 1 枚の厚みは h/2 しかない。口が板厚より
+     * 大きく開くにはあごが 45° 以上回ることになり、そこまで回れば付け根から千切れる。
+     * 頭打ちを入れないと、張り出しが 460 mm で飽和したあとも板だけが薄くなり続けるので、
+     * 板厚 85 mm に対して口が 138 mm（163 %）開くという非物理な形になっていた（実測）。 */
+    return Math.min(O.JAW_K * gator, O.JAW_MAX * Math.max(h, 0)) * e * e * ny;
   },
   /**
    * ワニ口の «板厚方向の広がり» を決めるべき指数。offset ∝ |ny|^p で、
@@ -5906,6 +5997,7 @@ class SlabState {
                                       zone: Rolling.endZone(p.tongue + p.gator, L), cut });
     const gp = e => Rolling.gatorPow(this.gatorDelta[e]);
     const ends = { 1: mk(x1, pP, this.cut[1], gp(1)), '-1': mk(x0, pM, this.cut['-1'], gp(-1)) };
+    const hNow = this.thickness;                      // あごの開きの頭打ちに使う（口 ≤ 板厚の半分）
     return {
       x0, x1, ends,
       /** 材料点 (x, ny, nz) の張り出し込み X。切断面があればそこで打ち切る。 */
@@ -5921,7 +6013,7 @@ class SlabState {
         const e = x > (x0 + x1) / 2 ? ends[1] : ends['-1'], sgn = x > (x0 + x1) / 2 ? 1 : -1;
         if (e.cut !== null) return 0;                     // クロップで切り落とした端は平ら
         const dEnd = sgn > 0 ? e.xE - x : x - e.xE;
-        return Rolling.endJaw(Math.max(dEnd, 0), e.gator, e.zone, ny);
+        return Rolling.endJaw(Math.max(dEnd, 0), e.gator, e.zone, ny, hNow);
       },
     };
   }
@@ -8167,8 +8259,9 @@ class PhysicsEngine {
   _guides(dt) {
     const s = this.slab, m = this.mill, G = CONFIG.TABLE.GUIDE;
     // 材料が来る側（上流）のガイドだけが板幅までクランプする。出側は開放。
-    const gx = -(Num.sign0(s.dir) || CONFIG.FLIP) * G.X;
-    const half = Layout.guideLen(Layout.guideN(gx)) / 2;      // 入側と出側で長さが違う
+    const sx = -(Num.sign0(s.dir) || CONFIG.FLIP);            // 材料が来る側（＋1 / −1）
+    const gx = Layout.guideCX(sx);                            // バーの中心（長さから決まる）
+    const half = Layout.guideLen(sx) / 2;                     // 入側 2,700 / 出側 875
     const near = s.xMax > gx - half && s.xMin < gx + half;
     const target = (near && Math.abs(m.currentSpeed) > 5) ? s.width + 20 : s.width + G.OPEN_MARGIN;
     m.guideGap = Num.rateTo(m.guideGap, target, G.RATE, dt);
@@ -9274,12 +9367,15 @@ const Parts = {
    * バーはテーブルローラの上を跨ぐスライドアーム 2 本で固定架台へ繋がり、アームは
    * 架台の軸受を貫いて開閉シリンダの中へ入る（伸縮部材）。
    */
-  sideGuideBar(n = CONFIG.TABLE.GUIDE.N_IN) {
+  sideGuideBar(sx = 1, mir = 1) {
     /* 写真のバー: 背板の前に上下のフランジと仕切り壁で «ポケット» を作り、各ポケットに
      * 立てコロを 1 個ずつ収める。コロは仕切りの面より RECESS だけ手前へ出て板の耳に当たる。
-     * 上面のボルト類は付けない（取付ボルトは架台側）。 */
+     * 上面のボルト類は付けない（取付ボルトは架台側）。
+     * 入側はコロが等間隔ではない（拡縮シリンダーの place で間隔が空く）ので、ポケットは
+     * «コロのある所だけ» に作る。空いた所は背板とフランジだけの平らな面になり、
+     * そこにシリンダーと開閉アームが付く —— 図面の見え方どおり。 */
     const g = CONFIG.TABLE.GUIDE, pitch = g.PITCH, pocketW = g.ROLL_D + 40;
-    const LEN = Layout.guideLen(n), H = Layout.guideH;       // 長さは本数から、高さはシャフト長から
+    const LEN = Layout.guideLen(sx), H = Layout.guideH;      // 長さは区分から、高さはシャフト長から
     const wallT = pitch - pocketW;                          // 仕切り壁の厚み
     const depth = g.ROLL_D + 30;                            // ポケット奥行き（コロ背面 + 逃げ）
     const zb = g.RECESS + depth;                            // 背板の前面
@@ -9287,15 +9383,20 @@ const Parts = {
     const parts = [G.at(G.box(LEN, H, backT), 0, H / 2, zb + backT / 2)];                       // 背板
     parts.push(G.at(G.box(LEN, flangeT, depth + backT), 0, H - flangeT / 2, g.RECESS + (depth + backT) / 2));   // 上フランジ
     parts.push(G.at(G.box(LEN, flangeT, depth + backT), 0, flangeT / 2, g.RECESS + (depth + backT) / 2));       // 下フランジ
-    for (let i = 0; i <= n; i++) {                                                              // 仕切り壁（両端は半分）
-      const x = -LEN / 2 + i * pitch, w = (i === 0 || i === n) ? wallT / 2 : wallT;
-      const xc = i === 0 ? x + w / 2 : i === n ? x - w / 2 : x;
-      parts.push(G.at(G.box(w, H - 2 * flangeT, depth), xc, H / 2, g.RECESS + depth / 2));
+    /* 仕切り壁はコロ 1 個ごとに左右へ 1 枚ずつ。隣り合うコロ（群の中）は同じ壁を共有するので
+     * 位置で重複を畳む。バーの端からはみ出す壁は端で切る。 */
+    const walls = new Map();
+    for (const xr0 of Layout.guideRollXs(sx)) for (const d of [-1, 1]) {
+      const xr = mir * xr0;                                     // 奥側は Y 軸 180° 回すので x を折り返す
+      const c = Num.clamp(xr + d * pitch / 2, -LEN / 2 + wallT / 2, LEN / 2 - wallT / 2);
+      walls.set(Math.round(c), c);
     }
-    // 背板から後ろへ出るスライドアーム 2 本（架台の軸受を貫いてシリンダへ）。根元に補強リブ
+    for (const c of walls.values())
+      parts.push(G.at(G.box(wallT, H - 2 * flangeT, depth), c, H / 2, g.RECESS + depth / 2));
+    // 背板から後ろへ出るスライドアーム（架台の軸受を貫いてシリンダへ）。根元に補強リブ
     const boxL = g.ARM_L - 900, zArm = zb + backT;
-    for (const sx of [-1, 1]) {
-      const x = sx * Layout.guideArmDX(n);
+    for (const x0 of Layout.guideArmXs(sx)) {
+      const x = mir * x0;
       parts.push(G.at(G.box(320, 260, boxL), x, g.ARM_Y + 130, zArm + boxL / 2));                // スライドアーム
       parts.push(G.at(G.box(60, H - 2 * flangeT - 60, 360), x, H / 2, zArm + 180));              // 補強リブ（背板 → アーム）
       parts.push(G.at(G.cyl(200, 900, 'z', 12), x, g.ARM_Y + 130, zArm + boxL + 450));           // シリンダロッド
@@ -9306,16 +9407,19 @@ const Parts = {
    * サイドガイド固定架台（片側）。テーブル架台の外側（ライン中心から BASE_Z）に床から立ち、
    * アームの軸受と開閉シリンダを持つ。原点＝架台中心（床面）、+Z がライン外側。
    */
-  sideGuideBase(n = CONFIG.TABLE.GUIDE.N_IN) {
+  sideGuideBase(sx = 1, mir = 1) {
     const g = CONFIG.TABLE.GUIDE, P = CONFIG.MILL.PASS_LINE, top = P + g.ARM_Y - 60, parts = [];
-    const LEN = Layout.guideLen(n);
-    for (const sx of [-1, 1]) {
-      const x = sx * Layout.guideArmDX(n);
-      parts.push(G.at(G.box(420, top, 520), x, top / 2, 0));                          // 柱（床から）
+    const arms = Layout.guideArmXs(sx).map(v => mir * v), cols = Layout.guideColXs(sx).map(v => mir * v);
+    for (const x of arms) {                                       // 軸受とシリンダは «空き» の位置
       parts.push(G.at(G.box(520, 460, 620), x, P + g.ARM_Y + 130, 0));                // アーム軸受
       parts.push(G.at(G.cyl(300, 1300, 'z', 14), x, P + g.ARM_Y + 130, 960));         // 開閉シリンダ
     }
-    parts.push(G.at(G.box(Math.max(2 * Layout.guideArmDX(n), 400), 220, 420), 0, 410, 0));   // 柱間のつなぎ
+    for (const x of cols)                                         // 床柱は床が空いている所だけ
+      parts.push(G.at(G.box(420, top, 520), x, top / 2, 0));
+    /* 梁は «軸受のいちばん外» から «柱のいちばん外» までを通し、床柱の無い側の軸受を持たせる。 */
+    const xs = [...arms, ...cols], x0 = Math.min(...xs), x1 = Math.max(...xs);
+    parts.push(G.at(G.box(Math.max(x1 - x0 + 520, 400), 220, 420), (x0 + x1) / 2, 410, 0));
+    parts.push(G.at(G.box(Math.max(x1 - x0 + 520, 400), 300, 460), (x0 + x1) / 2, P + g.ARM_Y - 210, 0));
     return G.merge(parts);
   },
   /** サイドガイドのコロ 1 個。本体 380 mm の上下へシャフト（535 mm）が出て軸受で受ける。 */
@@ -11361,16 +11465,24 @@ class GuideView {
      * 左右で使い回す。コロの形（本体 380 ＋ シャフト 535）は共通。 */
     const rollGeo = Parts.sideGuideRoll();
     const geoOf = new Map();
-    const barOf = n => { if (!geoOf.has(n)) geoOf.set(n, { bar: Parts.sideGuideBar(n), base: Parts.sideGuideBase(n) }); return geoOf.get(n); };
+    /* 入側はコロが左右非対称に並ぶ（図面どおりの群配置）。奥側は Y 軸 180° 回して置くので、
+     * そのままだと «並びが前後で反転» する。鏡像ぶんも形を作り分けて、どちらの側でも
+     * 同じ X にコロが来るようにする（実測で見つけた: 手前 2,612..7,303 / 奥 2,577..7,268）。 */
+    const barOf = (sx, mir) => { const k = `${sx}|${mir}`;
+      if (!geoOf.has(k)) geoOf.set(k, { bar: Parts.sideGuideBar(sx, mir), base: Parts.sideGuideBase(sx, mir) });
+      return geoOf.get(k); };
     // 架構だけを断面表示の対象にする。板の耳に当たるローラは «当たっていること» が
     // 見えるべき部材なので、透過させず常に実体で描く。
     this.sided = { near: [], far: [] };
-    this.stations = [-g.X, g.X].map(x => {
-      const n = Layout.guideN(x), LEN = Layout.guideLen(n), geo = barOf(n);
+    this.stations = [-g.NEAR, g.NEAR].map(sx => {
+      /* バーの «ミル側の端» は入側・出側で揃え、外側へそれぞれの長さぶん伸ばす。
+       * 中心 X は長さから決まるので、位置を固定値として持たない。 */
+      const x = Layout.guideCX(sx), n = Layout.guideN(sx), LEN = Layout.guideLen(sx);
       /* バーは «コロ本体の下端がパスラインに一致する» 高さに置く。薄板でも耳に当たる
        * 必要があるので、コロをバーの中央に置いてはいけない。 */
       const y0 = Layout.guideY0;
       const sides = [1, -1].map(s => {
+        const geo = barOf(Math.sign(sx), s);                   // 奥側は鏡像の形を使う
         const grp = new THREE.Group(); grp.name = 'サイドガイド可動部';
         const f = ghostable(new THREE.Mesh(geo.bar, MAT.guide), MAT.guide);
         f.name = 'サイドガイドバー'; f.castShadow = true;
@@ -11379,8 +11491,9 @@ class GuideView {
         grp.add(f);
         // ローラ中心は開口面から半径ぶん外側 ＝ 内接面がちょうど開口面に一致する
         const rolls = new Instances(rollGeo, MAT.rollNeck, n, { cull: false, name: 'サイドガイドローラ' });
+        const rxs = Layout.guideRollXs(sx);                 // 入側は等間隔ではない（図面どおりの群）
         for (let i = 0; i < n; i++)
-          rolls.set(i, -LEN / 2 + LEN * (i + 0.5) / n, y0 + g.ROLL_L / 2, g.ROLL_D / 2);
+          rolls.set(i, s * rxs[i], y0 + g.ROLL_L / 2, g.ROLL_D / 2);
         rolls.commit(); grp.add(rolls.mesh);
         grp.position.set(u(x), u(P - y0), 0); scene.add(grp);
         // 固定架台。テーブル架台の外側に床から立ち、開閉に関わらず動かない

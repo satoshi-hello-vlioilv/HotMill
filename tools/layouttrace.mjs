@@ -211,9 +211,15 @@ const out = await page.evaluate(() => {
     // 熱計算が見るヘッダ X（Layout）が同じ 1 式から来ていることまで見る。
     {
       const L = window.__LAYOUT, st = L.coolStations();
-      const atGuide = st.filter(x => Math.abs(Math.abs(x) - K.TABLE.GUIDE.X) < 1);
+      /* 門型は «サイドガイドの上» —— バーの中心と一致させる必要はなく、バーの範囲に
+       * 入っていればよい（入側は 5,400 mm あり、中心はミルから遠い）。 */
+      const inBar = x => { const c = L.guideCX(x), h = L.guideLen(x) / 2;
+                           return x > c - h && x < c + h; };
+      const atGuide = st.filter(inBar);
       ok('板面クーラントは入側・出側ともサイドガイドの上', atGuide.length === 2 && st.length === 2,
-         `門型 ${st.map(Math.round).join(' / ')} mm ／ サイドガイド ±${K.TABLE.GUIDE.X} mm`);
+         `門型 ${st.map(Math.round).join(' / ')} mm ／ バー ${st.map(x => {
+           const c = L.guideCX(x), h = L.guideLen(x) / 2;
+           return `${Math.round(c - h)}..${Math.round(c + h)}`; }).join(' / ')} mm`);
       ok('入側と出側にそれぞれ 1 基ずつある', st.filter(x => x > 0).length === 1 && st.filter(x => x < 0).length === 1,
          `入側 ${st.filter(x => x > 0).map(Math.round).join('')} / 出側 ${st.filter(x => x < 0).map(Math.round).join('')} mm`);
       // ヘッダは 1 ステーションに OS / DS の 2 本（X は同じ）。描画は ON/OFF に関わらず全ステーション
@@ -373,9 +379,27 @@ const out = await page.evaluate(() => {
     const inSt = st.find(q => q.x * K.FLIP < 0), outSt = st.find(q => q.x * K.FLIP > 0);
     ok('サイドガイドのコロが 入側 11 個・出側 5 個', inSt.n === 11 && outSt.n === 5,
        `入側 ${inSt.n} / 出側 ${outSt.n} 個`);
-    ok('バーの長さがコロの本数から決まる（LEN ＝ N × ピッチ）',
-       inSt.len === 11 * G.PITCH && outSt.len === 5 * G.PITCH,
-       `入側 ${inSt.len} mm（11 × ${G.PITCH}）／ 出側 ${outSt.len} mm（5 × ${G.PITCH}）`);
+    /* 長さは «区分» から決まる（LEN を固定値として持たない）。入側は図面どおり
+     * 1,570 ＋ 2,680 ＋ 1,150 ＝ 5,400、出側は一様なので 5 × 350 ＝ 1,750。 */
+    ok('バーの長さが区分から決まる（入側は図面の 3 区分、出側は一様）',
+       inSt.len === G.IN_SEG.reduce((a, b) => a + b, 0) && outSt.len === G.N_OUT * G.PITCH,
+       `入側 ${inSt.len} mm（${G.IN_SEG.join(' ＋ ')}）／ 出側 ${outSt.len} mm（${G.N_OUT} × ${G.PITCH}）`);
+    /* 入側のコロは等間隔ではない —— 拡縮シリンダーが入る位置で間隔が空く。
+     * 群の中は 350 ピッチ、群と群のあいだは空く、という図面どおりの並びを実測する。 */
+    {
+      const xs = L.guideRollXs(inSt.x), d = xs.slice(1).map((v, i) => Math.round(v - xs[i]));
+      const tight = d.filter(v => v === G.PITCH).length, gaps = d.filter(v => v > G.PITCH);
+      ok('入側のコロが図面どおりの群（群の中は 350 ピッチ・群のあいだが空く）',
+         xs.length === 11 && tight === 8 && gaps.length === 2,
+         `間隔 ${d.join(' / ')} mm（350 が ${tight} か所・空きが ${gaps.length} か所）`);
+      ok('拡縮シリンダーが «空き» の位置にある（少なくとも 1 か所）',
+         L.guideArmXs(inSt.x).some(a => {
+           let k = 0;
+           for (let i = 0; i < G.IN_N.length - 1; i++) { k += G.IN_N[i];
+             if (Math.abs(a - (xs[k - 1] + xs[k]) / 2) < 1) return true; }
+           return false;
+         }), `シリンダー ${L.guideArmXs(inSt.x).map(a => Math.round(inSt.x < 0 ? -1 : 1)).length} 本`);
+    }
     // 実体を測る: コロの数・本体の長さ・シャフトの長さ・下端の高さ
     const box = o => { const b = new T.Box3().setFromObject(o); return { y: [b.min.y / S, b.max.y / S], x: [b.min.x / S, b.max.x / S] }; };
     W.render(A.physics, 0.1);
@@ -397,9 +421,22 @@ const out = await page.evaluate(() => {
     ok('コロの実体が本数・寸法どおり（本体 380 ＋ シャフト 535・下端がパスライン）', bad.length === 0,
        bad.join(' ／ ') || `本体 ${G.ROLL_L} ／ シャフト ${G.SHAFT_L} ／ 高さ ${L.guideH} mm`);
     // 入側のバーが X 線板厚計に掛からないこと（長くしたので余裕が減る）
-    const gEnd = G.X + L.guideLen(G.N_IN) / 2, xr = Math.min(...K.XRAY.UNITS.map(u => Math.abs(u.x)));
-    ok('長くした入側バーが X 線板厚計に掛からない', gEnd < xr,
-       `バー端 ${gEnd.toFixed(0)} / いちばん近い計器 ${xr}（余裕 ${(xr - gEnd).toFixed(0)} mm）`);
+    /* 入側バーは 5,400 mm あり、X 線板厚計（|x| 4,640）の «X をまたぐ»。それでも当たらないのは
+     * バー本体が |z| ≤ 1,285 に収まり、計器の柱が |z| 2,610〜2,950 に立っているから ——
+     * X で離すのではなく Z で逃がしている。実体で確かめる。 */
+    {
+      /* バー本体は |z| ≤ RECESS ＋ 奥行 ＋ 背板 ＝ 300 の薄い箱で、計器の柱（|z| 2,610〜2,950）
+       * とは Z で離れている。計器の柱まで届くのは «スライドアームと開閉シリンダ» だけなので、
+       * 当たるかどうかはアームの X と計器の X が重なるかで決まる。 */
+      const inX = L.guideCX(1);
+      const arms = L.guideArmXs(1).map(d => inX + d);
+      const half = (K.XRAY.FRAME_T + 320) / 2;              // 計器の柱の厚み ＋ アームの幅
+      const gx = K.XRAY.UNITS.map(u => -u.x * K.FLIP).filter(x => x > 0);   // 入側の計器（世界 X）
+      const clash = arms.filter(a => gx.some(x => Math.abs(a - x) < half));
+      ok('入側のスライドアームが X 線板厚計の柱と重ならない', clash.length === 0,
+         `アーム ${arms.map(Math.round).join(' / ')} ／ 計器 ${gx.map(Math.round).join(' / ')} mm`
+         + `（いちばん近い ${Math.round(Math.min(...arms.flatMap(a => gx.map(x => Math.abs(a - x)))))} mm・要 ${Math.round(half)} mm）`);
+    }
   }
   R.failed = R.checks.filter(c => !c.pass).length;
   return R;

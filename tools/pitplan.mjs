@@ -71,6 +71,20 @@ const out = await page.evaluate(() => {
     const b = p(mix);
     ok('組める数が 3〜6 組なら パターン B', b.pairs >= 3 && b.pairs < 7 && b.key === 'B',
        `${b.pairs} 組 → ${b.key} ／ 組の和 ${b.sums.map(q => q.sum).join(',')}`);
+    /* 5 組・6 組のときも B でよい（ご確認済み）。B は 3 組しか使わないので 2〜3 組は
+     * 余るが、それが実機の運用。«組める数がちょうど何組か» で分岐を増やさない。 */
+    {
+      const mk = (nPair) => {                       // nPair 組だけが 2,660 以下になる並びを作る
+        const w = [];
+        for (let i = 0; i < nPair; i++) { w.push(1330); w.push(1330); }        // 和 2,660（組める）
+        for (let i = nPair; i < 7; i++) { w.push(2200); w.push(1000); }        // 和 3,200（組めない）
+        return w;
+      };
+      const bad = [];
+      for (const n of [3, 4, 5, 6]) { const q = p(mk(n)); if (!(q.pairs === n && q.key === 'B')) bad.push(`${n} 組 → ${q.pairs} 組 / ${q.key}`); }
+      ok('5 組・6 組でも パターン B（余る組は使わない）', bad.length === 0,
+         bad.join(' ／ ') || '3 / 4 / 5 / 6 組 いずれも B');
+    }
     // 組の和は番号順に増減しない —— 途中で打ち切らずに全部見ていること
     /* 幅の大きい順に並べると [2600, 2500, 1300, 1300, 1200, 100, 100, 60]。
      * 組の和は 2660 / 2600 / 1400 / 2500 と «増えたり減ったり» する ——
