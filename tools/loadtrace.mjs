@@ -53,20 +53,38 @@ const out = await page.evaluate(() => {
     // 巻取パスはベルトラッパーが先端を掴んで張力が立つまで（十数 s）荷重が動くので、そこも過渡に含める
     const tTr = K.SCHEDULE[cur.pass - 1]?.coil ? 15 : 3;
     const late = full.filter(q => q.dHead > ZONE && q.dTail > cur.len * 0.1 && q.t - t0 > tTr).map(q => q.gap);
-    /* «発振» と «ゆっくりしたずれ» を分ける。実ギャップ h ＝ S ＋ δ(F) なので、パス中に
-     * 荷重が動けばギャップも動く —— 巻取パスは尻へ向かって荷重が 2,400 → 2,900 t 上がり、
-     * 実機のミル定数（226〜296 t/mm）ではそれだけで 1.7 mm 伸びる。これは追従の «遅れ» で
-     * あって発振ではない。振れ幅（band）だけを見るとこの 2 つが混ざる。
-     * 発振は «往復» なので、隣り合う 3 点の «曲がり» x[i] − (x[i−1] + x[i+1])/2 を取れば
-     * 直線的なずれは消えて往復だけが残る。その RMS を ripple とする。 */
-    const ripple = (() => {
-      if (late.length < 5) return 0;
+    /* ギャップの振れは «3 つ» が混ざっている。分けないと «発振» の判定にならない。
+     *   ① ゆっくりしたずれ … 荷重が動けばミルが伸びる。巻取パスは尻へ向かって荷重が
+     *      2,400 → 2,900 t 上がり、実機のミル定数（226〜296 t/mm）ではそれだけで
+     *      1.7 mm 伸びる。追従の «遅れ» であって発振ではない。
+     *   ② 制御帯域の往復 … 圧下（一次遅れ TAU 0.55 s）が動ける範囲の往復。これが
+     *      «板厚制御の発振»。判定に数えるのはここだけ。
+     *   ③ スタンドの固有振動 … 15 Hz（CONFIG.MILL.STAND.FN）。圧下は TAU 0.55 s なので
+     *      この速さでは動けず、制御とは無関係。実測でギャップの自己相関の山がちょうど
+     *      15.00 Hz に立つ（巻取パスで σ 70.8 µm）。ミルが柔らかいほど材料ばね Q との
+     *      連成で実効減衰 ζ/√(1+Q/M) が下がるので、実機のミル定数にしてから立つように
+     *      なった —— 実機の «チャタ» に相当する現象で、制御の不良ではない。
+     * ② だけを見るために、まず ③ を移動平均で落としてから曲がりを取る。
+     * 窓は圧下の応答時定数 TAU の半分（0.275 s）—— 圧下が追える速さより速い往復は
+     * 制御には帰せない。 */
+    const dtSample = full.length > 1 ? (full[full.length - 1].t - full[0].t) / (full.length - 1) : 1 / 120;
+    const win = Math.max(3, Math.round(K.AGC.TAU / 2 / Math.max(dtSample, 1e-6)) | 1);
+    const smooth = late.map((_, i) => {
+      const a = Math.max(0, i - (win >> 1)), b = Math.min(late.length, i + (win >> 1) + 1);
+      let s2 = 0; for (let j = a; j < b; j++) s2 += late[j];
+      return s2 / (b - a);
+    });
+    const curv = (a) => {
+      if (a.length < 5) return 0;
       let sum = 0, n2 = 0;
-      for (let i = 1; i < late.length - 1; i++) {
-        const c = late[i] - (late[i - 1] + late[i + 1]) / 2;
-        sum += c * c; n2++;
-      }
+      for (let i = 1; i < a.length - 1; i++) { const c = a[i] - (a[i - 1] + a[i + 1]) / 2; sum += c * c; n2++; }
       return n2 ? Math.sqrt(sum / n2) : 0;
+    };
+    const ripple = curv(smooth);                       // ② 制御帯域の往復
+    const resonance = (() => {                          // ③ 固有振動ぶん（参考）
+      if (late.length < 5) return 0;
+      let sum = 0; for (let i = 0; i < late.length; i++) sum += (late[i] - smooth[i]) ** 2;
+      return Math.sqrt(sum / late.length);
     })();
     /* «往復しているか» は符号の反転で見る。単調に増えるだけのずれ（尻が冷えて荷重が
      * 立つ、など）は反転しない。標本 100 点あたりの反転数で出す —— 発振なら 50 に近づき、
@@ -88,7 +106,7 @@ const out = await page.evaluate(() => {
     const q4 = avg(full.filter(q => q.dHead > cur.len * 0.75).map(q => q.f));
     R.passes.push({
       pass: cur.pass, gap: cur.gap, len: Math.round(cur.len / 1000),
-      ripple: +ripple.toFixed(4), flips: +flips.toFixed(1),
+      ripple: +ripple.toFixed(4), reson: +resonance.toFixed(4), flips: +flips.toFixed(1),
       spike: Math.round(spike), headRef: Math.round(headRef),
       spikeR: +(spike / Math.max(headRef, 1)).toFixed(3),
       headR: +(headF / Math.max(headRef, 1)).toFixed(3),
@@ -157,8 +175,10 @@ const out = await page.evaluate(() => {
   // 巻取パスは頭がコイルの中で断熱され（+40 K）、尻だけが冷えるので «両端が冷たい» の対象外
   ok('頭・尻が中央より冷えている（長手方向の温度偏差。巻取パスを除く）', ps.filter(q => !q.coil).every(q => q.dTend < q.dTmid - 3),
      ps.map(q => `P${q.pass} ${q.dTend}/${q.dTmid}`).slice(0, 4).join(' '));
-  ok('板厚制御が発振しない（往復成分 ripple が目標板厚の 1 % 以内）',
+  ok('板厚制御が発振しない（制御帯域の往復が目標板厚の 1 % 以内）',
      ps.every(q => q.ripple <= q.gap * 0.01), ps.map(q => `P${q.pass} ${q.ripple}`).join(' '));
+  ok('（参考）スタンドの固有振動（15 Hz）ぶんの振れ —— 圧下は TAU 0.55 s なので追えない',
+     true, ps.map(q => `P${q.pass} ${q.reson}`).join(' '), true);
   ok('（参考）ギャップが «往復» しているか（標本 100 点あたりの向きの反転数）', true,
      ps.map(q => `P${q.pass} ${q.flips}`).join(' '), true);
   /* 振れ幅そのものは «荷重が動いたぶんミルが伸びる» を含むので、合否には数えず参考に出す。
@@ -178,7 +198,7 @@ for (const c of out.checks) console.log(`  ${c.ref ? '??  ' : c.pass ? 'ok  ' : 
 console.log('\npass 別:');
 for (const q of out.passes)
   console.log(`  P${String(q.pass).padStart(2)} 出側 ${String(q.gap).padStart(6)} mm  板長 ${String(q.len).padStart(3)} m  ` +
-    `衝撃 ${q.spikeR}  頭 ${q.headR}  尻 ${q.tailR}  振れ ${q.band} mm（往復 ${q.ripple} mm・反転 ${q.flips}/100）  端部 ${q.dTend} K`);
+    `衝撃 ${q.spikeR}  頭 ${q.headR}  尻 ${q.tailR}  振れ ${q.band} mm（制御帯域 ${q.ripple} ／ 固有振動 ${q.reson} mm）  端部 ${q.dTend} K`);
 const nRef = out.checks.filter(c => c.ref).length;
 console.log(`\nRESULT: ${out.failed ? 'FAIL' : 'PASS'} (${out.checks.length - nRef - out.failed}/${out.checks.length - nRef}`
   + `${nRef ? `、参考 ${nRef} 件` : ''})`);
