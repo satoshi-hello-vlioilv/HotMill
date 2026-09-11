@@ -17,7 +17,8 @@ const out = await page.evaluate(({ alloy, target }) => {
      *（tools/calib.mjs の目安時間と同じ扱い）。実機の実測が取れたら通常の項目に戻す。 */
     const ok = (n, c, d, soft = false) => checks.push({ name: n, pass: !!c, detail: d, soft });
     let last = -2, maxAsym = 0, drawnMax = 0, analyticMax = 0, wasRolling = false;
-    let headKink = { drop: 0, x: null, pass: null };
+    let headKink = { drop: 0, x: null, pass: null };       // 帯の «外» の落ち込み（＝ 誤り）
+    let jawFold  = { drop: 0, x: null, pass: null, th: 0 }; // 帯の «中» の折れ込み（＝ 正しい姿）
     // 未圧延側（尾端）の反りがパス中に変わっていないか。ワークロールに触れていない部分は
     // 曲率も «自分の板厚から決まる浮き上がり長» も変わってはいけない。
     const tailProbe = [];
@@ -39,10 +40,21 @@ const out = await page.evaluate(({ alloy, target }) => {
           for (let i = 0; i < pos.count; i++) my = Math.max(my, pos.getY(i));
           const lift = my / sc - (K.MILL.PASS_LINE + p.mill.gap);
           drawnMax = Math.max(drawnMax, lift);
-          // 反りの «折れ» 検査: 板は両端が持ち上がるので、端から 1.2 m の窓の中だけを見て
-          // «端へ向かって高さが下がらない» ことを確かめる。端部の張り出し（ワニ口）で端より
-          // 外へ出た頂点だけが落ち込む種類の誤りは、この窓でしか捕まらない。
+          /* 反りの «折れ» 検査: 板は両端が持ち上がるので、端から 1.2 m の窓の中だけを見て
+           * «端へ向かって高さが下がらない» ことを確かめる。端部の張り出し（ワニ口）で端より
+           * 外へ出た頂点だけが落ち込む種類の誤りは、この窓でしか捕まらない。
+           *
+           * ただし VER.1.22.0 で «ワニ口のあごが内側へ折れ込む» ようになったので、
+           * 端部欠陥の帯（zone）の中では上面が下がるのが «正しい» —— 割れたあごは次に
+           * ロールへ当たったところで中心側へ押し戻されるからで、これを落ち込みとして
+           * 数えると、直したことのほうを不合格にしてしまう。そこで窓を 2 つに分ける:
+           *   ・帯の外 … 落ち込みは 0 でなければならない（元から見ていた誤り）
+           *   ・帯の中 … 折れ込みは許すが «板厚の半分» を超えてはならない（あご 1 枚の厚み）
+           */
+          const shp = s.shape();
           for (const end of [1, -1]) {
+            const e = shp.ends[end === 1 ? 1 : '-1'];
+            const zone = (e && e.cut === null && e.gator > 0) ? e.zone : 0;
             const base = W.slabView.base, pts = [];
             for (let i = 0; i < pos.count; i++) {
               if (base.getY(i) + 0.5 < 0.99 || Math.abs(base.getZ(i)) > 1e-6) continue;   // 上面・幅中央
@@ -55,7 +67,11 @@ const out = await page.evaluate(({ alloy, target }) => {
             const win = pts.filter(q => q[0] > Math.max(x1 - 1200, 1500));
             for (let i = 1; i < win.length; i++) {
               const drop = win[i - 1][1] - win[i][1];                    // 端へ向かって «下がった» 量
-              if (drop > headKink.drop) headKink = { drop, x: Math.round(win[i][0] * end), pass: p.mill.passIndex, end };
+              const inZone = (x1 - win[i][0]) < zone;                    // 端部欠陥の帯の中か
+              const rec = { drop, x: Math.round(win[i][0] * end), pass: p.mill.passIndex, end,
+                            th: s.thickness, zone: Math.round(zone) };
+              if (inZone) { if (drop > jawFold.drop) jawFold = rec; }
+              else if (drop > headKink.drop) headKink = rec;
             }
           }
         }
@@ -127,8 +143,14 @@ const out = await page.evaluate(({ alloy, target }) => {
          `最大 ${tipMax} mm ／ 帯は実測ではなく置いた値（README 残件: 実機の反り量）`, true);
     }
     ok('描画の持ち上がりが現実的（1.5 m 以内、片持ちの立ち上がりを含む）', drawnMax <= 1500, `描画最大 ${drawnMax.toFixed(0)} mm ／ 着地後のスキー最大 ${analyticMax.toFixed(0)} mm`);
-    ok('板端が反りと逆へ折れない（張り出し部だけ落ち込まない）', headKink.drop <= 5,
-       `端へ向かう最大の落ち込み ${headKink.drop.toFixed(0)} mm${headKink.x === null ? '' : `（x=${headKink.x}, ${headKink.end > 0 ? 'xMax' : 'xMin'} 側, パス ${headKink.pass}）`}`);
+    ok('端部欠陥の帯の «外» では板端が反りと逆へ折れない', headKink.drop <= 5,
+       `帯の外の最大の落ち込み ${headKink.drop.toFixed(0)} mm${headKink.x === null ? '' : `（x=${headKink.x}, ${headKink.end > 0 ? 'xMax' : 'xMin'} 側, パス ${headKink.pass}）`}`);
+    /* 帯の中の折れ込みは «あってよい» —— ただしあご 1 枚は板厚の半分しかないので、
+     * 上面がそれより下がったら（＝ 芯を越えて折れたら）物理的におかしい。 */
+    ok('端部欠陥の帯の «中» の折れ込みが板厚の半分を超えない（あご 1 枚の厚み）',
+       jawFold.drop <= jawFold.th / 2 + 1,
+       jawFold.x === null ? '折れ込み無し'
+         : `最大 ${jawFold.drop.toFixed(0)} mm ／ 板厚 ${jawFold.th.toFixed(0)} mm の半分 ${(jawFold.th / 2).toFixed(0)} mm（x=${jawFold.x}, 帯 ${jawFold.zone} mm, パス ${jawFold.pass}）`);
     ok('圧延が完走した', P.finish.done, `done=${P.finish.done}`);
     ok('温度は NaN でない', Number.isFinite(s.temperature) && s.T.every(Number.isFinite), `${s.temperature.toFixed(1)} ℃`);
     res({ alloy: s.alloyKey, rows, checks, final: { th: +s.thickness.toFixed(1), T: +s.temperature.toFixed(0), passes: K.SCHEDULE.length, done: P.finish.done, mode: P.finish.mode } });

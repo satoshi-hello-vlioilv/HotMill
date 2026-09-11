@@ -392,13 +392,18 @@ const out = await page.evaluate(() => {
       ok('入側のコロが図面どおりの群（群の中は 350 ピッチ・群のあいだが空く）',
          xs.length === 11 && tight === 8 && gaps.length === 2,
          `間隔 ${d.join(' / ')} mm（350 が ${tight} か所・空きが ${gaps.length} か所）`);
-      ok('拡縮シリンダーが «空き» の位置にある（少なくとも 1 か所）',
-         L.guideArmXs(inSt.x).some(a => {
-           let k = 0;
-           for (let i = 0; i < G.IN_N.length - 1; i++) { k += G.IN_N[i];
-             if (Math.abs(a - (xs[k - 1] + xs[k]) / 2) < 1) return true; }
-           return false;
-         }), `シリンダー ${L.guideArmXs(inSt.x).map(a => Math.round(inSt.x < 0 ? -1 : 1)).length} 本`);
+      /* 拡縮シリンダーは «コロが空いている場所» —— 区分の切れ目がそのままシリンダーの
+       * place。図面の空きは 2 か所（バー中心から −1,115 と ＋1,517）なので、その両方に
+       * 立っていること。以前は外側に床が無く内へ寄せていたが、装入設備一式を外へ移して
+       * 図面どおりに立てられるようになった。 */
+      const gapXs = [];
+      { let k = 0; for (let i = 0; i < G.IN_N.length - 1; i++) { k += G.IN_N[i]; gapXs.push((xs[k - 1] + xs[k]) / 2); } }
+      const arms = L.guideArmXs(inSt.x);
+      const onGap = gapXs.every(g => arms.some(a => Math.abs(a - g) < 1));
+      const cx = L.guideCX(inSt.x), w = (v) => Math.round(Math.abs(cx) + v);
+      ok('拡縮シリンダーが図面どおりの «空き» 2 か所すべてに立つ',
+         onGap && arms.length === gapXs.length,
+         `シリンダー ${arms.map(w).join(' / ')} ／ 空き ${gapXs.map(w).join(' / ')} mm`);
     }
     // 実体を測る: コロの数・本体の長さ・シャフトの長さ・下端の高さ
     const box = o => { const b = new T.Box3().setFromObject(o); return { y: [b.min.y / S, b.max.y / S], x: [b.min.x / S, b.max.x / S] }; };

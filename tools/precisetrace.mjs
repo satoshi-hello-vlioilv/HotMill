@@ -17,8 +17,9 @@ const out = await page.evaluate(async () => {
   for (const key of Object.keys(K.ALLOYS)) {
     const al = K.ALLOYS[key], st = R.stParams(al);
     const raw = (T, e) => {
-      const Z = R.zener(T, e, al);
-      return Math.asinh(Math.sinh(st.alpha * al.C) * Math.pow(Z / st.Zref, 1 / st.n)) / al._st.alpha;
+      /* «上限（KF_MAX）を掛ける前» の生の構成式。materials の定数をそのまま使う
+       * （以前は経験式の C を通していたが、構成式を物理パラメータ化して C は無くなった）。 */
+      return R.sigmaOf(T, e, st.n, st.alpha, st.Q, st.lnA);
     };
     let worst = 0, at = '';
     for (let T = al.T_ROLL[0] - 60; T <= al.T_ROLL[1]; T += 5)
@@ -74,7 +75,7 @@ const out = await page.evaluate(async () => {
   const oldErr = Math.max(...qRows.map(r => Math.abs(r.旧誤差)));
   ok('直す前の当て推量は無視できないずれだった（記録）', oldErr > 0.15,
      `旧: 最大 ${(oldErr * 100).toFixed(0)} %`);
-  const M0 = K.MILL.MODULUS, gain = (q) => q * q / (M0 * (M0 + q));
+  const M0 = R.millModulus(1500), gain = (q) => q * q / (M0 * (M0 + q));   // その荷重での増分ばね定数
   const gRows = qRows.map(r => +(gain(r.旧) / gain(r.真値)).toFixed(2));
   ok('フィードフォワード利得が真値どおりになった',
      qRows.every(r => Math.abs(gain(r.Q) / gain(r.真値) - 1) < 0.06),

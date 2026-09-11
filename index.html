@@ -3,7 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>アルミニウム熱間圧延シミュレータ HYPER MILL</title>
+<title>熱間圧延機シミュレータ</title>
+<!-- ファビコン。外部へ取りに行かず、SVG のデータ URI で置く（単一ファイルのまま動く）。
+     «4 段ミル» を正面から見た形 —— 上下のバックアップロール（大）とワークロール（小）の
+     あいだを、赤熱した板が通る。小さく潰れても «2 大 2 小 ＋ 横一本» の並びで判る。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231b262c'/%3E%3Ccircle cx='32' cy='13' r='11' fill='%238d9aa3'/%3E%3Ccircle cx='32' cy='51' r='11' fill='%238d9aa3'/%3E%3Ccircle cx='32' cy='25' r='6.5' fill='%23d5dade'/%3E%3Ccircle cx='32' cy='39' r='6.5' fill='%23d5dade'/%3E%3Crect x='2' y='30' width='60' height='4' rx='1' fill='%23ff7a35'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
 /* =========================================================================
@@ -113,10 +117,12 @@ canvas { display:block; }
 #btn-log-close { width:27px; height:27px; border-radius:8px; font-size:13px;
   border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; cursor:pointer; }
 #btn-log-close:hover { background:rgba(255,255,255,.2); }
-/* 操作列: «何を見るか»（タブ）・«どの項目»・«どのパス» の 3 つだけを 1 行に置く。
-   選ぶ中身（項目 11 個・パス 23 個）はポップオーバーへ入れて、行が折り返さないようにする。 */
-.pnl .ctl { flex:none; display:flex; gap:8px; align-items:center; min-height:40px;
-  padding:6px 14px; background:var(--s-2); border-bottom:1px solid var(--line-2); }
+/* 操作列: «何を見るか»（タブ）・«どの項目»・«どのパス»・«横軸の倍率» を 1 行に置く。
+   選ぶ中身（項目 11 個・パス 23 個）はポップオーバーへ入れて、行が伸びないようにする。
+   それでも板を最小幅（520px）まで縮めると 1 行には収まらないので «折り返す» ——
+   隠す・潰すのではなく段を増やす。読めなくなる操作が出ないのがいちばん安い。 */
+.pnl .ctl { flex:none; display:flex; flex-wrap:wrap; gap:8px; row-gap:6px; align-items:center;
+  min-height:40px; padding:6px 14px; background:var(--s-2); border-bottom:1px solid var(--line-2); }
 .pnl .ctl .sep { width:1px; align-self:stretch; background:var(--line); margin:2px 2px; flex:none; }
 .pnl .ctl .seg { flex:none; }
 .pnl .ctl .seg button { padding:4px 10px; font-size:10.5px; white-space:nowrap; }
@@ -157,8 +163,16 @@ canvas { display:block; }
 /* 板を大きくしたぶんはチャートと表で分け合う（余白が増えるだけにしない） */
 .pnl .body { flex:1 1 auto; display:flex; flex-direction:column; gap:10px;
   padding:10px 14px 12px; overflow:hidden; min-height:0; }
+/* グラフ枠。横軸スケール（ズーム）を上げると中の SVG だけが横に伸び、枠はスクロールする。
+   «枠の大きさはそのまま・中身だけが伸びる» ので、板の大きさと軸の拡大が別々に扱える。 */
 .pnl .chart { position:relative; flex:1 1 44%; min-height:150px; border:1px solid var(--line-2);
-  border-radius:var(--r-m); background:var(--s-2); overflow:hidden; cursor:crosshair; }
+  border-radius:var(--r-m); background:var(--s-2); overflow:auto hidden; cursor:crosshair; }
+.pnl .chart[data-zoom="1"] { overflow:hidden; }
+/* 横軸スケールのつまみ。1 倍（全体が収まる）から 20 倍まで。数字はその場に出す。 */
+.pnl .zoom { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; color:var(--ink-3);
+  flex:0 1 auto; min-width:0; }
+.pnl .zoom input[type=range] { width:110px; min-width:64px; flex:0 1 auto; accent-color:var(--accent, #3a7bd5); }
+.pnl .zoom b { font-variant-numeric:tabular-nums; color:var(--ink-2); min-width:30px; text-align:right; }
 /* 読み取り線。グラフは «形» を見るためのものだが、数値をその場で読めないと結局
    表に戻ることになる。線を当てた時刻の値をその場に出して、往復させない。 */
 .pnl .chart .cross { position:absolute; top:0; bottom:0; width:1px; background:var(--ink-3);
@@ -170,7 +184,9 @@ canvas { display:block; }
 .pnl .chart .read b { font-weight:800; }
 .pnl .chart .read i { font-style:normal; display:inline-block; width:8px; height:8px;
   border-radius:2px; margin-right:5px; vertical-align:-1px; }
-.pnl .chart svg { display:block; width:100%; height:100%; }
+/* 横軸を引き伸ばしたときは «枠より広い» SVG を実寸で置く。ここで width:100% を
+   掛けると枠に押し込まれてスクロールできないので、高さだけを枠に合わせる。 */
+.pnl .chart svg { display:block; height:100%; }
 .pnl .tblwrap { flex:1 1 56%; min-height:90px; overflow:auto; }
 .pnl table { border-collapse:collapse; width:100%; font-size:11.5px; font-variant-numeric:tabular-nums; }
 .pnl th, .pnl td { padding:5px 8px; border-bottom:1px solid var(--line-2); text-align:right; white-space:nowrap; }
@@ -189,7 +205,18 @@ canvas { display:block; }
   font-size:10.5px; color:var(--ink-3); display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
 .pnl .lg { display:inline-flex; align-items:center; gap:5px; }
 .pnl .lg s { display:inline-block; width:14px; height:3px; border-radius:2px; text-decoration:none; }
-#log-grip { position:absolute; right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize;
+/* 大きさ変更の掴み手。4 辺 ＋ 4 隅のどこからでも掴める。
+   辺は «縁に沿った細い帯»、隅は «角の小さな正方形» で、隅を辺より上に重ねる。
+   目で探させないよう、右下だけは従来どおり «斜めの線» を描いて掴み手だと分かるようにする。 */
+.pnl .rz { position:absolute; z-index:2; }
+.pnl .rz-n { left:8px; right:8px; top:0; height:6px; cursor:ns-resize; }
+.pnl .rz-s { left:8px; right:8px; bottom:0; height:6px; cursor:ns-resize; }
+.pnl .rz-w { top:8px; bottom:8px; left:0; width:6px; cursor:ew-resize; }
+.pnl .rz-e { top:8px; bottom:8px; right:0; width:6px; cursor:ew-resize; }
+.pnl .rz-nw { left:0; top:0; width:12px; height:12px; cursor:nwse-resize; z-index:3; }
+.pnl .rz-ne { right:0; top:0; width:12px; height:12px; cursor:nesw-resize; z-index:3; }
+.pnl .rz-sw { left:0; bottom:0; width:12px; height:12px; cursor:nesw-resize; z-index:3; }
+.pnl .rz-se { right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize; z-index:3;
   background:linear-gradient(135deg,transparent 46%,var(--line) 46%,var(--line) 54%,transparent 54%,
              transparent 66%,var(--line) 66%,var(--line) 74%,transparent 74%); }
 
@@ -712,7 +739,7 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   <header class="brand">
     <i class="fa-solid fa-industry"></i>
     <div>
-      <div class="n">HYPER MILL<button id="btn-ver" class="ver" type="button"
+      <div class="n">熱間圧延機シミュレータ<button id="btn-ver" class="ver" type="button"
         title="版数と変更履歴を見る（V）" aria-haspopup="dialog">VER.–</button></div>
       <div class="sub">アルミニウム熱間可逆圧延機 / 4-High Reversing Mill</div>
     </div>
@@ -1019,7 +1046,7 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
     <div class="val"><span id="m-temp-v">500</span><u>℃</u></div>
     <div class="mx">
       <div class="r"><span id="m-temp-s">上 500 ／ 芯 500 ／ 下 500</span></div>
-      <div class="r"><span>コーティング</span><b id="m-coat-v">–</b><u>µm</u><span id="m-coat-s">–</span></div>
+      <div class="r"><span>コート</span><b id="m-coat-v">–</b><u>µm</u><span id="m-coat-s">–</span><span>組織</span><b id="m-micro-v">–</b><u>µm</u><span id="m-micro-s">–</span></div>
     </div></div>
 
   <div class="mc"><div class="k">品質（狙いとのずれ）</div>
@@ -1148,6 +1175,11 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
       <div class="cards" id="plan-saved"></div>
     </div>
   </div>
+  <div class="rz rz-n" data-rz="n"></div><div class="rz rz-s" data-rz="s"></div>
+  <div class="rz rz-w" data-rz="w"></div><div class="rz rz-e" data-rz="e"></div>
+  <div class="rz rz-nw" data-rz="nw"></div><div class="rz rz-ne" data-rz="ne"></div>
+  <div class="rz rz-sw" data-rz="sw"></div>
+  <div class="rz rz-se" data-rz="se" title="ドラッグで大きさを変える（4 辺・4 隅どこでも）"></div>
 </section>
 
 <!-- 圧延実績ビュワー。«計器が指した値» だけを、パス表と時系列で見せる。3D を見ながら使うので «モーダルではない» 板（パネル）にしてある。
@@ -1190,6 +1222,10 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
         <div class="chips" id="log-passes"></div>
       </div>
     </div>
+    <label class="zoom" title="グラフの横軸（時間）を引き伸ばします。1 倍で全体、上げると細かいところが読めます（枠は横スクロール）">
+      横軸 <input type="range" id="log-zoom" min="1" max="20" step="0.5" value="1"><b id="log-zoom-v">1.0×</b>
+      <button class="mini" id="log-zoom-fit" type="button" title="全体が収まる倍率へ戻す">全体</button>
+    </label>
     <span class="ctlhint">グラフ上でなぞると、その時刻の値が読めます</span>
   </div>
   <div class="body">
@@ -1208,7 +1244,11 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
     </tr></thead><tbody></tbody></table></div>
   </div>
   <footer id="log-foot">パスが終わるたびに 1 行増えます。平均は «噛んでいる間» だけで取っています。</footer>
-  <div id="log-grip" title="ドラッグで大きさを変える"></div>
+  <div class="rz rz-n" data-rz="n"></div><div class="rz rz-s" data-rz="s"></div>
+  <div class="rz rz-w" data-rz="w"></div><div class="rz rz-e" data-rz="e"></div>
+  <div class="rz rz-nw" data-rz="nw"></div><div class="rz rz-ne" data-rz="ne"></div>
+  <div class="rz rz-sw" data-rz="sw"></div>
+  <div class="rz rz-se" data-rz="se" title="ドラッグで大きさを変える（4 辺・4 隅どこでも）"></div>
 </section>
 
 <!-- 版数と変更履歴。«今どの版か» と «その版で何が入ったか» を 1 画面で見せる -->
@@ -1313,7 +1353,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
-    { v: '1.22.0', base: 'a0531ac', date: '2026-09-10', title: '図面どおりのローラを保つ・冷却モデルを上下面に分ける・沸騰曲線を液の状態で動かす・主駆動系に軸受摩擦とロール慣性・ロールコーティングとブラシ', items: [
+    { v: '1.22.0', base: 'a0531ac', date: '2026-09-10', title: '図面どおりのローラを保つ・冷却モデルを上下面に分ける・主駆動系に軸受摩擦とロール慣性・構成式を物理パラメータで持つ・圧力分布を解く・実機のミル定数と主機トルクカーブ・組織の履歴', items: [
       // --- テーブルローラ ---
       { t: 'X 線板厚計のために抜いていたローラ 3 本を戻し、図面どおりの本数とピッチにした。計器は «ローラとローラのあいだ» へ納める —— 計器の X は隣り合うローラの中点、下腕は軸受台のすきま（ピッチ 370 で 176 mm）を通す薄い断面、検出器はローラ最下点（618）より下', w: 'CONFIG.XRAY / Parts.xrayFrame' },
       { t: '腕はヘッドと同じ高さには置けない（同じ場所を取り合う）。上腕は線源の上、下腕は検出器の下に付ける', w: 'Parts.xrayFrame' },
@@ -1396,6 +1436,50 @@ const VERSION = {
       { t: '噴流の効き（JET）を «ロールから流れ落ちる» ぶんにも掛けていた。下面の抜熱が 35 % 過大だった', w: 'PhysicsEngine.surfaceCool' },
       { t: '較正のノブ（--set）で «false» が文字列のまま渡り、スイッチを切る実験がすべて効いていなかった', w: 'tools/reallot.mjs parseSets' },
       { t: '圧延で «体積が保たれるか» を素材長を変えて測る評価器を足した。出荷時のロット（530 × 1,330 × 3,450）は保たれる（ずれ −0.5 %）が、素材長 3,000 と 2,000 では板の体積が +21.2 % / +29.7 % ずれることが分かった。分かれるのは 16 mm へ入るパス 1 本で、その途中で平均板厚が出側ギャップを割り込む —— 材料の勘定は保たれているので、走っているのは幾何（xMax − xMin）の側。原因は未特定で、まだ直していない（README の 20 番）', w: 'tools/voltrace.mjs' },
+      // --- 実機データの反映（ミル定数・主機のトルクカーブ）---
+      { t: 'ミル定数を実機の測定値にした。ミル定数は «一定ではない» —— ハウジング・チョック・軸受のがたが荷重で締まるほど硬くなる。伸びの帯ごとの増分ばね定数 0〜1 mm 226 ／ 1〜2 244 ／ 2〜3 267 ／ 3〜4 281 ／ 4〜5 296 t/mm。従来の 550 t/mm 一定は実機の 2 倍以上硬く、2,600 t での伸びが 4.73 mm（実機の表なら 9.34 mm）と半分しか出ていなかった', w: 'MILL.MODULUS_TABLE / Rolling.millStretch' },
+      { t: 'ゲージメータ・ロードセル・圧下の下限がすべて同じ表を見る。ばねが非線形なので «荷重 ÷ 定数» ではなく «表から引いた伸び» を使う', w: 'Rolling.millForce / millStretch / millModulus' },
+      { t: '主機を更新後の実機仕様にした。2,000 kW × 2 台・IEGT インバータ・トランス 2,800 kVA × 2・真空遮断器（VCB）', w: 'CONFIG.DRIVE' },
+      { t: '主機のトルクカーブを実測値そのものにした。最大 1,520 kN·m（ベース速度 75 mpm まで一定）・定格 1,400 kN·m・最高速度 160 mpm・過負荷耐量 225 %/60 s。検算: 1,520 kN·m × 2.688 rad/s ＝ 4.09 MW で定格出力 4.0 MW と合う。従来は «電動機 kW ÷ 基底回転数 × 減速比» で組み立てた推定（1,442 kN·m 相当）だった', w: 'DRIVE.TORQUE_MAX / V_BASE / Drive.curveTorque' },
+      { t: '動力の上限に使っていた推定の margin（0.95）をやめ、実機の過負荷耐量そのもので見るようにした', w: 'Rolling.buildSchedule' },
+      // --- 組織の履歴（回復・再結晶を別の状態量として持つ）---
+      { t: '組織の履歴を状態量として持つようにした。亜結晶粒径・静的再結晶率・残留ひずみの 3 つ。文献どおり «変形中の亜結晶粒径はその場の Z だけで決まる»（1/d ＝ A ＋ B·log₁₀Z）ので履歴は持たず、履歴が要るのは «パスとパスのあいだ» —— 時間と温度で静的再結晶が進み（Avrami）、食い残しが次のパスへ持ち越される', w: 'PhysicsEngine._micro / CONFIG.MICRO' },
+      { t: '実測: 亜結晶粒径は 430 ℃/0.8 s⁻¹ で 3.4 µm、390 ℃/9.5 s⁻¹ で 2.1 µm（アルミ熱間の実測レンジ 1〜10 µm の中）。再結晶の半減時間は 450 ℃ で 2.0 s、390 ℃ で 29.7 s。運転では厚板段の持ち越しが 0.13 前後、最終パスで 0.77 まで増える（低温・短いパス間で再結晶しきれない）', w: 'tools/microtrace.mjs' },
+      { t: '材料の札に組織を出した（亜結晶粒径と再結晶率）', w: '#m-micro-v' },
+      { t: '実装中に 3 つ間違えた。① 材料点が 1 パスで受けるひずみは ln(h_in/h_out) なのに ε̇·dt を «パスの長さ» で積んでいた（23 パスで 3,659 になった）。② 再結晶後の粒成長を毎ステップ掛けて指数発散させた（亜結晶粒径 10⁸⁰ µm）。③ 残留ひずみを同じ分岐で読み書きして自己加算させた（どのパスでも上限に張り付いた）。いずれも実測で見つけて直した', w: 'PhysicsEngine._micro' },
+      { t: '反りの «折れ» 検査が、直したことのほうを不合格にしていた。ワニ口のあごが内側へ折れ込むようになったので、端部欠陥の帯の中では上面が下がるのが正しい姿。窓を «帯の外»（落ち込みは 0）と «帯の中»（折れ込みは板厚の半分まで）に分けた。実測: 帯の外 1 mm、帯の中は板厚 85 mm に対し 8 mm（半分の 43 mm 以内）', w: 'tools/curltrace.mjs' },
+      { t: '実機のミル定数にしたら巻取パスでギャップが往復するようになった。120 Hz で記録して成分に分けたら、自己相関の山がちょうど 15.00 Hz ＝ スタンドの固有振動（STAND.FN）だった。圧下は一次遅れ 0.55 s なのでこの速さでは動けず、制御とは無関係。スタンドのばね M と材料のばね Q は連成して実効減衰が ζ/√(1+Q/M) に下がるので、ミルが柔らかくなったぶん鳴くようになった —— 実機の «チャタ» に相当する現象で、モデルが実在の現象を再現するようになった側', w: 'PhysicsEngine._agc / tools/loadtrace.mjs' },
+      { t: '«板厚制御が発振しない» の判定が 3 つを混ぜていた。①荷重が上がればミルが伸びる（追従の遅れ）②制御帯域の往復（これが発振）③スタンドの固有振動。移動平均（窓は圧下の応答時定数の半分）で③を落としてから②を測る形にし、①③は参考に回した。実測: 巻取パスの往復 0.123 mm のうち制御帯域は 0.0025 mm で、残りはすべて固有振動だった', w: 'tools/loadtrace.mjs' },
+      { t: '最初に «圧下の遅れが微分フィードバックとして働く» と読んで進み補償（lead）を入れたが、実測で悪化した（往復 0.123 → 0.147 mm）。進みは高い周波数ほど利得が上がるので、打ち消したい遅れより先にロール偏芯を増幅していた。取り消した —— 機序の切り分け（ミル定数を旧値に戻すと 0.123 → 0.027 mm）は正しかったが、打ち消し方の選び方が誤りだった', w: 'CONFIG.AGC' },
+      { t: '体積保存の判定を «板だけ» から «板 ＋ 切り落とした材料» に直した。クロップで落とした材料は板から消えるのが正しいので、板だけの増減は不具合ではなく «どれだけクロップしたか»。板の論理長がカットの前後で減った量を積んで測る。出荷ロットは +0.8 % で保たれており、壊れている素材長は 4 つから 2 つ（3,000 と 2,000）に絞れた', w: 'tools/voltrace.mjs' },
+      { t: 'クロップ屑の評価器が 3 カット中 1 つを取りこぼしていた。逆転を BUR のすべり上限で頭打ちにしてから 1 ロットの所要が延び、420 s の窓から最後のカットが出ていた。900 s へ（実測 446 s で 4 カット完了）', w: 'tools/scraptrace.mjs' },
+      { t: '実績ビュワーの操作列が、横軸スライダーを足したぶん板の最小幅（520px）ではみ出していた。隠す・潰すのではなく折り返す', w: '.pnl .ctl' },
+      { t: '長手の板厚の振れが実機の実力（±50 µm ＝ 3σ）より 12 % 高くなった。外乱を 1 つずつ切って測ると、摩擦の揺らぎは切っても変わらず（19.2 → 19.2 µm）、スタンドの減衰を上げても下がらず（ζ 0.35 → 0.9 で 18.7 → 20.6 µm）、偏芯を切ると −23 %（18.7 → 14.6 µm）。残りは前のパスの凹凸の持ち回りで、ミルが柔らかいほど大きい（δ·Q/(M+Q)）—— 実機のミル定数から物理的に決まる量で、当てはめて下げるつまみが無い', w: 'tools/gaugetrace.mjs' },
+      { t: '差の説明として最も有力なのは «実機の AGC が持つ偏芯補償（ノッチフィルタ）が未実装» で、これは定量的に確かめられる —— 偏芯を切ったときの σ 14.6 µm は 3σ 44 µm で、ちょうど実力に入る。判定の帯は 35〜65 µm（実力の ±30 %）にして «桁に乗っているか» を見るに留め、パスごとの上限は参考へ回した（いただいたのは平均の実力 1 つで、パスごとの上限はこちらが置いた値だから）', w: 'README 残件 23' },
+      // --- 教育資料（圧延荷重に効く要因）---
+      { t: '圧延荷重に «何が・どれだけ・どう» 効くかを測る評価器を作った。感度（∂lnF/∂lnX ＝ 1 % 動かしたら何 %）と、それに «実機でその量が振れる幅» を掛けた影響度の 2 段構え。感度だけ見るとロール径は摩擦と並ぶ大物に見えるが、実機では新品から研磨限まででも 4.8 % しか細くならないので効かない —— 順位を決めるのは影響度のほう', w: 'tools/sensload.mjs' },
+      { t: '実測の順位: 材質 +343 % ＞ 圧下量 +41〜206 % ＞ 板幅 +60 % ＞ 摩擦 +4.6〜102 % ＞ 温度 −19〜23 % ＞ 張力 −23 % ＞ 速度 +19〜−3 % ＞ ロール径 +2.4〜5.8 %。厚板と薄板で順位が入れ替わり、その物差しは Ld/h̄（接触弧長 ÷ 平均板厚）ただ 1 つ —— 摩擦は厚板段で 0.085、巻取パスで 1.342', w: 'tools/sensload.mjs' },
+      { t: '判定のしきい値を «帯» で置けない量があることが分かった。摩擦と圧下量の感度は Ld/h̄ で桁が変わるのが正しい姿なので、帯ではなく «Ld/h̄ に対して単調に増える» で縛る。圧下量だけは単調にならない（幾何 0.5 ＋ 摩擦丘 ＋ ひずみ速度の足し算で、3 つ目が Ld/h̄ の小さい側で効く）ので、そこは参考として値を出す', w: 'tools/sensload.mjs' },
+      { t: '教育資料として docs/圧延荷重に効く要因.md を書いた。数字はすべて評価器の出力で、推論で書いた数字は無い。今後の精度向上のロードマップも «入れれば効く順» ではなく «入れないと説明できない現象がある順» に並べ、必要な実機データを項目ごとに添えた', w: 'docs/圧延荷重に効く要因.md' },
+      { t: '組織の履歴は状態量としては持ったが «荷重へ返していない»。残留ひずみは最終パスで 0.77 まで貯まるのに、変形抵抗はひずみに依存しないまま（Sellars–Tegart は定常流動応力の式）。ロードマップの ★★★ 筆頭に置いた —— 8 割できていて、残るのは返す 1 本の式と、その係数を決める実機データ 2 点だけ', w: 'docs/圧延荷重に効く要因.md §6' },
+      { t: 'README の «精度を上げるためにまだ入れていない理論» が実装に追い越されていた（ロール扁平・構成式・ミル定数の非線形性を «未実装» と書いたまま）。荷重まわりは教育資料へ移し、README には形状・板厚・制御に効く側だけを残した。同じ表が 2 か所にあると片方だけ直して食い違う', w: 'README.md 2-3' },
+      // --- 名前とファビコン ---
+      { t: 'アプリ名を «熱間圧延機シミュレータ» にし、ファビコンを付けた。外部へ取りに行かず SVG のデータ URI で 4 段ミルの正面（大小 2 対のロールと赤熱した板）を描くので、単一ファイルのまま動く', w: '<title> / link rel=icon' },
+      // --- 構成式とひずみ速度感受性（m を «導出量» にする）---
+      { t: '構成式の材料定数をそのまま持つ形にした。Z ＝ ε̇·exp(Q/RT) ＝ A·[sinh(ασ)]^n で、Q は温度依存だけ・n と α はひずみ速度依存の形だけ・A は絶対値だけを決める。荷重の較正で動かしてよいのは A だけになった', w: 'Rolling.stParams / ALLOYS' },
+      { t: 'm（ひずみ速度感受性）を材料定数として持つのをやめ、導出量にした。双曲線正弦則から m_eff ＝ tanh(ασ)/(n·ασ) が解析的に出る。同じ A5052 でも 520 ℃/0.5 s⁻¹ で 0.177、380 ℃/50 s⁻¹ で 0.083（2.14 倍）', w: 'Rolling.mEff' },
+      { t: '以前は経験式 C·exp(−b·ΔT)·ε̇^m が主で Q と α を当てはめていたため、荷重に合わせて m を動かすと温度依存が一緒に動いた（Q_fit ＝ b·R·T_ref²/m）。n ＝ 1/m を固定したせいで α が辻褄合わせに使われ、8 材質中 6 つで n・α がアルミの公表値の帯を外れていた（A7075 の α は探索の下限に張り付き）', w: 'ALLOYS' },
+      { t: '接触弧の «中» のひずみ速度分布を入れた。ε̇(φ) ＝ 2·Q·tanφ/h² で出口 0・入口最大。平均 1 点で変形抵抗を評価すると asinh の凸性のぶんだけ高く出る（実測で全パス 3.8〜4.5 %）', w: 'Rolling.arcStrainRate / flowStressArc' },
+      { t: '圧力分布そのものを解くようにした（Bland–Ford のスラブ法）。荷重は分布の積分、トルクはロール面の摩擦力のモーメントで、«同じ分布から» 出す。従来はトルクが «荷重 × 一定アーム比» で、荷重の定数倍でしかなかった —— 感度行列の行列式が 0 で、m と μ を分けられなかった', w: 'Rolling.blandFord' },
+      { t: '界面のせん断応力に凝着の上限を入れた（τ ≤ k ＝ k\'/2）。μ·p が材料のせん断降伏を超えると界面はすべらず凝着する。入れないとアーム比 λ が薄板パスで 0.63〜0.69（熱間の実用値 0.4〜0.5）になっていた。荷重には効かず、トルクにだけ効く', w: 'Rolling.blandFord' },
+      { t: '荷重とトルクの感度行列が «特異でなくなった»。荷重 ∂lnF/∂lnμ 0.683 に対しトルク ∂lnT/∂lnμ 0.969、m へはどちらも 0.52 —— 2 つの測りもので m と μ を分けられる（行列式 0.143）', w: 'tools/mtrace.mjs' },
+      { t: '速度を変えたときの荷重変化を «ひずみ速度／摩擦» に分けて出す評価器を作った。実測: 仕上げ 26→16 で ∂lnF/∂lnv 0.047 ＝ ひずみ速度 +0.114 と摩擦 −0.067 の差し引き。巻取パスでは摩擦が勝って «速くすると荷重が下がる»', w: 'tools/mtrace.mjs' },
+      { t: 'トルクが 13 % 高くなったぶん、自動生成が実機の 120 mpm を出せず 115 mpm へ落ちた。エネルギーで検算すると新しいトルクのほうが正しい（厚板パスで理想仕事 6.28 MW に対し 7.31 MW ＝ 摩擦・冗長仕事 +16 %。旧モデルは +3 % で過小）ので、実機のスケジュールから動力の margin を同定し直した（0.84 → 0.95 ＝ 厚板段で定格の 1.9 倍まで使う）', w: 'Rolling.buildSchedule / DRIVE' },
+      // --- 主駆動系（バックアップロールは連れ回される）---
+      { t: 'バックアップロールは歯車で駆動されておらず、ワークロールとの摩擦で連れ回される。押しつけが弱い空転中（下ワークロールの自重 13.3 t だけ）は滑るので、上下を別々の状態として解くようにした', w: 'PhysicsEngine._burDrag' },
+      { t: '逆転の勾配を «BUR を滑らせない上限» で頭打ちにした。実測 47.8 mpm/s で、主機の能力（110 mpm/s）より先に効く。実機がこれを守るのは、滑らせるとロール表面が擦れ、アルミではそれがそのまま板の表面品質になるから。逆転は 1.07 → 2.49 秒になった', w: 'Drive.burAccelLimit' },
+      { t: '制動側に上限が無く青天井だったのを、主機の能力で頭打ちにした。指令から実トルクが立つまでの遅れ（電流の立ち上がり ＋ 駆動系のねじれ、τ 0.12 s）も入れた', w: 'PhysicsEngine._drive' },
+      { t: 'トルク収支が «圧延 ＋ 軸受 ＋ BUR を連れ回す ＋ 慣性» の 4 項で閉じる（最大差 0.000 N·m）', w: 'tools/drivetrace.mjs' },
       // --- サイドガイド（図面どおりの並び）・ピット炉・ワニ口のあご（ご回答を反映）---
       { t: 'サイドガイドのコロピッチを実機の 350 mm にした。入側のコロは «等間隔ではない» —— 拡縮シリンダーが収まる位置で間隔が空くので、図面の区分（1,570 / 2,680 / 1,150 ＝ 5,400）にコロを 3 / 6 / 2 本ずつ、区分の中央へ寄せて並べる。実測の間隔は 350/350/900/350/350/350/350/350/865/350 mm', w: 'TABLE.GUIDE.IN_SEG / IN_N / Layout.guideRollXs' },
       { t: 'バーの長さと位置を固定値で持つのをやめた。長さは区分の和、位置は «ミル側の端（NEAR）を入側・出側で揃えて外側へ自分の長さぶん伸ばす» で決まる。入側 2,240〜7,640・出側 −3,990〜−2,240', w: 'Layout.guideLen / guideCX' },
@@ -1929,13 +2013,22 @@ const CONFIG = {
     BENDER:  { D: 300, L: 520, FORCE: 160 },
     RATED_FORCE_T: 3920,                   // 常用最大圧延荷重 (tonf)
     LIMIT_FORCE_T: 4200,                   // 非常最大圧延荷重 (tonf)
-    RATED_POWER_KW: 3800,                  // 主電動機定格 (1900 kW × 2台)
-    /* ミル定数（スタンドのばね定数）[t/mm]。実ギャップは圧下位置 S そのものではなく
-     * h = S + F/M —— 荷重を受けてハウジング・チョック・ロールが伸びたぶんだけ開く。
-     * 4 段可逆の重ミルで 400〜700 t/mm 級。狙いの板厚を出すには «伸びるぶん» を
-     * あらかじめ締めておく（ゲージメータ設定）ので、荷重がまだ無い噛み込みの瞬間は
-     * その締めた無負荷ギャップがそのまま材料に当たる —— これが噛み込み衝撃の正体。 */
-    MODULUS: 550,
+    RATED_POWER_KW: 4000,                  // 主電動機定格 (2000 kW × 2 台。更新後の実機値)
+    /* ミル定数（スタンドのばね）。実ギャップは圧下位置 S そのものではなく h ＝ S ＋ δ(F)
+     * —— 荷重を受けてハウジング・チョック・ロールが伸びたぶんだけ開く。狙いの板厚を出すには
+     * «伸びるぶん» をあらかじめ締めておく（ゲージメータ設定）ので、荷重がまだ無い噛み込みの
+     * 瞬間はその締めた無負荷ギャップがそのまま材料に当たる —— これが噛み込み衝撃の正体。
+     *
+     * ミル定数は «一定ではない» —— ハウジング・チョック・軸受のがたが荷重で締まるほど
+     * 硬くなる。実機の測定値は «伸びの帯ごとの増分ばね定数» で与えられる:
+     *     0〜1 mm 226 ／ 1〜2 mm 244 ／ 2〜3 mm 267 ／ 3〜4 mm 281 ／ 4〜5 mm 296 [t/mm]
+     * 積み上げると 1 mm で 226 t、5 mm で 1,314 t。割線で見ると 226 → 263 t/mm。
+     * 従来は 550 t/mm の «一定» で置いていたので、実機の 2 倍以上硬く、荷重 2,600 t での
+     * 伸びが 4.73 mm（実機の表なら 9.34 mm）と半分しか出ていなかった。
+     * MODULUS_STEP は帯の幅 [mm]。5 mm より先は測定が無いので «最後の増分のまま» 外挿する
+     * —— 硬くなり続けると置くのは根拠が無い。実測が伸びたらここへ足すだけでよい。 */
+    MODULUS_TABLE: [226, 244, 267, 281, 296],
+    MODULUS_STEP: 1,
     /* --- 上下ロールの径差 -------------------------------------------------------
      * 研削のたびに径は減るので、上下がぴったり同じ径であることはまず無い。実機で径差が
      * 効くのは «反り» —— 上下のワークロールは同じ回転数で回されるので、径が大きいほうの
@@ -2123,12 +2216,36 @@ const CONFIG = {
   DRIVE: {                                  // 駆動側 (−Z)
     // 主電動機 1,900 kW × 2 台（直流）。0/150/330 rpm、減速比 5.96:1。
     // 150 rpm までは定トルク、そこから 330 rpm までは定出力という直流機の特性を持つ。
-    MOTOR_KW: 1900, MOTOR_N: 2, RPM_BASE: 150, RPM_MAX: 330, GEAR: 5.96,
+    /* RPM_BASE —— 基底回転数（ここまでが定トルク、以上は定出力）。銘板が無いので推定値
+     * （README 残件 11）。定出力域で出せるトルクは 2·P·GEAR/ω で «基底回転数に依らない»
+     * ので、ここを動かしても高速側の能力は変わらない（低速側の定トルクだけが減る）。
+     * 実機が 120 mpm を回せている根拠は基底回転数ではなく «定格そのもの» の側にある。 */
+    MOTOR_KW: 2000, MOTOR_N: 2, RPM_MAX: 330, GEAR: 5.96,
+    /* 主機のトルクカーブ（実機の «HOT 主機モータトルクカーブ・更新後» より。ロール軸・2 台ぶん）。
+     *   最大トルク 1,520 kN·m —— ベース速度まで一定（定トルク域）
+     *   定格トルク 1,400 kN·m —— 連続の熱的定格
+     *   ベース速度 75 mpm ／ 最高速度 160 mpm。ベース速度より上は定出力（T ∝ 1/v）で、
+     *   160 mpm では 1,520 × 75/160 ＝ 713 kN·m（図の実測 ≒ 680 と合う）
+     *   過負荷耐量 225 % / 60 s —— 図の «定格トルクを超えているが現状制御可能» の根拠
+     * 検算: 1,520 kN·m × (75/60)/0.465 rad/s ＝ 4.09 MW で定格出力 4.0 MW と合う。
+     * 以前は «電動機 kW ÷ 基底回転数 × 減速比» で組み立てた推定値（1,442 kN·m 相当）で、
+     * ベース速度もロール軸で 55 mpm 相当と実機より低かった。 */
+    TORQUE_MAX: 1520e3, TORQUE_RATED: 1400e3, V_BASE: 75, V_MAX: 160,
+    /* 主機まわりの電気設備（更新後の実機仕様）。
+     *   ドライブ: IEGT インバータ —— 交流可変速。直流機と違って零速から定トルクを出せ、
+     *     トルクの立ち上がりも速い（TAU_TQ に効くのは主にスピンドルのねじれのほう）。
+     *   トランス: 2,800 kVA × 2 台 ＝ 5,600 kVA。«続けて引ける» 電力はここで決まるので、
+     *     短時間過負荷（OVERLOAD）は «秒単位» の話であって、連続では
+     *     5,600 kVA × 力率・効率 ≒ 5.3 MW —— 定格 4.0 MW に対して 1.3 倍ぶんしかない。
+     *   高圧遮断器: 真空遮断器（VCB）。
+     * TRANSFORMER_KVA はスケジュールの注意書き（連続で引ける電力の目安）に使う。 */
+    DRIVE_TYPE: 'IEGT インバータ', BREAKER: '真空遮断器（VCB）',
+    TRANSFORMER_KVA: 2800, TRANSFORMER_N: 2, TRANSFORMER_PF: 0.95,
     /* 短時間過負荷率。直流圧延機用電動機は定格の 2〜2.5 倍のトルクを短時間（1 パス数秒〜数十秒）
      * 出せる。実機は 30 mm 圧下を 120 mpm で通しており、本アプリの動力は 3.7〜5.0 MW（定格 3.8 MW）
      * になる —— 定格で頭打ちにすると実機の速度が出せない。パス単位の上限はこの倍率で見て、
      * サイクル全体の実効（RMS）が定格内かはスケジュールの注意書きで示す。 */
-    OVERLOAD: 2.0,
+    OVERLOAD: 2.25, OVERLOAD_SEC: 60,          // 実機の過負荷耐量 225 % / 60 s
     /* 駆動系の損失。主機が出すトルクは «圧延トルク ＋ 軸受の摩擦 ＋ 回転系の慣性»。
      * MU_BEARING —— 油膜軸受（モーゴイル）の等価摩擦係数。文献の幅は 0.002〜0.005。
      *   4段ミルなので «圧延荷重を受けるのはバックアップロールの首» で、ワークロールの首に
@@ -2139,6 +2256,17 @@ const CONFIG = {
      *   減速比の 2 乗でロール軸へ換算するので、加速の重さは実質ここで決まる。実機の GD² が
      *   手に入ればこの推定を置き換える（README 残件）。 */
     MU_BEARING: 0.003, ROTOR_KD: 0.60, ROTOR_KL: 0.45, ROTOR_RHO: 7000,
+    /* MU_WB —— ワークロールとバックアップロールの接触が伝えられる «接線力 / 押しつけ力»。
+     * BUR は駆動されておらず、この摩擦だけで連れ回される。押しつけが弱いとき（空転で
+     * ベンディングを掛けていないとき、押しつけはワークロールの自重 13.3 t だけ）には
+     * 逆転の加速に追いつけず滑る —— 実測: 追従できるのは WR の 46 %（μ 0.10）。
+     * 圧延中は荷重が 1,000 t を超えるので滑らない。油膜のある鋼どうしの転がり接触の
+     * 値として 0.10 を置いた（実機の実測が無いので推定。README 残件）。
+     * TAU_TQ —— 指令から実際にトルクが立つまでの時定数 [s]。電流・磁束の立ち上がりと、
+     * 主電動機 → 減速機 → ピニオンスタンド → スピンドル → ロールのねじれが合わさったもの。
+     * 駆動系のねじり 1 次固有振動数は 5〜15 Hz（周期 65〜200 ms）が一般的で、その桁。
+     * これが無いと速度線図の角が «直角»（加加速度が無限大）になり、逆転が実機より鋭くなる。 */
+    MU_WB: 0.10, TAU_TQ: 0.12,
     COUPLING_Z: -3960,                      // スピンドル継手（ロール側）＝ フォークの外側の自在継手中心
     PINION_Z:   -9500,                      // ピニオンスタンド出力軸（ここからミル側へ 1,200 mm 出る）
     PINION_SPAN: 1800, STAND_L: 2200,       // ピニオン軸間 / ギヤボックス奥行
@@ -2232,12 +2360,11 @@ const CONFIG = {
      * 外側へそれぞれの長さぶん伸ばす —— 長さが変わっても «ミルからの近さ» が動かない。 */
     GUIDE: { NEAR: 2240, N_OUT: 5, PITCH: 350, ROLL_D: 130, ROLL_L: 380, SHAFT_L: 535, SHAFT_D: 45,
              IN_SEG: [1570, 2680, 1150], IN_N: [3, 6, 2],
-             /* 床柱を立てられる X の外側の限界。入側は受取テーブル架構（x 4,400 から）と
-              * トランスファークレーン走行路（x 5,400 から）が床を塞いでいるので、
-              * 柱はそこまで。拡縮シリンダーとアーム軸受は «空き» の位置（＝図面どおり）に
-              * 残し、床柱だけを内側へ寄せて架台の梁で持たせる。
-              * ※ 5,400 mm のバーに対して床が足りていない —— README 残件 18。 */
-             BASE_X_LIM: 4100,
+             /* 床柱を立てられる X の外側の限界。入側は受取テーブル架構とトランスファー
+              * クレーン走行路が床を塞ぐので、その手前まで。装入設備一式を外へ移した
+              * （SUPPLY.TILTER_X）ので、いまは図面どおりの «区分の切れ目» 2 か所
+              * （x 3,825 と 6,458）に立てられる。 */
+             BASE_X_LIM: 6800,
              FLANGE_T: 45, RECESS: 20, OPEN_MARGIN: 600, RATE: 500, ARM_DX_MAX: 700,
              BASE_Z: 2300, ARM_L: 1700, ARM_Y: 300,
              /* 板面クーラント。門型（柱 POST_X/POST_Z、梁 BEAM_Y）から、ラインに «平行» な
@@ -2295,7 +2422,14 @@ const CONFIG = {
      * 熱伝導で均されていく（どれだけ残るかは実測が無いので、層モデルに解かせる）。 */
     HOLD_MIN: 10,
     SIDE_Z: 3800,                            // ラインから転倒機ベッド中心までの側方距離
-    TILTER_X: -13000,                        // 転倒軸（C-1 の中ほど）。倒したスラブはここからミル側へ横たわる
+    /* 転倒軸。倒したスラブはここからミル側へ横たわる。
+     * 入側サイドガイドを図面どおり 5,400 mm にしたことで、拡縮シリンダー（区分の切れ目）の
+     * 外側が x 6,458 まで来る。以前の −13,000 では受取テーブル架構が x 4,400 から床を
+     * 塞いでいて、外側のシリンダーを立てられなかった（内側へ寄せて逃がしていた）。
+     * ご指示により装入設備一式を 2,800 mm 外へ移し、受取テーブルの端を x 7,200 にした
+     * —— シリンダーの外端 6,668 に対して 532 mm の余地ができる。
+     * ピット炉は FURNACE.X1 で別に置いているので動かない。 */
+    TILTER_X: -15800,
     ARM_L: 4600,                             // 転倒アーム長（最大スラブ長 4200 mm を受ける）
     ARM_W: 3100,                             // 転倒アーム幅（最大スラブ幅 2200 mm と開いたトングを受ける）
     // 転倒軸はベッド面（＝パスライン）より PIVOT_DROP 下に置く。軸（Φ560）がベッド面から
@@ -3028,9 +3162,9 @@ const CONFIG = {
     /* JAW_K —— ワニ口の «あごの開き» の育ち方。割れた上下のあごが離れる量を、長手の
      * 張り出し（gator ＝ 割れの進み）に対する比で置く。0.15 なら張り出し 300 mm のとき
      * 端面で上下 ±45 mm（口の開き 90 mm）。
-     * JAW_MAX —— その頭打ち。あご 1 枚の厚みは板厚の半分しかないので、口が板厚より
-     * 大きく開くにはあごが 45° 以上回ることになり、そこまで回れば千切れる。0.25 は
-     * «口の開きが板厚の半分まで»（あごの先が元の板面のあたりまで持ち上がる）という置き方。
+     * JAW_MAX —— その頭打ち。折れ込みが板厚の半分を超えると上下のあごが中心で重なるので、
+     * そこで頭打ちにする。0.25 なら端面で片側 0.25h ずつ内へ折れ、端面の厚みは板厚の
+     * 半分（0.5h）まで薄くなる —— 合計は決して板厚を超えない。
      * 頂いたクロップ屑の写真は真横からではないため «比» までは読み取れない —— 開きが
      * 目に見える大きさであることは確かめられたが、板厚に対する比は決められなかった。
      * 真横から（スケールになる物を添えて）撮った 1 枚があれば較正できる（README 残件 17）。 */
@@ -3084,7 +3218,7 @@ const CONFIG = {
    * 同じ炉に違う合金を入れると材質ごとの均熱条件を作れないので、実機と同じく炉を分ける。
    * 8・9 番炉は予備（この 7 材質では使わない）。 */
   ALLOYS: {
-    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, C: 19.6, b: 0.00538, m: 0.15, Q_ACT: 156, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
+    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 26.202, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
     /* A1100 は実機ロット（2026-09 提供、607T）の材質。1050 との違いは Cu 0.12 % ぶんの
      * 固溶強化で、変形抵抗はわずかに高い。3 つの係数は «別々の役割» で決めてある:
      *   m —— ひずみ速度依存。最終パス（22 → 7.9 mm・94 mpm で平均 1,064 t）で較正。
@@ -3095,13 +3229,13 @@ const CONFIG = {
      *         b をそのままにすると Q_fit が 99（公表の −37 %）まで落ち、«最終パスの荷重を
      *         温度依存を弱めて買う» ことになる（実測して見つけた）。
      *   C —— 絶対値。上の 2 つを決めたあと、厚板段の荷重帯（287〜520 t、板幅 1,070）で合わせる。 */
-    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, C: 17.5, b: 0.0080, m: 0.22, Q_ACT: 158, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
-    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, C: 32.2, b: 0.00538, m: 0.13, Q_ACT: 180, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
-    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, C: 32.5, b: 0.00442, m: 0.12, Q_ACT: 160, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
-    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, C: 55.1, b: 0.00483, m: 0.12, Q_ACT: 175, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
-    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, C: 83.4, b: 0.00468, m: 0.11, Q_ACT: 185, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
-    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, C: 46.9, b: 0.00400, m: 0.12, Q_ACT: 145, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
-    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, C: 97.3, b: 0.00529, m: 0.10, Q_ACT: 230, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
+    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 27.517, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
+    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 30.106, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
+    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 27.959, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
+    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 27.092, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
+    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 26.694, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
+    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 22.588, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
+    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 34.306, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
   },
 
   /* 幅方向の形状（クラウン・平坦度・幅広がり・据わり）の諸元。
@@ -3339,6 +3473,28 @@ const CONFIG = {
    * 実機より短く出ていた（実測: 実機 450 s に対し 332 s ＝ −26 %）。単パスの区間では
    * 84 s 対 90 s と 6 s だけ足りず、これがちょうど 1 パスぶんの死に時間に当たる。
    * 実機 2 ロットからの逆算は A5052 5.6 s/パス・A1100 7.8 s/パス。 */
+  /* 組織の履歴 —— 亜結晶粒径・再結晶率・残留ひずみ。
+   *
+   * 文献（README 節 2-5）は «熱間圧延中に形成される亜結晶粒径は直前のパスの Z だけで
+   * 決まり、それ以前の履歴に依らない» と言っている。ひずみの導入と動的回復が釣り合った
+   * 定常変形だからで、これは «変形抵抗に履歴項が要らない» ことの裏づけでもある。
+   * だからここで持つ履歴は «パスとパスのあいだ» の話 ——
+   *   ・変形中は動的回復が釣り合い、亜結晶粒径はその場の Z で決まる（履歴なし）
+   *   ・パス間の «時間と温度» で静的再結晶が進み、溜まったひずみを食う（Avrami）
+   *   ・食い残したぶんが残留ひずみとして次のパスへ持ち越される
+   * 荷重への効きは小さく（残留ひずみ 0.3 で +1.5 % 程度）、主な意味は «出来上がった
+   * コイルの組織» —— 亜結晶粒径と再結晶率が下工程の硬さ・集合組織を決める。
+   *
+   *   SUB_A / SUB_B —— 1/d ＝ A ＋ B·log₁₀Z [µm⁻¹]（文献の形）。Z 8×10¹² で d 3.4 µm、
+   *                    1.5×10¹⁴ で 2.4 µm になる置き方。
+   *   SUB_EPS —— 亜結晶粒がその場の Z の定常値へ入れ替わるのに要るひずみ。
+   *   REX_A / REX_Q / REX_N —— 静的再結晶の Avrami。t₅₀ ＝ A·ε⁻²·exp(Q/RT) [s]、
+   *                    X ＝ 1 − exp(−0.693·(t/t₅₀)^N)。450 ℃・ひずみ 0.3 で t₅₀ ≒ 2 s。
+   *   RET_K / RET_MAX —— 残留ひずみが変形抵抗に効く割合と、その上限。
+   * ※ 係数はアルミ熱間加工の一般的な形と桁で置いた推定値（README 残件）。 */
+  MICRO: { SUB_A: -1.00, SUB_B: 0.100, SUB_EPS: 0.20, SUB_MAX: 50,
+           REX_A: 1.77e-14, REX_Q: 180, REX_N: 1.4, REX_GROW: 2.5,
+           RET_K: 0.05, RET_MAX: 0.80 },
   PROCESS: { PASS_DEAD: 6, MU: 0.32, MU_KT: 0.0, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
              TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.95, PEAK_K: 1.22,
              /* 巻取パスの尻: «パス時間いっぱい待って冷えた» 温度で解いた荷重に掛ける係数。最後の 1 m の
@@ -4004,17 +4160,18 @@ class EventBus {
  */
 const Drive = {
   /** ロール軸に出せる最大トルク [N·m]（2ロール合計） */
-  get maxTorque() {
-    const D = CONFIG.DRIVE;
-    return (D.MOTOR_KW * 1000 * D.MOTOR_N) / (D.RPM_BASE * Math.PI / 30) * D.GEAR;
-  },
+  /** 定トルク域で出せる最大トルク [N·m]（ロール軸・2 台ぶん）。実機のカーブの平らな所。 */
+  get maxTorque() { return CONFIG.DRIVE.TORQUE_MAX; },
+  /** 連続の熱的定格トルク [N·m]。これを超えるぶんは «60 秒まで» の話。 */
+  get ratedTorque() { return CONFIG.DRIVE.TORQUE_RATED; },
   get ratedPowerKW() { return CONFIG.DRIVE.MOTOR_KW * CONFIG.DRIVE.MOTOR_N; },
   rollRpm(speedMpm, dia) { return Math.abs(speedMpm) / (Math.PI * dia / 1000); },
   motorRpm(speedMpm, dia) { return Drive.rollRpm(speedMpm, dia) * CONFIG.DRIVE.GEAR; },
   /** ロール径から決まる最高圧延速度 [mpm] */
   maxSpeed(dia = CONFIG.MILL.WR_D) {
-    const D = CONFIG.DRIVE;
-    return Math.PI * (dia / 1000) * (D.RPM_MAX / D.GEAR);
+    /* 実機の最高速度は «公称ロール径での» 値。研削で径が減れば、同じ回転数でも
+     * 周速はその比で落ちる。 */
+    return CONFIG.DRIVE.V_MAX * (dia / CONFIG.MILL.WR_D);
   },
   /**
    * ロール軸まわりの慣性モーメント [kg·m²]。上下のワークロールはそのまま、
@@ -4024,11 +4181,65 @@ const Drive = {
    */
   inertia(wrDia = CONFIG.MILL.WR_D, brDia = CONFIG.MILL.BR_D) {
     const M = CONFIG.MILL, D = CONFIG.DRIVE;
-    // 中実円柱の慣性 J = ½·m·r²、m = ρ·π·r²·L
-    const J = (dia, len) => { const r = dia / 2000; return 0.5 * M.ROLL_RHO * Math.PI * r * r * (len / 1000) * r * r; };
     const k = wrDia / brDia;                                        // BUR の回転数比
-    return 2 * J(wrDia, M.BARREL) + 2 * J(brDia, M.BR_BARREL) * k * k
+    return 2 * Drive.cylInertia(wrDia, M.BARREL) + 2 * Drive.cylInertia(brDia, M.BR_BARREL) * k * k
          + Drive.rotorInertia() * D.MOTOR_N * D.GEAR * D.GEAR;
+  },
+  /** 中実円柱の慣性モーメント [kg·m²]。J = ½·m·r²、m = ρ·π·r²·L */
+  cylInertia(dia, len) {
+    const r = dia / 2000;
+    return 0.5 * CONFIG.MILL.ROLL_RHO * Math.PI * r * r * (len / 1000) * r * r;
+  },
+  /**
+   * 駆動側だけの慣性 [kg·m²]（ロール軸換算）。ワークロール ＋ 減速機 ＋ 主電動機。
+   *
+   * バックアップロールは «歯車で繋がっていない» —— 4 段ミルで駆動されるのはワークロールだけで、
+   * BUR はワークロールとの接触の摩擦で連れ回される。だから BUR は駆動側の慣性に «常には»
+   * 入らない。押しつけが強い（圧延中）ときは滑らないので一緒に回り、押しつけが弱い
+   * （空転・ベンディング 0）ときは滑って付いてこない。BUR は別に解く（PhysicsEngine._burDrag）。
+   */
+  driveInertia(wrDia = CONFIG.MILL.WR_D) {
+    const M = CONFIG.MILL, D = CONFIG.DRIVE;
+    return 2 * Drive.cylInertia(wrDia, M.BARREL) + Drive.rotorInertia() * D.MOTOR_N * D.GEAR * D.GEAR;
+  },
+  /** バックアップロール 1 本の慣性 [kg·m²]（BUR 自身の軸まわり） */
+  burInertia(brDia = CONFIG.MILL.BR_D) { return Drive.cylInertia(brDia, CONFIG.MILL.BR_BARREL); },
+  /**
+   * ワークロールとバックアップロールの接触が «伝えられる» 接線力 [N]（1 か所ぶん）。
+   * 伝えるのは摩擦なので、押しつけ力（圧延中は圧延荷重、空転ならベンディング力とロール自重）
+   * に比例し、それを超えると滑る。MU_WB は油膜のある鋼どうしの転がり接触の値（推定）。
+   */
+  burTraction(normalN) { return CONFIG.DRIVE.MU_WB * Math.max(normalN, 0); },
+  /**
+   * バックアップロールを «滑らせずに» 付いてこさせられる表面加速度の上限 [mpm/s]。
+   *   伝えられる接線力 F ＝ μ·N、BUR の角加速度 α ＝ a/r_B、要るトルク J_B·α ＝ F·r_B
+   *   → a ≤ μ·N·r_B² / J_B
+   * 実機がここを守るのは «滑らせるとロールの表面が擦れる» から —— アルミ熱延では
+   * ロール表面の状態がそのまま板の表面品質になるので、BUR との擦れは許容できない。
+   * 空転（板なし・ベンディング 0）では押しつけが下ワークロールの自重 13.3 t しかないので、
+   * 上限は約 50 mpm/s まで落ちる。主機の能力（110 mpm/s 相当）より «こちらが先に効く»。
+   */
+  burAccelLimit(normalN, brDia = CONFIG.MILL.BR_D) {
+    const rB = brDia / 2000, Jb = Drive.burInertia(brDia);
+    if (!(Jb > 0)) return Infinity;
+    /* 接線力は «慣性を回す» ぶんだけでなく «BUR 自身の首の摩擦» も賄わなければならない。
+     *   F·r_B − T_drag ＝ J_B·α  かつ  F ≤ μ·N
+     *   → α ≤ (μ·N·r_B − T_drag) / J_B、表面加速度 a ＝ α·r_B
+     * 首の摩擦を落とすと «上限どおりに振っても少し滑る» ことになる（実測 7.1 mpm）。 */
+    const burW = Drive.rollMass(brDia, CONFIG.MILL.BR_BARREL) * 9.80665;
+    const net = Drive.burTraction(normalN) * rB - Drive.burBearingTorque(normalN + burW);
+    return Math.max(net, 0) * rB / Jb * 60;                     // m/s² → mpm/s
+  },
+  /**
+   * ワークロールとバックアップロールの «接触の押しつけ力» [N]。
+   *   上の接触 —— 上バックアップロールが上ワークロールの «上に載る» ので、その自重
+   *   下の接触 —— 下ワークロールが下バックアップロールの «上に載る» ので、その自重
+   * 圧延中は圧延荷重がこれを遥かに上回り（1,000 t 超）、ベンディング力も足し合わさる。
+   */
+  burNormal(top, rollForceN, bendN, wrDia = CONFIG.MILL.WR_D, brDia = CONFIG.MILL.BR_D) {
+    const M = CONFIG.MILL;
+    const w = top ? Drive.rollMass(brDia, M.BR_BARREL) : Drive.rollMass(wrDia, M.BARREL);
+    return Math.max(rollForceN, 0) + Math.abs(bendN) + w * 9.80665;
   },
   /** 主電動機 1 台の回転子慣性 [kg·m²]（電動機軸まわり）。外形から置いた推定値。 */
   rotorInertia() {
@@ -4050,17 +4261,29 @@ const Drive = {
     const wr = mu * Math.max(bendN, 0) * (M.WR_NECK_D / 2000);
     return 2 * (br + wr);
   },
-  /** その速度で主機が出せるトルク [N·m]（基底回転数まで定トルク、以上は定出力。短時間過負荷込み） */
+  /** バックアップロール 1 本の首の摩擦トルク [N·m]（BUR 自身の軸まわり）。 */
+  burBearingTorque(normalN) {
+    return CONFIG.DRIVE.MU_BEARING * Math.max(normalN, 0) * (CONFIG.MILL.BR_NECK_D / 2000);
+  },
+  /** ベース速度 [mpm]（そのロール径での）。ここまでが定トルク域。 */
+  baseSpeed(dia = CONFIG.MILL.WR_D) { return CONFIG.DRIVE.V_BASE * (dia / CONFIG.MILL.WR_D); },
+  /**
+   * その速度で主機が «連続で» 出せるトルク [N·m]（実機のトルクカーブそのもの）。
+   * ベース速度まで一定（TORQUE_MAX）、それより上は定出力で T ∝ 1/v。
+   */
+  curveTorque(speedMpm, dia = CONFIG.MILL.WR_D) {
+    const vB = Drive.baseSpeed(dia), v = Math.abs(speedMpm);
+    return Drive.maxTorque * Math.min(1, vB / Math.max(v, 1e-6));
+  },
+  /** その速度で出せるトルク [N·m]（短時間過負荷込み。実機の過負荷耐量 225 % / 60 s）。 */
   availTorque(speedMpm, dia = CONFIG.MILL.WR_D) {
-    const D = CONFIG.DRIVE, rpm = Drive.motorRpm(speedMpm, dia);
-    return Drive.maxTorque * D.OVERLOAD * Math.min(1, D.RPM_BASE / Math.max(rpm, 1e-6));
+    return Drive.curveTorque(speedMpm, dia) * CONFIG.DRIVE.OVERLOAD;
   },
   /** 所要トルク M [N·m] を出せる最高速度 [mpm]。定出力域では速度と反比例する（短時間過負荷込み）。 */
-  speedLimit(torqueNm, dia) {
-    const D = CONFIG.DRIVE, vMax = Drive.maxSpeed(dia);
+  speedLimit(torqueNm, dia = CONFIG.MILL.WR_D) {
+    const vMax = Drive.maxSpeed(dia);
     if (!(torqueNm > 1)) return vMax;
-    const vBase = Math.PI * (dia / 1000) * (D.RPM_BASE / D.GEAR);
-    return Num.clamp(vBase * Drive.maxTorque * D.OVERLOAD / torqueNm, 5, vMax);
+    return Num.clamp(Drive.baseSpeed(dia) * Drive.maxTorque * CONFIG.DRIVE.OVERLOAD / torqueNm, 5, vMax);
   },
 };
 
@@ -4205,46 +4428,43 @@ const Rolling = {
   stParams(alloy) {
     if (alloy._st) return alloy._st;
     const Rg = Rolling.RGAS, Tref = CONFIG.MATERIAL.TREF + 273.15;
-    const n = 1 / alloy.m;                                          // べき乗則の指数
-    /* Q（活性化エネルギー）と α（べき乗則から指数則へ移る応力の逆数）は、材質ごとに
-     * 実験から決めるもの。ここでは «この材質について既に持っている熱間実験式
-     * C·exp(−b·ΔT)·ε̇^m を、熱間域でいちばんよく再現する (Q, α) の組» を数値的に選ぶ。
-     * こうすると熱間域の較正を壊さずに、式の形だけをアレニウス＋双曲線正弦へ差し替えられる。
-     * α だけを当てはめると «温度勾配のずれ» を吸収できず、材質によって 27 % もずれた
-     * （温度依存の形そのものが違うため）ので、2 つとも当てはめる。
-     * 当てはまった Q が公表値の帯（Q_ACT の ±40 % 程度）に入るかは評価器で照合する。 */
-    const sig = (Q, a, T, r) => {
-      const Zr = Math.exp(Q / (Rg * Tref));
-      const Z = Math.max(r, 1e-4) * Math.exp(Q / (Rg * (T + 273.15)));
-      return Math.asinh(Math.sinh(a * alloy.C) * Math.pow(Z / Zr, 1 / n)) / a;
-    };
-    const Ts = [], Tlo = alloy.T_ROLL[0] - 60, Thi = alloy.T_ROLL[1];
-    for (let i = 0; i <= 6; i++) Ts.push(Tlo + (Thi - Tlo) * i / 6);
-    const rates = [0.5, 2, 8, 20];
-    const err = (Q, a) => {
-      let worst = 0;
-      for (const T of Ts) for (const r of rates) {
-        const ref = alloy.C * Math.exp(-alloy.b * (T - CONFIG.MATERIAL.TREF)) * Math.pow(r, alloy.m);
-        worst = Math.max(worst, Math.abs(sig(Q, a, T, r) / ref - 1));
-      }
-      return worst;
-    };
-    /* Q は «公表値の帯» の中でだけ探す。当てはまりだけを追うと非物理な値（Al で 300 kJ/mol
-     * 超）へ逃げてしまい、式を物理的な形にした意味が無くなる。帯の中で最良のものを採り、
-     * 残った差（熱間域で 5〜9 %）は «線形指数形とアレニウス形の違いそのもの» として受け入れる。 */
-    const qLo = alloy.Q_ACT * 0.60, qHi = alloy.Q_ACT * 1.40;
-    let Q = alloy.Q_ACT * 1000, alpha = 0.02, best = Infinity;
-    for (let i = 0; i <= 60; i++) {
-      const q = (qLo + (qHi - qLo) * i / 60) * 1000;
-      for (let j = 0; j <= 90; j++) {
-        const a = 0.002 + (0.060 - 0.002) * j / 90;
-        const e = err(q, a);
-        if (e < best) { best = e; Q = q; alpha = a; }
-      }
-    }
-    const Zref = Math.exp(Q / (Rg * Tref));
-    alloy._st = { n, Q, Zref, alpha, fitErr: best, cold: sig(Q, alpha, Rolling.T_COLD, 1) };
+    /* 構成式の «材料定数» をそのまま持つ（当てはめをしない）。
+     *   Z ＝ ε̇·exp(Q/RT) ＝ A·[sinh(α·σ)]^n            （Sellars–Tegart / Garofalo）
+     *   → σ ＝ (1/α)·asinh[ (Z/A)^(1/n) ]
+     * 役割が 1 つずつ分かれている ——
+     *   Q     … 温度依存だけを決める（材質ごとの公表値。ここは荷重で動かさない）
+     *   n, α  … ひずみ速度依存の «形» を決める（材質ごとの公表値）
+     *   A     … 絶対値だけを決める（＝ 荷重の較正で動かしてよい唯一のつまみ）
+     * 以前は経験式 C·exp(−b·ΔT)·ε̇^m を主にして Q と α を数値的に当てはめていたため、
+     * «荷重を合わせるために m を動かすと温度依存が一緒に動く» という結び付きがあった
+     * （Q_fit ＝ b·R·T_ref²/m）。さらに n ＝ 1/m を固定したせいで α が辻褄合わせに使われ、
+     * 8 材質中 6 つで n・α がアルミの公表値の帯（n 4.0〜6.5、α 0.012〜0.050）を外れていた
+     * （A7075 の α は探索の下限 0.002 に張り付いていた）。この形にすればその結び付きが無い。 */
+    const n = alloy.N_EXP, alpha = alloy.ALPHA, Q = alloy.Q_ACT * 1000, lnA = alloy.LN_A;
+    alloy._st = { n, Q, alpha, lnA, Zref: Math.exp(Q / (Rg * Tref)),
+                  cold: Rolling.sigmaOf(Rolling.T_COLD, 1, n, alpha, Q, lnA) };
     return alloy._st;
+  },
+  /** 構成式そのもの [MPa]。σ ＝ (1/α)·asinh[ (Z/A)^(1/n) ]、Z ＝ ε̇·exp(Q/RT)。 */
+  sigmaOf(T, strainRate, n, alpha, Q, lnA) {
+    const lnZ = Math.log(Math.max(strainRate, 1e-4)) + Q / (Rolling.RGAS * (T + 273.15));
+    return Math.asinh(Math.exp((lnZ - lnA) / n)) / alpha;
+  },
+  /**
+   * いまの条件での «実効» ひずみ速度感受性指数 m_eff ＝ ∂lnσ/∂lnε̇ [-]。
+   *
+   * m は独立な材料定数ではない —— 双曲線正弦則から解析的に出る量で、
+   *   ln Z ＝ ln A ＋ n·ln sinh(ασ)  を σ について微分して
+   *   m_eff ＝ tanh(ασ) / (n·ασ)
+   * になる。低応力側（高温・低速）では ασ ≪ 1 なので m_eff → 1/n、高応力側（低温・高速）
+   * では tanh → 1 なので m_eff → 1/(n·ασ) と小さくなる。つまり «同じ材質でも温度と
+   * ひずみ速度で m が変わる» —— これが固定 m では表せなかったところ。
+   */
+  mEff(T, strainRate, alloy = Rolling.alloy()) {
+    const st = Rolling.stParams(alloy);
+    const x = st.alpha * Rolling.sigmaOf(T, strainRate, st.n, st.alpha, st.Q, st.lnA);
+    if (!(x > 0)) return 1 / st.n;
+    return Math.tanh(x) / (st.n * x);
   },
   /**
    * 室温の上限を «どれだけ角を立てて» 効かせるか（p ノルムの p）。
@@ -4265,11 +4485,42 @@ const Rolling = {
    * 温度が低いほど、ひずみ速度が高いほど大きく、低温側では指数則へ移って
    * 室温の変形抵抗（KF_MAX）へ漸近する。
    */
+  /**
+   * 接触弧の中の «局所» ひずみ速度 [1/s]。
+   *
+   * 圧延のひずみ速度は接触弧の中で一定ではない —— 出口で 0、入口で最大になる。
+   * 板厚 h(φ) ＝ h_out ＋ 2R(1−cos φ)、水平速度は体積一定から v_x ＝ Q/h なので
+   *     ε̇(φ) ＝ (1/h)·|dh/dx|·v_x ＝ 2·Q·tan φ / h²      （Q ＝ 単位幅の体積流量）
+   * になる。«平均ひずみ速度 1 点» で変形抵抗を評価すると、変形抵抗が ln ε̇ に対して
+   * 上に凸（asinh）なぶんだけ高く出る —— 実測で全パス一貫して 3.8〜4.5 % 高かった。
+   * @param phi  ロール中心から見た角度 [rad]（出口が 0、入口が噛み込み角）
+   */
+  arcStrainRate(phi, hOut, R, Qflow) {
+    const h = hOut + 2 * R * (1 - Math.cos(phi));
+    return h > 0 ? 2 * Qflow * Math.tan(phi) / (h * h) : 0;
+  },
+  /** 接触弧の分割数。上げても 8 から先はほとんど動かない（実測 8 と 64 で 0.1 % 未満）。 */
+  ARC_N: 8,
+  /**
+   * 接触弧に沿って平均した変形抵抗 [MPa]。局所ひずみ速度で評価した変形抵抗を
+   * «水平距離で» 等分平均する（圧下は水平距離に比例して進むので、これが素直な重み）。
+   */
+  flowStressArc(T, hIn, hOut, R, vRoll, alloy = Rolling.alloy()) {
+    const dh = hIn - hOut;
+    if (!(dh > 0) || !(R > 0)) return Rolling.flowStress(T, 0, alloy);
+    const a = Math.acos(Num.clamp(1 - dh / (2 * R), -1, 1));      // 噛み込み角
+    const L = R * Math.sin(a), Qflow = vRoll * hOut, N = Rolling.ARC_N;
+    let sum = 0;
+    for (let i = 0; i < N; i++) {
+      const x = L * (i + 0.5) / N;                                // 出口からの水平距離
+      const phi = Math.asin(Num.clamp(x / R, -1, 1));
+      sum += Rolling.flowStress(T, Rolling.arcStrainRate(phi, hOut, R, Qflow), alloy);
+    }
+    return sum / N;
+  },
   flowStress(T, strainRate, alloy = Rolling.alloy()) {
     const st = Rolling.stParams(alloy);
-    const Z = Rolling.zener(T, strainRate, alloy);
-    const X = Math.sinh(st.alpha * alloy.C) * Math.pow(Z / st.Zref, 1 / st.n);
-    const kf = Math.asinh(X) / st.alpha;
+    const kf = Rolling.sigmaOf(T, strainRate, st.n, st.alpha, st.Q, st.lnA);
     /* 双曲線正弦則は高 Z 側で対数的に寝るので、それ自体が発散を防ぐ。ただし単一の Q で
      * 室温まで外挿できる保証は無い（変形機構が変わる）ので、室温の変形抵抗 KF_MAX を
      * 上限として «滑らかな最小値»（p ノルム）で押さえる。p は KF_CAP_P を参照。 */
@@ -4390,7 +4641,106 @@ const Rolling = {
     const phiN = Num.clamp(phi / 2 * (1 - phi / (2 * Math.max(mu, 1e-3))), 0, phi);
     return { f: Num.clamp(Rflat * phiN * phiN / hOut, 0, 0.25), phiN };
   },
-  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */
+  /**
+   * ロールバイト内の圧力分布（Bland–Ford のスラブ法）と、そこから出る荷重・トルク。
+   *
+   * それまでは «平均面圧 × 接触面積» で荷重を出し、トルクは «荷重 × 一定のアーム比» で
+   * 出していた。そのためトルクは荷重の定数倍でしかなく、m（ひずみ速度感受性）と
+   * μ（摩擦）を分ける情報を持っていなかった —— 実測で感度行列の行列式が 0 になった
+   * （tools/mtrace.mjs）。実機ではトルクはロール面の摩擦力のモーメントで、
+   * «中立点がどこか» で決まる。荷重とトルクを «同じ圧力分布から» 出せば、
+   * 2 つの測りもので m と μ を分けられる。
+   *
+   *   h(φ) ＝ h_out ＋ R·φ²                       （小角近似）
+   *   H(φ) ＝ 2·√(R/h_out)·atan(√(R/h_out)·φ)
+   *   入側 (φ_N ≤ φ ≤ α): p ＝ k'·(h/h_in )·exp(μ·(H_α − H))
+   *   出側 (0  ≤ φ ≤ φ_N): p ＝ k'·(h/h_out)·exp(μ·H)
+   *   中立点は 2 つの枝が等しくなる H_N ＝ H_α/2 ＋ ln(h_out/h_in)/(2μ)
+   *   荷重   F ＝ w·R·∫₀^α p dφ
+   *   トルク M ＝ w·R²·μ·[ ∫_{φ_N}^α p dφ − ∫₀^{φ_N} p dφ ]   （ロール 1 本ぶん）
+   *
+   * @param kp k' ＝ 平面ひずみの変形抵抗（1.155·k_f）
+   */
+  BF_N: 16,                                   // 枝ごとの分割数（32 にしても 0.05 % 未満）
+  blandFord(hIn, hOut, R, mu, kp, width) {
+    const dh = hIn - hOut;
+    if (!(dh > 0) || !(R > 0) || !(kp > 0)) return { force: 0, torque: 0, phiN: 0, pm: 0, pMax: 0 };
+    const a = Math.sqrt(dh / R);                                  // 噛み込み角（小角近似）
+    const g = Math.sqrt(R / Math.max(hOut, 1e-6));
+    const H = (phi) => 2 * g * Math.atan(g * phi);
+    const Ha = H(a), m2 = Math.max(mu, 1e-4);
+    const Hn = Ha / 2 + Math.log(hOut / hIn) / (2 * m2);
+    const phiN = Num.clamp(Math.tan(Num.clamp(Hn / (2 * g), -1.5, 1.5)) / g, 0, a);
+    const h = (phi) => hOut + R * phi * phi;
+    const pEnt = (phi) => kp * (h(phi) / hIn) * Math.exp(m2 * (Ha - H(phi)));
+    const pExt = (phi) => kp * (h(phi) / hOut) * Math.exp(m2 * H(phi));
+    const N = Rolling.BF_N;
+    /* 界面のせん断応力には上限がある —— τ ＝ μ·p はあくまで «すべる» ときの話で、
+     * μ·p が材料のせん断降伏 k を超えると界面はすべらず «凝着» し、そこから先は
+     * τ ＝ k で頭打ちになる（平面ひずみで k ＝ k'/2）。
+     * 熱間圧延はまさにこの領域で、上限を入れないとトルクが過大に出る ——
+     * 実測: アーム比 λ ＝ T/(2F·Ld) が薄板パスで 0.63〜0.69（熱間の実用値 0.4〜0.5）。
+     * 荷重（法線方向）には効かず、トルク（接線方向）にだけ効く。 */
+    const kShear = kp / 2;
+    const tau = (q) => Math.min(m2 * q, kShear);
+    // 中点法で 2 つの枝を別々に積む（中立点で折れるので 1 本で積んではいけない）
+    let sExt = 0, sEnt = 0, tExt = 0, tEnt = 0, pMax = 0, stick = 0;
+    for (let i = 0; i < N; i++) {
+      const pe = phiN * (i + 0.5) / N, q = pExt(pe), dw = phiN / N;
+      sExt += q * dw; tExt += tau(q) * dw; pMax = Math.max(pMax, q);
+      if (m2 * q >= kShear) stick += dw;
+    }
+    for (let i = 0; i < N; i++) {
+      const pe = phiN + (a - phiN) * (i + 0.5) / N, q = pEnt(pe), dw = (a - phiN) / N;
+      sEnt += q * dw; tEnt += tau(q) * dw; pMax = Math.max(pMax, q);
+      if (m2 * q >= kShear) stick += dw;
+    }
+    const force = width * R * (sExt + sEnt);                       // N
+    const torque = width * R * R * (tEnt - tExt) / 1000;           // N·m（ロール 1 本）
+    const stickFrac = a > 0 ? stick / a : 0;                       // 凝着している弧の割合
+    const Ld = R * a;
+    return { force, torque, phiN, pMax, stickFrac, pm: Ld > 0 ? force / (width * Ld) : 0 };
+  },
+  /**
+   * ミルばね —— 実機の測定表（伸びの帯ごとの増分ばね定数）から «荷重 ⇄ 伸び» を引く。
+   * ここが単一の出どころで、ゲージメータ・ロードセル・圧下の下限がすべてこれを見る。
+   */
+  /** そのパスで材料点が受けるひずみ ln(h_in/h_out)。スケジュールから取る。 */
+  passStrainOf(passIndex) {
+    const sch = CONFIG.SCHEDULE;
+    if (!sch || passIndex < 0 || passIndex >= sch.length) return 0;
+    const hOut = sch[passIndex].gap;
+    const hIn = passIndex > 0 ? sch[passIndex - 1].gap : CONFIG.SLAB.CAST_DEFAULT - 2 * CONFIG.SLAB.SCALP_DEFAULT;
+    return hIn > hOut ? Math.log(hIn / hOut) : 0;
+  },
+  /** 伸び δ [mm] のときの荷重 [t]（表を積み上げる） */
+  millForce(mm) {
+    const M = CONFIG.MILL, tab = M.MODULUS_TABLE, st = M.MODULUS_STEP;
+    let d = Math.max(mm, 0), f = 0;
+    for (let i = 0; i < tab.length && d > 0; i++) { const w = Math.min(d, st); f += tab[i] * w; d -= w; }
+    return f + d * tab[tab.length - 1];              // 表の外は最後の増分のまま
+  },
+  /** 荷重 [t] のときの伸び [mm]（表の逆引き） */
+  millStretch(forceT) {
+    const M = CONFIG.MILL, tab = M.MODULUS_TABLE, st = M.MODULUS_STEP;
+    let f = Math.max(forceT, 0), d = 0;
+    for (let i = 0; i < tab.length; i++) {
+      const cap = tab[i] * st;
+      if (f <= cap) return d + f / tab[i];
+      f -= cap; d += st;
+    }
+    return d + f / tab[tab.length - 1];
+  },
+  /** その荷重での «増分» ばね定数 dF/dδ [t/mm]（AGC の利得はこちらを見る） */
+  millModulus(forceT) {
+    const M = CONFIG.MILL, tab = M.MODULUS_TABLE, st = M.MODULUS_STEP;
+    let f = Math.max(forceT, 0);
+    for (let i = 0; i < tab.length; i++) { const cap = tab[i] * st; if (f <= cap) return tab[i]; f -= cap; }
+    return tab[tab.length - 1];
+  },
+  /** その荷重での «割線» ばね定数 F/δ [t/mm]（表示・目安用） */
+  millSecant(forceT) { const d = Rolling.millStretch(forceT); return d > 0 ? forceT / d : CONFIG.MILL.MODULUS_TABLE[0]; },
+  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */
   frictionHill(Ld, hMean, mu = CONFIG.PROCESS.MU) {
     const x = mu * Ld / Math.max(hMean, 1e-3);
     return x < 1e-6 ? 1 : (Math.exp(x) - 1) / x;
@@ -4418,20 +4768,27 @@ const Rolling = {
      * 接触弧長を不動点反復で解く（緩和つき。3〜6 回で 1e-5 に落ちる）。
      * 1 回目（＝剛体ロール）の荷重も残しておき、扁平がどれだけ効いたかを見えるようにする。 */
     let Ld = Rolling.contactLength(hIn, hOut), Rflat = R, resid = 0;
-    let kf0 = 0, kfTop = 0, kfBot = 0, kf = 0, pm = 0, force = 0, strainRate = 0, forceRigid = 0;
+    let kf0 = 0, kfTop = 0, kfBot = 0, kf = 0, pm = 0, force = 0, strainRate = 0, forceRigid = 0, bf = null;
     for (let it = 0; it < 14; it++) {
+      /* strainRate は «代表値»（平均ひずみ速度）として表示・記録に使う。変形抵抗そのものは
+       * 接触弧の中の局所ひずみ速度で評価して平均する（Rolling.flowStressArc）——
+       * 1 点評価だと asinh の凸性のぶんだけ高く出る（実測で全パス 3.8〜4.5 %）。 */
       strainRate = Ld > 0 ? (v / Ld) * strain : 0;
-      if (typeof temp === 'number') { kf0 = kfTop = kfBot = Rolling.flowStress(temp, strainRate, alloy); }
+      const kfAt = (T) => Rolling.flowStressArc(T, hIn, hOut, Rflat, v, alloy);
+      if (typeof temp === 'number') { kf0 = kfTop = kfBot = kfAt(temp); }
       else {
         let sum = 0;
-        for (let j = 0; j < temp.length; j++) sum += Rolling.flowStress(temp[j], strainRate, alloy);
+        for (let j = 0; j < temp.length; j++) sum += kfAt(temp[j]);
         kf0 = sum / temp.length;
-        kfTop = Rolling.flowStress(temp[0], strainRate, alloy);
-        kfBot = Rolling.flowStress(temp[temp.length - 1], strainRate, alloy);
+        kfTop = kfAt(temp[0]);
+        kfBot = kfAt(temp[temp.length - 1]);
       }
       kf = Math.max(kf0 - tensionMPa, kf0 * 0.35);                  // 張力による見かけの低下
-      pm = 1.155 * kf * Rolling.frictionHill(Ld, hMean, mu);        // MPa
-      force = pm * width * Ld;                                      // N
+      /* 圧力分布そのものを解いて荷重を出す（Bland–Ford）。平均面圧 × 面積では
+       * トルクが荷重の定数倍になってしまい、m と μ を分けられない。 */
+      bf = Rolling.blandFord(hIn, hOut, Rflat, mu, 1.155 * kf, width);
+      pm = bf.pm;                                                   // MPa
+      force = bf.force;                                             // N
       if (it === 0) forceRigid = force;
       const Rn = Rolling.flattenedRadius(R, force / width, dh);
       const LdN = Rolling.contactLength(hIn, hOut, Rn);
@@ -4439,7 +4796,10 @@ const Rolling = {
       Ld += 0.7 * (LdN - Ld); Rflat = Rn;                           // 緩和つきで更新
       if (resid < 1e-5) break;
     }
-    const torque = 2 * force * (CONFIG.PROCESS.TORQUE_ARM * Ld / 1000);   // N·m
+    /* トルクは «ロール面の摩擦力のモーメント»（上下 2 本ぶん）。中立点より入側では
+     * 摩擦が材料を引き込む向き、出側では押し戻す向きに働くので、その差が主機の負担になる。
+     * 中立点の位置が μ で動くので、トルクは荷重とは «別の» 情報を持つ。 */
+    const torque = 2 * (bf ? bf.torque : 0);                        // N·m
     const power = torque * ((v / 1000) / (R / 1000));               // W
     const heat = CONFIG.PROCESS.HEAT_EFF * 1.155 * kf * 1e6 * strain
                / (alloy.RHO * alloy.CP);                            // K (このパスでの加工発熱)
@@ -5284,7 +5644,15 @@ const Rolling = {
     const vMax = Drive.maxSpeed();
     // 荷重の余裕は «モデルの不確かさ» だけを見る（常用最大の LOAD_MARGIN まで）。
     // 頭・尻の割増は予測荷重そのものへ PEAK_K で織り込む。
-    const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * CONFIG.DRIVE.OVERLOAD * 0.84;
+    /* 動力の上限。定格 × 短時間過負荷 に «モデルの不確かさ» のぶんの margin を掛ける。
+     * トルクを物理（ロール面の摩擦力のモーメント）で解くようにして 13 % 高く出るように
+     * なったので、この margin を 0.84 のままにすると実機が回している 120 mpm が入らず、
+     * 自動生成が 115 mpm へ落ちる（実測: 厚板段の 4 パス）。実機はその圧下で 120 mpm を
+     * 回しているのだから、足りていないのは «能力の見積り» の側。実機のスケジュールから
+     * その後に実機のトルクカーブ（最大 1,520 kN·m・ベース速度 75 mpm・過負荷 225 %/60 s）を
+     * いただいたので、推定の margin はやめて «実機の過負荷耐量そのもの» で見る。過負荷は
+     * 60 秒までの話なので、連続で引ける電力はトランス（2,800 kVA × 2）が決める。 */
+    const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * CONFIG.DRIVE.OVERLOAD;
     /* 巻取パスの尻の峰（待って冷えた最後の数 m、1〜2 s の事象）は常用最大ではなく非常最大に
      * 余裕を見て当てる。常用最大は連続の定格で、尻の一瞬の峰まで 0.95 倍に収めると実機が
      * 通している 16 → 8 mm（尻 3,687 t ＜ 常用 3,920 t）が 8.8 mm で止まる（tools/calib.mjs）。 */
@@ -5543,12 +5911,19 @@ const Rolling = {
   endJaw(dEnd, gator, zone, ny, h) {
     if (!(gator > 0) || dEnd >= zone) return 0;
     const O = CONFIG.SLAB.OVERHANG, e = 1 - dEnd / zone;
-    /* 開きは張り出し（＝割れの進み）に比例して育つが、«板厚で頭打ち» になる。
-     * 割れるのは板厚の中央の面なので、あご 1 枚の厚みは h/2 しかない。口が板厚より
-     * 大きく開くにはあごが 45° 以上回ることになり、そこまで回れば付け根から千切れる。
-     * 頭打ちを入れないと、張り出しが 460 mm で飽和したあとも板だけが薄くなり続けるので、
-     * 板厚 85 mm に対して口が 138 mm（163 %）開くという非物理な形になっていた（実測）。 */
-    return Math.min(O.JAW_K * gator, O.JAW_MAX * Math.max(h, 0)) * e * e * ny;
+    /* 割れた端は «内側へ折れ込む»。割れは板厚中央の面で起きるが、割れたあごはそのまま
+     * 外へ開いたままにはならない —— 次にロールへ当たったところで押し戻され、中心側へ
+     * 折れる。だから合計の厚みは板厚を «超えない»（めくれ上がりが皆無ではないにせよ、
+     * 板厚より厚い端面にはならない）。
+     *
+     * 以前はここを «外向き» に足していたため、端面が板厚の 1.5 倍（h/2 ＋ 0.25h を上下）に
+     * 膨らんでいた —— 実機の見え方と逆で、明確な誤りだった。
+     *
+     * 折れ込む量は割れの進み（gator）に比例して育ち、板厚の半分で頭打ちにする
+     * （それ以上折れると上下のあごが中心で重なる）。あごは割れの先端を支点に回るので、
+     * 端へ向かって e² で増える。 */
+    const fold = Math.min(O.JAW_K * gator, O.JAW_MAX * Math.max(h, 0)) * e * e;
+    return -Math.sign(ny) * fold * Math.abs(ny);
   },
   /**
    * ワニ口の «板厚方向の広がり» を決めるべき指数。offset ∝ |ny|^p で、
@@ -5634,6 +6009,10 @@ class SlabState {
     this.hBite = 0;                             // いまバイトに入っている材料の入側板厚 [mm]
     this.hDeliv = 0;                            // 噛んでいる間の実ギャップ ＝ 出ていく板厚 [mm]
     this.currentSpeed = 0; this.strainRate = 0; this.flowStress = 0;
+    /* 組織の履歴（PhysicsEngine._micro）。subGrain は亜結晶粒径 [µm]、rexFrac は
+     * 静的再結晶の進み（0〜1）、retStrain は次のパスへ持ち越す残留ひずみ。 */
+    this.subGrain = 0; this.rexFrac = 1; this.retStrain = 0; this.passStrain = 0;
+    this._rexT = 0; this._wasBite = false; this._dDef = 0; this._dRex = 0;
     this.dir = 1;
     // 反り（曲率 [1/mm]、+ は上反り）。kNew: 直近のパスで付いた反り、kOld: その前のパスの反り
     this.kNew = 0; this.kOld = 0; this._kAcc = 0; this._kW = 0;
@@ -6105,7 +6484,15 @@ class MillState {
     this.guideGap = 2600;
     this.wrDia = CONFIG.MILL.WR_D; this.brDia = CONFIG.MILL.BR_D;  // 研削による現在径（RollShop が入れる。上下の平均）
     // 主駆動系（PhysicsEngine._drive）。圧延トルクのほかに掛かるぶんと、その合計 [N·m]
-    this.bearingTorque = 0; this.inertiaTorque = 0; this.driveTorque = 0; this.drivePowerKW = 0; this.steadyPowerKW = 0; this.accelCap = CONFIG.PROCESS.ACCEL;
+    this.bearingTorque = 0; this.inertiaTorque = 0; this.driveTorque = 0; this.drivePowerKW = 0; this.steadyPowerKW = 0; this.accelCap = CONFIG.PROCESS.ACCEL; this.burCap = CONFIG.PROCESS.ACCEL;
+    /* バックアップロールは駆動されておらず、ワークロールとの摩擦で連れ回される。
+     * 押しつけが弱いときは滑って付いてこないので、«BUR の表面速度» を別の状態として持つ。
+     * brSurf は BUR 胴表面の周速 [mpm]（滑っていなければ currentSpeed と同じ）。 */
+    this.br = { top: { surf: 0, angle: 0, F: 0, slip: 0 }, bot: { surf: 0, angle: 0, F: 0, slip: 0 } };
+    this.brSlip = 0; this.burTorque = 0; this.burSlipping = false;
+    /* 指令から実際にトルクが立つまでの遅れ（電流の立ち上がりと駆動系のねじれ）。
+     * 0（指令どおり）〜1（立ち上がりきった）で、加速度の «出せる割合» に掛かる。 */
+    this.tqRise = 0;
     this.wrRa = CONFIG.MILL.ROLL_SHOP.WR.RA_NEW; this.brRa = CONFIG.MILL.ROLL_SHOP.BR.RA_NEW;   // 表面粗度 [µmRa]
     this.powerCap = 161;                       // 駆動包絡線から決まる速度上限
     this.motorRpm = 0;
@@ -7855,7 +8242,7 @@ class PhysicsEngine {
     this.millCtrl.update(this.finishCtrl, dt);
     this.finishCtrl.update(dt);
     this._actuators(dt);
-    if (this.slab.onLine) { this._dynamics(dt); this._guides(dt); this._thermal(dt); this._lengthwise(dt); }
+    if (this.slab.onLine) { this._dynamics(dt); this._guides(dt); this._thermal(dt); this._lengthwise(dt); this._micro(dt); }
     /* 主駆動系は «その時刻のトルク» を受けて速度を積分するので、圧延トルクが決まったあとに
      * 回す（_actuators の中で回すと 1 ステップ古い圧延トルクで加速を決めることになる）。 */
     this._drive(dt);
@@ -7890,19 +8277,48 @@ class PhysicsEngine {
    */
   _drive(dt) {
     const m = this.mill, s = this.slab, D = CONFIG.DRIVE, r = m.wrDia / 2000;
+    /* バックアップロールを «先に» 解く。連れ回すトルクは駆動側の定常項に入るので、
+     * 後から解くと 1 ステップ古い値でトルク収支を組むことになり、収支が閉じない
+     * （実測で 9.2 kN·m ずれた。_drive を _actuators の中で呼んでいたときと同じ取り違え）。 */
+    this._burDrag(dt);
     // ワークロールの首に掛かるのはベンディング力とロール自重（圧延荷重は BUR の首が受ける）
     const wrNeckN = m.bendForceT * 9806.65 + Drive.rollMass(m.wrDia, CONFIG.MILL.BARREL) * 9.80665;
     m.bearingTorque = Drive.bearingTorque((m.forceMeas || 0) * 9806.65, wrNeckN, m.wrDia, m.brDia);
-    const steady = (s.inBite ? s.rollTorque || 0 : 0) + m.bearingTorque;
+    /* バックアップロールを連れ回すために «駆動側が余分に出す» トルク。BUR は歯車で
+     * 繋がっていないので、これは接触の摩擦を通してしか伝わらない（_burDrag で解く）。 */
+    const burT = m.burTorque || 0;
+    const steady = (s.inBite ? s.rollTorque || 0 : 0) + m.bearingTorque + burT;
     m.powerCap = Num.approach(m.powerCap, Drive.speedLimit(steady, m.wrDia), 0.5, dt);
     m.motorRpm = Drive.motorRpm(m.currentSpeed, m.wrDia);
-    const J = Drive.inertia(m.wrDia, m.brDia);
+    /* 慣性は «駆動側だけ»（ワークロール ＋ 減速機 ＋ 主電動機）。バックアップロールは
+     * 摩擦でしか繋がっていないので、一緒くたにすると «滑って付いてこない» が出せない。 */
+    const J = Drive.driveInertia(m.wrDia);
     const net = Drive.availTorque(m.currentSpeed, m.wrDia) - steady;        // 慣性へ回せるトルク
-    m.accelCap = Math.min(CONFIG.PROCESS.ACCEL, Math.max(net, 0) / J * r * 60);   // rad/s² → mpm/s
+    /* 指令から実トルクが立つまでの遅れ（電流の立ち上がり ＋ 駆動系のねじれ）。
+     * 速度指令が変わっている間だけ立ち上がり、定速に入れば 1 に張り付く。 */
+    const changing = Math.abs(m.targetSpeed - m.currentSpeed) > 0.5;
+    m.tqRise = changing ? Num.approach(m.tqRise, 1, 1 / Math.max(D.TAU_TQ, 1e-3), dt) : 1;
+    const rise = Math.max(m.tqRise, 1e-3);
+    const capRaw = Math.max(net, 0) / J * r * 60;                           // rad/s² → mpm/s
+    /* バックアップロールを «滑らせない» 上限。BUR は歯車ではなく摩擦で連れ回されるので、
+     * 押しつけが弱い空転中はここが主機の能力より先に効く（実測: 下の接触で 50.8 mpm/s）。
+     * 実機がこれを守るのは、滑らせるとロール表面が擦れ、アルミではそれがそのまま
+     * 板の表面品質になるため。上下の接触のうち «弱いほう» で決まる。 */
+    const rollN = s.inBite ? (m.forceMeas || 0) * 9806.65 : 0;
+    const bendN = Math.abs(m.bendForceT) * 9806.65;
+    m.burCap = Math.min(
+      Drive.burAccelLimit(Drive.burNormal(true,  rollN, bendN, m.wrDia, m.brDiaTop), m.brDiaTop),
+      Drive.burAccelLimit(Drive.burNormal(false, rollN, bendN, m.wrDia, m.brDiaBot), m.brDiaBot));
+    m.accelCap = Math.min(CONFIG.PROCESS.ACCEL, capRaw, m.burCap) * rise;
+    /* 制動側も «出せるトルク» で頭打ちにする。回生制動の能力は力行と同じ枠で見て、
+     * 軸受の摩擦は減速を助ける向きに働く。以前は制動だけ青天井で、主機の能力を
+     * 無視して止まれてしまっていた（実測では能力内だったので表には出ていなかった）。 */
+    const brakeCap = Math.min(CONFIG.PROCESS.ACCEL,
+      (Drive.availTorque(m.currentSpeed, m.wrDia) + m.bearingTorque + burT) / J * r * 60,
+      m.burCap) * rise;
     const v0 = m.currentSpeed;
-    const vFull = Num.rateTo(v0, m.targetSpeed, CONFIG.PROCESS.ACCEL, dt);
-    // 速さが増える向きの刻みだけ余力で頭打ちにする（逆転の «まず止める» 側は制動）
-    let v1 = Math.abs(vFull) > Math.abs(v0) ? Num.rateTo(v0, m.targetSpeed, m.accelCap, dt) : vFull;
+    const speeding = Math.abs(m.targetSpeed) > Math.abs(v0) && Math.sign(m.targetSpeed || v0) === Math.sign(v0 || m.targetSpeed);
+    let v1 = Num.rateTo(v0, m.targetSpeed, speeding ? m.accelCap : brakeCap, dt);
     /* 定常ぶんを主機が賄えないときはロールが減速する —— 噛み込みの瞬間にミルの速度が落ちる
      * «衝撃降下»。指令の頭打ち（powerCap、時定数 2 s）より速く効くので、この 2 つは役割が違う。 */
     if (net < 0 && s.inBite && v0 !== 0) v1 = Math.sign(v0) * Math.max(Math.abs(v1) + net / J * r * 60 * dt, 0);
@@ -7914,6 +8330,48 @@ class PhysicsEngine {
     /* 過負荷の判定が見るのは «続いている» ぶん（圧延 ＋ 軸受）。加速の慣性トルクは数秒で
      * 消えるうえ短時間過負荷の枠内なので、これを混ぜると空転の立ち上げのたびに警告が出る。 */
     m.steadyPowerKW = steady * w / 1000;
+  }
+
+  /**
+   * バックアップロールは «連れ回される» —— 4 段ミルで駆動されるのはワークロールだけで、
+   * BUR はワークロールとの接触の摩擦で回る。伝えられる接線力は押しつけ力に比例するので、
+   *   ・圧延中は圧延荷重（1,000 t 超）が押しつけるので滑らない
+   *   ・空転でベンディングを掛けていないときはワークロールの自重（13.3 t）だけなので滑る
+   * 実測: μ 0.10 なら空転時に追従できるのは WR の 46 %。逆転のたびに BUR が置いていかれる。
+   */
+  _burDrag(dt) {
+    const m = this.mill, s = this.slab, rW = m.wrDia / 2000;
+    if (!(dt > 0)) return;
+    const rollN = s.inBite ? (m.forceMeas || 0) * 9806.65 : 0;
+    const bendN = Math.abs(m.bendForceT) * 9806.65;
+    let torque = 0, slipping = false, slipMax = 0;
+    for (const key of ['top', 'bot']) {
+      const top = key === 'top', st = m.br[key];
+      const brDia = top ? m.brDiaTop : m.brDiaBot;
+      const rB = brDia / 2000, Jb = Drive.burInertia(brDia);
+      if (!(rB > 0) || !(Jb > 0)) continue;
+      const N = Drive.burNormal(top, rollN, bendN, m.wrDia, brDia);
+      const Fmax = Drive.burTraction(N);
+      const Tdrag = Drive.burBearingTorque(N + Drive.rollMass(brDia, CONFIG.MILL.BR_BARREL) * 9.80665);
+      const wW = (m.currentSpeed / 60) / rB;            // «滑らないとき» の BUR 角速度 [rad/s]
+      const wB = (st.surf / 60) / rB;
+      const sgn = wB !== 0 ? Math.sign(wB) : Math.sign(wW);
+      /* くっついて回れるか（stick）を先に試す —— この刻みで wB を wW に合わせるのに要る
+       * 接線力。Fmax 以下なら滑らず、超えるなら Fmax で頭打ち（Coulomb 摩擦）。 */
+      const Fstick = (Jb * (wW - wB) / dt + Tdrag * sgn) / rB;
+      const slip = Math.abs(Fstick) > Fmax;
+      const F = slip ? Math.sign(Fstick) * Fmax : Fstick;
+      let wNew = slip ? wB + (F * rB - Tdrag * sgn) / Jb * dt : wW;
+      if (wB !== 0 && Math.sign(wNew) !== Math.sign(wB) && Math.abs(wW) < 1e-6) wNew = 0;
+      st.F = F; st.surf = wNew * rB * 60; st.angle += wNew * dt;
+      st.slip = m.currentSpeed - st.surf;
+      torque += Math.abs(F) * rW;                       // 駆動側が余分に出すトルク
+      if (slip) slipping = true;
+      slipMax = Math.abs(st.slip) > Math.abs(slipMax) ? st.slip : slipMax;
+    }
+    m.burTorque = torque;
+    m.burSlipping = slipping;
+    m.brSlip = slipMax;
   }
 
   /**
@@ -7944,12 +8402,14 @@ class PhysicsEngine {
      * 要るのはこのため）。振幅は 1 本あたりなので、合計が従来と同じになるよう半分ずつ。
      * m.rollAngle は下 WR の回転角で数えているので、他のロールは径の逆比で回る。 */
     /* 上下のワークロールは «同じ回転数» で駆動されるので、回転角は同じ（径が違えば周速が
-     * 違う ＝ それが反りの駆動力になる）。バックアップロールは駆動されておらず、それぞれの
-     * ワークロールに «周速を合わせて» 連れ回るので、回転角は径の逆比。 */
+     * 違う ＝ それが反りの駆動力になる）。バックアップロールは駆動されておらず、
+     * ワークロールとの摩擦で連れ回されるので、回転角は «実際に連れ回された角» を使う
+     * （m.brAngle。押しつけが弱いときは滑って遅れる ——_burDrag）。径の逆比を掛けるのは
+     * «滑らない» という仮定を置くことなので、偏芯の位相もその滑りに従う。 */
     const aWb = m.rollAngle + ph[0];
     const aWt = m.rollAngle + ph[3];
-    const aBb = m.rollAngle * (m.wrDiaBot / m.brDiaBot) + ph[1];
-    const aBt = m.rollAngle * (m.wrDiaTop / m.brDiaTop) + ph[4];
+    const aBb = m.br.bot.angle + ph[1];
+    const aBt = m.br.top.angle + ph[4];
     const h2 = (a) => Math.sin(a) + E.ECC_H2 * Math.sin(2 * a + ph[2] - ph[1]);
     /* ECC_* は «上下 2 本を合わせた» 半振幅。2 本は互いに独立な位相を持つので、合成の
      * 実効値（RMS）が ECC_* になるよう 1 本あたり ECC/√2 にする。ここを 1/2 ずつにすると、
@@ -7982,7 +8442,9 @@ class PhysicsEngine {
     const fRef = s.inBite ? m.forceMeas
                          : (auto && G.PRESET && plan ? (plan.steady ?? plan.force ?? 0) * m.adapt : 0);
     // 制御が «自分で思っている» ミル定数（真値とは M_EST_ERR だけずれている）
-    m.spring = fRef / (C.MODULUS * (1 + G.M_EST_ERR));
+    /* 制御が «自分で思っている» 伸び（真値とは M_EST_ERR だけずれている）。
+     * ばねが非線形なので «荷重 ÷ 定数» ではなく «表から引いた伸び» を使う。 */
+    m.spring = Rolling.millStretch(fRef) / (1 + G.M_EST_ERR);
     /* フィードフォワード: 前のパスが残した «その場所の板厚» は分かっているので、
      * 荷重に現れるのを待たずに先に圧下を動かす（実機は入側の厚み計がこれを担う）。
      * 肝は «先読み» で、いま噛んでいる材料ではなく «圧下の応答時間ぶん先の材料» を読む。
@@ -8003,10 +8465,11 @@ class PhysicsEngine {
        * フィードフォワードが受け持つのは «その差» ＝ δ·Q²/(M·(M+Q)) だけ。
        * ここを δ·Q/M（＝全量）にすると 5 倍ほど効かせ過ぎて、かえって振れが増える
        * （実測: 入側に +4 % の段差を入れたとき 0.147 → 0.360 mm に悪化した）。 */
-      const M = C.MODULUS;
+      const M = Rolling.millModulus(fRef);          // その荷重での «増分» ばね定数
       ff = -G.FF_KP * (hAhead - nom) * Qp * Qp / (M * (M + Qp));
     }
     const comp = auto ? G.KP * m.spring + m.trim - ff : 0;   // 手動はミルばねを補償しない（実機どおり）
+
     /* 板を噛んだままラインが止まると（75 mm シャーの端部切断がこれ）、荷重が抜けて
      * ゲージメータが «伸びが無い» と判断し、圧下を締めに行ってしまう。そのまま再起動すると
      * 荷重が戻ってミルが開き、出側が大きく外れる（実測: 第 7 パスでギャップが 6.96 mm 振れ、
@@ -8022,7 +8485,7 @@ class PhysicsEngine {
      * h を GAP_MIN まで詰めるには S を GAP_MIN より F/M だけ下へ入れる必要がある。
      * ここを GAP_MIN で止めていたため、薄板パスで圧下が飽和して板厚が目標から外れた
      * （実測: 目標 9.1 mm に対し 7.8 mm）。実ギャップ側の下限は下で別に効かせる。 */
-    const screwMin = C.GAP_MIN - C.RATED_FORCE_T / C.MODULUS;
+    const screwMin = C.GAP_MIN - Rolling.millStretch(C.RATED_FORCE_T);
     if (!lock) m.screwCmd = Num.clamp(m.targetGap - comp, screwMin, C.GAP_MAX);
     const want = Num.approach(m.screw, m.screwCmd, G.TAU, dt);   // 圧下の応答（一次遅れ）
     m.screw = Num.rateTo(m.screw, want, C.GAP_RATE, dt);         // ＋シリンダ速度の制限
@@ -8030,11 +8493,11 @@ class PhysicsEngine {
      *    （半陰的オイラー。ω·dt = 0.79 < 2 なので固定ステップ 1/120 s で安定）。
      *    噛み込みの階段荷重で伸びが行き過ぎ、その間だけギャップが余計に開く。 */
     {
-      const w = 2 * Math.PI * C.STAND.FN, xT = (s.rollForce || 0) / C.MODULUS;
+      const w = 2 * Math.PI * C.STAND.FN, xT = Rolling.millStretch(s.rollForce || 0);
       m.stretchV += (w * w * (xT - m.stretch) - 2 * C.STAND.ZETA * w * m.stretchV) * dt;
       m.stretch += m.stretchV * dt;
       if (m.stretch < 0) { m.stretch = 0; m.stretchV = Math.max(m.stretchV, 0); }   // 伸びは荷重側にしか出ない
-      m.forceMeas = C.MODULUS * m.stretch;                       // ロードセルはハウジングの伸びを読む
+      m.forceMeas = Rolling.millForce(m.stretch);                // ロードセルはハウジングの伸びを読む
     }
     this._disturb(dt);
     m.gap = Num.clamp(m.screw + m.stretch + m.ecc + m.muNoise, C.GAP_MIN, C.GAP_MAX);
@@ -8732,6 +9195,53 @@ class PhysicsEngine {
    * «掛ける長さ»（cov）は板の長手方向で何割に掛けるか。パスの頭から数えて cov を超えたら
    * ブラシを離す —— 実機の «F-2 は全長の半分» という掛け方がそのまま形になる。
    */
+  /**
+   * 組織の履歴 —— 亜結晶粒径・再結晶率・残留ひずみ。
+   *
+   * 変形中（バイトの中）: ひずみの導入と動的回復が釣り合った定常変形なので、亜結晶粒径は
+   * «その場の Z» だけで決まり履歴に依らない（文献。README 節 2-5）。ひずみは溜まる。
+   * パス間: 時間と温度で静的再結晶が進み（Avrami）、溜まったひずみを食う。食い残しが
+   * 次のパスへ持ち越される —— これが «履歴» の正体で、パス間時間が短いほど残る。
+   */
+  _micro(dt) {
+    const s = this.slab, MI = CONFIG.MICRO, Tk = s.temperature + 273.15;
+    const inBite = s.inBite && s.strainRate > 1e-6;
+    if (inBite) {
+      /* 材料点が 1 パスで受けるひずみは ln(h_in/h_out)。ε̇·dt を «パスの長さ» で積むと
+       * 板全体が延々と変形し続けることになり、ひずみが桁で狂う（実測: 23 パスで 3,659）。
+       * 1 パスぶんはスケジュールから取る —— «前のパスの出側厚 → このパスの出側厚»。
+       * 持ち越したぶん（前のパスで再結晶しきれなかった残り）に、このパスのぶんを足す。 */
+      const eps = Rolling.passStrainOf(this.mill.passIndex);
+      if (!s._wasBite) {
+        /* «パスの入り口の 1 回だけ» 足す。毎ステップ足すと retStrain を読み書きする
+         * 自己ループになり、上限へ張り付く（実測: どのパスでも 1.0 前後になった）。 */
+        s.passStrain = Math.min(s.retStrain + eps, MI.RET_MAX * 2);
+        s.retStrain = Math.min(s.passStrain, MI.RET_MAX);
+      }
+      // 亜結晶粒径は «その場の Z» の定常値へ。入れ替わりに要るひずみは SUB_EPS。
+      const Z = Rolling.zener(s.temperature, s.strainRate, s.alloy);
+      const dSS = 1 / Math.max(MI.SUB_A + MI.SUB_B * Math.log10(Math.max(Z, 1e6)), 1 / MI.SUB_MAX);
+      const k = Num.clamp(eps / Math.max(MI.SUB_EPS, 1e-6), 0, 1);
+      s.subGrain = s.subGrain > 0 ? s.subGrain + (dSS - s.subGrain) * k : dSS;
+      s.rexFrac = 0; s._rexT = 0;
+    } else {
+      if (s._wasBite) {
+        /* パスの出口。«変形でできた組織» をここで凍結する。再結晶が進むと、その割合だけ
+         * «変形組織» から «再結晶後の粗い粒» へ置き換わる。毎ステップ掛け算にすると
+         * 指数的に発散する（実測: 亜結晶粒径が 10⁸⁰ µm になった）ので、目標を作って混ぜる。 */
+        s._dDef = s.subGrain; s._dRex = s.subGrain * MI.REX_GROW; s._rexT = 0;
+      }
+      if (s.passStrain > 1e-4) {
+        s._rexT += dt;
+        const t50 = MI.REX_A * Math.pow(Math.max(s.passStrain, 0.01), -2)
+                  * Math.exp(MI.REX_Q * 1000 / (Rolling.RGAS * Tk));
+        s.rexFrac = 1 - Math.exp(-0.693 * Math.pow(s._rexT / Math.max(t50, 1e-6), MI.REX_N));
+        s.retStrain = Math.min(s.passStrain * (1 - s.rexFrac), MI.RET_MAX);
+        if (s._dDef > 0) s.subGrain = s._dDef * (1 - s.rexFrac) + s._dRex * s.rexFrac;
+      }
+    }
+    s._wasBite = inBite;
+  }
   _coating(dt) {
     const m = this.mill, s = this.slab, B = CONFIG.BRUSH;
     const row = m.passIndex >= 0 ? Rolling.brushAt(m.passIndex, CONFIG.SCHEDULE.length, s.alloyKey) : null;
@@ -8903,8 +9413,13 @@ function initMaterials(envMap) {
                                                 map: Tex.checker(), bumpMap: Tex.checker(), bumpScale: 0.6 }),
   });
   MAT.envMap = envMap;
-  // BoxGeometry のグループ順は +X, -X, +Y, -Y, +Z, -Z。+Y/-Y だけ鏡面にする。
-  MAT.slabFaces = [MAT.slab, MAT.slab, MAT.slabMirror, MAT.slabMirror, MAT.slab, MAT.slab];
+  /* 端面（±X）は «圧延されていない» 面 —— ワニ口の割れ口も、シャーで切った切口も、
+   * 出来たての地金が露わになった面で、圧延面（鏡面）や鋳肌の側面とは見え方が違う。
+   * 白っぽく、光沢はほとんど無く（破面なので微細な凹凸が光を散らす）、酸化が浅いので
+   * 温度による色の振れも小さい。専用の材料を割り当てる。
+   * BoxGeometry のグループ順は +X, -X, +Y, -Y, +Z, -Z。 */
+  MAT.slabFresh = matte(0xe6e9ec, 0.72, 0.55);         // 破面・切口の地金（白っぽいサテン）
+  MAT.slabFaces = [MAT.slabFresh, MAT.slabFresh, MAT.slabMirror, MAT.slabMirror, MAT.slab, MAT.slab];
   /* 加熱前のスラブ（スラブヤード）用。質感は同じだが «温度追従の対象にしない» ので、
    * 圧延材が赤らんでもヤードのスラブは冷えた色のまま。MAT.tint には登録しない。 */
   MAT.slabCold = matte(0xd8dce0, 0.30, 0.62);          // World3D.COLD と同じ «冷えた» 色
@@ -8915,7 +9430,7 @@ function initMaterials(envMap) {
    * 複製した材料は色オブジェクトも複製されるため、元だけを更新すると複製は構築時の色で
    * 固まってしまう（コイルが板と違う色に見えていた原因）。複製はここに登録して一緒に更新する。
    */
-  MAT.tint = { slab: [MAT.slab], mirror: [MAT.slabMirror] };
+  MAT.tint = { slab: [MAT.slab], mirror: [MAT.slabMirror], fresh: [MAT.slabFresh] };
   /** 両面表示の複製を作り、温度追従の対象として登録する。 */
   MAT.doubleSided = (mat, kind) => {
     const c = mat.clone(); c.side = THREE.DoubleSide;
@@ -9416,10 +9931,13 @@ const Parts = {
     }
     for (const x of cols)                                         // 床柱は床が空いている所だけ
       parts.push(G.at(G.box(420, top, 520), x, top / 2, 0));
-    /* 梁は «軸受のいちばん外» から «柱のいちばん外» までを通し、床柱の無い側の軸受を持たせる。 */
+    /* 梁は «軸受のいちばん外» から «柱のいちばん外» までを通す。
+     * 奥行きは X 線板厚計の柱（|z| 2,610〜2,950）に掛からない幅に留める —— 入側の梁は
+     * 計器の X をまたぐので、ここを広げると柱と取り合う（実測 50 mm の食い込み）。 */
     const xs = [...arms, ...cols], x0 = Math.min(...xs), x1 = Math.max(...xs);
-    parts.push(G.at(G.box(Math.max(x1 - x0 + 520, 400), 220, 420), (x0 + x1) / 2, 410, 0));
-    parts.push(G.at(G.box(Math.max(x1 - x0 + 520, 400), 300, 460), (x0 + x1) / 2, P + g.ARM_Y - 210, 0));
+    const beamZ = Math.min(420, 2 * (CONFIG.XRAY.COL_Z - CONFIG.XRAY.COL_W / 2 - g.BASE_Z) - 80);
+    parts.push(G.at(G.box(Math.max(x1 - x0 + 520, 400), 220, beamZ), (x0 + x1) / 2, 410, 0));
+    parts.push(G.at(G.box(Math.max(x1 - x0 + 520, 400), 300, beamZ), (x0 + x1) / 2, P + g.ARM_Y - 210, 0));
     return G.merge(parts);
   },
   /** サイドガイドのコロ 1 個。本体 380 mm の上下へシャフト（535 mm）が出て軸受で受ける。 */
@@ -11253,8 +11771,10 @@ class MillStandView {
     this.rolls.workBot.position.y   = u(wb); this.rolls.workBot.rotation.z   = -mill.rollAngle;
     /* バックアップロールは連れ回りなので «周速を合わせる» 回転数。上下で径が違えば
      * 回転数も別々になる（ワークロールは駆動なので上下同じ回転数）。 */
-    this.rolls.backupTop.position.y = u(bt); this.rolls.backupTop.rotation.z = -mill.rollAngle * (mill.wrDiaTop / mill.brDiaTop);
-    this.rolls.backupBot.position.y = u(bb); this.rolls.backupBot.rotation.z =  mill.rollAngle * (mill.wrDiaBot / mill.brDiaBot);
+    /* バックアップロールは «連れ回された実際の角» で回す（滑ると遅れる。_burDrag）。
+     * 径が上下で違う場合は、同じ周速になるように径の逆比でそれぞれ換算する。 */
+    this.rolls.backupTop.position.y = u(bt); this.rolls.backupTop.rotation.z = -mill.br.top.angle;
+    this.rolls.backupBot.position.y = u(bb); this.rolls.backupBot.rotation.z =  mill.br.bot.angle;
 
     /* ブラシロール: 掛けているときはワークロールに接し、掛けていないときは半径方向へ引く。
      * 回転はインバータ周波数から（掛けていなければ止まる）。 */
@@ -13324,6 +13844,14 @@ class World3D {
     /* 圧延面（鏡面側）も «同じ材料の同じ温度» なので、色は板の面とほぼ同じところまで寄せる。
      * 0.6 倍にして «冷たいまま» にしていたため、コイルの外周だけが白く浮いて見えていた。 */
     for (const m of MAT.tint.mirror) { m.color.copy(World3D.COLD).lerp(World3D.HOT, t * 0.9); m.roughness = 0.24 + 0.12 * t; }
+    /* 端面（破面・切口）は «出来たての地金» なので、酸化皮膜が薄く白っぽいまま。
+     * 温度による色の振れは板面の 1/3 程度に留め、粗さは破面らしく高いまま動かさない。
+     * COLD 側へ寄せて «光を散らす白» にするのは、割れ口が周りより明るく見える実機の
+     * 見え方に合わせるため（圧延面は鏡なので光を一方向へ返し、破面は散らす）。 */
+    for (const m of MAT.tint.fresh) {
+      m.color.copy(World3D.COLD).lerp(World3D.HOT, t * 0.3).lerp(new THREE.Color(0xffffff), 0.35);
+      m.roughness = 0.70 + 0.04 * t;
+    }
 
     this._tween(dt);
     this.controls.update();
@@ -13386,11 +13914,11 @@ class UIManager {
     // 実績ビュワーの状態: ロット（null = 運転中の最新）／パス（空 = 全部）／項目
     this.logLot = null; this.logPass = new Set();
     this.logSeries = new Set(RollingLog.SERIES.map(q => q.key));
-    this._logBox = null; this.logShow = 'both'; this._logPop = null;
+    this._logBox = null; this.logShow = 'both'; this._logPop = null; this.logZoom = 1;
     this._buildTabs(); this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
     this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildStripCool(); this._buildCutScope();
     this._buildVersion();
-    this._bind(); this._listen(); this._logDragResize(); this._panelDrag('pnl-plan', 'plan-drag'); this._logCrosshair();
+    this._bind(); this._listen(); this._logDragResize(); this._logZoomCtl(); this._panelDrag('pnl-plan', 'plan-drag'); this._logCrosshair();
     this.dims(); this._rollState(); this._diaDiff(); this._plState(); this._coolState(); this._coolSide(); this.setLogShow("both");
     this.setPlanLoop('none'); this.renderPlan(); this.setTimeScale(this.timeScale); this._startBtn();
     this.setSidebar(false);              // 条件は «運転計画» で決めるので、左メニューは畳んで始める
@@ -13553,7 +14081,13 @@ class UIManager {
   _logChart(tgt) {
     const host = $('log-chart'), pad = { l: 52, r: 96, t: 14, b: 22 };
     // 板の大きさは変えられるので、その時点の実寸で組む（viewBox を引き伸ばすと文字が歪む）
-    const w = Math.max(host.clientWidth || 1200, 320), h = Math.max(host.clientHeight || 216, 120);
+    /* 横軸スケール（ズーム）。枠の幅はそのままに «中の SVG だけ» を倍率ぶん伸ばし、
+     * 枠を横スクロールさせる。こうすると «板の大きさ» と «軸の拡大» が別々に扱える
+     * —— 細かいところを読むために板を画面いっぱいに広げる必要が無くなる。 */
+    const zoom = Math.max(this.logZoom || 1, 1);
+    const boxW = Math.max(host.clientWidth || 1200, 320);
+    const w = Math.round(boxW * zoom), h = Math.max(host.clientHeight || 216, 120);
+    host.dataset.zoom = zoom === 1 ? '1' : 'n';
     const S = (tgt?.series || []).filter(p => this._passOn(p.pass));
     const use = RollingLog.SERIES.filter(q => this.logSeries.has(q.key));
     if (!S.length || !use.length) {
@@ -13599,7 +14133,9 @@ class UIManager {
     // 読み取り線が使う写像を残しておく（描いたときの縮尺でなぞれるようにする）
     this._logMap = { w, h, pad, t0, t1, use, axMax, S,
                      px: (t) => X(t) / w, val: (q, v) => Y(q, v) };
-    host.innerHTML = `<svg viewBox="0 0 ${w} ${h}">
+    /* ズーム時は «枠より広い SVG» を実寸で置く（viewBox で縮めない）。幅を px で明示して
+     * おかないと、枠の overflow が効かず中身が潰れる。 */
+    host.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block">
       ${grid}
       <line x1="${pad.l}" y1="${h - pad.b}" x2="${w - pad.r}" y2="${h - pad.b}" stroke="var(--line)"/>
       ${lines}
@@ -13621,20 +14157,26 @@ class UIManager {
     host.addEventListener('pointermove', (e) => {
       const m = this._logMap, c = $('log-cross'), rd = $('log-read');
       if (!m || !m.S.length || !c || !rd) return hide();
-      const b = host.getBoundingClientRect(), fx = (e.clientX - b.left) / b.width;
+      /* 横軸を引き伸ばしているときは «枠より SVG のほうが広い»。読み取り線は SVG の座標で
+       * 置く（枠と一緒にスクロールする）ので、マウス位置にスクロール量を足して SVG 上の
+       * X に直す。ここを枠の幅で割ると、ズーム時に線と値がずれる。 */
+      const b = host.getBoundingClientRect();
+      const px = (e.clientX - b.left) + host.scrollLeft;      // SVG 上の X [px]
+      const fx = px / m.w;
       const inPlot = fx >= m.pad.l / m.w && fx <= (m.w - m.pad.r) / m.w;
       if (!inPlot) return hide();
       const t = m.t0 + (m.t1 - m.t0) * (fx - m.pad.l / m.w) / ((m.w - m.pad.l - m.pad.r) / m.w);
       let best = m.S[0];
       for (const p of m.S) if (Math.abs(p.t - t) < Math.abs(best.t - t)) best = p;
-      c.hidden = false; c.style.left = (b.width * fx).toFixed(1) + 'px';
+      c.hidden = false; c.style.left = px.toFixed(1) + 'px';
       rd.hidden = false;
       rd.innerHTML = `<div><b>P${best.pass}</b>　${(best.t - m.t0).toFixed(1)} s</div>`
         + m.use.map(q => `<div><i style="background:${q.css}"></i>${q.name} <b>${
             (best[q.key] ?? 0) >= 100 ? Math.round(best[q.key]) : (+(best[q.key] ?? 0)).toFixed(1)
           }</b> ${q.unit}</div>`).join('');
-      const rw = rd.offsetWidth || 150;
-      rd.style.left = Num.clamp(b.width * fx + 12, 4, Math.max(4, b.width - rw - 6)) + 'px';
+      /* 値の札は «見えている範囲» に収める（スクロールしていても画面外へ出さない）。 */
+      const rw = rd.offsetWidth || 150, vis = host.clientWidth, sl = host.scrollLeft;
+      rd.style.left = Num.clamp(px + 12, sl + 4, Math.max(sl + 4, sl + vis - rw - 6)) + 'px';
     });
   }
 
@@ -13662,10 +14204,36 @@ class UIManager {
       p.style.right = 'auto';
     }
   }
-  _logDragResize() { this._panelDrag('pnl-log', 'log-drag', 'log-grip', () => this.renderLog()); }
-  /** 板（パネル）を «見出しで移動・右下で大きさ変更» できるようにする。両方の板で同じ 1 式。 */
-  _panelDrag(pnlId, hdId, gripId, onResize) {
-    const p = $(pnlId), hd = $(hdId), grip = gripId ? $(gripId) : null;
+  _logDragResize() { this._panelDrag('pnl-log', 'log-drag', () => this.renderLog()); }
+  /**
+   * グラフの横軸スケール（ズーム）。1 倍で «ロット全体が枠に収まる»、上げると枠は
+   * そのままに中身だけが伸びて横スクロールになる。板を広げなくても細かいところが読める。
+   * 拡大するときは «いま見えている真ん中» を軸にする —— 端へ飛ばされると見ていた場所を
+   * 見失うので、目が追っていた所が動かないようにする。
+   */
+  _logZoomCtl() {
+    const sl = $('log-zoom'), out = $('log-zoom-v'), fit = $('log-zoom-fit'), host = $('log-chart');
+    if (!sl || !host) return;
+    const apply = (z) => {
+      const prev = Math.max(this.logZoom || 1, 1), vis = host.clientWidth || 1;
+      const centre = (host.scrollLeft + vis / 2) / Math.max(prev, 1e-6);   // 1 倍換算の中心
+      this.logZoom = Math.max(z, 1);
+      sl.value = String(this.logZoom); out.textContent = this.logZoom.toFixed(1) + '×';
+      this.renderLog();
+      host.scrollLeft = Math.max(centre * this.logZoom - vis / 2, 0);
+    };
+    sl.addEventListener('input', () => apply(+sl.value));
+    fit?.addEventListener('click', () => { host.scrollLeft = 0; apply(1); });
+    out.textContent = '1.0×';
+  }
+  /**
+   * 板（パネル）を «見出しで移動・4 辺 4 隅で大きさ変更» できるようにする。両方の板で同じ 1 式。
+   * 掴み手は data-rz（n/s/e/w と 4 隅）で向きを持つので、どこを掴んだかで
+   * «どの辺が動くか» が決まる。上・左を掴んだときは幅を変えると同時に左上も動かす
+   * （掴んだ辺だけが動き、反対の辺は動かない ＝ 手で掴んだ感じと一致する）。
+   */
+  _panelDrag(pnlId, hdId, onResize) {
+    const p = $(pnlId), hd = $(hdId);
     if (!p || !hd) return;
     const save = () => { const r = p.getBoundingClientRect();
       this['_box_' + pnlId] = { x: r.left, y: r.top, w: r.width, h: r.height }; };
@@ -13682,8 +14250,15 @@ class UIManager {
           p.style.left = Num.clamp(r.left + dx, -r.width + 120, innerWidth - 120) + 'px';
           p.style.top = Num.clamp(r.top + dy, 0, innerHeight - 40) + 'px';
         } else {
-          p.style.width = Num.clamp(r.width + dx, 520, innerWidth - r.left - 4) + 'px';
-          p.style.height = Num.clamp(r.height + dy, 280, innerHeight - r.top - 4) + 'px';
+          /* mode は掴んだ向き（'n' 'se' など）。含まれる方位の辺だけを動かす。 */
+          const MINW = 520, MINH = 280;
+          let x = r.left, y = r.top, w = r.width, h = r.height;
+          if (mode.includes('e')) w = Num.clamp(r.width + dx, MINW, innerWidth - r.left - 4);
+          if (mode.includes('s')) h = Num.clamp(r.height + dy, MINH, innerHeight - r.top - 4);
+          if (mode.includes('w')) { w = Num.clamp(r.width - dx, MINW, r.right - 4); x = r.right - w; }
+          if (mode.includes('n')) { h = Num.clamp(r.height - dy, MINH, r.bottom - 4); y = r.bottom - h; }
+          p.style.left = x + 'px'; p.style.top = y + 'px';
+          p.style.width = w + 'px'; p.style.height = h + 'px';
           onResize?.();                          // 大きさに合わせて中身を描き直す
         }
       };
@@ -13692,7 +14267,8 @@ class UIManager {
       addEventListener('pointermove', move); addEventListener('pointerup', up);
     };
     hd.addEventListener('pointerdown', e => start(e, 'move'));
-    grip?.addEventListener('pointerdown', e => start(e, 'size'));
+    for (const g of p.querySelectorAll('[data-rz]'))
+      g.addEventListener('pointerdown', e => start(e, g.dataset.rz));
     addEventListener('resize', () => { if (this.logOpen) this._logPlace(); });
   }
 
@@ -14023,9 +14599,16 @@ class UIManager {
       t.min = a.T_ROLL[0]; t.max = a.T_ROLL[1];
       t.value = Num.clamp(+t.value, a.T_ROLL[0], a.T_ROLL[1]);
       $('der-temp').textContent = `${a.name.split(' ')[0]} の熱間圧延域は ${a.T_ROLL[0]}〜${a.T_ROLL[1]} ℃（巻取温度の目安 ${a.T_COIL} ℃）。この温度域では可視発光しません。`;
+      /* 構成式の材料定数をそのまま見せる。m は «定数ではなく導出量» なので、
+       * 代表条件での実効値 m_eff を 2 点出して «条件で変わる» ことが分かるようにする。 */
+      const kf450 = Rolling.flowStress(450, 1, a), m450 = Rolling.mEff(450, 1, a);
+      const m400 = Rolling.mEff(400, 10, a);
       $('der-alloy').innerHTML =
-        `変形抵抗 ${a.C} MPa（450 ℃・ε̇=1/s）／ 温度係数 b=${a.b.toFixed(4)} ／ 速度指数 m=${a.m.toFixed(2)}<br>` +
-        `密度 ${a.RHO} kg/m³ ／ 熱伝導率 ${a.K} W/mK ／ 端部欠陥係数 ${a.end.toFixed(1)}`;
+        `変形抵抗 ${kf450.toFixed(1)} MPa（450 ℃・ε̇=1/s）／ 活性化エネルギー Q=${a.Q_ACT} kJ/mol`
+        + ` ／ 応力指数 n=${a.N_EXP} ／ α=${a.ALPHA} MPa⁻¹<br>`
+        + `実効ひずみ速度感受性 m_eff = ${m450.toFixed(3)}（450 ℃・1/s）→ ${m400.toFixed(3)}（400 ℃・10/s）`
+        + ` ※ m は定数ではなく tanh(ασ)/(n·ασ) で条件から決まる<br>`
+        + `密度 ${a.RHO} kg/m³ ／ 熱伝導率 ${a.K} W/mK ／ 端部欠陥係数 ${a.end.toFixed(1)}`;
     };
     sel.addEventListener('change', () => { applyRange(); this._slabChanged(); });
     applyRange();
@@ -14049,9 +14632,10 @@ class UIManager {
       ['BUR 硬度 / 粗度 / クラウン', `${M.BR_HARDNESS} ／ ${M.BR_ROUGHNESS} ／ ${M.BR_CROWN > 0 ? '+' : ''}${M.BR_CROWN} µm`],
       ['ロールベンディング', `最大 ${M.BENDER.FORCE} t/対（クラウン利得 約 0.7 µm/t）`],
       ['主電動機', '1,900 kW × 2 台（直流）'],
-      ['回転数 / 減速比', `0 / ${CONFIG.DRIVE.RPM_BASE} / ${CONFIG.DRIVE.RPM_MAX} rpm ／ ${CONFIG.DRIVE.GEAR}:1`],
+      ['圧延速度', `ベース ${CONFIG.DRIVE.V_BASE} / 最高 ${CONFIG.DRIVE.V_MAX} mpm ／ 減速比 ${CONFIG.DRIVE.GEAR}:1`],
       ['最大圧延速度', `${Drive.maxSpeed().toFixed(0)} mpm <span style="color:var(--ink-3)">(= π·D·${CONFIG.DRIVE.RPM_MAX}/${CONFIG.DRIVE.GEAR})</span>`],
-      ['ロール軸 最大トルク', `${(Drive.maxTorque / 1000).toFixed(0)} kN·m <span style="color:var(--ink-3)">(基底 ${CONFIG.DRIVE.RPM_BASE} rpm まで)</span>`],
+      ['ロール軸 トルク', `最大 ${(Drive.maxTorque / 1000).toFixed(0)} ／ 定格 ${(Drive.ratedTorque / 1000).toFixed(0)} kN·m <span style="color:var(--ink-3)">(ベース速度 ${CONFIG.DRIVE.V_BASE} mpm まで一定・以上は定出力)</span>`],
+      ['ドライブ / 受電', `${CONFIG.DRIVE.DRIVE_TYPE} ／ トランス ${CONFIG.DRIVE.TRANSFORMER_KVA} kVA × ${CONFIG.DRIVE.TRANSFORMER_N} ／ ${CONFIG.DRIVE.BREAKER} <span style="color:var(--ink-3)">(過負荷耐量 ${(CONFIG.DRIVE.OVERLOAD * 100).toFixed(0)} % / ${CONFIG.DRIVE.OVERLOAD_SEC} s)</span>`],
       ['常用 / 非常最大圧延荷重', `${M.RATED_FORCE_T.toLocaleString()} / ${M.LIMIT_FORCE_T.toLocaleString()} ton`],
       ['入側 / 出側テーブル長', `${(ent / 1000).toFixed(1)} / ${(ext / 1000).toFixed(1)} m`],
       ['テーブルローラ', `胴長 ${T.BARREL}、胴端 Φ${T.ROLL_D_END} → 中央 Φ${T.ROLL_D_MID}`],
@@ -15047,6 +15631,11 @@ class UIManager {
       const sp = m.brushKey ? CONFIG.BRUSH.SPEC[m.brushKey] : null;
       $('lbl-coat').innerHTML = `${c.toFixed(1)}<em>µm</em>`;
       $('m-coat-v').textContent = c.toFixed(1);
+      /* 組織 —— 亜結晶粒径と «次のパスへ持ち越すひずみ»。パス間で再結晶しきれば持ち越しは 0。
+       * 亜結晶粒径は下工程の硬さを決める量で、細かいほど硬い。 */
+      $('m-micro-v').textContent = s.subGrain > 0 ? s.subGrain.toFixed(1) : '–';
+      $('m-micro-s').textContent = s.subGrain > 0
+        ? `再結晶 ${(s.rexFrac * 100).toFixed(0)} %` : '–';
       $('m-coat-s').innerHTML = `<span style="color:${st[1]};font-weight:700">${st[0]}</span>`
         + (sp ? ` ／ ${sp.key} ${m.brushHz} Hz` : ' ／ ブラシ無し');
       $('der-coat').innerHTML = `<span style="color:${st[1]};font-weight:700">${st[0]}</span>`

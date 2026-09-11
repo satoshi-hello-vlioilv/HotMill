@@ -111,6 +111,56 @@ for (const w of widths) {
      m.cardStable ? `${m.n} 枚とも同じ` : m.before.cards.map((b, i) => `${i}: ${b.join(',')} → ${m.longer.cards[i].join(',')}`).filter((_, i) => true).slice(0, 2).join(' ／ '));
   ok('札からはみ出した中身は隠れる（外へ押し出さない）', m.overflow.every(v => v >= 0),
      `はみ出し ${m.overflow.join(' / ')} px（隠す設計）`);
+  /* 実績ビュワーの «横軸スケール» と «4 辺 4 隅のサイズ変更»。
+   * どちらも «目で見て確かめる» しかない類の機能なので、実際に掴んで動かして測る。 */
+  if (w === 1728) {
+    const pn = await page.evaluate(() => new Promise(res => setTimeout(() => {
+      const A = window.__app, $ = (id) => document.getElementById(id);
+      window.__startAuto(false);
+      window.__ff((p) => p.mill.passIndex >= 2, 120 * 400, 0);
+      $('pnl-log').hidden = false; A.ui.renderLog();
+      const host = $('log-chart'), sl = $('log-zoom');
+      const svgW = () => { const s = host.querySelector('svg'); return s ? +s.getAttribute('width') : 0; };
+      const box = host.clientWidth, w1 = svgW();
+      sl.value = '5'; sl.dispatchEvent(new Event('input', { bubbles: true }));
+      const w5 = svgW(), scroll5 = host.scrollWidth > host.clientWidth + 1;
+      $('log-zoom-fit').click();
+      const wFit = svgW();
+      const p = $('pnl-log');
+      const dirs = [...p.querySelectorAll('[data-rz]')].map(e => e.dataset.rz).sort();
+      const plan = [...document.querySelectorAll('#pnl-plan [data-rz]')].map(e => e.dataset.rz).sort();
+      // 掴んだ辺«だけ»が動くこと（北西を掴んだら右下は動かない）
+      const grab = (dir, dx, dy) => {
+        const r = p.getBoundingClientRect(), g = p.querySelector(`[data-rz="${dir}"]`);
+        const x = dir.includes('w') ? r.left + 2 : dir.includes('e') ? r.right - 2 : (r.left + r.right) / 2;
+        const y = dir.includes('n') ? r.top + 2 : dir.includes('s') ? r.bottom - 2 : (r.top + r.bottom) / 2;
+        g.dispatchEvent(new PointerEvent('pointerdown', { clientX: x, clientY: y, bubbles: true }));
+        dispatchEvent(new PointerEvent('pointermove', { clientX: x + dx, clientY: y + dy, bubbles: true }));
+        dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+        const q = p.getBoundingClientRect();
+        return { l: Math.round(q.left - r.left), t: Math.round(q.top - r.top),
+                 r: Math.round(q.right - r.right), b: Math.round(q.bottom - r.bottom) };
+      };
+      const nw = grab('nw', 60, 40), se = grab('se', -50, -30), e = grab('e', -40, 0);
+      res({ box, w1, w5, wFit, scroll5, dirs, plan, nw, se, e });
+    }, 400)));
+    ok('グラフの横軸スケールが 1 倍で枠ちょうど', Math.abs(pn.w1 - pn.box) <= 1, `SVG ${pn.w1} / 枠 ${pn.box} px`);
+    ok('横軸スケールを上げると中身だけが伸びて横スクロールになる',
+       Math.abs(pn.w5 - pn.box * 5) <= 2 && pn.scroll5, `5 倍で SVG ${pn.w5} px・スクロール ${pn.scroll5 ? 'あり' : 'なし'}`);
+    ok('«全体» で 1 倍に戻る', Math.abs(pn.wFit - pn.box) <= 1, `SVG ${pn.wFit} px`);
+    ok('サイズ変更の掴み手が 4 辺 4 隅の 8 つある（両方の板）',
+       pn.dirs.join(',') === 'e,n,ne,nw,s,se,sw,w' && pn.plan.join(',') === 'e,n,ne,nw,s,se,sw,w',
+       `実績 ${pn.dirs.join(' ')} ／ 計画 ${pn.plan.join(' ')}`);
+    ok('北西の隅を掴むと左上だけが動く（右下は動かない）',
+       pn.nw.l > 0 && pn.nw.t > 0 && pn.nw.r === 0 && pn.nw.b === 0,
+       `左 ${pn.nw.l} / 上 ${pn.nw.t} / 右 ${pn.nw.r} / 下 ${pn.nw.b} px`);
+    ok('南東の隅を掴むと右下だけが動く（左上は動かない）',
+       pn.se.r < 0 && pn.se.b < 0 && pn.se.l === 0 && pn.se.t === 0,
+       `左 ${pn.se.l} / 上 ${pn.se.t} / 右 ${pn.se.r} / 下 ${pn.se.b} px`);
+    ok('右の辺を掴むと «右» だけが動く（上下は動かない）',
+       pn.e.r < 0 && pn.e.t === 0 && pn.e.b === 0 && pn.e.l === 0,
+       `左 ${pn.e.l} / 上 ${pn.e.t} / 右 ${pn.e.r} / 下 ${pn.e.b} px`);
+  }
   await browser.close();
 }
 console.log(`\nRESULT: ${failed ? 'FAIL' : 'PASS'}`);
