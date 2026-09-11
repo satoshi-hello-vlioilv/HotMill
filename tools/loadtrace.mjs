@@ -23,7 +23,10 @@ await installHelpers(page);
 
 const out = await page.evaluate(() => {
   const A = window.__app, P = A.physics, K = window.__CFG;
-  const R = { checks: [], passes: [] }, ok = (n, p, d = '') => R.checks.push({ name: n, pass: !!p, detail: d });
+  /* ref を立てた判定は «参考» —— しきい値に実測の裏づけが無いものは合否に数えず、
+   * 数値だけを毎回出す（CLAUDE.md の決め）。 */
+  const R = { checks: [], passes: [] },
+    ok = (n, p, d = '', ref = false) => R.checks.push({ name: n, pass: !!p, detail: d, ref });
   const ZONE = 1500, REF = 6000;                 // 端部として見る範囲 ／ その基準にする範囲
   const avg = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
 
@@ -50,11 +53,42 @@ const out = await page.evaluate(() => {
     // 巻取パスはベルトラッパーが先端を掴んで張力が立つまで（十数 s）荷重が動くので、そこも過渡に含める
     const tTr = K.SCHEDULE[cur.pass - 1]?.coil ? 15 : 3;
     const late = full.filter(q => q.dHead > ZONE && q.dTail > cur.len * 0.1 && q.t - t0 > tTr).map(q => q.gap);
+    /* «発振» と «ゆっくりしたずれ» を分ける。実ギャップ h ＝ S ＋ δ(F) なので、パス中に
+     * 荷重が動けばギャップも動く —— 巻取パスは尻へ向かって荷重が 2,400 → 2,900 t 上がり、
+     * 実機のミル定数（226〜296 t/mm）ではそれだけで 1.7 mm 伸びる。これは追従の «遅れ» で
+     * あって発振ではない。振れ幅（band）だけを見るとこの 2 つが混ざる。
+     * 発振は «往復» なので、隣り合う 3 点の «曲がり» x[i] − (x[i−1] + x[i+1])/2 を取れば
+     * 直線的なずれは消えて往復だけが残る。その RMS を ripple とする。 */
+    const ripple = (() => {
+      if (late.length < 5) return 0;
+      let sum = 0, n2 = 0;
+      for (let i = 1; i < late.length - 1; i++) {
+        const c = late[i] - (late[i - 1] + late[i + 1]) / 2;
+        sum += c * c; n2++;
+      }
+      return n2 ? Math.sqrt(sum / n2) : 0;
+    })();
+    /* «往復しているか» は符号の反転で見る。単調に増えるだけのずれ（尻が冷えて荷重が
+     * 立つ、など）は反転しない。標本 100 点あたりの反転数で出す —— 発振なら 50 に近づき、
+     * ゆっくりしたずれなら 0 に近い。 */
+    const flips = (() => {
+      if (late.length < 5) return 0;
+      let f = 0, prev = 0;
+      for (let i = 1; i < late.length; i++) {
+        const d = late[i] - late[i - 1];
+        if (Math.abs(d) < 1e-9) continue;
+        const sg = Math.sign(d);
+        if (prev && sg !== prev) f++;
+        prev = sg;
+      }
+      return f / (late.length - 1) * 100;
+    })();
     // 頭からの距離で前 1/4 と後 1/4 の平均荷重（巻取パスの «尻へ向かって上がる» を見る）
     const q1 = avg(full.filter(q => q.dHead < cur.len * 0.25).map(q => q.f));
     const q4 = avg(full.filter(q => q.dHead > cur.len * 0.75).map(q => q.f));
     R.passes.push({
       pass: cur.pass, gap: cur.gap, len: Math.round(cur.len / 1000),
+      ripple: +ripple.toFixed(4), flips: +flips.toFixed(1),
       spike: Math.round(spike), headRef: Math.round(headRef),
       spikeR: +(spike / Math.max(headRef, 1)).toFixed(3),
       headR: +(headF / Math.max(headRef, 1)).toFixed(3),
@@ -123,22 +157,30 @@ const out = await page.evaluate(() => {
   // 巻取パスは頭がコイルの中で断熱され（+40 K）、尻だけが冷えるので «両端が冷たい» の対象外
   ok('頭・尻が中央より冷えている（長手方向の温度偏差。巻取パスを除く）', ps.filter(q => !q.coil).every(q => q.dTend < q.dTmid - 3),
      ps.map(q => `P${q.pass} ${q.dTend}/${q.dTmid}`).slice(0, 4).join(' '));
-  ok('板厚制御が発振しない（過渡後のギャップの振れが目標の 5 % 以内）',
-     ps.every(q => q.band <= q.gap * 0.05), ps.map(q => `P${q.pass} ${q.band}`).join(' '));
+  ok('板厚制御が発振しない（往復成分 ripple が目標板厚の 1 % 以内）',
+     ps.every(q => q.ripple <= q.gap * 0.01), ps.map(q => `P${q.pass} ${q.ripple}`).join(' '));
+  ok('（参考）ギャップが «往復» しているか（標本 100 点あたりの向きの反転数）', true,
+     ps.map(q => `P${q.pass} ${q.flips}`).join(' '), true);
+  /* 振れ幅そのものは «荷重が動いたぶんミルが伸びる» を含むので、合否には数えず参考に出す。
+   * 実機のミル定数を入れてから巻取パスでは 0.5 mm 級になる —— それが実機の姿。 */
+  ok('（参考）過渡後のギャップの振れ幅', ps.every(q => q.band <= q.gap * 0.05),
+     ps.map(q => `P${q.pass} ${q.band}`).join(' '), true);
   ok('出側板厚が目標に収まる（±3 %）', ps.every(q => Math.abs(q.hOut - q.gap) <= q.gap * 0.03),
      ps.map(q => `P${q.pass} ${q.hOut}/${q.gap}`).join(' '));
   ok('ピークが非常最大を超えない', ps.every(q => q.spike <= K.MILL.LIMIT_FORCE_T),
      `最大 ${Math.max(...ps.map(q => q.spike))} t / 非常最大 ${K.MILL.LIMIT_FORCE_T} t`);
 
-  R.failed = R.checks.filter(c => !c.pass).length;
+  R.failed = R.checks.filter(c => !c.pass && !c.ref).length;
   return R;
 });
 
-for (const c of out.checks) console.log(`  ${c.pass ? 'ok  ' : 'NG  '} ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
+for (const c of out.checks) console.log(`  ${c.ref ? '??  ' : c.pass ? 'ok  ' : 'NG  '} ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
 console.log('\npass 別:');
 for (const q of out.passes)
   console.log(`  P${String(q.pass).padStart(2)} 出側 ${String(q.gap).padStart(6)} mm  板長 ${String(q.len).padStart(3)} m  ` +
-    `衝撃 ${q.spikeR}  頭 ${q.headR}  尻 ${q.tailR}  振れ ${q.band} mm  端部 ${q.dTend} K`);
-console.log(`\nRESULT: ${out.failed ? 'FAIL' : 'PASS'} (${out.checks.length - out.failed}/${out.checks.length})`);
+    `衝撃 ${q.spikeR}  頭 ${q.headR}  尻 ${q.tailR}  振れ ${q.band} mm（往復 ${q.ripple} mm・反転 ${q.flips}/100）  端部 ${q.dTend} K`);
+const nRef = out.checks.filter(c => c.ref).length;
+console.log(`\nRESULT: ${out.failed ? 'FAIL' : 'PASS'} (${out.checks.length - nRef - out.failed}/${out.checks.length - nRef}`
+  + `${nRef ? `、参考 ${nRef} 件` : ''})`);
 await browser.close();
 process.exit(out.failed ? 1 : 0);

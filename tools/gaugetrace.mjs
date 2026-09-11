@@ -17,7 +17,10 @@ await installHelpers(page);
 
 const out = await page.evaluate(async () => {
   const A = window.__app, P = A.physics, W = A.world, K = window.__CFG, S = K.SCALE, T = window.__T;
-  const R = { checks: [] }, ok = (n, p, d = '') => R.checks.push({ name: n, pass: !!p, detail: String(d) });
+  /* ref を立てた判定は «参考» —— しきい値に実測の裏づけが無いもの、数値だけを見たいものは
+   * 合否に数えず毎回出す（CLAUDE.md の決め）。 */
+  const R = { checks: [] },
+    ok = (n, p, d = '', ref = false) => R.checks.push({ name: n, pass: !!p, detail: String(d), ref });
   const st = a => { const m = a.reduce((x, y) => x + y, 0) / a.length;
                     return { m, sd: Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / a.length) }; };
 
@@ -244,8 +247,26 @@ const out = await page.evaluate(async () => {
     const m2 = a.slice(a.length * 0.15 | 0, a.length * 0.85 | 0);
     sd2.push(+(st(m2.map(r => r.hd)).sd * 1000).toFixed(1)); }
   R.noEcc = sd2;
-  ok('偏芯を切ると長手の振れが小さくなる（振れの主因が偏芯）', avg(sd2) < avg(sds) * 0.75,
-     `偏芯あり σ平均 ${avg(sds).toFixed(1)} → なし ${avg(sd2).toFixed(1)} µm`);
+  ok('偏芯を切ると長手の振れが小さくなる（偏芯が振れの一因）', avg(sd2) < avg(sds),
+     `偏芯あり σ平均 ${avg(sds).toFixed(1)} → なし ${avg(sd2).toFixed(1)} µm`
+     + `（${((1 - avg(sd2) / avg(sds)) * 100).toFixed(0)} % 減）`);
+
+  /* 摩擦・潤滑の揺らぎ（MU_SD）を切ると何が残るか。残るのは «前のパスの凹凸の持ち回り»
+   * と «長手の温度分布» —— 外乱を足さなくても出る、材料そのものの振れ。
+   * 実機のミル定数（226〜296 t/mm）は従来置いていた 550 t/mm の半分以下なので、
+   * 持ち回りの伝達 Q/(M+Q) が大きくなり、この «残り» が効くようになった。 */
+  const keepMu = K.MILL.GAUGE_MODEL.MU_SD;
+  K.MILL.GAUGE_MODEL.MU_SD = 0;
+  const tr3 = runOnce();
+  K.MILL.GAUGE_MODEL.MU_SD = keepMu;
+  const by3 = {}; for (const r of tr3) (by3[r.pass] ??= []).push(r);
+  const sd3 = [];
+  for (const k of finishing) { const a = by3[k]; if (!a || a.length < 200) continue;
+    const m3 = a.slice(a.length * 0.15 | 0, a.length * 0.85 | 0);
+    sd3.push(+(st(m3.map(r => r.hd)).sd * 1000).toFixed(1)); }
+  R.noMu = sd3;
+  ok('（参考）外乱の内訳 —— 偏芯を切る／摩擦の揺らぎを切る', true,
+     `そのまま σ平均 ${avg(sds).toFixed(1)} ／ 偏芯なし ${avg(sd2).toFixed(1)} ／ 摩擦の揺らぎなし ${avg(sd3).toFixed(1)} µm`, true);
 
   /* ---------- ④ 計器の «読み» ------------------------------------------------ */
   const gm = tr.filter(r => r.hx !== null && r.he !== null);
@@ -272,9 +293,11 @@ const out = await page.evaluate(async () => {
   return R;
 });
 
-console.log(JSON.stringify({ band: out.band, acf: out.acf, noEcc: out.noEcc }, null, 1));
-for (const c of out.checks) console.log(`  ${c.pass ? 'ok  ' : 'NG  '} ${c.name} — ${c.detail}`);
-const bad = out.checks.filter(c => !c.pass);
-console.log(`\nRESULT: ${bad.length ? 'FAIL' : 'PASS'} (${out.checks.length - bad.length}/${out.checks.length})`);
+console.log(JSON.stringify({ band: out.band, acf: out.acf, noEcc: out.noEcc, noMu: out.noMu }, null, 1));
+for (const c of out.checks) console.log(`  ${c.ref ? '??  ' : c.pass ? 'ok  ' : 'NG  '} ${c.name} — ${c.detail}`);
+const bad = out.checks.filter(c => !c.pass && !c.ref);
+const nRef = out.checks.filter(c => c.ref).length;
+console.log(`\nRESULT: ${bad.length ? 'FAIL' : 'PASS'} (${out.checks.length - nRef - bad.length}/${out.checks.length - nRef}`
+  + `${nRef ? `、参考 ${nRef} 件` : ''})`);
 await browser.close();
 process.exit(bad.length ? 1 : 0);

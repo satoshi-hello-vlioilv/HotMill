@@ -134,7 +134,11 @@ const out = await page.evaluate((EPS) => {
     const seqs = new Map(), ends = new Map();     // ピースごとの経過（混ぜると順序が読めない）
     let n = 0, minY = 1e9, maxCx = -1e9, minCx = 1e9, bedBack = false, sawDown = false;
     const cx = (x) => K.FLIP * (x - K.CROP_SHEAR.X);
-    while (n++ < 120 * 420) {
+    /* 900 s ＝ 走らせる «ラインの» 時間。1 ロットのクロップ（先端・後端の全カット）が
+     * 終わり、屑が屑箱まで着くまでを 1 本の流れで見る。主駆動の逆転を «BUR を
+     * 滑らせない上限» で頭打ちにしてから 1 ロットの所要が延びたので、420 s では
+     * 最後のカットが窓の外に出ていた（実測: 3 カット中 1 つが ONBED のまま）。 */
+    while (n++ < 120 * 900) {
       P.step(1 / 120);
       const f = P.finish;
       for (const s of f.scraps) {
@@ -201,7 +205,11 @@ const out = await page.evaluate((EPS) => {
       return { best: deep, at };
     };
     let n = 0;
-    while (n++ < 120 * 420) {
+    /* 900 s ＝ 走らせる «ラインの» 時間。1 ロットのクロップ（先端・後端の全カット）が
+     * 終わり、屑が屑箱まで着くまでを 1 本の流れで見る。主駆動の逆転を «BUR を
+     * 滑らせない上限» で頭打ちにしてから 1 ロットの所要が延びたので、420 s では
+     * 最後のカットが窓の外に出ていた（実測: 3 カット中 1 つが ONBED のまま）。 */
+    while (n++ < 120 * 900) {
       P.step(1 / 120);
       const f = P.finish;
       const moving = f.scraps.filter(s => /CHUTE|CHUTE_TIP|PITFALL|CONVEY|DROP/.test(s.stage));

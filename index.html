@@ -117,10 +117,12 @@ canvas { display:block; }
 #btn-log-close { width:27px; height:27px; border-radius:8px; font-size:13px;
   border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; cursor:pointer; }
 #btn-log-close:hover { background:rgba(255,255,255,.2); }
-/* 操作列: «何を見るか»（タブ）・«どの項目»・«どのパス» の 3 つだけを 1 行に置く。
-   選ぶ中身（項目 11 個・パス 23 個）はポップオーバーへ入れて、行が折り返さないようにする。 */
-.pnl .ctl { flex:none; display:flex; gap:8px; align-items:center; min-height:40px;
-  padding:6px 14px; background:var(--s-2); border-bottom:1px solid var(--line-2); }
+/* 操作列: «何を見るか»（タブ）・«どの項目»・«どのパス»・«横軸の倍率» を 1 行に置く。
+   選ぶ中身（項目 11 個・パス 23 個）はポップオーバーへ入れて、行が伸びないようにする。
+   それでも板を最小幅（520px）まで縮めると 1 行には収まらないので «折り返す» ——
+   隠す・潰すのではなく段を増やす。読めなくなる操作が出ないのがいちばん安い。 */
+.pnl .ctl { flex:none; display:flex; flex-wrap:wrap; gap:8px; row-gap:6px; align-items:center;
+  min-height:40px; padding:6px 14px; background:var(--s-2); border-bottom:1px solid var(--line-2); }
 .pnl .ctl .sep { width:1px; align-self:stretch; background:var(--line); margin:2px 2px; flex:none; }
 .pnl .ctl .seg { flex:none; }
 .pnl .ctl .seg button { padding:4px 10px; font-size:10.5px; white-space:nowrap; }
@@ -167,8 +169,9 @@ canvas { display:block; }
   border-radius:var(--r-m); background:var(--s-2); overflow:auto hidden; cursor:crosshair; }
 .pnl .chart[data-zoom="1"] { overflow:hidden; }
 /* 横軸スケールのつまみ。1 倍（全体が収まる）から 20 倍まで。数字はその場に出す。 */
-.pnl .zoom { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; color:var(--ink-3); }
-.pnl .zoom input[type=range] { width:110px; accent-color:var(--accent, #3a7bd5); }
+.pnl .zoom { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; color:var(--ink-3);
+  flex:0 1 auto; min-width:0; }
+.pnl .zoom input[type=range] { width:110px; min-width:64px; flex:0 1 auto; accent-color:var(--accent, #3a7bd5); }
 .pnl .zoom b { font-variant-numeric:tabular-nums; color:var(--ink-2); min-width:30px; text-align:right; }
 /* 読み取り線。グラフは «形» を見るためのものだが、数値をその場で読めないと結局
    表に戻ることになる。線を当てた時刻の値をその場に出して、往復させない。 */
@@ -2163,6 +2166,9 @@ const CONFIG = {
   AGC: {
     PRESET: true,                          // パス前に予定荷重ぶんの伸びを見込んで圧下を置く
     KP: 1.0, TAU: 0.55,                    // ゲージメータ補償率 ／ 圧下の応答時定数 [s]
+    /* 圧下の遅れを見込んだ «進み»（lead）。LEAD 1.0 で一次遅れをちょうど打ち消す。
+     * LEAD_TAU は微分をなまらせる時定数 [s]（雑音を拾わせないため）。 */
+    LEAD: 1.0, LEAD_TAU: 0.12,
     /* 制御が思っているミル定数の誤差。実機のミル定数は «キス圧下» の同定で求めるもので、
      * 板幅・ロール径・ロール組替えで変わるため、数 % はずれている。ここを «真値を知っている»
      * ことにすると、ゲージメータ AGC だけで板厚が完全に決まってしまい、モニタ AGC も
@@ -8458,6 +8464,23 @@ class PhysicsEngine {
       ff = -G.FF_KP * (hAhead - nom) * Qp * Qp / (M * (M + Qp));
     }
     const comp = auto ? G.KP * m.spring + m.trim - ff : 0;   // 手動はミルばねを補償しない（実機どおり）
+    /* 圧下は一次遅れ（TAU）で動くので、補償をそのまま指令にすると «伸びの変化» に対して
+     * 圧下が TAU だけ遅れる。遅れたぶんは «微分フィードバック» として働き、その利得は
+     * およそ Q·TAU/M —— ミルが柔らかいほど大きい。実機のミル定数（226〜296 t/mm）は
+     * 従来置いていた 550 t/mm 一定の半分以下なので、この利得が倍になり、巻取パスで
+     * ギャップが往復するようになった（実測: 往復成分 0.027 → 0.123 mm、向きの反転
+     * 61 → 80 回/100 点）。実機の AGC と同じく «進み»（lead）を入れて遅れを打ち消す:
+     *
+     *     指令 ＝ comp ＋ LEAD·TAU·d(comp)/dt
+     *
+     * 一次遅れ 1/(1+TAU·s) に (1 + TAU·s) を掛けると 1 になる —— これが進みの意味。
+     * 微分は雑音を拾うので LEAD_TAU でなまらせる。 */
+    {
+      const dComp = (comp - (m.compPrev ?? comp)) / Math.max(dt, 1e-6);
+      m.compPrev = comp;
+      m.compRate = Num.approach(m.compRate ?? 0, dComp, G.LEAD_TAU, dt);
+    }
+    const compLead = comp + G.LEAD * G.TAU * (m.compRate ?? 0);
     /* 板を噛んだままラインが止まると（75 mm シャーの端部切断がこれ）、荷重が抜けて
      * ゲージメータが «伸びが無い» と判断し、圧下を締めに行ってしまう。そのまま再起動すると
      * 荷重が戻ってミルが開き、出側が大きく外れる（実測: 第 7 パスでギャップが 6.96 mm 振れ、
@@ -8474,7 +8497,7 @@ class PhysicsEngine {
      * ここを GAP_MIN で止めていたため、薄板パスで圧下が飽和して板厚が目標から外れた
      * （実測: 目標 9.1 mm に対し 7.8 mm）。実ギャップ側の下限は下で別に効かせる。 */
     const screwMin = C.GAP_MIN - Rolling.millStretch(C.RATED_FORCE_T);
-    if (!lock) m.screwCmd = Num.clamp(m.targetGap - comp, screwMin, C.GAP_MAX);
+    if (!lock) m.screwCmd = Num.clamp(m.targetGap - compLead, screwMin, C.GAP_MAX);
     const want = Num.approach(m.screw, m.screwCmd, G.TAU, dt);   // 圧下の応答（一次遅れ）
     m.screw = Num.rateTo(m.screw, want, C.GAP_RATE, dt);         // ＋シリンダ速度の制限
     /* 2) スタンドの伸び。質量とばねを持つ 2 次系  x'' + 2ζω x' + ω² x = ω²·F/M  で荷重に追従する
