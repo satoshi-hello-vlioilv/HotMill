@@ -157,8 +157,15 @@ canvas { display:block; }
 /* 板を大きくしたぶんはチャートと表で分け合う（余白が増えるだけにしない） */
 .pnl .body { flex:1 1 auto; display:flex; flex-direction:column; gap:10px;
   padding:10px 14px 12px; overflow:hidden; min-height:0; }
+/* グラフ枠。横軸スケール（ズーム）を上げると中の SVG だけが横に伸び、枠はスクロールする。
+   «枠の大きさはそのまま・中身だけが伸びる» ので、板の大きさと軸の拡大が別々に扱える。 */
 .pnl .chart { position:relative; flex:1 1 44%; min-height:150px; border:1px solid var(--line-2);
-  border-radius:var(--r-m); background:var(--s-2); overflow:hidden; cursor:crosshair; }
+  border-radius:var(--r-m); background:var(--s-2); overflow:auto hidden; cursor:crosshair; }
+.pnl .chart[data-zoom="1"] { overflow:hidden; }
+/* 横軸スケールのつまみ。1 倍（全体が収まる）から 20 倍まで。数字はその場に出す。 */
+.pnl .zoom { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; color:var(--ink-3); }
+.pnl .zoom input[type=range] { width:110px; accent-color:var(--accent, #3a7bd5); }
+.pnl .zoom b { font-variant-numeric:tabular-nums; color:var(--ink-2); min-width:30px; text-align:right; }
 /* 読み取り線。グラフは «形» を見るためのものだが、数値をその場で読めないと結局
    表に戻ることになる。線を当てた時刻の値をその場に出して、往復させない。 */
 .pnl .chart .cross { position:absolute; top:0; bottom:0; width:1px; background:var(--ink-3);
@@ -170,7 +177,9 @@ canvas { display:block; }
 .pnl .chart .read b { font-weight:800; }
 .pnl .chart .read i { font-style:normal; display:inline-block; width:8px; height:8px;
   border-radius:2px; margin-right:5px; vertical-align:-1px; }
-.pnl .chart svg { display:block; width:100%; height:100%; }
+/* 横軸を引き伸ばしたときは «枠より広い» SVG を実寸で置く。ここで width:100% を
+   掛けると枠に押し込まれてスクロールできないので、高さだけを枠に合わせる。 */
+.pnl .chart svg { display:block; height:100%; }
 .pnl .tblwrap { flex:1 1 56%; min-height:90px; overflow:auto; }
 .pnl table { border-collapse:collapse; width:100%; font-size:11.5px; font-variant-numeric:tabular-nums; }
 .pnl th, .pnl td { padding:5px 8px; border-bottom:1px solid var(--line-2); text-align:right; white-space:nowrap; }
@@ -189,7 +198,18 @@ canvas { display:block; }
   font-size:10.5px; color:var(--ink-3); display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
 .pnl .lg { display:inline-flex; align-items:center; gap:5px; }
 .pnl .lg s { display:inline-block; width:14px; height:3px; border-radius:2px; text-decoration:none; }
-#log-grip { position:absolute; right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize;
+/* 大きさ変更の掴み手。4 辺 ＋ 4 隅のどこからでも掴める。
+   辺は «縁に沿った細い帯»、隅は «角の小さな正方形» で、隅を辺より上に重ねる。
+   目で探させないよう、右下だけは従来どおり «斜めの線» を描いて掴み手だと分かるようにする。 */
+.pnl .rz { position:absolute; z-index:2; }
+.pnl .rz-n { left:8px; right:8px; top:0; height:6px; cursor:ns-resize; }
+.pnl .rz-s { left:8px; right:8px; bottom:0; height:6px; cursor:ns-resize; }
+.pnl .rz-w { top:8px; bottom:8px; left:0; width:6px; cursor:ew-resize; }
+.pnl .rz-e { top:8px; bottom:8px; right:0; width:6px; cursor:ew-resize; }
+.pnl .rz-nw { left:0; top:0; width:12px; height:12px; cursor:nwse-resize; z-index:3; }
+.pnl .rz-ne { right:0; top:0; width:12px; height:12px; cursor:nesw-resize; z-index:3; }
+.pnl .rz-sw { left:0; bottom:0; width:12px; height:12px; cursor:nesw-resize; z-index:3; }
+.pnl .rz-se { right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize; z-index:3;
   background:linear-gradient(135deg,transparent 46%,var(--line) 46%,var(--line) 54%,transparent 54%,
              transparent 66%,var(--line) 66%,var(--line) 74%,transparent 74%); }
 
@@ -1148,6 +1168,11 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
       <div class="cards" id="plan-saved"></div>
     </div>
   </div>
+  <div class="rz rz-n" data-rz="n"></div><div class="rz rz-s" data-rz="s"></div>
+  <div class="rz rz-w" data-rz="w"></div><div class="rz rz-e" data-rz="e"></div>
+  <div class="rz rz-nw" data-rz="nw"></div><div class="rz rz-ne" data-rz="ne"></div>
+  <div class="rz rz-sw" data-rz="sw"></div>
+  <div class="rz rz-se" data-rz="se" title="ドラッグで大きさを変える（4 辺・4 隅どこでも）"></div>
 </section>
 
 <!-- 圧延実績ビュワー。«計器が指した値» だけを、パス表と時系列で見せる。3D を見ながら使うので «モーダルではない» 板（パネル）にしてある。
@@ -1190,6 +1215,10 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
         <div class="chips" id="log-passes"></div>
       </div>
     </div>
+    <label class="zoom" title="グラフの横軸（時間）を引き伸ばします。1 倍で全体、上げると細かいところが読めます（枠は横スクロール）">
+      横軸 <input type="range" id="log-zoom" min="1" max="20" step="0.5" value="1"><b id="log-zoom-v">1.0×</b>
+      <button class="mini" id="log-zoom-fit" type="button" title="全体が収まる倍率へ戻す">全体</button>
+    </label>
     <span class="ctlhint">グラフ上でなぞると、その時刻の値が読めます</span>
   </div>
   <div class="body">
@@ -1208,7 +1237,11 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
     </tr></thead><tbody></tbody></table></div>
   </div>
   <footer id="log-foot">パスが終わるたびに 1 行増えます。平均は «噛んでいる間» だけで取っています。</footer>
-  <div id="log-grip" title="ドラッグで大きさを変える"></div>
+  <div class="rz rz-n" data-rz="n"></div><div class="rz rz-s" data-rz="s"></div>
+  <div class="rz rz-w" data-rz="w"></div><div class="rz rz-e" data-rz="e"></div>
+  <div class="rz rz-nw" data-rz="nw"></div><div class="rz rz-ne" data-rz="ne"></div>
+  <div class="rz rz-sw" data-rz="sw"></div>
+  <div class="rz rz-se" data-rz="se" title="ドラッグで大きさを変える（4 辺・4 隅どこでも）"></div>
 </section>
 
 <!-- 版数と変更履歴。«今どの版か» と «その版で何が入ったか» を 1 画面で見せる -->
@@ -13562,11 +13595,11 @@ class UIManager {
     // 実績ビュワーの状態: ロット（null = 運転中の最新）／パス（空 = 全部）／項目
     this.logLot = null; this.logPass = new Set();
     this.logSeries = new Set(RollingLog.SERIES.map(q => q.key));
-    this._logBox = null; this.logShow = 'both'; this._logPop = null;
+    this._logBox = null; this.logShow = 'both'; this._logPop = null; this.logZoom = 1;
     this._buildTabs(); this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
     this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildStripCool(); this._buildCutScope();
     this._buildVersion();
-    this._bind(); this._listen(); this._logDragResize(); this._panelDrag('pnl-plan', 'plan-drag'); this._logCrosshair();
+    this._bind(); this._listen(); this._logDragResize(); this._logZoomCtl(); this._panelDrag('pnl-plan', 'plan-drag'); this._logCrosshair();
     this.dims(); this._rollState(); this._diaDiff(); this._plState(); this._coolState(); this._coolSide(); this.setLogShow("both");
     this.setPlanLoop('none'); this.renderPlan(); this.setTimeScale(this.timeScale); this._startBtn();
     this.setSidebar(false);              // 条件は «運転計画» で決めるので、左メニューは畳んで始める
@@ -13729,7 +13762,13 @@ class UIManager {
   _logChart(tgt) {
     const host = $('log-chart'), pad = { l: 52, r: 96, t: 14, b: 22 };
     // 板の大きさは変えられるので、その時点の実寸で組む（viewBox を引き伸ばすと文字が歪む）
-    const w = Math.max(host.clientWidth || 1200, 320), h = Math.max(host.clientHeight || 216, 120);
+    /* 横軸スケール（ズーム）。枠の幅はそのままに «中の SVG だけ» を倍率ぶん伸ばし、
+     * 枠を横スクロールさせる。こうすると «板の大きさ» と «軸の拡大» が別々に扱える
+     * —— 細かいところを読むために板を画面いっぱいに広げる必要が無くなる。 */
+    const zoom = Math.max(this.logZoom || 1, 1);
+    const boxW = Math.max(host.clientWidth || 1200, 320);
+    const w = Math.round(boxW * zoom), h = Math.max(host.clientHeight || 216, 120);
+    host.dataset.zoom = zoom === 1 ? '1' : 'n';
     const S = (tgt?.series || []).filter(p => this._passOn(p.pass));
     const use = RollingLog.SERIES.filter(q => this.logSeries.has(q.key));
     if (!S.length || !use.length) {
@@ -13775,7 +13814,9 @@ class UIManager {
     // 読み取り線が使う写像を残しておく（描いたときの縮尺でなぞれるようにする）
     this._logMap = { w, h, pad, t0, t1, use, axMax, S,
                      px: (t) => X(t) / w, val: (q, v) => Y(q, v) };
-    host.innerHTML = `<svg viewBox="0 0 ${w} ${h}">
+    /* ズーム時は «枠より広い SVG» を実寸で置く（viewBox で縮めない）。幅を px で明示して
+     * おかないと、枠の overflow が効かず中身が潰れる。 */
+    host.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block">
       ${grid}
       <line x1="${pad.l}" y1="${h - pad.b}" x2="${w - pad.r}" y2="${h - pad.b}" stroke="var(--line)"/>
       ${lines}
@@ -13797,20 +13838,26 @@ class UIManager {
     host.addEventListener('pointermove', (e) => {
       const m = this._logMap, c = $('log-cross'), rd = $('log-read');
       if (!m || !m.S.length || !c || !rd) return hide();
-      const b = host.getBoundingClientRect(), fx = (e.clientX - b.left) / b.width;
+      /* 横軸を引き伸ばしているときは «枠より SVG のほうが広い»。読み取り線は SVG の座標で
+       * 置く（枠と一緒にスクロールする）ので、マウス位置にスクロール量を足して SVG 上の
+       * X に直す。ここを枠の幅で割ると、ズーム時に線と値がずれる。 */
+      const b = host.getBoundingClientRect();
+      const px = (e.clientX - b.left) + host.scrollLeft;      // SVG 上の X [px]
+      const fx = px / m.w;
       const inPlot = fx >= m.pad.l / m.w && fx <= (m.w - m.pad.r) / m.w;
       if (!inPlot) return hide();
       const t = m.t0 + (m.t1 - m.t0) * (fx - m.pad.l / m.w) / ((m.w - m.pad.l - m.pad.r) / m.w);
       let best = m.S[0];
       for (const p of m.S) if (Math.abs(p.t - t) < Math.abs(best.t - t)) best = p;
-      c.hidden = false; c.style.left = (b.width * fx).toFixed(1) + 'px';
+      c.hidden = false; c.style.left = px.toFixed(1) + 'px';
       rd.hidden = false;
       rd.innerHTML = `<div><b>P${best.pass}</b>　${(best.t - m.t0).toFixed(1)} s</div>`
         + m.use.map(q => `<div><i style="background:${q.css}"></i>${q.name} <b>${
             (best[q.key] ?? 0) >= 100 ? Math.round(best[q.key]) : (+(best[q.key] ?? 0)).toFixed(1)
           }</b> ${q.unit}</div>`).join('');
-      const rw = rd.offsetWidth || 150;
-      rd.style.left = Num.clamp(b.width * fx + 12, 4, Math.max(4, b.width - rw - 6)) + 'px';
+      /* 値の札は «見えている範囲» に収める（スクロールしていても画面外へ出さない）。 */
+      const rw = rd.offsetWidth || 150, vis = host.clientWidth, sl = host.scrollLeft;
+      rd.style.left = Num.clamp(px + 12, sl + 4, Math.max(sl + 4, sl + vis - rw - 6)) + 'px';
     });
   }
 
@@ -13838,10 +13885,36 @@ class UIManager {
       p.style.right = 'auto';
     }
   }
-  _logDragResize() { this._panelDrag('pnl-log', 'log-drag', 'log-grip', () => this.renderLog()); }
-  /** 板（パネル）を «見出しで移動・右下で大きさ変更» できるようにする。両方の板で同じ 1 式。 */
-  _panelDrag(pnlId, hdId, gripId, onResize) {
-    const p = $(pnlId), hd = $(hdId), grip = gripId ? $(gripId) : null;
+  _logDragResize() { this._panelDrag('pnl-log', 'log-drag', () => this.renderLog()); }
+  /**
+   * グラフの横軸スケール（ズーム）。1 倍で «ロット全体が枠に収まる»、上げると枠は
+   * そのままに中身だけが伸びて横スクロールになる。板を広げなくても細かいところが読める。
+   * 拡大するときは «いま見えている真ん中» を軸にする —— 端へ飛ばされると見ていた場所を
+   * 見失うので、目が追っていた所が動かないようにする。
+   */
+  _logZoomCtl() {
+    const sl = $('log-zoom'), out = $('log-zoom-v'), fit = $('log-zoom-fit'), host = $('log-chart');
+    if (!sl || !host) return;
+    const apply = (z) => {
+      const prev = Math.max(this.logZoom || 1, 1), vis = host.clientWidth || 1;
+      const centre = (host.scrollLeft + vis / 2) / Math.max(prev, 1e-6);   // 1 倍換算の中心
+      this.logZoom = Math.max(z, 1);
+      sl.value = String(this.logZoom); out.textContent = this.logZoom.toFixed(1) + '×';
+      this.renderLog();
+      host.scrollLeft = Math.max(centre * this.logZoom - vis / 2, 0);
+    };
+    sl.addEventListener('input', () => apply(+sl.value));
+    fit?.addEventListener('click', () => { host.scrollLeft = 0; apply(1); });
+    out.textContent = '1.0×';
+  }
+  /**
+   * 板（パネル）を «見出しで移動・4 辺 4 隅で大きさ変更» できるようにする。両方の板で同じ 1 式。
+   * 掴み手は data-rz（n/s/e/w と 4 隅）で向きを持つので、どこを掴んだかで
+   * «どの辺が動くか» が決まる。上・左を掴んだときは幅を変えると同時に左上も動かす
+   * （掴んだ辺だけが動き、反対の辺は動かない ＝ 手で掴んだ感じと一致する）。
+   */
+  _panelDrag(pnlId, hdId, onResize) {
+    const p = $(pnlId), hd = $(hdId);
     if (!p || !hd) return;
     const save = () => { const r = p.getBoundingClientRect();
       this['_box_' + pnlId] = { x: r.left, y: r.top, w: r.width, h: r.height }; };
@@ -13858,8 +13931,15 @@ class UIManager {
           p.style.left = Num.clamp(r.left + dx, -r.width + 120, innerWidth - 120) + 'px';
           p.style.top = Num.clamp(r.top + dy, 0, innerHeight - 40) + 'px';
         } else {
-          p.style.width = Num.clamp(r.width + dx, 520, innerWidth - r.left - 4) + 'px';
-          p.style.height = Num.clamp(r.height + dy, 280, innerHeight - r.top - 4) + 'px';
+          /* mode は掴んだ向き（'n' 'se' など）。含まれる方位の辺だけを動かす。 */
+          const MINW = 520, MINH = 280;
+          let x = r.left, y = r.top, w = r.width, h = r.height;
+          if (mode.includes('e')) w = Num.clamp(r.width + dx, MINW, innerWidth - r.left - 4);
+          if (mode.includes('s')) h = Num.clamp(r.height + dy, MINH, innerHeight - r.top - 4);
+          if (mode.includes('w')) { w = Num.clamp(r.width - dx, MINW, r.right - 4); x = r.right - w; }
+          if (mode.includes('n')) { h = Num.clamp(r.height - dy, MINH, r.bottom - 4); y = r.bottom - h; }
+          p.style.left = x + 'px'; p.style.top = y + 'px';
+          p.style.width = w + 'px'; p.style.height = h + 'px';
           onResize?.();                          // 大きさに合わせて中身を描き直す
         }
       };
@@ -13868,7 +13948,8 @@ class UIManager {
       addEventListener('pointermove', move); addEventListener('pointerup', up);
     };
     hd.addEventListener('pointerdown', e => start(e, 'move'));
-    grip?.addEventListener('pointerdown', e => start(e, 'size'));
+    for (const g of p.querySelectorAll('[data-rz]'))
+      g.addEventListener('pointerdown', e => start(e, g.dataset.rz));
     addEventListener('resize', () => { if (this.logOpen) this._logPlace(); });
   }
 
