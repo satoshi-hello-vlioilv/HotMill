@@ -49,39 +49,76 @@ const out = await page.evaluate(async () => {
        `350/450/520 ℃ = ${kf(350, 1).toFixed(0)}/${kf(450, 1).toFixed(0)}/${kf(520, 1).toFixed(0)} MPa`);
     ok('変形抵抗がひずみ速度に対して単調増加', kf(450, 0.1) < kf(450, 1) && kf(450, 1) < kf(450, 30),
        `0.1/1/30 s⁻¹ = ${kf(450, 0.1).toFixed(0)}/${kf(450, 1).toFixed(0)}/${kf(450, 30).toFixed(0)} MPa`);
-    // 熱間域では従来の実験式（C·exp(−bΔT)·ε̇^m）に十分近いこと（較正を壊さない）
-    let worst = 0, at = '';
-    for (const T of [380, 420, 460, 500]) for (const r of [0.5, 2, 10]) {
-      const old = al.C * Math.exp(-al.b * (T - K.MATERIAL.TREF)) * Math.pow(r, al.m);
-      const dev = Math.abs(kf(T, r) / old - 1);
-      if (dev > worst) { worst = dev; at = `${T} ℃ / ${r} s⁻¹`; }
-    }
-    /* アレニウス形（1/T）と従来の線形指数形（T に線形）は、同じ点で一致させても
-     * 域の端では必ず離れる。その差そのものが «形の違い» なので、12 % を上限として許す
-     * （予測と実測の突き合わせで測った不確かさが 1 割程度なのと同じ桁）。 */
-    ok('熱間域では従来の実験式と 12 % 以内で一致（較正を壊さない）', worst < 0.12,
-       `最大ずれ ${(worst * 100).toFixed(1)} % @ ${at}`);
-    /* b と m は独立ではない。当てはめられる活性化エネルギーは Q_fit ＝ b・R・T_ref²/m で
-     * 決まるので、材質表の b は «公表の Q_ACT から逆算した値» でなければならない。
-     * ここを見張らないと «m だけ動かして荷重を合わせる» ができてしまい、そのとき失うのは
-     * 温度依存の正しさ（実測: A1100 で Q_fit が公表値の −37 % まで落ちていた）。 */
+    /* ---- 構成式が «材料 / 温度 / ひずみ速度» を分けて持てているかを検証する ----
+     *
+     * 使う式は Sellars–Tegart（Garofalo）:
+     *     Z ＝ ε̇·exp(Q/RT) ＝ A·[sinh(α·σ)]^n
+     * 役割が 1 つずつ分かれていることが要点 ——
+     *     Q     … 温度依存だけを決める（材質ごとの公表値。荷重合わせで動かさない）
+     *     n, α  … ひずみ速度依存の «形» だけを決める（材質ごとの公表値）
+     *     A     … 絶対値だけを決める（荷重の較正で動かしてよい唯一のつまみ）
+     * 以前は経験式 C·exp(−b·ΔT)·ε̇^m が主で、Q と α をそれに «当てはめて» いたため、
+     * 荷重を合わせに m を動かすと温度依存が一緒に動いた（Q_fit ＝ b·R·T_ref²/m）。 */
     {
-      const Tref = K.MATERIAL.TREF + 273.15, RT2 = R.RGAS * Tref * Tref, bad = [];
-      for (const [k, a] of Object.entries(K.ALLOYS)) {
-        const want = a.Q_ACT * 1000 * a.m / RT2;
-        if (Math.abs(a.b / want - 1) > 0.03) bad.push(`${k} b=${a.b} / 要 ${want.toFixed(5)}`);
+      const Rg = R.RGAS;
+      // ① 恒等式そのもの: n·ln sinh(ασ) ＝ ln ε̇ ＋ Q/(R·T) − ln A が全点で成り立つか
+      let idBad = 0, idMax = 0;
+      for (const T of [360, 420, 480, 540]) for (const r of [0.1, 1, 10, 100]) {
+        const st = R.stParams(al), sg = R.flowStress(T, r, al);
+        if (sg >= al.KF_MAX * 0.98) continue;                 // 室温側の頭打ちが効く域は除く
+        const lhs = st.n * Math.log(Math.sinh(st.alpha * sg));
+        const rhs = Math.log(r) + st.Q / (Rg * (T + 273.15)) - st.lnA;
+        const d = Math.abs(lhs - rhs);
+        idMax = Math.max(idMax, d); if (d > 1e-6) idBad++;
       }
-      ok('材質表の b が公表の活性化エネルギーと m から逆算した値（b ＝ Q_ACT・m/(R・T_ref²)）',
-         bad.length === 0, bad.join(' ') || `${Object.keys(K.ALLOYS).length} 材質すべて一致`);
+      ok('構成式の恒等式が全点で成り立つ（n·ln sinh(ασ) ＝ ln ε̇ ＋ Q/RT − ln A）',
+         idBad === 0, `最大残差 ${idMax.toExponential(1)}`);
+
+      // ② 温度依存を担うのは Q «だけ» —— 逆算した活性化エネルギーが公表値に一致するか
+      const qOf = (a) => {
+        const st = R.stParams(a), T1 = 420, T2 = 480, r = 1;
+        const f = (T) => st.n * Math.log(Math.sinh(st.alpha * R.flowStress(T, r, a)));
+        const x1 = 1 / (T1 + 273.15), x2 = 1 / (T2 + 273.15);
+        return Rg * (f(T1) - f(T2)) / (x1 - x2) / 1000;       // [kJ/mol]
+      };
+      const qBad2 = Object.entries(K.ALLOYS).filter(([, a]) => Math.abs(qOf(a) / a.Q_ACT - 1) > 0.001);
+      ok('温度依存を担うのは Q だけ（式から逆算した活性化エネルギーが公表値と一致）',
+         qBad2.length === 0,
+         Object.entries(K.ALLOYS).map(([k, a]) => `${k} ${qOf(a).toFixed(0)}/${a.Q_ACT}`).join(' '));
+
+      // ③ ひずみ速度依存の «形» を担うのは n と α だけ —— 逆算した 1/n が一致するか
+      const nOf = (a) => {
+        const st = R.stParams(a), T = 450;
+        const f = (r) => Math.log(Math.sinh(st.alpha * R.flowStress(T, r, a)));
+        return (Math.log(10) - Math.log(1)) / (f(10) - f(1));
+      };
+      const nBad = Object.entries(K.ALLOYS).filter(([, a]) => Math.abs(nOf(a) / a.N_EXP - 1) > 0.001);
+      ok('ひずみ速度依存の形を担うのは n（式から逆算した応力指数が表の値と一致）',
+         nBad.length === 0, Object.entries(K.ALLOYS).map(([k, a]) => `${k} ${nOf(a).toFixed(2)}/${a.N_EXP}`).join(' '));
+
+      // ④ n と α がアルミ熱間加工の公表値の帯に入っているか（辻褄合わせに使われていないこと）
+      const NB = [4.0, 6.5], AB = [0.012, 0.050];
+      const band = Object.entries(K.ALLOYS).filter(([, a]) =>
+        !(a.N_EXP >= NB[0] && a.N_EXP <= NB[1] && a.ALPHA >= AB[0] && a.ALPHA <= AB[1]));
+      ok(`n と α がアルミの公表値の帯に入る（n ${NB[0]}〜${NB[1]}・α ${AB[0]}〜${AB[1]}）`,
+         band.length === 0, band.length ? band.map(([k, a]) => `${k} n=${a.N_EXP} α=${a.ALPHA}`).join(' ')
+                                        : `${Object.keys(K.ALLOYS).length} 材質すべて帯の中`);
+
+      // ⑤ m は «定数ではなく導出量» —— 数値微分した ∂lnσ/∂lnε̇ が tanh(ασ)/(n·ασ) と一致するか
+      let mMax = 0;
+      for (const T of [380, 450, 520]) for (const r of [0.5, 5, 50]) {
+        const num = (Math.log(R.flowStress(T, r * 1.001, al)) - Math.log(R.flowStress(T, r / 1.001, al)))
+                  / (Math.log(r * 1.001) - Math.log(r / 1.001));
+        mMax = Math.max(mMax, Math.abs(num / R.mEff(T, r, al) - 1));
+      }
+      ok('m_eff が数値微分した ∂lnσ/∂lnε̇ と一致する（式 tanh(ασ)/(n·ασ)）', mMax < 2e-3,
+         `最大ずれ ${(mMax * 100).toFixed(3)} %`);
+
+      // ⑥ 同じ材質でも m は条件で変わる（固定 m では表せない）
+      const mHot = R.mEff(520, 0.5, al), mCold = R.mEff(380, 50, al);
+      ok('同じ材質でも m_eff が条件で変わる（高温・低速ほど大きい）', mHot > mCold * 1.15,
+         `520 ℃/0.5 s⁻¹ で ${mHot.toFixed(3)} ／ 380 ℃/50 s⁻¹ で ${mCold.toFixed(3)}（比 ${(mHot / mCold).toFixed(2)}）`);
     }
-    // 当てはめた活性化エネルギーが公表値に近いこと（式を物理の形にした意味を保つ）
-    let qBad = [];
-    for (const [k, a] of Object.entries(K.ALLOYS)) {
-      const st = R.stParams(a), q = st.Q / 1000;
-      if (!(q >= a.Q_ACT * 0.8 - 1 && q <= a.Q_ACT * 1.2 + 1)) qBad.push(`${k} ${q.toFixed(0)}/${a.Q_ACT}`);
-    }
-    ok('当てはめた活性化エネルギーが公表値の ±20 % に収まる', qBad.length === 0,
-       Object.entries(K.ALLOYS).map(([k, a]) => `${k} ${(R.stParams(a).Q / 1000).toFixed(0)}`).join(' '));
     // 低温では «室温の変形抵抗» へ漸近して発散しない
     const cold = kf(30, 1);
     ok('低温で発散せず室温の変形抵抗へ漸近', cold > al.KF_MAX * 0.6 && cold < al.KF_MAX * 1.6,

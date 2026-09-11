@@ -2139,6 +2139,17 @@ const CONFIG = {
      *   減速比の 2 乗でロール軸へ換算するので、加速の重さは実質ここで決まる。実機の GD² が
      *   手に入ればこの推定を置き換える（README 残件）。 */
     MU_BEARING: 0.003, ROTOR_KD: 0.60, ROTOR_KL: 0.45, ROTOR_RHO: 7000,
+    /* MU_WB —— ワークロールとバックアップロールの接触が伝えられる «接線力 / 押しつけ力»。
+     * BUR は駆動されておらず、この摩擦だけで連れ回される。押しつけが弱いとき（空転で
+     * ベンディングを掛けていないとき、押しつけはワークロールの自重 13.3 t だけ）には
+     * 逆転の加速に追いつけず滑る —— 実測: 追従できるのは WR の 46 %（μ 0.10）。
+     * 圧延中は荷重が 1,000 t を超えるので滑らない。油膜のある鋼どうしの転がり接触の
+     * 値として 0.10 を置いた（実機の実測が無いので推定。README 残件）。
+     * TAU_TQ —— 指令から実際にトルクが立つまでの時定数 [s]。電流・磁束の立ち上がりと、
+     * 主電動機 → 減速機 → ピニオンスタンド → スピンドル → ロールのねじれが合わさったもの。
+     * 駆動系のねじり 1 次固有振動数は 5〜15 Hz（周期 65〜200 ms）が一般的で、その桁。
+     * これが無いと速度線図の角が «直角»（加加速度が無限大）になり、逆転が実機より鋭くなる。 */
+    MU_WB: 0.10, TAU_TQ: 0.12,
     COUPLING_Z: -3960,                      // スピンドル継手（ロール側）＝ フォークの外側の自在継手中心
     PINION_Z:   -9500,                      // ピニオンスタンド出力軸（ここからミル側へ 1,200 mm 出る）
     PINION_SPAN: 1800, STAND_L: 2200,       // ピニオン軸間 / ギヤボックス奥行
@@ -3084,7 +3095,7 @@ const CONFIG = {
    * 同じ炉に違う合金を入れると材質ごとの均熱条件を作れないので、実機と同じく炉を分ける。
    * 8・9 番炉は予備（この 7 材質では使わない）。 */
   ALLOYS: {
-    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, C: 19.6, b: 0.00538, m: 0.15, Q_ACT: 156, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
+    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 26.72, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
     /* A1100 は実機ロット（2026-09 提供、607T）の材質。1050 との違いは Cu 0.12 % ぶんの
      * 固溶強化で、変形抵抗はわずかに高い。3 つの係数は «別々の役割» で決めてある:
      *   m —— ひずみ速度依存。最終パス（22 → 7.9 mm・94 mpm で平均 1,064 t）で較正。
@@ -3095,13 +3106,13 @@ const CONFIG = {
      *         b をそのままにすると Q_fit が 99（公表の −37 %）まで落ち、«最終パスの荷重を
      *         温度依存を弱めて買う» ことになる（実測して見つけた）。
      *   C —— 絶対値。上の 2 つを決めたあと、厚板段の荷重帯（287〜520 t、板幅 1,070）で合わせる。 */
-    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, C: 17.5, b: 0.0080, m: 0.22, Q_ACT: 158, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
-    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, C: 32.2, b: 0.00538, m: 0.13, Q_ACT: 180, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
-    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, C: 32.5, b: 0.00442, m: 0.12, Q_ACT: 160, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
-    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, C: 55.1, b: 0.00483, m: 0.12, Q_ACT: 175, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
-    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, C: 83.4, b: 0.00468, m: 0.11, Q_ACT: 185, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
-    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, C: 46.9, b: 0.00400, m: 0.12, Q_ACT: 145, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
-    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, C: 97.3, b: 0.00529, m: 0.10, Q_ACT: 230, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
+    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 28.0, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
+    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 30.68, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
+    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 28.49, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
+    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 27.77, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
+    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 27.54, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
+    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 23.24, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
+    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 35.1, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
   },
 
   /* 幅方向の形状（クラウン・平坦度・幅広がり・据わり）の諸元。
@@ -4024,11 +4035,65 @@ const Drive = {
    */
   inertia(wrDia = CONFIG.MILL.WR_D, brDia = CONFIG.MILL.BR_D) {
     const M = CONFIG.MILL, D = CONFIG.DRIVE;
-    // 中実円柱の慣性 J = ½·m·r²、m = ρ·π·r²·L
-    const J = (dia, len) => { const r = dia / 2000; return 0.5 * M.ROLL_RHO * Math.PI * r * r * (len / 1000) * r * r; };
     const k = wrDia / brDia;                                        // BUR の回転数比
-    return 2 * J(wrDia, M.BARREL) + 2 * J(brDia, M.BR_BARREL) * k * k
+    return 2 * Drive.cylInertia(wrDia, M.BARREL) + 2 * Drive.cylInertia(brDia, M.BR_BARREL) * k * k
          + Drive.rotorInertia() * D.MOTOR_N * D.GEAR * D.GEAR;
+  },
+  /** 中実円柱の慣性モーメント [kg·m²]。J = ½·m·r²、m = ρ·π·r²·L */
+  cylInertia(dia, len) {
+    const r = dia / 2000;
+    return 0.5 * CONFIG.MILL.ROLL_RHO * Math.PI * r * r * (len / 1000) * r * r;
+  },
+  /**
+   * 駆動側だけの慣性 [kg·m²]（ロール軸換算）。ワークロール ＋ 減速機 ＋ 主電動機。
+   *
+   * バックアップロールは «歯車で繋がっていない» —— 4 段ミルで駆動されるのはワークロールだけで、
+   * BUR はワークロールとの接触の摩擦で連れ回される。だから BUR は駆動側の慣性に «常には»
+   * 入らない。押しつけが強い（圧延中）ときは滑らないので一緒に回り、押しつけが弱い
+   * （空転・ベンディング 0）ときは滑って付いてこない。BUR は別に解く（PhysicsEngine._burDrag）。
+   */
+  driveInertia(wrDia = CONFIG.MILL.WR_D) {
+    const M = CONFIG.MILL, D = CONFIG.DRIVE;
+    return 2 * Drive.cylInertia(wrDia, M.BARREL) + Drive.rotorInertia() * D.MOTOR_N * D.GEAR * D.GEAR;
+  },
+  /** バックアップロール 1 本の慣性 [kg·m²]（BUR 自身の軸まわり） */
+  burInertia(brDia = CONFIG.MILL.BR_D) { return Drive.cylInertia(brDia, CONFIG.MILL.BR_BARREL); },
+  /**
+   * ワークロールとバックアップロールの接触が «伝えられる» 接線力 [N]（1 か所ぶん）。
+   * 伝えるのは摩擦なので、押しつけ力（圧延中は圧延荷重、空転ならベンディング力とロール自重）
+   * に比例し、それを超えると滑る。MU_WB は油膜のある鋼どうしの転がり接触の値（推定）。
+   */
+  burTraction(normalN) { return CONFIG.DRIVE.MU_WB * Math.max(normalN, 0); },
+  /**
+   * バックアップロールを «滑らせずに» 付いてこさせられる表面加速度の上限 [mpm/s]。
+   *   伝えられる接線力 F ＝ μ·N、BUR の角加速度 α ＝ a/r_B、要るトルク J_B·α ＝ F·r_B
+   *   → a ≤ μ·N·r_B² / J_B
+   * 実機がここを守るのは «滑らせるとロールの表面が擦れる» から —— アルミ熱延では
+   * ロール表面の状態がそのまま板の表面品質になるので、BUR との擦れは許容できない。
+   * 空転（板なし・ベンディング 0）では押しつけが下ワークロールの自重 13.3 t しかないので、
+   * 上限は約 50 mpm/s まで落ちる。主機の能力（110 mpm/s 相当）より «こちらが先に効く»。
+   */
+  burAccelLimit(normalN, brDia = CONFIG.MILL.BR_D) {
+    const rB = brDia / 2000, Jb = Drive.burInertia(brDia);
+    if (!(Jb > 0)) return Infinity;
+    /* 接線力は «慣性を回す» ぶんだけでなく «BUR 自身の首の摩擦» も賄わなければならない。
+     *   F·r_B − T_drag ＝ J_B·α  かつ  F ≤ μ·N
+     *   → α ≤ (μ·N·r_B − T_drag) / J_B、表面加速度 a ＝ α·r_B
+     * 首の摩擦を落とすと «上限どおりに振っても少し滑る» ことになる（実測 7.1 mpm）。 */
+    const burW = Drive.rollMass(brDia, CONFIG.MILL.BR_BARREL) * 9.80665;
+    const net = Drive.burTraction(normalN) * rB - Drive.burBearingTorque(normalN + burW);
+    return Math.max(net, 0) * rB / Jb * 60;                     // m/s² → mpm/s
+  },
+  /**
+   * ワークロールとバックアップロールの «接触の押しつけ力» [N]。
+   *   上の接触 —— 上バックアップロールが上ワークロールの «上に載る» ので、その自重
+   *   下の接触 —— 下ワークロールが下バックアップロールの «上に載る» ので、その自重
+   * 圧延中は圧延荷重がこれを遥かに上回り（1,000 t 超）、ベンディング力も足し合わさる。
+   */
+  burNormal(top, rollForceN, bendN, wrDia = CONFIG.MILL.WR_D, brDia = CONFIG.MILL.BR_D) {
+    const M = CONFIG.MILL;
+    const w = top ? Drive.rollMass(brDia, M.BR_BARREL) : Drive.rollMass(wrDia, M.BARREL);
+    return Math.max(rollForceN, 0) + Math.abs(bendN) + w * 9.80665;
   },
   /** 主電動機 1 台の回転子慣性 [kg·m²]（電動機軸まわり）。外形から置いた推定値。 */
   rotorInertia() {
@@ -4049,6 +4114,10 @@ const Drive = {
     const br = mu * Math.max(forceN, 0) * (M.BR_NECK_D / 2000) * (wrDia / brDia);
     const wr = mu * Math.max(bendN, 0) * (M.WR_NECK_D / 2000);
     return 2 * (br + wr);
+  },
+  /** バックアップロール 1 本の首の摩擦トルク [N·m]（BUR 自身の軸まわり）。 */
+  burBearingTorque(normalN) {
+    return CONFIG.DRIVE.MU_BEARING * Math.max(normalN, 0) * (CONFIG.MILL.BR_NECK_D / 2000);
   },
   /** その速度で主機が出せるトルク [N·m]（基底回転数まで定トルク、以上は定出力。短時間過負荷込み） */
   availTorque(speedMpm, dia = CONFIG.MILL.WR_D) {
@@ -4205,46 +4274,43 @@ const Rolling = {
   stParams(alloy) {
     if (alloy._st) return alloy._st;
     const Rg = Rolling.RGAS, Tref = CONFIG.MATERIAL.TREF + 273.15;
-    const n = 1 / alloy.m;                                          // べき乗則の指数
-    /* Q（活性化エネルギー）と α（べき乗則から指数則へ移る応力の逆数）は、材質ごとに
-     * 実験から決めるもの。ここでは «この材質について既に持っている熱間実験式
-     * C·exp(−b·ΔT)·ε̇^m を、熱間域でいちばんよく再現する (Q, α) の組» を数値的に選ぶ。
-     * こうすると熱間域の較正を壊さずに、式の形だけをアレニウス＋双曲線正弦へ差し替えられる。
-     * α だけを当てはめると «温度勾配のずれ» を吸収できず、材質によって 27 % もずれた
-     * （温度依存の形そのものが違うため）ので、2 つとも当てはめる。
-     * 当てはまった Q が公表値の帯（Q_ACT の ±40 % 程度）に入るかは評価器で照合する。 */
-    const sig = (Q, a, T, r) => {
-      const Zr = Math.exp(Q / (Rg * Tref));
-      const Z = Math.max(r, 1e-4) * Math.exp(Q / (Rg * (T + 273.15)));
-      return Math.asinh(Math.sinh(a * alloy.C) * Math.pow(Z / Zr, 1 / n)) / a;
-    };
-    const Ts = [], Tlo = alloy.T_ROLL[0] - 60, Thi = alloy.T_ROLL[1];
-    for (let i = 0; i <= 6; i++) Ts.push(Tlo + (Thi - Tlo) * i / 6);
-    const rates = [0.5, 2, 8, 20];
-    const err = (Q, a) => {
-      let worst = 0;
-      for (const T of Ts) for (const r of rates) {
-        const ref = alloy.C * Math.exp(-alloy.b * (T - CONFIG.MATERIAL.TREF)) * Math.pow(r, alloy.m);
-        worst = Math.max(worst, Math.abs(sig(Q, a, T, r) / ref - 1));
-      }
-      return worst;
-    };
-    /* Q は «公表値の帯» の中でだけ探す。当てはまりだけを追うと非物理な値（Al で 300 kJ/mol
-     * 超）へ逃げてしまい、式を物理的な形にした意味が無くなる。帯の中で最良のものを採り、
-     * 残った差（熱間域で 5〜9 %）は «線形指数形とアレニウス形の違いそのもの» として受け入れる。 */
-    const qLo = alloy.Q_ACT * 0.60, qHi = alloy.Q_ACT * 1.40;
-    let Q = alloy.Q_ACT * 1000, alpha = 0.02, best = Infinity;
-    for (let i = 0; i <= 60; i++) {
-      const q = (qLo + (qHi - qLo) * i / 60) * 1000;
-      for (let j = 0; j <= 90; j++) {
-        const a = 0.002 + (0.060 - 0.002) * j / 90;
-        const e = err(q, a);
-        if (e < best) { best = e; Q = q; alpha = a; }
-      }
-    }
-    const Zref = Math.exp(Q / (Rg * Tref));
-    alloy._st = { n, Q, Zref, alpha, fitErr: best, cold: sig(Q, alpha, Rolling.T_COLD, 1) };
+    /* 構成式の «材料定数» をそのまま持つ（当てはめをしない）。
+     *   Z ＝ ε̇·exp(Q/RT) ＝ A·[sinh(α·σ)]^n            （Sellars–Tegart / Garofalo）
+     *   → σ ＝ (1/α)·asinh[ (Z/A)^(1/n) ]
+     * 役割が 1 つずつ分かれている ——
+     *   Q     … 温度依存だけを決める（材質ごとの公表値。ここは荷重で動かさない）
+     *   n, α  … ひずみ速度依存の «形» を決める（材質ごとの公表値）
+     *   A     … 絶対値だけを決める（＝ 荷重の較正で動かしてよい唯一のつまみ）
+     * 以前は経験式 C·exp(−b·ΔT)·ε̇^m を主にして Q と α を数値的に当てはめていたため、
+     * «荷重を合わせるために m を動かすと温度依存が一緒に動く» という結び付きがあった
+     * （Q_fit ＝ b·R·T_ref²/m）。さらに n ＝ 1/m を固定したせいで α が辻褄合わせに使われ、
+     * 8 材質中 6 つで n・α がアルミの公表値の帯（n 4.0〜6.5、α 0.012〜0.050）を外れていた
+     * （A7075 の α は探索の下限 0.002 に張り付いていた）。この形にすればその結び付きが無い。 */
+    const n = alloy.N_EXP, alpha = alloy.ALPHA, Q = alloy.Q_ACT * 1000, lnA = alloy.LN_A;
+    alloy._st = { n, Q, alpha, lnA, Zref: Math.exp(Q / (Rg * Tref)),
+                  cold: Rolling.sigmaOf(Rolling.T_COLD, 1, n, alpha, Q, lnA) };
     return alloy._st;
+  },
+  /** 構成式そのもの [MPa]。σ ＝ (1/α)·asinh[ (Z/A)^(1/n) ]、Z ＝ ε̇·exp(Q/RT)。 */
+  sigmaOf(T, strainRate, n, alpha, Q, lnA) {
+    const lnZ = Math.log(Math.max(strainRate, 1e-4)) + Q / (Rolling.RGAS * (T + 273.15));
+    return Math.asinh(Math.exp((lnZ - lnA) / n)) / alpha;
+  },
+  /**
+   * いまの条件での «実効» ひずみ速度感受性指数 m_eff ＝ ∂lnσ/∂lnε̇ [-]。
+   *
+   * m は独立な材料定数ではない —— 双曲線正弦則から解析的に出る量で、
+   *   ln Z ＝ ln A ＋ n·ln sinh(ασ)  を σ について微分して
+   *   m_eff ＝ tanh(ασ) / (n·ασ)
+   * になる。低応力側（高温・低速）では ασ ≪ 1 なので m_eff → 1/n、高応力側（低温・高速）
+   * では tanh → 1 なので m_eff → 1/(n·ασ) と小さくなる。つまり «同じ材質でも温度と
+   * ひずみ速度で m が変わる» —— これが固定 m では表せなかったところ。
+   */
+  mEff(T, strainRate, alloy = Rolling.alloy()) {
+    const st = Rolling.stParams(alloy);
+    const x = st.alpha * Rolling.sigmaOf(T, strainRate, st.n, st.alpha, st.Q, st.lnA);
+    if (!(x > 0)) return 1 / st.n;
+    return Math.tanh(x) / (st.n * x);
   },
   /**
    * 室温の上限を «どれだけ角を立てて» 効かせるか（p ノルムの p）。
@@ -4267,9 +4333,7 @@ const Rolling = {
    */
   flowStress(T, strainRate, alloy = Rolling.alloy()) {
     const st = Rolling.stParams(alloy);
-    const Z = Rolling.zener(T, strainRate, alloy);
-    const X = Math.sinh(st.alpha * alloy.C) * Math.pow(Z / st.Zref, 1 / st.n);
-    const kf = Math.asinh(X) / st.alpha;
+    const kf = Rolling.sigmaOf(T, strainRate, st.n, st.alpha, st.Q, st.lnA);
     /* 双曲線正弦則は高 Z 側で対数的に寝るので、それ自体が発散を防ぐ。ただし単一の Q で
      * 室温まで外挿できる保証は無い（変形機構が変わる）ので、室温の変形抵抗 KF_MAX を
      * 上限として «滑らかな最小値»（p ノルム）で押さえる。p は KF_CAP_P を参照。 */
@@ -6105,7 +6169,15 @@ class MillState {
     this.guideGap = 2600;
     this.wrDia = CONFIG.MILL.WR_D; this.brDia = CONFIG.MILL.BR_D;  // 研削による現在径（RollShop が入れる。上下の平均）
     // 主駆動系（PhysicsEngine._drive）。圧延トルクのほかに掛かるぶんと、その合計 [N·m]
-    this.bearingTorque = 0; this.inertiaTorque = 0; this.driveTorque = 0; this.drivePowerKW = 0; this.steadyPowerKW = 0; this.accelCap = CONFIG.PROCESS.ACCEL;
+    this.bearingTorque = 0; this.inertiaTorque = 0; this.driveTorque = 0; this.drivePowerKW = 0; this.steadyPowerKW = 0; this.accelCap = CONFIG.PROCESS.ACCEL; this.burCap = CONFIG.PROCESS.ACCEL;
+    /* バックアップロールは駆動されておらず、ワークロールとの摩擦で連れ回される。
+     * 押しつけが弱いときは滑って付いてこないので、«BUR の表面速度» を別の状態として持つ。
+     * brSurf は BUR 胴表面の周速 [mpm]（滑っていなければ currentSpeed と同じ）。 */
+    this.br = { top: { surf: 0, angle: 0, F: 0, slip: 0 }, bot: { surf: 0, angle: 0, F: 0, slip: 0 } };
+    this.brSlip = 0; this.burTorque = 0; this.burSlipping = false;
+    /* 指令から実際にトルクが立つまでの遅れ（電流の立ち上がりと駆動系のねじれ）。
+     * 0（指令どおり）〜1（立ち上がりきった）で、加速度の «出せる割合» に掛かる。 */
+    this.tqRise = 0;
     this.wrRa = CONFIG.MILL.ROLL_SHOP.WR.RA_NEW; this.brRa = CONFIG.MILL.ROLL_SHOP.BR.RA_NEW;   // 表面粗度 [µmRa]
     this.powerCap = 161;                       // 駆動包絡線から決まる速度上限
     this.motorRpm = 0;
@@ -7890,19 +7962,48 @@ class PhysicsEngine {
    */
   _drive(dt) {
     const m = this.mill, s = this.slab, D = CONFIG.DRIVE, r = m.wrDia / 2000;
+    /* バックアップロールを «先に» 解く。連れ回すトルクは駆動側の定常項に入るので、
+     * 後から解くと 1 ステップ古い値でトルク収支を組むことになり、収支が閉じない
+     * （実測で 9.2 kN·m ずれた。_drive を _actuators の中で呼んでいたときと同じ取り違え）。 */
+    this._burDrag(dt);
     // ワークロールの首に掛かるのはベンディング力とロール自重（圧延荷重は BUR の首が受ける）
     const wrNeckN = m.bendForceT * 9806.65 + Drive.rollMass(m.wrDia, CONFIG.MILL.BARREL) * 9.80665;
     m.bearingTorque = Drive.bearingTorque((m.forceMeas || 0) * 9806.65, wrNeckN, m.wrDia, m.brDia);
-    const steady = (s.inBite ? s.rollTorque || 0 : 0) + m.bearingTorque;
+    /* バックアップロールを連れ回すために «駆動側が余分に出す» トルク。BUR は歯車で
+     * 繋がっていないので、これは接触の摩擦を通してしか伝わらない（_burDrag で解く）。 */
+    const burT = m.burTorque || 0;
+    const steady = (s.inBite ? s.rollTorque || 0 : 0) + m.bearingTorque + burT;
     m.powerCap = Num.approach(m.powerCap, Drive.speedLimit(steady, m.wrDia), 0.5, dt);
     m.motorRpm = Drive.motorRpm(m.currentSpeed, m.wrDia);
-    const J = Drive.inertia(m.wrDia, m.brDia);
+    /* 慣性は «駆動側だけ»（ワークロール ＋ 減速機 ＋ 主電動機）。バックアップロールは
+     * 摩擦でしか繋がっていないので、一緒くたにすると «滑って付いてこない» が出せない。 */
+    const J = Drive.driveInertia(m.wrDia);
     const net = Drive.availTorque(m.currentSpeed, m.wrDia) - steady;        // 慣性へ回せるトルク
-    m.accelCap = Math.min(CONFIG.PROCESS.ACCEL, Math.max(net, 0) / J * r * 60);   // rad/s² → mpm/s
+    /* 指令から実トルクが立つまでの遅れ（電流の立ち上がり ＋ 駆動系のねじれ）。
+     * 速度指令が変わっている間だけ立ち上がり、定速に入れば 1 に張り付く。 */
+    const changing = Math.abs(m.targetSpeed - m.currentSpeed) > 0.5;
+    m.tqRise = changing ? Num.approach(m.tqRise, 1, 1 / Math.max(D.TAU_TQ, 1e-3), dt) : 1;
+    const rise = Math.max(m.tqRise, 1e-3);
+    const capRaw = Math.max(net, 0) / J * r * 60;                           // rad/s² → mpm/s
+    /* バックアップロールを «滑らせない» 上限。BUR は歯車ではなく摩擦で連れ回されるので、
+     * 押しつけが弱い空転中はここが主機の能力より先に効く（実測: 下の接触で 50.8 mpm/s）。
+     * 実機がこれを守るのは、滑らせるとロール表面が擦れ、アルミではそれがそのまま
+     * 板の表面品質になるため。上下の接触のうち «弱いほう» で決まる。 */
+    const rollN = s.inBite ? (m.forceMeas || 0) * 9806.65 : 0;
+    const bendN = Math.abs(m.bendForceT) * 9806.65;
+    m.burCap = Math.min(
+      Drive.burAccelLimit(Drive.burNormal(true,  rollN, bendN, m.wrDia, m.brDiaTop), m.brDiaTop),
+      Drive.burAccelLimit(Drive.burNormal(false, rollN, bendN, m.wrDia, m.brDiaBot), m.brDiaBot));
+    m.accelCap = Math.min(CONFIG.PROCESS.ACCEL, capRaw, m.burCap) * rise;
+    /* 制動側も «出せるトルク» で頭打ちにする。回生制動の能力は力行と同じ枠で見て、
+     * 軸受の摩擦は減速を助ける向きに働く。以前は制動だけ青天井で、主機の能力を
+     * 無視して止まれてしまっていた（実測では能力内だったので表には出ていなかった）。 */
+    const brakeCap = Math.min(CONFIG.PROCESS.ACCEL,
+      (Drive.availTorque(m.currentSpeed, m.wrDia) + m.bearingTorque + burT) / J * r * 60,
+      m.burCap) * rise;
     const v0 = m.currentSpeed;
-    const vFull = Num.rateTo(v0, m.targetSpeed, CONFIG.PROCESS.ACCEL, dt);
-    // 速さが増える向きの刻みだけ余力で頭打ちにする（逆転の «まず止める» 側は制動）
-    let v1 = Math.abs(vFull) > Math.abs(v0) ? Num.rateTo(v0, m.targetSpeed, m.accelCap, dt) : vFull;
+    const speeding = Math.abs(m.targetSpeed) > Math.abs(v0) && Math.sign(m.targetSpeed || v0) === Math.sign(v0 || m.targetSpeed);
+    let v1 = Num.rateTo(v0, m.targetSpeed, speeding ? m.accelCap : brakeCap, dt);
     /* 定常ぶんを主機が賄えないときはロールが減速する —— 噛み込みの瞬間にミルの速度が落ちる
      * «衝撃降下»。指令の頭打ち（powerCap、時定数 2 s）より速く効くので、この 2 つは役割が違う。 */
     if (net < 0 && s.inBite && v0 !== 0) v1 = Math.sign(v0) * Math.max(Math.abs(v1) + net / J * r * 60 * dt, 0);
@@ -7914,6 +8015,48 @@ class PhysicsEngine {
     /* 過負荷の判定が見るのは «続いている» ぶん（圧延 ＋ 軸受）。加速の慣性トルクは数秒で
      * 消えるうえ短時間過負荷の枠内なので、これを混ぜると空転の立ち上げのたびに警告が出る。 */
     m.steadyPowerKW = steady * w / 1000;
+  }
+
+  /**
+   * バックアップロールは «連れ回される» —— 4 段ミルで駆動されるのはワークロールだけで、
+   * BUR はワークロールとの接触の摩擦で回る。伝えられる接線力は押しつけ力に比例するので、
+   *   ・圧延中は圧延荷重（1,000 t 超）が押しつけるので滑らない
+   *   ・空転でベンディングを掛けていないときはワークロールの自重（13.3 t）だけなので滑る
+   * 実測: μ 0.10 なら空転時に追従できるのは WR の 46 %。逆転のたびに BUR が置いていかれる。
+   */
+  _burDrag(dt) {
+    const m = this.mill, s = this.slab, rW = m.wrDia / 2000;
+    if (!(dt > 0)) return;
+    const rollN = s.inBite ? (m.forceMeas || 0) * 9806.65 : 0;
+    const bendN = Math.abs(m.bendForceT) * 9806.65;
+    let torque = 0, slipping = false, slipMax = 0;
+    for (const key of ['top', 'bot']) {
+      const top = key === 'top', st = m.br[key];
+      const brDia = top ? m.brDiaTop : m.brDiaBot;
+      const rB = brDia / 2000, Jb = Drive.burInertia(brDia);
+      if (!(rB > 0) || !(Jb > 0)) continue;
+      const N = Drive.burNormal(top, rollN, bendN, m.wrDia, brDia);
+      const Fmax = Drive.burTraction(N);
+      const Tdrag = Drive.burBearingTorque(N + Drive.rollMass(brDia, CONFIG.MILL.BR_BARREL) * 9.80665);
+      const wW = (m.currentSpeed / 60) / rB;            // «滑らないとき» の BUR 角速度 [rad/s]
+      const wB = (st.surf / 60) / rB;
+      const sgn = wB !== 0 ? Math.sign(wB) : Math.sign(wW);
+      /* くっついて回れるか（stick）を先に試す —— この刻みで wB を wW に合わせるのに要る
+       * 接線力。Fmax 以下なら滑らず、超えるなら Fmax で頭打ち（Coulomb 摩擦）。 */
+      const Fstick = (Jb * (wW - wB) / dt + Tdrag * sgn) / rB;
+      const slip = Math.abs(Fstick) > Fmax;
+      const F = slip ? Math.sign(Fstick) * Fmax : Fstick;
+      let wNew = slip ? wB + (F * rB - Tdrag * sgn) / Jb * dt : wW;
+      if (wB !== 0 && Math.sign(wNew) !== Math.sign(wB) && Math.abs(wW) < 1e-6) wNew = 0;
+      st.F = F; st.surf = wNew * rB * 60; st.angle += wNew * dt;
+      st.slip = m.currentSpeed - st.surf;
+      torque += Math.abs(F) * rW;                       // 駆動側が余分に出すトルク
+      if (slip) slipping = true;
+      slipMax = Math.abs(st.slip) > Math.abs(slipMax) ? st.slip : slipMax;
+    }
+    m.burTorque = torque;
+    m.burSlipping = slipping;
+    m.brSlip = slipMax;
   }
 
   /**
@@ -7944,12 +8087,14 @@ class PhysicsEngine {
      * 要るのはこのため）。振幅は 1 本あたりなので、合計が従来と同じになるよう半分ずつ。
      * m.rollAngle は下 WR の回転角で数えているので、他のロールは径の逆比で回る。 */
     /* 上下のワークロールは «同じ回転数» で駆動されるので、回転角は同じ（径が違えば周速が
-     * 違う ＝ それが反りの駆動力になる）。バックアップロールは駆動されておらず、それぞれの
-     * ワークロールに «周速を合わせて» 連れ回るので、回転角は径の逆比。 */
+     * 違う ＝ それが反りの駆動力になる）。バックアップロールは駆動されておらず、
+     * ワークロールとの摩擦で連れ回されるので、回転角は «実際に連れ回された角» を使う
+     * （m.brAngle。押しつけが弱いときは滑って遅れる ——_burDrag）。径の逆比を掛けるのは
+     * «滑らない» という仮定を置くことなので、偏芯の位相もその滑りに従う。 */
     const aWb = m.rollAngle + ph[0];
     const aWt = m.rollAngle + ph[3];
-    const aBb = m.rollAngle * (m.wrDiaBot / m.brDiaBot) + ph[1];
-    const aBt = m.rollAngle * (m.wrDiaTop / m.brDiaTop) + ph[4];
+    const aBb = m.br.bot.angle + ph[1];
+    const aBt = m.br.top.angle + ph[4];
     const h2 = (a) => Math.sin(a) + E.ECC_H2 * Math.sin(2 * a + ph[2] - ph[1]);
     /* ECC_* は «上下 2 本を合わせた» 半振幅。2 本は互いに独立な位相を持つので、合成の
      * 実効値（RMS）が ECC_* になるよう 1 本あたり ECC/√2 にする。ここを 1/2 ずつにすると、
@@ -11253,8 +11398,10 @@ class MillStandView {
     this.rolls.workBot.position.y   = u(wb); this.rolls.workBot.rotation.z   = -mill.rollAngle;
     /* バックアップロールは連れ回りなので «周速を合わせる» 回転数。上下で径が違えば
      * 回転数も別々になる（ワークロールは駆動なので上下同じ回転数）。 */
-    this.rolls.backupTop.position.y = u(bt); this.rolls.backupTop.rotation.z = -mill.rollAngle * (mill.wrDiaTop / mill.brDiaTop);
-    this.rolls.backupBot.position.y = u(bb); this.rolls.backupBot.rotation.z =  mill.rollAngle * (mill.wrDiaBot / mill.brDiaBot);
+    /* バックアップロールは «連れ回された実際の角» で回す（滑ると遅れる。_burDrag）。
+     * 径が上下で違う場合は、同じ周速になるように径の逆比でそれぞれ換算する。 */
+    this.rolls.backupTop.position.y = u(bt); this.rolls.backupTop.rotation.z = -mill.br.top.angle;
+    this.rolls.backupBot.position.y = u(bb); this.rolls.backupBot.rotation.z =  mill.br.bot.angle;
 
     /* ブラシロール: 掛けているときはワークロールに接し、掛けていないときは半径方向へ引く。
      * 回転はインバータ周波数から（掛けていなければ止まる）。 */
@@ -14023,9 +14170,16 @@ class UIManager {
       t.min = a.T_ROLL[0]; t.max = a.T_ROLL[1];
       t.value = Num.clamp(+t.value, a.T_ROLL[0], a.T_ROLL[1]);
       $('der-temp').textContent = `${a.name.split(' ')[0]} の熱間圧延域は ${a.T_ROLL[0]}〜${a.T_ROLL[1]} ℃（巻取温度の目安 ${a.T_COIL} ℃）。この温度域では可視発光しません。`;
+      /* 構成式の材料定数をそのまま見せる。m は «定数ではなく導出量» なので、
+       * 代表条件での実効値 m_eff を 2 点出して «条件で変わる» ことが分かるようにする。 */
+      const kf450 = Rolling.flowStress(450, 1, a), m450 = Rolling.mEff(450, 1, a);
+      const m400 = Rolling.mEff(400, 10, a);
       $('der-alloy').innerHTML =
-        `変形抵抗 ${a.C} MPa（450 ℃・ε̇=1/s）／ 温度係数 b=${a.b.toFixed(4)} ／ 速度指数 m=${a.m.toFixed(2)}<br>` +
-        `密度 ${a.RHO} kg/m³ ／ 熱伝導率 ${a.K} W/mK ／ 端部欠陥係数 ${a.end.toFixed(1)}`;
+        `変形抵抗 ${kf450.toFixed(1)} MPa（450 ℃・ε̇=1/s）／ 活性化エネルギー Q=${a.Q_ACT} kJ/mol`
+        + ` ／ 応力指数 n=${a.N_EXP} ／ α=${a.ALPHA} MPa⁻¹<br>`
+        + `実効ひずみ速度感受性 m_eff = ${m450.toFixed(3)}（450 ℃・1/s）→ ${m400.toFixed(3)}（400 ℃・10/s）`
+        + ` ※ m は定数ではなく tanh(ασ)/(n·ασ) で条件から決まる<br>`
+        + `密度 ${a.RHO} kg/m³ ／ 熱伝導率 ${a.K} W/mK ／ 端部欠陥係数 ${a.end.toFixed(1)}`;
     };
     sel.addEventListener('change', () => { applyRange(); this._slabChanged(); });
     applyRange();
