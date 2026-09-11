@@ -265,8 +265,24 @@ const out = await page.evaluate(async () => {
     const m3 = a.slice(a.length * 0.15 | 0, a.length * 0.85 | 0);
     sd3.push(+(st(m3.map(r => r.hd)).sd * 1000).toFixed(1)); }
   R.noMu = sd3;
-  ok('（参考）外乱の内訳 —— 偏芯を切る／摩擦の揺らぎを切る', true,
-     `そのまま σ平均 ${avg(sds).toFixed(1)} ／ 偏芯なし ${avg(sd2).toFixed(1)} ／ 摩擦の揺らぎなし ${avg(sd3).toFixed(1)} µm`, true);
+
+  /* スタンドの減衰を上げると何が消えるか。スタンドのばね M と材料のばね Q は連成し、
+   * 実効減衰は ζ/√(1+Q/M) に下がる —— ミルが柔らかいほど鳴きやすい（実測: 巻取パスで
+   * 15.00 Hz の山。tools/loadtrace.mjs の «固有振動» 列）。ζ は実機の実測が無い置き値
+   * なので、ここで «鳴きが振れのどれだけを占めるか» を出しておく。 */
+  const keepZ = K.MILL.STAND.ZETA;
+  K.MILL.STAND.ZETA = 0.9;
+  const tr4 = runOnce();
+  K.MILL.STAND.ZETA = keepZ;
+  const by4 = {}; for (const r of tr4) (by4[r.pass] ??= []).push(r);
+  const sd4 = [];
+  for (const k of finishing) { const a = by4[k]; if (!a || a.length < 200) continue;
+    const m4 = a.slice(a.length * 0.15 | 0, a.length * 0.85 | 0);
+    sd4.push(+(st(m4.map(r => r.hd)).sd * 1000).toFixed(1)); }
+  R.hiZeta = sd4;
+  ok('（参考）外乱の内訳 —— 偏芯／摩擦の揺らぎ／スタンドの鳴き', true,
+     `そのまま σ平均 ${avg(sds).toFixed(1)} ／ 偏芯なし ${avg(sd2).toFixed(1)}`
+     + ` ／ 摩擦の揺らぎなし ${avg(sd3).toFixed(1)} ／ 減衰 ζ ${keepZ}→0.9 で ${avg(sd4).toFixed(1)} µm`, true);
 
   /* ---------- ④ 計器の «読み» ------------------------------------------------ */
   const gm = tr.filter(r => r.hx !== null && r.he !== null);
@@ -293,7 +309,7 @@ const out = await page.evaluate(async () => {
   return R;
 });
 
-console.log(JSON.stringify({ band: out.band, acf: out.acf, noEcc: out.noEcc, noMu: out.noMu }, null, 1));
+console.log(JSON.stringify({ band: out.band, acf: out.acf, noEcc: out.noEcc, noMu: out.noMu, hiZeta: out.hiZeta }, null, 1));
 for (const c of out.checks) console.log(`  ${c.ref ? '??  ' : c.pass ? 'ok  ' : 'NG  '} ${c.name} — ${c.detail}`);
 const bad = out.checks.filter(c => !c.pass && !c.ref);
 const nRef = out.checks.filter(c => c.ref).length;
