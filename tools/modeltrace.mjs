@@ -223,7 +223,38 @@ const out = await page.evaluate(async () => {
       ok('フィードフォワードを入れても出側の振れが悪化しない（10 % 以内）', on <= off * 1.10,
          `FF あり ${on.toFixed(3)} mm / なし ${off.toFixed(3)} mm（入側に +4 % の段差）`);
       // 受け持ち量が導出どおりの桁であること（δ·Q²/(M(M+Q))。全量 δ·Q/M ではない）
-      const M = K.MILL.MODULUS, Q = 150;
+      const M = R.millModulus(1500), Q = 150;   // ミル定数は非線形なので «その荷重での» 値
+      /* ミルばねは実機の測定表（伸びの帯ごとの増分ばね定数）から引く。
+       * 一定ではない —— ハウジング・チョック・軸受のがたが荷重で締まるほど硬くなる。 */
+      {
+        const tab = K.MILL.MODULUS_TABLE, st = K.MILL.MODULUS_STEP;
+        // ① 表を積み上げた荷重と、帯の境目での値が一致するか
+        let f = 0, bad = [];
+        for (let i = 0; i < tab.length; i++) {
+          f += tab[i] * st;
+          if (Math.abs(R.millForce((i + 1) * st) - f) > 1e-9) bad.push(`${(i + 1) * st} mm`);
+        }
+        ok('ミルばねが測定表どおりに積み上がる', bad.length === 0,
+           bad.join(' ') || tab.map((v, i) => `${i * st}〜${(i + 1) * st} mm ${v}`).join(' ／ ') + ' t/mm');
+        // ② 荷重 ⇄ 伸びが往復して戻る（逆引きが正しい）
+        let rt = 0;
+        for (const ft of [100, 226, 500, 1314, 2000, 3200])
+          rt = Math.max(rt, Math.abs(R.millForce(R.millStretch(ft)) - ft));
+        ok('荷重 ⇄ 伸びの往復が戻る（逆引きが正しい）', rt < 1e-6, `最大ずれ ${rt.toExponential(1)} t`);
+        // ③ 荷重が増えるほど硬くなる（がたが締まる）
+        const inc = [200, 700, 1200, 2000].map(ft => R.millModulus(ft));
+        ok('荷重が増えるほど増分ばね定数が上がる（がたが締まる）',
+           inc.every((v, i) => i === 0 || v >= inc[i - 1]), inc.map(v => v.toFixed(0)).join(' → ') + ' t/mm');
+        // ④ 割線ばね定数は増分より «やわらかい» 側に出る（下から積み上げるので当然）
+        const sec = R.millSecant(1314);
+        ok('割線ばね定数が増分より小さい（下の柔らかい帯を引きずる）',
+           sec < R.millModulus(1314) && Math.abs(sec - 1314 / 5) < 0.5,
+           `1,314 t で 割線 ${sec.toFixed(1)} ／ 増分 ${R.millModulus(1314).toFixed(0)} t/mm（伸び ${R.millStretch(1314).toFixed(2)} mm）`);
+        // ⑤ 表の外は «最後の増分のまま» 外挿する（硬くなり続けると置かない）
+        ok('測定範囲の外は最後の増分のまま外挿する',
+           Math.abs(R.millModulus(1e5) - tab[tab.length - 1]) < 1e-9,
+           `5 mm 超は ${tab[tab.length - 1]} t/mm のまま`);
+      }
       const share = Q * Q / (M * (M + Q)) / (Q / M);
       ok('フィードフォワードの取り分が導出どおり（全量の 1 割強）', share > 0.05 && share < 0.35,
          `Q/(M+Q) = ${share.toFixed(3)}（Q ${Q} / M ${M} t/mm）`);

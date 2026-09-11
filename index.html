@@ -3,7 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>アルミニウム熱間圧延シミュレータ HYPER MILL</title>
+<title>熱間圧延機シミュレータ</title>
+<!-- ファビコン。外部へ取りに行かず、SVG のデータ URI で置く（単一ファイルのまま動く）。
+     «4 段ミル» を正面から見た形 —— 上下のバックアップロール（大）とワークロール（小）の
+     あいだを、赤熱した板が通る。小さく潰れても «2 大 2 小 ＋ 横一本» の並びで判る。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231b262c'/%3E%3Ccircle cx='32' cy='13' r='11' fill='%238d9aa3'/%3E%3Ccircle cx='32' cy='51' r='11' fill='%238d9aa3'/%3E%3Ccircle cx='32' cy='25' r='6.5' fill='%23d5dade'/%3E%3Ccircle cx='32' cy='39' r='6.5' fill='%23d5dade'/%3E%3Crect x='2' y='30' width='60' height='4' rx='1' fill='%23ff7a35'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
 /* =========================================================================
@@ -732,7 +736,7 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   <header class="brand">
     <i class="fa-solid fa-industry"></i>
     <div>
-      <div class="n">HYPER MILL<button id="btn-ver" class="ver" type="button"
+      <div class="n">熱間圧延機シミュレータ<button id="btn-ver" class="ver" type="button"
         title="版数と変更履歴を見る（V）" aria-haspopup="dialog">VER.–</button></div>
       <div class="sub">アルミニウム熱間可逆圧延機 / 4-High Reversing Mill</div>
     </div>
@@ -1039,7 +1043,7 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
     <div class="val"><span id="m-temp-v">500</span><u>℃</u></div>
     <div class="mx">
       <div class="r"><span id="m-temp-s">上 500 ／ 芯 500 ／ 下 500</span></div>
-      <div class="r"><span>コーティング</span><b id="m-coat-v">–</b><u>µm</u><span id="m-coat-s">–</span></div>
+      <div class="r"><span>コート</span><b id="m-coat-v">–</b><u>µm</u><span id="m-coat-s">–</span><span>組織</span><b id="m-micro-v">–</b><u>µm</u><span id="m-micro-s">–</span></div>
     </div></div>
 
   <div class="mc"><div class="k">品質（狙いとのずれ）</div>
@@ -1346,7 +1350,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
-    { v: '1.22.0', base: 'a0531ac', date: '2026-09-10', title: '図面どおりのローラを保つ・冷却モデルを上下面に分ける・沸騰曲線を液の状態で動かす・主駆動系に軸受摩擦とロール慣性・ロールコーティングとブラシ', items: [
+    { v: '1.22.0', base: 'a0531ac', date: '2026-09-10', title: '図面どおりのローラを保つ・冷却モデルを上下面に分ける・主駆動系に軸受摩擦とロール慣性・構成式を物理パラメータで持つ・圧力分布を解く・実機のミル定数と主機トルクカーブ・組織の履歴', items: [
       // --- テーブルローラ ---
       { t: 'X 線板厚計のために抜いていたローラ 3 本を戻し、図面どおりの本数とピッチにした。計器は «ローラとローラのあいだ» へ納める —— 計器の X は隣り合うローラの中点、下腕は軸受台のすきま（ピッチ 370 で 176 mm）を通す薄い断面、検出器はローラ最下点（618）より下', w: 'CONFIG.XRAY / Parts.xrayFrame' },
       { t: '腕はヘッドと同じ高さには置けない（同じ場所を取り合う）。上腕は線源の上、下腕は検出器の下に付ける', w: 'Parts.xrayFrame' },
@@ -1429,6 +1433,19 @@ const VERSION = {
       { t: '噴流の効き（JET）を «ロールから流れ落ちる» ぶんにも掛けていた。下面の抜熱が 35 % 過大だった', w: 'PhysicsEngine.surfaceCool' },
       { t: '較正のノブ（--set）で «false» が文字列のまま渡り、スイッチを切る実験がすべて効いていなかった', w: 'tools/reallot.mjs parseSets' },
       { t: '圧延で «体積が保たれるか» を素材長を変えて測る評価器を足した。出荷時のロット（530 × 1,330 × 3,450）は保たれる（ずれ −0.5 %）が、素材長 3,000 と 2,000 では板の体積が +21.2 % / +29.7 % ずれることが分かった。分かれるのは 16 mm へ入るパス 1 本で、その途中で平均板厚が出側ギャップを割り込む —— 材料の勘定は保たれているので、走っているのは幾何（xMax − xMin）の側。原因は未特定で、まだ直していない（README の 20 番）', w: 'tools/voltrace.mjs' },
+      // --- 実機データの反映（ミル定数・主機のトルクカーブ）---
+      { t: 'ミル定数を実機の測定値にした。ミル定数は «一定ではない» —— ハウジング・チョック・軸受のがたが荷重で締まるほど硬くなる。伸びの帯ごとの増分ばね定数 0〜1 mm 226 ／ 1〜2 244 ／ 2〜3 267 ／ 3〜4 281 ／ 4〜5 296 t/mm。従来の 550 t/mm 一定は実機の 2 倍以上硬く、2,600 t での伸びが 4.73 mm（実機の表なら 9.34 mm）と半分しか出ていなかった', w: 'MILL.MODULUS_TABLE / Rolling.millStretch' },
+      { t: 'ゲージメータ・ロードセル・圧下の下限がすべて同じ表を見る。ばねが非線形なので «荷重 ÷ 定数» ではなく «表から引いた伸び» を使う', w: 'Rolling.millForce / millStretch / millModulus' },
+      { t: '主機を更新後の実機仕様にした。2,000 kW × 2 台・IEGT インバータ・トランス 2,800 kVA × 2・真空遮断器（VCB）', w: 'CONFIG.DRIVE' },
+      { t: '主機のトルクカーブを実測値そのものにした。最大 1,520 kN·m（ベース速度 75 mpm まで一定）・定格 1,400 kN·m・最高速度 160 mpm・過負荷耐量 225 %/60 s。検算: 1,520 kN·m × 2.688 rad/s ＝ 4.09 MW で定格出力 4.0 MW と合う。従来は «電動機 kW ÷ 基底回転数 × 減速比» で組み立てた推定（1,442 kN·m 相当）だった', w: 'DRIVE.TORQUE_MAX / V_BASE / Drive.curveTorque' },
+      { t: '動力の上限に使っていた推定の margin（0.95）をやめ、実機の過負荷耐量そのもので見るようにした', w: 'Rolling.buildSchedule' },
+      // --- 組織の履歴（回復・再結晶を別の状態量として持つ）---
+      { t: '組織の履歴を状態量として持つようにした。亜結晶粒径・静的再結晶率・残留ひずみの 3 つ。文献どおり «変形中の亜結晶粒径はその場の Z だけで決まる»（1/d ＝ A ＋ B·log₁₀Z）ので履歴は持たず、履歴が要るのは «パスとパスのあいだ» —— 時間と温度で静的再結晶が進み（Avrami）、食い残しが次のパスへ持ち越される', w: 'PhysicsEngine._micro / CONFIG.MICRO' },
+      { t: '実測: 亜結晶粒径は 430 ℃/0.8 s⁻¹ で 3.4 µm、390 ℃/9.5 s⁻¹ で 2.1 µm（アルミ熱間の実測レンジ 1〜10 µm の中）。再結晶の半減時間は 450 ℃ で 2.0 s、390 ℃ で 29.7 s。運転では厚板段の持ち越しが 0.13 前後、最終パスで 0.77 まで増える（低温・短いパス間で再結晶しきれない）', w: 'tools/microtrace.mjs' },
+      { t: '材料の札に組織を出した（亜結晶粒径と再結晶率）', w: '#m-micro-v' },
+      { t: '実装中に 3 つ間違えた。① 材料点が 1 パスで受けるひずみは ln(h_in/h_out) なのに ε̇·dt を «パスの長さ» で積んでいた（23 パスで 3,659 になった）。② 再結晶後の粒成長を毎ステップ掛けて指数発散させた（亜結晶粒径 10⁸⁰ µm）。③ 残留ひずみを同じ分岐で読み書きして自己加算させた（どのパスでも上限に張り付いた）。いずれも実測で見つけて直した', w: 'PhysicsEngine._micro' },
+      // --- 名前とファビコン ---
+      { t: 'アプリ名を «熱間圧延機シミュレータ» にし、ファビコンを付けた。外部へ取りに行かず SVG のデータ URI で 4 段ミルの正面（大小 2 対のロールと赤熱した板）を描くので、単一ファイルのまま動く', w: '<title> / link rel=icon' },
       // --- 構成式とひずみ速度感受性（m を «導出量» にする）---
       { t: '構成式の材料定数をそのまま持つ形にした。Z ＝ ε̇·exp(Q/RT) ＝ A·[sinh(ασ)]^n で、Q は温度依存だけ・n と α はひずみ速度依存の形だけ・A は絶対値だけを決める。荷重の較正で動かしてよいのは A だけになった', w: 'Rolling.stParams / ALLOYS' },
       { t: 'm（ひずみ速度感受性）を材料定数として持つのをやめ、導出量にした。双曲線正弦則から m_eff ＝ tanh(ασ)/(n·ασ) が解析的に出る。同じ A5052 でも 520 ℃/0.5 s⁻¹ で 0.177、380 ℃/50 s⁻¹ で 0.083（2.14 倍）', w: 'Rolling.mEff' },
@@ -1977,13 +1994,22 @@ const CONFIG = {
     BENDER:  { D: 300, L: 520, FORCE: 160 },
     RATED_FORCE_T: 3920,                   // 常用最大圧延荷重 (tonf)
     LIMIT_FORCE_T: 4200,                   // 非常最大圧延荷重 (tonf)
-    RATED_POWER_KW: 3800,                  // 主電動機定格 (1900 kW × 2台)
-    /* ミル定数（スタンドのばね定数）[t/mm]。実ギャップは圧下位置 S そのものではなく
-     * h = S + F/M —— 荷重を受けてハウジング・チョック・ロールが伸びたぶんだけ開く。
-     * 4 段可逆の重ミルで 400〜700 t/mm 級。狙いの板厚を出すには «伸びるぶん» を
-     * あらかじめ締めておく（ゲージメータ設定）ので、荷重がまだ無い噛み込みの瞬間は
-     * その締めた無負荷ギャップがそのまま材料に当たる —— これが噛み込み衝撃の正体。 */
-    MODULUS: 550,
+    RATED_POWER_KW: 4000,                  // 主電動機定格 (2000 kW × 2 台。更新後の実機値)
+    /* ミル定数（スタンドのばね）。実ギャップは圧下位置 S そのものではなく h ＝ S ＋ δ(F)
+     * —— 荷重を受けてハウジング・チョック・ロールが伸びたぶんだけ開く。狙いの板厚を出すには
+     * «伸びるぶん» をあらかじめ締めておく（ゲージメータ設定）ので、荷重がまだ無い噛み込みの
+     * 瞬間はその締めた無負荷ギャップがそのまま材料に当たる —— これが噛み込み衝撃の正体。
+     *
+     * ミル定数は «一定ではない» —— ハウジング・チョック・軸受のがたが荷重で締まるほど
+     * 硬くなる。実機の測定値は «伸びの帯ごとの増分ばね定数» で与えられる:
+     *     0〜1 mm 226 ／ 1〜2 mm 244 ／ 2〜3 mm 267 ／ 3〜4 mm 281 ／ 4〜5 mm 296 [t/mm]
+     * 積み上げると 1 mm で 226 t、5 mm で 1,314 t。割線で見ると 226 → 263 t/mm。
+     * 従来は 550 t/mm の «一定» で置いていたので、実機の 2 倍以上硬く、荷重 2,600 t での
+     * 伸びが 4.73 mm（実機の表なら 9.34 mm）と半分しか出ていなかった。
+     * MODULUS_STEP は帯の幅 [mm]。5 mm より先は測定が無いので «最後の増分のまま» 外挿する
+     * —— 硬くなり続けると置くのは根拠が無い。実測が伸びたらここへ足すだけでよい。 */
+    MODULUS_TABLE: [226, 244, 267, 281, 296],
+    MODULUS_STEP: 1,
     /* --- 上下ロールの径差 -------------------------------------------------------
      * 研削のたびに径は減るので、上下がぴったり同じ径であることはまず無い。実機で径差が
      * 効くのは «反り» —— 上下のワークロールは同じ回転数で回されるので、径が大きいほうの
@@ -2175,12 +2201,32 @@ const CONFIG = {
      * （README 残件 11）。定出力域で出せるトルクは 2·P·GEAR/ω で «基底回転数に依らない»
      * ので、ここを動かしても高速側の能力は変わらない（低速側の定トルクだけが減る）。
      * 実機が 120 mpm を回せている根拠は基底回転数ではなく «定格そのもの» の側にある。 */
-    MOTOR_KW: 1900, MOTOR_N: 2, RPM_BASE: 150, RPM_MAX: 330, GEAR: 5.96,
+    MOTOR_KW: 2000, MOTOR_N: 2, RPM_MAX: 330, GEAR: 5.96,
+    /* 主機のトルクカーブ（実機の «HOT 主機モータトルクカーブ・更新後» より。ロール軸・2 台ぶん）。
+     *   最大トルク 1,520 kN·m —— ベース速度まで一定（定トルク域）
+     *   定格トルク 1,400 kN·m —— 連続の熱的定格
+     *   ベース速度 75 mpm ／ 最高速度 160 mpm。ベース速度より上は定出力（T ∝ 1/v）で、
+     *   160 mpm では 1,520 × 75/160 ＝ 713 kN·m（図の実測 ≒ 680 と合う）
+     *   過負荷耐量 225 % / 60 s —— 図の «定格トルクを超えているが現状制御可能» の根拠
+     * 検算: 1,520 kN·m × (75/60)/0.465 rad/s ＝ 4.09 MW で定格出力 4.0 MW と合う。
+     * 以前は «電動機 kW ÷ 基底回転数 × 減速比» で組み立てた推定値（1,442 kN·m 相当）で、
+     * ベース速度もロール軸で 55 mpm 相当と実機より低かった。 */
+    TORQUE_MAX: 1520e3, TORQUE_RATED: 1400e3, V_BASE: 75, V_MAX: 160,
+    /* 主機まわりの電気設備（更新後の実機仕様）。
+     *   ドライブ: IEGT インバータ —— 交流可変速。直流機と違って零速から定トルクを出せ、
+     *     トルクの立ち上がりも速い（TAU_TQ に効くのは主にスピンドルのねじれのほう）。
+     *   トランス: 2,800 kVA × 2 台 ＝ 5,600 kVA。«続けて引ける» 電力はここで決まるので、
+     *     短時間過負荷（OVERLOAD）は «秒単位» の話であって、連続では
+     *     5,600 kVA × 力率・効率 ≒ 5.3 MW —— 定格 4.0 MW に対して 1.3 倍ぶんしかない。
+     *   高圧遮断器: 真空遮断器（VCB）。
+     * TRANSFORMER_KVA はスケジュールの注意書き（連続で引ける電力の目安）に使う。 */
+    DRIVE_TYPE: 'IEGT インバータ', BREAKER: '真空遮断器（VCB）',
+    TRANSFORMER_KVA: 2800, TRANSFORMER_N: 2, TRANSFORMER_PF: 0.95,
     /* 短時間過負荷率。直流圧延機用電動機は定格の 2〜2.5 倍のトルクを短時間（1 パス数秒〜数十秒）
      * 出せる。実機は 30 mm 圧下を 120 mpm で通しており、本アプリの動力は 3.7〜5.0 MW（定格 3.8 MW）
      * になる —— 定格で頭打ちにすると実機の速度が出せない。パス単位の上限はこの倍率で見て、
      * サイクル全体の実効（RMS）が定格内かはスケジュールの注意書きで示す。 */
-    OVERLOAD: 2.0,
+    OVERLOAD: 2.25, OVERLOAD_SEC: 60,          // 実機の過負荷耐量 225 % / 60 s
     /* 駆動系の損失。主機が出すトルクは «圧延トルク ＋ 軸受の摩擦 ＋ 回転系の慣性»。
      * MU_BEARING —— 油膜軸受（モーゴイル）の等価摩擦係数。文献の幅は 0.002〜0.005。
      *   4段ミルなので «圧延荷重を受けるのはバックアップロールの首» で、ワークロールの首に
@@ -3408,6 +3454,28 @@ const CONFIG = {
    * 実機より短く出ていた（実測: 実機 450 s に対し 332 s ＝ −26 %）。単パスの区間では
    * 84 s 対 90 s と 6 s だけ足りず、これがちょうど 1 パスぶんの死に時間に当たる。
    * 実機 2 ロットからの逆算は A5052 5.6 s/パス・A1100 7.8 s/パス。 */
+  /* 組織の履歴 —— 亜結晶粒径・再結晶率・残留ひずみ。
+   *
+   * 文献（README 節 2-5）は «熱間圧延中に形成される亜結晶粒径は直前のパスの Z だけで
+   * 決まり、それ以前の履歴に依らない» と言っている。ひずみの導入と動的回復が釣り合った
+   * 定常変形だからで、これは «変形抵抗に履歴項が要らない» ことの裏づけでもある。
+   * だからここで持つ履歴は «パスとパスのあいだ» の話 ——
+   *   ・変形中は動的回復が釣り合い、亜結晶粒径はその場の Z で決まる（履歴なし）
+   *   ・パス間の «時間と温度» で静的再結晶が進み、溜まったひずみを食う（Avrami）
+   *   ・食い残したぶんが残留ひずみとして次のパスへ持ち越される
+   * 荷重への効きは小さく（残留ひずみ 0.3 で +1.5 % 程度）、主な意味は «出来上がった
+   * コイルの組織» —— 亜結晶粒径と再結晶率が下工程の硬さ・集合組織を決める。
+   *
+   *   SUB_A / SUB_B —— 1/d ＝ A ＋ B·log₁₀Z [µm⁻¹]（文献の形）。Z 8×10¹² で d 3.4 µm、
+   *                    1.5×10¹⁴ で 2.4 µm になる置き方。
+   *   SUB_EPS —— 亜結晶粒がその場の Z の定常値へ入れ替わるのに要るひずみ。
+   *   REX_A / REX_Q / REX_N —— 静的再結晶の Avrami。t₅₀ ＝ A·ε⁻²·exp(Q/RT) [s]、
+   *                    X ＝ 1 − exp(−0.693·(t/t₅₀)^N)。450 ℃・ひずみ 0.3 で t₅₀ ≒ 2 s。
+   *   RET_K / RET_MAX —— 残留ひずみが変形抵抗に効く割合と、その上限。
+   * ※ 係数はアルミ熱間加工の一般的な形と桁で置いた推定値（README 残件）。 */
+  MICRO: { SUB_A: -1.00, SUB_B: 0.100, SUB_EPS: 0.20, SUB_MAX: 50,
+           REX_A: 1.77e-14, REX_Q: 180, REX_N: 1.4, REX_GROW: 2.5,
+           RET_K: 0.05, RET_MAX: 0.80 },
   PROCESS: { PASS_DEAD: 6, MU: 0.32, MU_KT: 0.0, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
              TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.95, PEAK_K: 1.22,
              /* 巻取パスの尻: «パス時間いっぱい待って冷えた» 温度で解いた荷重に掛ける係数。最後の 1 m の
@@ -4073,17 +4141,18 @@ class EventBus {
  */
 const Drive = {
   /** ロール軸に出せる最大トルク [N·m]（2ロール合計） */
-  get maxTorque() {
-    const D = CONFIG.DRIVE;
-    return (D.MOTOR_KW * 1000 * D.MOTOR_N) / (D.RPM_BASE * Math.PI / 30) * D.GEAR;
-  },
+  /** 定トルク域で出せる最大トルク [N·m]（ロール軸・2 台ぶん）。実機のカーブの平らな所。 */
+  get maxTorque() { return CONFIG.DRIVE.TORQUE_MAX; },
+  /** 連続の熱的定格トルク [N·m]。これを超えるぶんは «60 秒まで» の話。 */
+  get ratedTorque() { return CONFIG.DRIVE.TORQUE_RATED; },
   get ratedPowerKW() { return CONFIG.DRIVE.MOTOR_KW * CONFIG.DRIVE.MOTOR_N; },
   rollRpm(speedMpm, dia) { return Math.abs(speedMpm) / (Math.PI * dia / 1000); },
   motorRpm(speedMpm, dia) { return Drive.rollRpm(speedMpm, dia) * CONFIG.DRIVE.GEAR; },
   /** ロール径から決まる最高圧延速度 [mpm] */
   maxSpeed(dia = CONFIG.MILL.WR_D) {
-    const D = CONFIG.DRIVE;
-    return Math.PI * (dia / 1000) * (D.RPM_MAX / D.GEAR);
+    /* 実機の最高速度は «公称ロール径での» 値。研削で径が減れば、同じ回転数でも
+     * 周速はその比で落ちる。 */
+    return CONFIG.DRIVE.V_MAX * (dia / CONFIG.MILL.WR_D);
   },
   /**
    * ロール軸まわりの慣性モーメント [kg·m²]。上下のワークロールはそのまま、
@@ -4177,17 +4246,25 @@ const Drive = {
   burBearingTorque(normalN) {
     return CONFIG.DRIVE.MU_BEARING * Math.max(normalN, 0) * (CONFIG.MILL.BR_NECK_D / 2000);
   },
-  /** その速度で主機が出せるトルク [N·m]（基底回転数まで定トルク、以上は定出力。短時間過負荷込み） */
+  /** ベース速度 [mpm]（そのロール径での）。ここまでが定トルク域。 */
+  baseSpeed(dia = CONFIG.MILL.WR_D) { return CONFIG.DRIVE.V_BASE * (dia / CONFIG.MILL.WR_D); },
+  /**
+   * その速度で主機が «連続で» 出せるトルク [N·m]（実機のトルクカーブそのもの）。
+   * ベース速度まで一定（TORQUE_MAX）、それより上は定出力で T ∝ 1/v。
+   */
+  curveTorque(speedMpm, dia = CONFIG.MILL.WR_D) {
+    const vB = Drive.baseSpeed(dia), v = Math.abs(speedMpm);
+    return Drive.maxTorque * Math.min(1, vB / Math.max(v, 1e-6));
+  },
+  /** その速度で出せるトルク [N·m]（短時間過負荷込み。実機の過負荷耐量 225 % / 60 s）。 */
   availTorque(speedMpm, dia = CONFIG.MILL.WR_D) {
-    const D = CONFIG.DRIVE, rpm = Drive.motorRpm(speedMpm, dia);
-    return Drive.maxTorque * D.OVERLOAD * Math.min(1, D.RPM_BASE / Math.max(rpm, 1e-6));
+    return Drive.curveTorque(speedMpm, dia) * CONFIG.DRIVE.OVERLOAD;
   },
   /** 所要トルク M [N·m] を出せる最高速度 [mpm]。定出力域では速度と反比例する（短時間過負荷込み）。 */
-  speedLimit(torqueNm, dia) {
-    const D = CONFIG.DRIVE, vMax = Drive.maxSpeed(dia);
+  speedLimit(torqueNm, dia = CONFIG.MILL.WR_D) {
+    const vMax = Drive.maxSpeed(dia);
     if (!(torqueNm > 1)) return vMax;
-    const vBase = Math.PI * (dia / 1000) * (D.RPM_BASE / D.GEAR);
-    return Num.clamp(vBase * Drive.maxTorque * D.OVERLOAD / torqueNm, 5, vMax);
+    return Num.clamp(Drive.baseSpeed(dia) * Drive.maxTorque * CONFIG.DRIVE.OVERLOAD / torqueNm, 5, vMax);
   },
 };
 
@@ -4605,7 +4682,46 @@ const Rolling = {
     const Ld = R * a;
     return { force, torque, phiN, pMax, stickFrac, pm: Ld > 0 ? force / (width * Ld) : 0 };
   },
-  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */
+  /**
+   * ミルばね —— 実機の測定表（伸びの帯ごとの増分ばね定数）から «荷重 ⇄ 伸び» を引く。
+   * ここが単一の出どころで、ゲージメータ・ロードセル・圧下の下限がすべてこれを見る。
+   */
+  /** そのパスで材料点が受けるひずみ ln(h_in/h_out)。スケジュールから取る。 */
+  passStrainOf(passIndex) {
+    const sch = CONFIG.SCHEDULE;
+    if (!sch || passIndex < 0 || passIndex >= sch.length) return 0;
+    const hOut = sch[passIndex].gap;
+    const hIn = passIndex > 0 ? sch[passIndex - 1].gap : CONFIG.SLAB.CAST_DEFAULT - 2 * CONFIG.SLAB.SCALP_DEFAULT;
+    return hIn > hOut ? Math.log(hIn / hOut) : 0;
+  },
+  /** 伸び δ [mm] のときの荷重 [t]（表を積み上げる） */
+  millForce(mm) {
+    const M = CONFIG.MILL, tab = M.MODULUS_TABLE, st = M.MODULUS_STEP;
+    let d = Math.max(mm, 0), f = 0;
+    for (let i = 0; i < tab.length && d > 0; i++) { const w = Math.min(d, st); f += tab[i] * w; d -= w; }
+    return f + d * tab[tab.length - 1];              // 表の外は最後の増分のまま
+  },
+  /** 荷重 [t] のときの伸び [mm]（表の逆引き） */
+  millStretch(forceT) {
+    const M = CONFIG.MILL, tab = M.MODULUS_TABLE, st = M.MODULUS_STEP;
+    let f = Math.max(forceT, 0), d = 0;
+    for (let i = 0; i < tab.length; i++) {
+      const cap = tab[i] * st;
+      if (f <= cap) return d + f / tab[i];
+      f -= cap; d += st;
+    }
+    return d + f / tab[tab.length - 1];
+  },
+  /** その荷重での «増分» ばね定数 dF/dδ [t/mm]（AGC の利得はこちらを見る） */
+  millModulus(forceT) {
+    const M = CONFIG.MILL, tab = M.MODULUS_TABLE, st = M.MODULUS_STEP;
+    let f = Math.max(forceT, 0);
+    for (let i = 0; i < tab.length; i++) { const cap = tab[i] * st; if (f <= cap) return tab[i]; f -= cap; }
+    return tab[tab.length - 1];
+  },
+  /** その荷重での «割線» ばね定数 F/δ [t/mm]（表示・目安用） */
+  millSecant(forceT) { const d = Rolling.millStretch(forceT); return d > 0 ? forceT / d : CONFIG.MILL.MODULUS_TABLE[0]; },
+  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */
   frictionHill(Ld, hMean, mu = CONFIG.PROCESS.MU) {
     const x = mu * Ld / Math.max(hMean, 1e-3);
     return x < 1e-6 ? 1 : (Math.exp(x) - 1) / x;
@@ -5514,9 +5630,10 @@ const Rolling = {
      * なったので、この margin を 0.84 のままにすると実機が回している 120 mpm が入らず、
      * 自動生成が 115 mpm へ落ちる（実測: 厚板段の 4 パス）。実機はその圧下で 120 mpm を
      * 回しているのだから、足りていないのは «能力の見積り» の側。実機のスケジュールから
-     * 逆に margin を同定して 0.95 とした ——「この圧延機は厚板段で定格の 1.9 倍まで使う」
-     * ということ。本当の不確かさは主電動機の定格そのもの（README 残件 11）。 */
-    const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * CONFIG.DRIVE.OVERLOAD * 0.95;
+     * その後に実機のトルクカーブ（最大 1,520 kN·m・ベース速度 75 mpm・過負荷 225 %/60 s）を
+     * いただいたので、推定の margin はやめて «実機の過負荷耐量そのもの» で見る。過負荷は
+     * 60 秒までの話なので、連続で引ける電力はトランス（2,800 kVA × 2）が決める。 */
+    const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * CONFIG.DRIVE.OVERLOAD;
     /* 巻取パスの尻の峰（待って冷えた最後の数 m、1〜2 s の事象）は常用最大ではなく非常最大に
      * 余裕を見て当てる。常用最大は連続の定格で、尻の一瞬の峰まで 0.95 倍に収めると実機が
      * 通している 16 → 8 mm（尻 3,687 t ＜ 常用 3,920 t）が 8.8 mm で止まる（tools/calib.mjs）。 */
@@ -5873,6 +5990,10 @@ class SlabState {
     this.hBite = 0;                             // いまバイトに入っている材料の入側板厚 [mm]
     this.hDeliv = 0;                            // 噛んでいる間の実ギャップ ＝ 出ていく板厚 [mm]
     this.currentSpeed = 0; this.strainRate = 0; this.flowStress = 0;
+    /* 組織の履歴（PhysicsEngine._micro）。subGrain は亜結晶粒径 [µm]、rexFrac は
+     * 静的再結晶の進み（0〜1）、retStrain は次のパスへ持ち越す残留ひずみ。 */
+    this.subGrain = 0; this.rexFrac = 1; this.retStrain = 0; this.passStrain = 0;
+    this._rexT = 0; this._wasBite = false; this._dDef = 0; this._dRex = 0;
     this.dir = 1;
     // 反り（曲率 [1/mm]、+ は上反り）。kNew: 直近のパスで付いた反り、kOld: その前のパスの反り
     this.kNew = 0; this.kOld = 0; this._kAcc = 0; this._kW = 0;
@@ -8102,7 +8223,7 @@ class PhysicsEngine {
     this.millCtrl.update(this.finishCtrl, dt);
     this.finishCtrl.update(dt);
     this._actuators(dt);
-    if (this.slab.onLine) { this._dynamics(dt); this._guides(dt); this._thermal(dt); this._lengthwise(dt); }
+    if (this.slab.onLine) { this._dynamics(dt); this._guides(dt); this._thermal(dt); this._lengthwise(dt); this._micro(dt); }
     /* 主駆動系は «その時刻のトルク» を受けて速度を積分するので、圧延トルクが決まったあとに
      * 回す（_actuators の中で回すと 1 ステップ古い圧延トルクで加速を決めることになる）。 */
     this._drive(dt);
@@ -8302,7 +8423,9 @@ class PhysicsEngine {
     const fRef = s.inBite ? m.forceMeas
                          : (auto && G.PRESET && plan ? (plan.steady ?? plan.force ?? 0) * m.adapt : 0);
     // 制御が «自分で思っている» ミル定数（真値とは M_EST_ERR だけずれている）
-    m.spring = fRef / (C.MODULUS * (1 + G.M_EST_ERR));
+    /* 制御が «自分で思っている» 伸び（真値とは M_EST_ERR だけずれている）。
+     * ばねが非線形なので «荷重 ÷ 定数» ではなく «表から引いた伸び» を使う。 */
+    m.spring = Rolling.millStretch(fRef) / (1 + G.M_EST_ERR);
     /* フィードフォワード: 前のパスが残した «その場所の板厚» は分かっているので、
      * 荷重に現れるのを待たずに先に圧下を動かす（実機は入側の厚み計がこれを担う）。
      * 肝は «先読み» で、いま噛んでいる材料ではなく «圧下の応答時間ぶん先の材料» を読む。
@@ -8323,7 +8446,7 @@ class PhysicsEngine {
        * フィードフォワードが受け持つのは «その差» ＝ δ·Q²/(M·(M+Q)) だけ。
        * ここを δ·Q/M（＝全量）にすると 5 倍ほど効かせ過ぎて、かえって振れが増える
        * （実測: 入側に +4 % の段差を入れたとき 0.147 → 0.360 mm に悪化した）。 */
-      const M = C.MODULUS;
+      const M = Rolling.millModulus(fRef);          // その荷重での «増分» ばね定数
       ff = -G.FF_KP * (hAhead - nom) * Qp * Qp / (M * (M + Qp));
     }
     const comp = auto ? G.KP * m.spring + m.trim - ff : 0;   // 手動はミルばねを補償しない（実機どおり）
@@ -8342,7 +8465,7 @@ class PhysicsEngine {
      * h を GAP_MIN まで詰めるには S を GAP_MIN より F/M だけ下へ入れる必要がある。
      * ここを GAP_MIN で止めていたため、薄板パスで圧下が飽和して板厚が目標から外れた
      * （実測: 目標 9.1 mm に対し 7.8 mm）。実ギャップ側の下限は下で別に効かせる。 */
-    const screwMin = C.GAP_MIN - C.RATED_FORCE_T / C.MODULUS;
+    const screwMin = C.GAP_MIN - Rolling.millStretch(C.RATED_FORCE_T);
     if (!lock) m.screwCmd = Num.clamp(m.targetGap - comp, screwMin, C.GAP_MAX);
     const want = Num.approach(m.screw, m.screwCmd, G.TAU, dt);   // 圧下の応答（一次遅れ）
     m.screw = Num.rateTo(m.screw, want, C.GAP_RATE, dt);         // ＋シリンダ速度の制限
@@ -8350,11 +8473,11 @@ class PhysicsEngine {
      *    （半陰的オイラー。ω·dt = 0.79 < 2 なので固定ステップ 1/120 s で安定）。
      *    噛み込みの階段荷重で伸びが行き過ぎ、その間だけギャップが余計に開く。 */
     {
-      const w = 2 * Math.PI * C.STAND.FN, xT = (s.rollForce || 0) / C.MODULUS;
+      const w = 2 * Math.PI * C.STAND.FN, xT = Rolling.millStretch(s.rollForce || 0);
       m.stretchV += (w * w * (xT - m.stretch) - 2 * C.STAND.ZETA * w * m.stretchV) * dt;
       m.stretch += m.stretchV * dt;
       if (m.stretch < 0) { m.stretch = 0; m.stretchV = Math.max(m.stretchV, 0); }   // 伸びは荷重側にしか出ない
-      m.forceMeas = C.MODULUS * m.stretch;                       // ロードセルはハウジングの伸びを読む
+      m.forceMeas = Rolling.millForce(m.stretch);                // ロードセルはハウジングの伸びを読む
     }
     this._disturb(dt);
     m.gap = Num.clamp(m.screw + m.stretch + m.ecc + m.muNoise, C.GAP_MIN, C.GAP_MAX);
@@ -9052,6 +9175,53 @@ class PhysicsEngine {
    * «掛ける長さ»（cov）は板の長手方向で何割に掛けるか。パスの頭から数えて cov を超えたら
    * ブラシを離す —— 実機の «F-2 は全長の半分» という掛け方がそのまま形になる。
    */
+  /**
+   * 組織の履歴 —— 亜結晶粒径・再結晶率・残留ひずみ。
+   *
+   * 変形中（バイトの中）: ひずみの導入と動的回復が釣り合った定常変形なので、亜結晶粒径は
+   * «その場の Z» だけで決まり履歴に依らない（文献。README 節 2-5）。ひずみは溜まる。
+   * パス間: 時間と温度で静的再結晶が進み（Avrami）、溜まったひずみを食う。食い残しが
+   * 次のパスへ持ち越される —— これが «履歴» の正体で、パス間時間が短いほど残る。
+   */
+  _micro(dt) {
+    const s = this.slab, MI = CONFIG.MICRO, Tk = s.temperature + 273.15;
+    const inBite = s.inBite && s.strainRate > 1e-6;
+    if (inBite) {
+      /* 材料点が 1 パスで受けるひずみは ln(h_in/h_out)。ε̇·dt を «パスの長さ» で積むと
+       * 板全体が延々と変形し続けることになり、ひずみが桁で狂う（実測: 23 パスで 3,659）。
+       * 1 パスぶんはスケジュールから取る —— «前のパスの出側厚 → このパスの出側厚»。
+       * 持ち越したぶん（前のパスで再結晶しきれなかった残り）に、このパスのぶんを足す。 */
+      const eps = Rolling.passStrainOf(this.mill.passIndex);
+      if (!s._wasBite) {
+        /* «パスの入り口の 1 回だけ» 足す。毎ステップ足すと retStrain を読み書きする
+         * 自己ループになり、上限へ張り付く（実測: どのパスでも 1.0 前後になった）。 */
+        s.passStrain = Math.min(s.retStrain + eps, MI.RET_MAX * 2);
+        s.retStrain = Math.min(s.passStrain, MI.RET_MAX);
+      }
+      // 亜結晶粒径は «その場の Z» の定常値へ。入れ替わりに要るひずみは SUB_EPS。
+      const Z = Rolling.zener(s.temperature, s.strainRate, s.alloy);
+      const dSS = 1 / Math.max(MI.SUB_A + MI.SUB_B * Math.log10(Math.max(Z, 1e6)), 1 / MI.SUB_MAX);
+      const k = Num.clamp(eps / Math.max(MI.SUB_EPS, 1e-6), 0, 1);
+      s.subGrain = s.subGrain > 0 ? s.subGrain + (dSS - s.subGrain) * k : dSS;
+      s.rexFrac = 0; s._rexT = 0;
+    } else {
+      if (s._wasBite) {
+        /* パスの出口。«変形でできた組織» をここで凍結する。再結晶が進むと、その割合だけ
+         * «変形組織» から «再結晶後の粗い粒» へ置き換わる。毎ステップ掛け算にすると
+         * 指数的に発散する（実測: 亜結晶粒径が 10⁸⁰ µm になった）ので、目標を作って混ぜる。 */
+        s._dDef = s.subGrain; s._dRex = s.subGrain * MI.REX_GROW; s._rexT = 0;
+      }
+      if (s.passStrain > 1e-4) {
+        s._rexT += dt;
+        const t50 = MI.REX_A * Math.pow(Math.max(s.passStrain, 0.01), -2)
+                  * Math.exp(MI.REX_Q * 1000 / (Rolling.RGAS * Tk));
+        s.rexFrac = 1 - Math.exp(-0.693 * Math.pow(s._rexT / Math.max(t50, 1e-6), MI.REX_N));
+        s.retStrain = Math.min(s.passStrain * (1 - s.rexFrac), MI.RET_MAX);
+        if (s._dDef > 0) s.subGrain = s._dDef * (1 - s.rexFrac) + s._dRex * s.rexFrac;
+      }
+    }
+    s._wasBite = inBite;
+  }
   _coating(dt) {
     const m = this.mill, s = this.slab, B = CONFIG.BRUSH;
     const row = m.passIndex >= 0 ? Rolling.brushAt(m.passIndex, CONFIG.SCHEDULE.length, s.alloyKey) : null;
@@ -14442,9 +14612,10 @@ class UIManager {
       ['BUR 硬度 / 粗度 / クラウン', `${M.BR_HARDNESS} ／ ${M.BR_ROUGHNESS} ／ ${M.BR_CROWN > 0 ? '+' : ''}${M.BR_CROWN} µm`],
       ['ロールベンディング', `最大 ${M.BENDER.FORCE} t/対（クラウン利得 約 0.7 µm/t）`],
       ['主電動機', '1,900 kW × 2 台（直流）'],
-      ['回転数 / 減速比', `0 / ${CONFIG.DRIVE.RPM_BASE} / ${CONFIG.DRIVE.RPM_MAX} rpm ／ ${CONFIG.DRIVE.GEAR}:1`],
+      ['圧延速度', `ベース ${CONFIG.DRIVE.V_BASE} / 最高 ${CONFIG.DRIVE.V_MAX} mpm ／ 減速比 ${CONFIG.DRIVE.GEAR}:1`],
       ['最大圧延速度', `${Drive.maxSpeed().toFixed(0)} mpm <span style="color:var(--ink-3)">(= π·D·${CONFIG.DRIVE.RPM_MAX}/${CONFIG.DRIVE.GEAR})</span>`],
-      ['ロール軸 最大トルク', `${(Drive.maxTorque / 1000).toFixed(0)} kN·m <span style="color:var(--ink-3)">(基底 ${CONFIG.DRIVE.RPM_BASE} rpm まで)</span>`],
+      ['ロール軸 トルク', `最大 ${(Drive.maxTorque / 1000).toFixed(0)} ／ 定格 ${(Drive.ratedTorque / 1000).toFixed(0)} kN·m <span style="color:var(--ink-3)">(ベース速度 ${CONFIG.DRIVE.V_BASE} mpm まで一定・以上は定出力)</span>`],
+      ['ドライブ / 受電', `${CONFIG.DRIVE.DRIVE_TYPE} ／ トランス ${CONFIG.DRIVE.TRANSFORMER_KVA} kVA × ${CONFIG.DRIVE.TRANSFORMER_N} ／ ${CONFIG.DRIVE.BREAKER} <span style="color:var(--ink-3)">(過負荷耐量 ${(CONFIG.DRIVE.OVERLOAD * 100).toFixed(0)} % / ${CONFIG.DRIVE.OVERLOAD_SEC} s)</span>`],
       ['常用 / 非常最大圧延荷重', `${M.RATED_FORCE_T.toLocaleString()} / ${M.LIMIT_FORCE_T.toLocaleString()} ton`],
       ['入側 / 出側テーブル長', `${(ent / 1000).toFixed(1)} / ${(ext / 1000).toFixed(1)} m`],
       ['テーブルローラ', `胴長 ${T.BARREL}、胴端 Φ${T.ROLL_D_END} → 中央 Φ${T.ROLL_D_MID}`],
@@ -15440,6 +15611,11 @@ class UIManager {
       const sp = m.brushKey ? CONFIG.BRUSH.SPEC[m.brushKey] : null;
       $('lbl-coat').innerHTML = `${c.toFixed(1)}<em>µm</em>`;
       $('m-coat-v').textContent = c.toFixed(1);
+      /* 組織 —— 亜結晶粒径と «次のパスへ持ち越すひずみ»。パス間で再結晶しきれば持ち越しは 0。
+       * 亜結晶粒径は下工程の硬さを決める量で、細かいほど硬い。 */
+      $('m-micro-v').textContent = s.subGrain > 0 ? s.subGrain.toFixed(1) : '–';
+      $('m-micro-s').textContent = s.subGrain > 0
+        ? `再結晶 ${(s.rexFrac * 100).toFixed(0)} %` : '–';
       $('m-coat-s').innerHTML = `<span style="color:${st[1]};font-weight:700">${st[0]}</span>`
         + (sp ? ` ／ ${sp.key} ${m.brushHz} Hz` : ' ／ ブラシ無し');
       $('der-coat').innerHTML = `<span style="color:${st[1]};font-weight:700">${st[0]}</span>`

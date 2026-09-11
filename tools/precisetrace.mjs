@@ -75,7 +75,7 @@ const out = await page.evaluate(async () => {
   const oldErr = Math.max(...qRows.map(r => Math.abs(r.旧誤差)));
   ok('直す前の当て推量は無視できないずれだった（記録）', oldErr > 0.15,
      `旧: 最大 ${(oldErr * 100).toFixed(0)} %`);
-  const M0 = K.MILL.MODULUS, gain = (q) => q * q / (M0 * (M0 + q));
+  const M0 = R.millModulus(1500), gain = (q) => q * q / (M0 * (M0 + q));   // その荷重での増分ばね定数
   const gRows = qRows.map(r => +(gain(r.旧) / gain(r.真値)).toFixed(2));
   ok('フィードフォワード利得が真値どおりになった',
      qRows.every(r => Math.abs(gain(r.Q) / gain(r.真値) - 1) < 0.06),
