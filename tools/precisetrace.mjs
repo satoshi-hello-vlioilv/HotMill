@@ -17,8 +17,9 @@ const out = await page.evaluate(async () => {
   for (const key of Object.keys(K.ALLOYS)) {
     const al = K.ALLOYS[key], st = R.stParams(al);
     const raw = (T, e) => {
-      const Z = R.zener(T, e, al);
-      return Math.asinh(Math.sinh(st.alpha * al.C) * Math.pow(Z / st.Zref, 1 / st.n)) / al._st.alpha;
+      /* «上限（KF_MAX）を掛ける前» の生の構成式。materials の定数をそのまま使う
+       * （以前は経験式の C を通していたが、構成式を物理パラメータ化して C は無くなった）。 */
+      return R.sigmaOf(T, e, st.n, st.alpha, st.Q, st.lnA);
     };
     let worst = 0, at = '';
     for (let T = al.T_ROLL[0] - 60; T <= al.T_ROLL[1]; T += 5)

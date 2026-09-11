@@ -289,31 +289,35 @@ const out = await page.evaluate(async () => {
         ok('芯（ny = 0）では開かない（割れの起点）', R.endOffset(0, 0, 100, 1000, 0, 0, p8) === 0, '0 mm');
         /* あごの上下の開き。割れは板厚中央の面で起き、上あごは上・下あごは下へ動く。
          * 割れの先端（zone）を支点に回るので、端へ向かって e² で増える。 */
-        const J = K.SLAB.OVERHANG.JAW_K, g = 300, z = 900, hh = 4000;   // hh は頭打ちを効かせない厚さ
+        /* あごは «内側へ» 折れ込む。割れは板厚中央の面で起きるが、割れたあごは外へ開いた
+         * ままにはならず、次にロールへ当たったところで押し戻されて中心側へ折れる。
+         * だから端面の合計の厚みは板厚を «超えない»。 */
+        const J = K.SLAB.OVERHANG.JAW_K, g = 300, z = 900, hh = 400;
         const top = R.endJaw(0, g, z, 1, hh), bot = R.endJaw(0, g, z, -1, hh), mid = R.endJaw(0, g, z, 0, hh);
-        ok('あごが上下に開く（上は上へ・下は下へ・芯は動かない）',
-           top > 0 && Math.abs(top + bot) < 1e-9 && mid === 0,
-           `端面で 上 +${top.toFixed(0)} / 下 ${bot.toFixed(0)} / 芯 ${mid} mm（張り出し ${g} mm・比 ${J}）`);
-        ok('開きは割れの先端で 0、端面で最大（e² で増える）',
+        ok('あごが内側へ折れ込む（上は下へ・下は上へ・芯は動かない）',
+           top < 0 && Math.abs(top + bot) < 1e-9 && mid === 0,
+           `端面で 上 ${top.toFixed(0)} / 下 ${(-bot).toFixed(0)} / 芯 ${mid} mm（板厚 ${hh} mm）`);
+        ok('折れ込みは割れの先端で 0、端面で最大（e² で増える）',
            R.endJaw(z, g, z, 1, hh) === 0 && Math.abs(R.endJaw(z / 2, g, z, 1, hh) - top / 4) < 1e-9,
            `先端 0 ／ 中間 ${R.endJaw(z / 2, g, z, 1, hh).toFixed(1)} ／ 端面 ${top.toFixed(1)} mm`);
-        ok('ワニ口が出ないパスではあごも開かない', R.endJaw(0, 0, z, 1, hh) === 0, '0 mm');
-        /* あごは板厚の «中央の面» で割れるので、あご 1 枚の厚みは h/2 しかない。口が板厚より
-         * 大きく開くにはあごが 45° 以上回ることになり、そこまで回れば付け根から千切れる。
-         * 頭打ちが無いと、張り出しが飽和したあとも板だけが薄くなり続けるので、
-         * 板厚 85 mm に対して口が 138 mm（163 %）開くという非物理な形になっていた。 */
+        ok('ワニ口が出ないパスではあごも折れない', R.endJaw(0, 0, z, 1, hh) === 0, '0 mm');
         {
+          /* いちばん大事な判定 —— 端面の «合計の厚み» が板厚を超えないこと。
+           * 以前は折れ込みを外向きに «足して» いたため、端面が板厚の 1.5 倍に膨らんでいた
+           * （h/2 ＋ 0.25h を上下）。実機の見え方と逆で、明確な誤りだった。 */
           const bad = [];
-          for (const h of [520, 340, 190, 130, 85, 40, 8]) {
-            const mouth = 2 * R.endJaw(0, 1e6, z, 1, h);        // 張り出しを十分大きくして頭打ちだけを見る
-            if (mouth > h + 1e-6) bad.push(`板厚 ${h} で口 ${mouth.toFixed(1)} mm`);
+          for (const h of [530, 340, 190, 85, 40, 8]) for (const gg of [50, 300, 1e6]) {
+            const yTop = h / 2 + R.endJaw(0, gg, z, 1, h);      // 上面の端面での位置
+            const yBot = -h / 2 + R.endJaw(0, gg, z, -1, h);
+            const tot = yTop - yBot;
+            if (tot > h + 1e-9) bad.push(`板厚 ${h}・張り出し ${gg} で端面 ${tot.toFixed(1)} mm`);
+            if (tot < 0) bad.push(`板厚 ${h}・張り出し ${gg} で端面が裏返る`);
           }
-          ok('あごの口が板厚を超えない（板厚で頭打ちになる）', bad.length === 0,
-             bad.join(' ／ ') || `口 ≤ 板厚 × ${2 * K.SLAB.OVERHANG.JAW_MAX}（板厚 85 mm なら ${(85 * 2 * K.SLAB.OVERHANG.JAW_MAX).toFixed(0)} mm）`);
-          ok('薄いほど頭打ちが効く（厚板は張り出しで決まり、薄板は板厚で決まる）',
-             R.endJaw(0, 190, 900, 1, 520) < R.endJaw(0, 1e6, 900, 1, 520)
-             && Math.abs(R.endJaw(0, 1e6, 900, 1, 85) - 85 * K.SLAB.OVERHANG.JAW_MAX) < 1e-9,
-             `板厚 520: 張り出しで ${R.endJaw(0, 190, 900, 1, 520).toFixed(1)} mm ／ 板厚 85: 頭打ちで ${R.endJaw(0, 1e6, 900, 1, 85).toFixed(1)} mm`);
+          ok('端面の合計の厚みが板厚を超えない（あごは内へ折れる）', bad.length === 0,
+             bad.slice(0, 3).join(' ／ ') || `板厚 530 で端面 ${(530 + 2 * R.endJaw(0, 1e6, z, 1, 530)).toFixed(0)} mm（板厚の ${(1 + 2 * R.endJaw(0, 1e6, z, 1, 530) / 530).toFixed(2)} 倍）`);
+          ok('折れ込みは板厚の半分で頭打ち（上下のあごが中心で重ならない）',
+             Math.abs(R.endJaw(0, 1e6, z, 1, 200) + 200 * K.SLAB.OVERHANG.JAW_MAX) < 1e-9,
+             `板厚 200 mm で片側 ${(-R.endJaw(0, 1e6, z, 1, 200)).toFixed(0)} mm 内へ`);
         }
       }
       A.bus.emit('CMD_RESET');

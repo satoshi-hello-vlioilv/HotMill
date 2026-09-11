@@ -3039,9 +3039,9 @@ const CONFIG = {
     /* JAW_K —— ワニ口の «あごの開き» の育ち方。割れた上下のあごが離れる量を、長手の
      * 張り出し（gator ＝ 割れの進み）に対する比で置く。0.15 なら張り出し 300 mm のとき
      * 端面で上下 ±45 mm（口の開き 90 mm）。
-     * JAW_MAX —— その頭打ち。あご 1 枚の厚みは板厚の半分しかないので、口が板厚より
-     * 大きく開くにはあごが 45° 以上回ることになり、そこまで回れば千切れる。0.25 は
-     * «口の開きが板厚の半分まで»（あごの先が元の板面のあたりまで持ち上がる）という置き方。
+     * JAW_MAX —— その頭打ち。折れ込みが板厚の半分を超えると上下のあごが中心で重なるので、
+     * そこで頭打ちにする。0.25 なら端面で片側 0.25h ずつ内へ折れ、端面の厚みは板厚の
+     * 半分（0.5h）まで薄くなる —— 合計は決して板厚を超えない。
      * 頂いたクロップ屑の写真は真横からではないため «比» までは読み取れない —— 開きが
      * 目に見える大きさであることは確かめられたが、板厚に対する比は決められなかった。
      * 真横から（スケールになる物を添えて）撮った 1 枚があれば較正できる（README 残件 17）。 */
@@ -5607,12 +5607,19 @@ const Rolling = {
   endJaw(dEnd, gator, zone, ny, h) {
     if (!(gator > 0) || dEnd >= zone) return 0;
     const O = CONFIG.SLAB.OVERHANG, e = 1 - dEnd / zone;
-    /* 開きは張り出し（＝割れの進み）に比例して育つが、«板厚で頭打ち» になる。
-     * 割れるのは板厚の中央の面なので、あご 1 枚の厚みは h/2 しかない。口が板厚より
-     * 大きく開くにはあごが 45° 以上回ることになり、そこまで回れば付け根から千切れる。
-     * 頭打ちを入れないと、張り出しが 460 mm で飽和したあとも板だけが薄くなり続けるので、
-     * 板厚 85 mm に対して口が 138 mm（163 %）開くという非物理な形になっていた（実測）。 */
-    return Math.min(O.JAW_K * gator, O.JAW_MAX * Math.max(h, 0)) * e * e * ny;
+    /* 割れた端は «内側へ折れ込む»。割れは板厚中央の面で起きるが、割れたあごはそのまま
+     * 外へ開いたままにはならない —— 次にロールへ当たったところで押し戻され、中心側へ
+     * 折れる。だから合計の厚みは板厚を «超えない»（めくれ上がりが皆無ではないにせよ、
+     * 板厚より厚い端面にはならない）。
+     *
+     * 以前はここを «外向き» に足していたため、端面が板厚の 1.5 倍（h/2 ＋ 0.25h を上下）に
+     * 膨らんでいた —— 実機の見え方と逆で、明確な誤りだった。
+     *
+     * 折れ込む量は割れの進み（gator）に比例して育ち、板厚の半分で頭打ちにする
+     * （それ以上折れると上下のあごが中心で重なる）。あごは割れの先端を支点に回るので、
+     * 端へ向かって e² で増える。 */
+    const fold = Math.min(O.JAW_K * gator, O.JAW_MAX * Math.max(h, 0)) * e * e;
+    return -Math.sign(ny) * fold * Math.abs(ny);
   },
   /**
    * ワニ口の «板厚方向の広がり» を決めるべき指数。offset ∝ |ny|^p で、
@@ -9048,8 +9055,13 @@ function initMaterials(envMap) {
                                                 map: Tex.checker(), bumpMap: Tex.checker(), bumpScale: 0.6 }),
   });
   MAT.envMap = envMap;
-  // BoxGeometry のグループ順は +X, -X, +Y, -Y, +Z, -Z。+Y/-Y だけ鏡面にする。
-  MAT.slabFaces = [MAT.slab, MAT.slab, MAT.slabMirror, MAT.slabMirror, MAT.slab, MAT.slab];
+  /* 端面（±X）は «圧延されていない» 面 —— ワニ口の割れ口も、シャーで切った切口も、
+   * 出来たての地金が露わになった面で、圧延面（鏡面）や鋳肌の側面とは見え方が違う。
+   * 白っぽく、光沢はほとんど無く（破面なので微細な凹凸が光を散らす）、酸化が浅いので
+   * 温度による色の振れも小さい。専用の材料を割り当てる。
+   * BoxGeometry のグループ順は +X, -X, +Y, -Y, +Z, -Z。 */
+  MAT.slabFresh = matte(0xe6e9ec, 0.72, 0.55);         // 破面・切口の地金（白っぽいサテン）
+  MAT.slabFaces = [MAT.slabFresh, MAT.slabFresh, MAT.slabMirror, MAT.slabMirror, MAT.slab, MAT.slab];
   /* 加熱前のスラブ（スラブヤード）用。質感は同じだが «温度追従の対象にしない» ので、
    * 圧延材が赤らんでもヤードのスラブは冷えた色のまま。MAT.tint には登録しない。 */
   MAT.slabCold = matte(0xd8dce0, 0.30, 0.62);          // World3D.COLD と同じ «冷えた» 色
@@ -9060,7 +9072,7 @@ function initMaterials(envMap) {
    * 複製した材料は色オブジェクトも複製されるため、元だけを更新すると複製は構築時の色で
    * 固まってしまう（コイルが板と違う色に見えていた原因）。複製はここに登録して一緒に更新する。
    */
-  MAT.tint = { slab: [MAT.slab], mirror: [MAT.slabMirror] };
+  MAT.tint = { slab: [MAT.slab], mirror: [MAT.slabMirror], fresh: [MAT.slabFresh] };
   /** 両面表示の複製を作り、温度追従の対象として登録する。 */
   MAT.doubleSided = (mat, kind) => {
     const c = mat.clone(); c.side = THREE.DoubleSide;
@@ -13471,6 +13483,14 @@ class World3D {
     /* 圧延面（鏡面側）も «同じ材料の同じ温度» なので、色は板の面とほぼ同じところまで寄せる。
      * 0.6 倍にして «冷たいまま» にしていたため、コイルの外周だけが白く浮いて見えていた。 */
     for (const m of MAT.tint.mirror) { m.color.copy(World3D.COLD).lerp(World3D.HOT, t * 0.9); m.roughness = 0.24 + 0.12 * t; }
+    /* 端面（破面・切口）は «出来たての地金» なので、酸化皮膜が薄く白っぽいまま。
+     * 温度による色の振れは板面の 1/3 程度に留め、粗さは破面らしく高いまま動かさない。
+     * COLD 側へ寄せて «光を散らす白» にするのは、割れ口が周りより明るく見える実機の
+     * 見え方に合わせるため（圧延面は鏡なので光を一方向へ返し、破面は散らす）。 */
+    for (const m of MAT.tint.fresh) {
+      m.color.copy(World3D.COLD).lerp(World3D.HOT, t * 0.3).lerp(new THREE.Color(0xffffff), 0.35);
+      m.roughness = 0.70 + 0.04 * t;
+    }
 
     this._tween(dt);
     this.controls.update();
