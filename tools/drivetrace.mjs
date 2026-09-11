@@ -47,6 +47,7 @@ const out = await page.evaluate(() => {
   let maxBur = 0;
   let nb = 0, sumB = 0, sumR = 0, maxB = 0, maxR = 0, maxI = 0, budget = 0, accelN = 0, capBound = 0;
   let capMin = 1e9, capOk = true, powerCapMin = 1e9, maxIfree = 0;
+  let overN = 0, overBad = 0, overMax = 0, vPrev = null;
   window.__ff((p, n) => {
     const m = p.mill, s = p.slab;
     if (Math.abs(m.targetSpeed) > Math.abs(m.currentSpeed) + 0.5) { accelN++; if (m.accelCap < K.PROCESS.ACCEL - 0.5) capBound++; capMin = Math.min(capMin, m.accelCap); }
@@ -60,7 +61,15 @@ const out = await page.evaluate(() => {
       budget = Math.max(budget, Math.abs(m.driveTorque
         - (s.rollTorque + m.bearingTorque + (m.burTorque || 0) + Math.max(m.inertiaTorque, 0))));
       maxBur = Math.max(maxBur, m.burTorque || 0);
-      if (m.driveTorque > D.availTorque(m.currentSpeed, m.wrDia) * 1.001) capOk = false;
+      /* 需要トルクが «その速度で出せるトルク» を超えることはある —— それが «ミルが
+       * 落ち込む» 現象そのもので、実機でも噛み込みの瞬間に速度が落ちる。見るべきは
+       * «超えないこと» ではなく «超えたときにちゃんと減速していること»。 */
+      const av = D.availTorque(m.currentSpeed, m.wrDia);
+      if (m.driveTorque > av * 1.001) {
+        overN++; overMax = Math.max(overMax, m.driveTorque / av);
+        if (vPrev !== null && Math.abs(m.currentSpeed) > Math.abs(vPrev) + 1e-9) overBad++;
+      }
+      vPrev = m.currentSpeed;
     }
     return p.finish.done || p.tripped;
   }, 120 * 3000, 0);
@@ -70,10 +79,16 @@ const out = await page.evaluate(() => {
   const ratio = sumB / Math.max(sumR, 1);
   ok('軸受摩擦は圧延トルクの 1〜8 %', ratio > 0.01 && ratio < 0.08,
      `平均 ${(ratio * 100).toFixed(1)} %（最大 軸受 ${(maxB / 1e3).toFixed(0)} / 圧延 ${(maxR / 1e3).toFixed(0)} kN·m）`);
-  ok('慣性トルクは加速中だけ立つ（定速で圧延している間は 0）', maxI < 1 && maxIfree > 1,
+  /* «圧延中は慣性トルクが立たない» はもう成り立たない —— バックアップロールを滑らせない
+   * 上限（空転で 47.8 mpm/s）を入れたので、板が来るまでに定速へ届かず、噛んでから加速を
+   * 続けるパスがある。実機の可逆ミルの運転（低速で噛ませてから加速）そのもの。
+   * 見るのは «立たないこと» ではなく «圧延中の慣性が空転時より小さいこと» に変わった。 */
+  ok('慣性トルクは主に空転の加減速で立つ（圧延中はそれより小さい）', maxI < maxIfree && maxIfree > 1,
      `圧延中 ${(maxI / 1e3).toFixed(1)} kN·m ／ 空転の加減速中 ${(maxIfree / 1e3).toFixed(0)} kN·m（定格 ${(D.maxTorque / 1e3).toFixed(0)} kN·m）`);
-  ok('主機トルクがその速度で出せるトルクの内側に収まる', capOk,
-     `最大所要 ${((maxR + maxB) / 1e3).toFixed(0)} kN·m ／ 定格 ${(D.maxTorque / 1e3).toFixed(0)} × 過負荷 ${DR.OVERLOAD}`);
+  ok('能力を超える需要が出たときは «速度が上がらない»（ミルが落ち込む）', overBad === 0,
+     overN === 0 ? '超えた刻みなし'
+       : `超えた刻み ${overN} 回・最大 ${overMax.toFixed(2)} 倍・そのうち増速していた ${overBad} 回`
+         + `／ 最大所要 ${((maxR + maxB) / 1e3).toFixed(0)} kN·m ／ 定格 ${(D.maxTorque / 1e3).toFixed(0)} × 過負荷 ${DR.OVERLOAD}`);
 
   // --- 4. 加速: 余力で決まる頭打ちと、指令の変化率のどちらが効いているか ---
   const r = M.WR_D / 2000;

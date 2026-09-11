@@ -1429,6 +1429,21 @@ const VERSION = {
       { t: '噴流の効き（JET）を «ロールから流れ落ちる» ぶんにも掛けていた。下面の抜熱が 35 % 過大だった', w: 'PhysicsEngine.surfaceCool' },
       { t: '較正のノブ（--set）で «false» が文字列のまま渡り、スイッチを切る実験がすべて効いていなかった', w: 'tools/reallot.mjs parseSets' },
       { t: '圧延で «体積が保たれるか» を素材長を変えて測る評価器を足した。出荷時のロット（530 × 1,330 × 3,450）は保たれる（ずれ −0.5 %）が、素材長 3,000 と 2,000 では板の体積が +21.2 % / +29.7 % ずれることが分かった。分かれるのは 16 mm へ入るパス 1 本で、その途中で平均板厚が出側ギャップを割り込む —— 材料の勘定は保たれているので、走っているのは幾何（xMax − xMin）の側。原因は未特定で、まだ直していない（README の 20 番）', w: 'tools/voltrace.mjs' },
+      // --- 構成式とひずみ速度感受性（m を «導出量» にする）---
+      { t: '構成式の材料定数をそのまま持つ形にした。Z ＝ ε̇·exp(Q/RT) ＝ A·[sinh(ασ)]^n で、Q は温度依存だけ・n と α はひずみ速度依存の形だけ・A は絶対値だけを決める。荷重の較正で動かしてよいのは A だけになった', w: 'Rolling.stParams / ALLOYS' },
+      { t: 'm（ひずみ速度感受性）を材料定数として持つのをやめ、導出量にした。双曲線正弦則から m_eff ＝ tanh(ασ)/(n·ασ) が解析的に出る。同じ A5052 でも 520 ℃/0.5 s⁻¹ で 0.177、380 ℃/50 s⁻¹ で 0.083（2.14 倍）', w: 'Rolling.mEff' },
+      { t: '以前は経験式 C·exp(−b·ΔT)·ε̇^m が主で Q と α を当てはめていたため、荷重に合わせて m を動かすと温度依存が一緒に動いた（Q_fit ＝ b·R·T_ref²/m）。n ＝ 1/m を固定したせいで α が辻褄合わせに使われ、8 材質中 6 つで n・α がアルミの公表値の帯を外れていた（A7075 の α は探索の下限に張り付き）', w: 'ALLOYS' },
+      { t: '接触弧の «中» のひずみ速度分布を入れた。ε̇(φ) ＝ 2·Q·tanφ/h² で出口 0・入口最大。平均 1 点で変形抵抗を評価すると asinh の凸性のぶんだけ高く出る（実測で全パス 3.8〜4.5 %）', w: 'Rolling.arcStrainRate / flowStressArc' },
+      { t: '圧力分布そのものを解くようにした（Bland–Ford のスラブ法）。荷重は分布の積分、トルクはロール面の摩擦力のモーメントで、«同じ分布から» 出す。従来はトルクが «荷重 × 一定アーム比» で、荷重の定数倍でしかなかった —— 感度行列の行列式が 0 で、m と μ を分けられなかった', w: 'Rolling.blandFord' },
+      { t: '界面のせん断応力に凝着の上限を入れた（τ ≤ k ＝ k\'/2）。μ·p が材料のせん断降伏を超えると界面はすべらず凝着する。入れないとアーム比 λ が薄板パスで 0.63〜0.69（熱間の実用値 0.4〜0.5）になっていた。荷重には効かず、トルクにだけ効く', w: 'Rolling.blandFord' },
+      { t: '荷重とトルクの感度行列が «特異でなくなった»。荷重 ∂lnF/∂lnμ 0.683 に対しトルク ∂lnT/∂lnμ 0.969、m へはどちらも 0.52 —— 2 つの測りもので m と μ を分けられる（行列式 0.143）', w: 'tools/mtrace.mjs' },
+      { t: '速度を変えたときの荷重変化を «ひずみ速度／摩擦» に分けて出す評価器を作った。実測: 仕上げ 26→16 で ∂lnF/∂lnv 0.047 ＝ ひずみ速度 +0.114 と摩擦 −0.067 の差し引き。巻取パスでは摩擦が勝って «速くすると荷重が下がる»', w: 'tools/mtrace.mjs' },
+      { t: 'トルクが 13 % 高くなったぶん、自動生成が実機の 120 mpm を出せず 115 mpm へ落ちた。エネルギーで検算すると新しいトルクのほうが正しい（厚板パスで理想仕事 6.28 MW に対し 7.31 MW ＝ 摩擦・冗長仕事 +16 %。旧モデルは +3 % で過小）ので、実機のスケジュールから動力の margin を同定し直した（0.84 → 0.95 ＝ 厚板段で定格の 1.9 倍まで使う）', w: 'Rolling.buildSchedule / DRIVE' },
+      // --- 主駆動系（バックアップロールは連れ回される）---
+      { t: 'バックアップロールは歯車で駆動されておらず、ワークロールとの摩擦で連れ回される。押しつけが弱い空転中（下ワークロールの自重 13.3 t だけ）は滑るので、上下を別々の状態として解くようにした', w: 'PhysicsEngine._burDrag' },
+      { t: '逆転の勾配を «BUR を滑らせない上限» で頭打ちにした。実測 47.8 mpm/s で、主機の能力（110 mpm/s）より先に効く。実機がこれを守るのは、滑らせるとロール表面が擦れ、アルミではそれがそのまま板の表面品質になるから。逆転は 1.07 → 2.49 秒になった', w: 'Drive.burAccelLimit' },
+      { t: '制動側に上限が無く青天井だったのを、主機の能力で頭打ちにした。指令から実トルクが立つまでの遅れ（電流の立ち上がり ＋ 駆動系のねじれ、τ 0.12 s）も入れた', w: 'PhysicsEngine._drive' },
+      { t: 'トルク収支が «圧延 ＋ 軸受 ＋ BUR を連れ回す ＋ 慣性» の 4 項で閉じる（最大差 0.000 N·m）', w: 'tools/drivetrace.mjs' },
       // --- サイドガイド（図面どおりの並び）・ピット炉・ワニ口のあご（ご回答を反映）---
       { t: 'サイドガイドのコロピッチを実機の 350 mm にした。入側のコロは «等間隔ではない» —— 拡縮シリンダーが収まる位置で間隔が空くので、図面の区分（1,570 / 2,680 / 1,150 ＝ 5,400）にコロを 3 / 6 / 2 本ずつ、区分の中央へ寄せて並べる。実測の間隔は 350/350/900/350/350/350/350/350/865/350 mm', w: 'TABLE.GUIDE.IN_SEG / IN_N / Layout.guideRollXs' },
       { t: 'バーの長さと位置を固定値で持つのをやめた。長さは区分の和、位置は «ミル側の端（NEAR）を入側・出側で揃えて外側へ自分の長さぶん伸ばす» で決まる。入側 2,240〜7,640・出側 −3,990〜−2,240', w: 'Layout.guideLen / guideCX' },
@@ -2156,6 +2171,10 @@ const CONFIG = {
   DRIVE: {                                  // 駆動側 (−Z)
     // 主電動機 1,900 kW × 2 台（直流）。0/150/330 rpm、減速比 5.96:1。
     // 150 rpm までは定トルク、そこから 330 rpm までは定出力という直流機の特性を持つ。
+    /* RPM_BASE —— 基底回転数（ここまでが定トルク、以上は定出力）。銘板が無いので推定値
+     * （README 残件 11）。定出力域で出せるトルクは 2·P·GEAR/ω で «基底回転数に依らない»
+     * ので、ここを動かしても高速側の能力は変わらない（低速側の定トルクだけが減る）。
+     * 実機が 120 mpm を回せている根拠は基底回転数ではなく «定格そのもの» の側にある。 */
     MOTOR_KW: 1900, MOTOR_N: 2, RPM_BASE: 150, RPM_MAX: 330, GEAR: 5.96,
     /* 短時間過負荷率。直流圧延機用電動機は定格の 2〜2.5 倍のトルクを短時間（1 パス数秒〜数十秒）
      * 出せる。実機は 30 mm 圧下を 120 mpm で通しており、本アプリの動力は 3.7〜5.0 MW（定格 3.8 MW）
@@ -3134,7 +3153,7 @@ const CONFIG = {
    * 同じ炉に違う合金を入れると材質ごとの均熱条件を作れないので、実機と同じく炉を分ける。
    * 8・9 番炉は予備（この 7 材質では使わない）。 */
   ALLOYS: {
-    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 26.72, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
+    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 26.202, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
     /* A1100 は実機ロット（2026-09 提供、607T）の材質。1050 との違いは Cu 0.12 % ぶんの
      * 固溶強化で、変形抵抗はわずかに高い。3 つの係数は «別々の役割» で決めてある:
      *   m —— ひずみ速度依存。最終パス（22 → 7.9 mm・94 mpm で平均 1,064 t）で較正。
@@ -3145,13 +3164,13 @@ const CONFIG = {
      *         b をそのままにすると Q_fit が 99（公表の −37 %）まで落ち、«最終パスの荷重を
      *         温度依存を弱めて買う» ことになる（実測して見つけた）。
      *   C —— 絶対値。上の 2 つを決めたあと、厚板段の荷重帯（287〜520 t、板幅 1,070）で合わせる。 */
-    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 28.0, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
-    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 30.68, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
-    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 28.49, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
-    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 27.77, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
-    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 27.54, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
-    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 23.24, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
-    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 35.1, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
+    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 27.517, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
+    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 30.106, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
+    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 27.959, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
+    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 27.092, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
+    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 26.694, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
+    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 22.588, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
+    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 34.306, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
   },
 
   /* 幅方向の形状（クラウン・平坦度・幅広がり・据わり）の諸元。
@@ -4370,6 +4389,39 @@ const Rolling = {
    * 温度が低いほど、ひずみ速度が高いほど大きく、低温側では指数則へ移って
    * 室温の変形抵抗（KF_MAX）へ漸近する。
    */
+  /**
+   * 接触弧の中の «局所» ひずみ速度 [1/s]。
+   *
+   * 圧延のひずみ速度は接触弧の中で一定ではない —— 出口で 0、入口で最大になる。
+   * 板厚 h(φ) ＝ h_out ＋ 2R(1−cos φ)、水平速度は体積一定から v_x ＝ Q/h なので
+   *     ε̇(φ) ＝ (1/h)·|dh/dx|·v_x ＝ 2·Q·tan φ / h²      （Q ＝ 単位幅の体積流量）
+   * になる。«平均ひずみ速度 1 点» で変形抵抗を評価すると、変形抵抗が ln ε̇ に対して
+   * 上に凸（asinh）なぶんだけ高く出る —— 実測で全パス一貫して 3.8〜4.5 % 高かった。
+   * @param phi  ロール中心から見た角度 [rad]（出口が 0、入口が噛み込み角）
+   */
+  arcStrainRate(phi, hOut, R, Qflow) {
+    const h = hOut + 2 * R * (1 - Math.cos(phi));
+    return h > 0 ? 2 * Qflow * Math.tan(phi) / (h * h) : 0;
+  },
+  /** 接触弧の分割数。上げても 8 から先はほとんど動かない（実測 8 と 64 で 0.1 % 未満）。 */
+  ARC_N: 8,
+  /**
+   * 接触弧に沿って平均した変形抵抗 [MPa]。局所ひずみ速度で評価した変形抵抗を
+   * «水平距離で» 等分平均する（圧下は水平距離に比例して進むので、これが素直な重み）。
+   */
+  flowStressArc(T, hIn, hOut, R, vRoll, alloy = Rolling.alloy()) {
+    const dh = hIn - hOut;
+    if (!(dh > 0) || !(R > 0)) return Rolling.flowStress(T, 0, alloy);
+    const a = Math.acos(Num.clamp(1 - dh / (2 * R), -1, 1));      // 噛み込み角
+    const L = R * Math.sin(a), Qflow = vRoll * hOut, N = Rolling.ARC_N;
+    let sum = 0;
+    for (let i = 0; i < N; i++) {
+      const x = L * (i + 0.5) / N;                                // 出口からの水平距離
+      const phi = Math.asin(Num.clamp(x / R, -1, 1));
+      sum += Rolling.flowStress(T, Rolling.arcStrainRate(phi, hOut, R, Qflow), alloy);
+    }
+    return sum / N;
+  },
   flowStress(T, strainRate, alloy = Rolling.alloy()) {
     const st = Rolling.stParams(alloy);
     const kf = Rolling.sigmaOf(T, strainRate, st.n, st.alpha, st.Q, st.lnA);
@@ -4493,7 +4545,67 @@ const Rolling = {
     const phiN = Num.clamp(phi / 2 * (1 - phi / (2 * Math.max(mu, 1e-3))), 0, phi);
     return { f: Num.clamp(Rflat * phiN * phiN / hOut, 0, 0.25), phiN };
   },
-  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */
+  /**
+   * ロールバイト内の圧力分布（Bland–Ford のスラブ法）と、そこから出る荷重・トルク。
+   *
+   * それまでは «平均面圧 × 接触面積» で荷重を出し、トルクは «荷重 × 一定のアーム比» で
+   * 出していた。そのためトルクは荷重の定数倍でしかなく、m（ひずみ速度感受性）と
+   * μ（摩擦）を分ける情報を持っていなかった —— 実測で感度行列の行列式が 0 になった
+   * （tools/mtrace.mjs）。実機ではトルクはロール面の摩擦力のモーメントで、
+   * «中立点がどこか» で決まる。荷重とトルクを «同じ圧力分布から» 出せば、
+   * 2 つの測りもので m と μ を分けられる。
+   *
+   *   h(φ) ＝ h_out ＋ R·φ²                       （小角近似）
+   *   H(φ) ＝ 2·√(R/h_out)·atan(√(R/h_out)·φ)
+   *   入側 (φ_N ≤ φ ≤ α): p ＝ k'·(h/h_in )·exp(μ·(H_α − H))
+   *   出側 (0  ≤ φ ≤ φ_N): p ＝ k'·(h/h_out)·exp(μ·H)
+   *   中立点は 2 つの枝が等しくなる H_N ＝ H_α/2 ＋ ln(h_out/h_in)/(2μ)
+   *   荷重   F ＝ w·R·∫₀^α p dφ
+   *   トルク M ＝ w·R²·μ·[ ∫_{φ_N}^α p dφ − ∫₀^{φ_N} p dφ ]   （ロール 1 本ぶん）
+   *
+   * @param kp k' ＝ 平面ひずみの変形抵抗（1.155·k_f）
+   */
+  BF_N: 16,                                   // 枝ごとの分割数（32 にしても 0.05 % 未満）
+  blandFord(hIn, hOut, R, mu, kp, width) {
+    const dh = hIn - hOut;
+    if (!(dh > 0) || !(R > 0) || !(kp > 0)) return { force: 0, torque: 0, phiN: 0, pm: 0, pMax: 0 };
+    const a = Math.sqrt(dh / R);                                  // 噛み込み角（小角近似）
+    const g = Math.sqrt(R / Math.max(hOut, 1e-6));
+    const H = (phi) => 2 * g * Math.atan(g * phi);
+    const Ha = H(a), m2 = Math.max(mu, 1e-4);
+    const Hn = Ha / 2 + Math.log(hOut / hIn) / (2 * m2);
+    const phiN = Num.clamp(Math.tan(Num.clamp(Hn / (2 * g), -1.5, 1.5)) / g, 0, a);
+    const h = (phi) => hOut + R * phi * phi;
+    const pEnt = (phi) => kp * (h(phi) / hIn) * Math.exp(m2 * (Ha - H(phi)));
+    const pExt = (phi) => kp * (h(phi) / hOut) * Math.exp(m2 * H(phi));
+    const N = Rolling.BF_N;
+    /* 界面のせん断応力には上限がある —— τ ＝ μ·p はあくまで «すべる» ときの話で、
+     * μ·p が材料のせん断降伏 k を超えると界面はすべらず «凝着» し、そこから先は
+     * τ ＝ k で頭打ちになる（平面ひずみで k ＝ k'/2）。
+     * 熱間圧延はまさにこの領域で、上限を入れないとトルクが過大に出る ——
+     * 実測: アーム比 λ ＝ T/(2F·Ld) が薄板パスで 0.63〜0.69（熱間の実用値 0.4〜0.5）。
+     * 荷重（法線方向）には効かず、トルク（接線方向）にだけ効く。 */
+    const kShear = kp / 2;
+    const tau = (q) => Math.min(m2 * q, kShear);
+    // 中点法で 2 つの枝を別々に積む（中立点で折れるので 1 本で積んではいけない）
+    let sExt = 0, sEnt = 0, tExt = 0, tEnt = 0, pMax = 0, stick = 0;
+    for (let i = 0; i < N; i++) {
+      const pe = phiN * (i + 0.5) / N, q = pExt(pe), dw = phiN / N;
+      sExt += q * dw; tExt += tau(q) * dw; pMax = Math.max(pMax, q);
+      if (m2 * q >= kShear) stick += dw;
+    }
+    for (let i = 0; i < N; i++) {
+      const pe = phiN + (a - phiN) * (i + 0.5) / N, q = pEnt(pe), dw = (a - phiN) / N;
+      sEnt += q * dw; tEnt += tau(q) * dw; pMax = Math.max(pMax, q);
+      if (m2 * q >= kShear) stick += dw;
+    }
+    const force = width * R * (sExt + sEnt);                       // N
+    const torque = width * R * R * (tEnt - tExt) / 1000;           // N·m（ロール 1 本）
+    const stickFrac = a > 0 ? stick / a : 0;                       // 凝着している弧の割合
+    const Ld = R * a;
+    return { force, torque, phiN, pMax, stickFrac, pm: Ld > 0 ? force / (width * Ld) : 0 };
+  },
+  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */  /** 摩擦丘係数 Qp （スラブ法, x→0 で 1 に収束） */
   frictionHill(Ld, hMean, mu = CONFIG.PROCESS.MU) {
     const x = mu * Ld / Math.max(hMean, 1e-3);
     return x < 1e-6 ? 1 : (Math.exp(x) - 1) / x;
@@ -4521,20 +4633,27 @@ const Rolling = {
      * 接触弧長を不動点反復で解く（緩和つき。3〜6 回で 1e-5 に落ちる）。
      * 1 回目（＝剛体ロール）の荷重も残しておき、扁平がどれだけ効いたかを見えるようにする。 */
     let Ld = Rolling.contactLength(hIn, hOut), Rflat = R, resid = 0;
-    let kf0 = 0, kfTop = 0, kfBot = 0, kf = 0, pm = 0, force = 0, strainRate = 0, forceRigid = 0;
+    let kf0 = 0, kfTop = 0, kfBot = 0, kf = 0, pm = 0, force = 0, strainRate = 0, forceRigid = 0, bf = null;
     for (let it = 0; it < 14; it++) {
+      /* strainRate は «代表値»（平均ひずみ速度）として表示・記録に使う。変形抵抗そのものは
+       * 接触弧の中の局所ひずみ速度で評価して平均する（Rolling.flowStressArc）——
+       * 1 点評価だと asinh の凸性のぶんだけ高く出る（実測で全パス 3.8〜4.5 %）。 */
       strainRate = Ld > 0 ? (v / Ld) * strain : 0;
-      if (typeof temp === 'number') { kf0 = kfTop = kfBot = Rolling.flowStress(temp, strainRate, alloy); }
+      const kfAt = (T) => Rolling.flowStressArc(T, hIn, hOut, Rflat, v, alloy);
+      if (typeof temp === 'number') { kf0 = kfTop = kfBot = kfAt(temp); }
       else {
         let sum = 0;
-        for (let j = 0; j < temp.length; j++) sum += Rolling.flowStress(temp[j], strainRate, alloy);
+        for (let j = 0; j < temp.length; j++) sum += kfAt(temp[j]);
         kf0 = sum / temp.length;
-        kfTop = Rolling.flowStress(temp[0], strainRate, alloy);
-        kfBot = Rolling.flowStress(temp[temp.length - 1], strainRate, alloy);
+        kfTop = kfAt(temp[0]);
+        kfBot = kfAt(temp[temp.length - 1]);
       }
       kf = Math.max(kf0 - tensionMPa, kf0 * 0.35);                  // 張力による見かけの低下
-      pm = 1.155 * kf * Rolling.frictionHill(Ld, hMean, mu);        // MPa
-      force = pm * width * Ld;                                      // N
+      /* 圧力分布そのものを解いて荷重を出す（Bland–Ford）。平均面圧 × 面積では
+       * トルクが荷重の定数倍になってしまい、m と μ を分けられない。 */
+      bf = Rolling.blandFord(hIn, hOut, Rflat, mu, 1.155 * kf, width);
+      pm = bf.pm;                                                   // MPa
+      force = bf.force;                                             // N
       if (it === 0) forceRigid = force;
       const Rn = Rolling.flattenedRadius(R, force / width, dh);
       const LdN = Rolling.contactLength(hIn, hOut, Rn);
@@ -4542,7 +4661,10 @@ const Rolling = {
       Ld += 0.7 * (LdN - Ld); Rflat = Rn;                           // 緩和つきで更新
       if (resid < 1e-5) break;
     }
-    const torque = 2 * force * (CONFIG.PROCESS.TORQUE_ARM * Ld / 1000);   // N·m
+    /* トルクは «ロール面の摩擦力のモーメント»（上下 2 本ぶん）。中立点より入側では
+     * 摩擦が材料を引き込む向き、出側では押し戻す向きに働くので、その差が主機の負担になる。
+     * 中立点の位置が μ で動くので、トルクは荷重とは «別の» 情報を持つ。 */
+    const torque = 2 * (bf ? bf.torque : 0);                        // N·m
     const power = torque * ((v / 1000) / (R / 1000));               // W
     const heat = CONFIG.PROCESS.HEAT_EFF * 1.155 * kf * 1e6 * strain
                / (alloy.RHO * alloy.CP);                            // K (このパスでの加工発熱)
@@ -5387,7 +5509,14 @@ const Rolling = {
     const vMax = Drive.maxSpeed();
     // 荷重の余裕は «モデルの不確かさ» だけを見る（常用最大の LOAD_MARGIN まで）。
     // 頭・尻の割増は予測荷重そのものへ PEAK_K で織り込む。
-    const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * CONFIG.DRIVE.OVERLOAD * 0.84;
+    /* 動力の上限。定格 × 短時間過負荷 に «モデルの不確かさ» のぶんの margin を掛ける。
+     * トルクを物理（ロール面の摩擦力のモーメント）で解くようにして 13 % 高く出るように
+     * なったので、この margin を 0.84 のままにすると実機が回している 120 mpm が入らず、
+     * 自動生成が 115 mpm へ落ちる（実測: 厚板段の 4 パス）。実機はその圧下で 120 mpm を
+     * 回しているのだから、足りていないのは «能力の見積り» の側。実機のスケジュールから
+     * 逆に margin を同定して 0.95 とした ——「この圧延機は厚板段で定格の 1.9 倍まで使う」
+     * ということ。本当の不確かさは主電動機の定格そのもの（README 残件 11）。 */
+    const fLimit = M.RATED_FORCE_T * P.LOAD_MARGIN, pLimit = Drive.ratedPowerKW * CONFIG.DRIVE.OVERLOAD * 0.95;
     /* 巻取パスの尻の峰（待って冷えた最後の数 m、1〜2 s の事象）は常用最大ではなく非常最大に
      * 余裕を見て当てる。常用最大は連続の定格で、尻の一瞬の峰まで 0.95 倍に収めると実機が
      * 通している 16 → 8 mm（尻 3,687 t ＜ 常用 3,920 t）が 8.8 mm で止まる（tools/calib.mjs）。 */
