@@ -86,9 +86,16 @@ const out = await page.evaluate(() => {
       const d = (c.tens + 5) - Math.max(c.tens - 5, 0);
       return d > 0 ? Math.log(up.forceTon / dn.forceTon) / d * 10 * 100 : 0;  // [%/10 MPa]
     })();
-    /* --- ⑨ ロール扁平そのもの（剛体ロールと比べて何 % 増えたか） --- */
+    /* --- ⑨ 摩擦丘そのもの。μ を 0 に近づけたときの荷重と比べる ——
+     *      Qp ＝ p̄/(1.155·kf) には «h/h_out» の幾何のぶんも混ざっているので、
+     *      «摩擦が作っている山» だけを見たいならこちらで測る。 */
+    const hill = (() => {
+      const free = F(c, { muScale: 1e-4 });
+      return base.forceTon / free.forceTon;          // 摩擦が無いときの何倍か
+    })();
+    /* --- ⑩ ロール扁平そのもの（剛体ロールと比べて何 % 増えたか） --- */
     const flat = (base.forceTon / base.forceRigidTon - 1) * 100;
-    /* --- ⑩ 接触弧の局所ひずみ速度（1 点評価との差） --- */
+    /* --- ⑪ 接触弧の局所ひずみ速度（1 点評価との差） --- */
     const arcGain = (() => {
       const n0 = R.ARC_N; R.ARC_N = 1; const one = F(c); R.ARC_N = n0;
       return (one.forceTon / base.forceTon - 1) * 100;                 // 1 点評価だと何 % 高いか
@@ -97,11 +104,11 @@ const out = await page.evaluate(() => {
     const hBar = (c.hIn + c.hOut) / 2;
     rows.push({ name: c.name, tens: c.tens, F: +base.forceTon.toFixed(0), kf: +kfBase.toFixed(1),
       Ld: +base.Ld.toFixed(1), Ldh: +(base.Ld / hBar).toFixed(2), delta: +(hBar / base.Ld).toFixed(2),
-      pm: +base.pm.toFixed(0), mu: +base.mu.toFixed(4),
+      pm: +base.pm.toFixed(0), Qp: +(base.pm / (1.155 * kfBase)).toFixed(3), mu: +base.mu.toFixed(4),
       rate: +base.strainRate.toFixed(2), mEff: +R.mEff(c.T, base.strainRate, al).toFixed(4),
       eDh: +eDh.toFixed(3), eKf: +eKf.toFixed(3), eT: +eT.toFixed(2), eW: +eW.toFixed(3),
       eR: +eR.toFixed(3), eV: +eV.toFixed(3), eMu: +eMu.toFixed(3), eTens: +eTens.toFixed(2),
-      flat: +flat.toFixed(1), arc: +arcGain.toFixed(1) });
+      flat: +flat.toFixed(1), arc: +arcGain.toFixed(1), hill: +hill.toFixed(3) });
   }
 
   /* 材質の振れ幅は «同じパスを 8 材質で通したときの荷重の比» で測る（弾性値では出せない）。 */
@@ -164,9 +171,9 @@ await browser.close();
 
 const P = (x, n) => String(x).padStart(n);
 console.log(`材質 ${out.alloy} ／ WR Φ${out.wrD}（研磨限 Φ${out.wrMin}）／ 接触弧の分割 ${out.arcN}\n`);
-console.log('条件            荷重 t   kf MPa  Ld mm  Ld/h̄    Δ  pm MPa     μ    ε̇ /s  m_eff');
+console.log('条件            荷重 t   kf MPa  Ld mm  Ld/h̄    Δ  pm MPa     Qp     μ    ε̇ /s  m_eff');
 for (const r of out.rows)
-  console.log(`${r.name}  ${P(r.F,6)}${P(r.kf,9)}${P(r.Ld,7)}${P(r.Ldh,7)}${P(r.delta,5)}${P(r.pm,8)}${P(r.mu,7)}${P(r.rate,8)}${P(r.mEff,8)}`);
+  console.log(`${r.name}  ${P(r.F,6)}${P(r.kf,9)}${P(r.Ld,7)}${P(r.Ldh,7)}${P(r.delta,5)}${P(r.pm,8)}${P(r.Qp,7)}${P(r.mu,7)}${P(r.rate,8)}${P(r.mEff,8)}`);
 
 console.log('\n感度（∂lnF/∂lnX ＝ X を 1 % 増やすと荷重が何 % 動くか）');
 console.log('条件             Δh     kf      幅     ロール径   速度     μ    │ 温度 %/10K  張力 %/10MPa');
@@ -174,9 +181,9 @@ for (const r of out.rows)
   console.log(`${r.name}${P(r.eDh,7)}${P(r.eKf,7)}${P(r.eW,8)}${P(r.eR,10)}${P(r.eV,8)}${P(r.eMu,7)}    │${P(r.eT,9)}${P(r.eTens,13)}`);
 
 console.log('\nモデルの中で «効いている» 補正（基準との差）');
-console.log('条件            ロール扁平  接触弧を 1 点で評価すると');
+console.log('条件            摩擦丘（μ→0 比）  ロール扁平  接触弧を 1 点で評価すると');
 for (const r of out.rows)
-  console.log(`${r.name}${P('+' + r.flat + ' %',11)}${P('+' + r.arc + ' %',20)}`);
+  console.log(`${r.name}${P(r.hill + ' 倍',14)}${P('+' + r.flat + ' %',13)}${P('+' + r.arc + ' %',20)}`);
 
 console.log('\n影響度（実機でその量が振れる幅ぶん動かしたら、荷重は何 % 動くか）');
 for (const im of out.impact) {
@@ -228,6 +235,10 @@ for (const r of out.rows) {
   ok('圧下量の感度は Ld/h̄ が最大のパスで最大になる',
      byLdh[byLdh.length - 1].eDh === Math.max(...out.rows.map(r => r.eDh)),
      byLdh.map(r => `${r.Ldh}→${r.eDh}`).join('  '));
+  ok('摩擦丘係数 Qp も Ld/h̄ が大きいほど大きい（＝ 摩擦丘の正体が Ld/h̄ である）', mono('Qp'),
+     byLdh.map(r => `${r.Ldh}→${r.Qp}`).join('  '));
+  ok('摩擦が作る «山» そのもの（μ→0 との比）も Ld/h̄ が大きいほど大きい', mono('hill'),
+     byLdh.map(r => `${r.Ldh}→${r.hill} 倍`).join('  '));
   ok('ロール扁平の効きも Ld/h̄ が大きいほど大きい（薄いほど平たく潰れる）', mono('flat'),
      byLdh.map(r => `${r.Ldh}→+${r.flat}%`).join('  '));
 }
