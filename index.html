@@ -1714,6 +1714,15 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.11.0', base: '3f25976', date: '2026-09-12', title: '素材長によって体積が «作られて» いたのを直す —— 原因はクロップ時のプロファイル張り直し', items: [
+      { t: '素材長 3,000 / 2,000 で «板 ＋ 切り落とし» が素材と +21.8 % / +134.7 % ずれていた（＝ 体積が作られていた）。原因は SlabState.cropProfile —— 端を切ったときの材料座標の張り直しで、そのパスがそこまで書いた «出側» の板厚（_hNext）を «入側»（hProf）から作り直していた', w: 'SlabState.cropProfile' },
+      { t: 'パスの途中で端を切ると、もう圧延した区間が «入側の厚いまま» に戻る。材料座標は一方向にしか進まないので、その区間はそのパスでは二度と書かれない。次のパスはそれを入側として読むため、質量流の比 gap/h_in が小さくなりすぎて入側の端が進まず、板が伸びすぎていた', w: 'PhysicsEngine._dynamics' },
+      { t: '実測で追い切った —— 素材長 2,000・パス 20 の途中で切った瞬間に _hNext[0] が 26.3 → 36.2 mm へ戻り、プロファイルの 0..180 番が 36.1 mm のまま残る。次のパス（26 → 16 mm）で板長が 40.2 → 85.3 m（正しくは 65.4 m）になり、そこから先が全部ずれていた', w: 'tools/voltrace.mjs' },
+      { t: '出側バッファは «出側バッファのまま» 張り直すようにした。重み付き平均の重み（_hCov）と貯め（_hAcc）、書けた範囲（_wLo/_wHi）、前に書いた材料座標（_uPrev）、発熱を積んだ範囲（_qLo/_qHi）も同じ写像で一緒に動かす —— どれか 1 つでも切る前の位置を指していると、次の書き込みで値が飛ぶ', w: 'SlabState.cropProfile' },
+      { t: '評価器の数え方も直した。板の体積を «板厚 × 板長» で数えていたが、板厚はパスが終わったときの出側厚なので、過負荷などで途中で止まると もう圧延した部分まで入側の厚みで数えてしまう（素材長 2,000 が +86 % ずれて «見えて» いた。材料そのものは保たれていた）。長手プロファイルの積分で数える', w: 'SlabState.matVolume / tools/voltrace.mjs' },
+      { t: '体積保存を素材長 5 通りすべてで合否に数えるようにした（これまでは出荷ロットだけ）。素材長で «たまたま» 通るのを見逃さないため。実測 −0.3 〜 +1.7 %', w: 'tools/voltrace.mjs' },
+      { t: '素材長 2,000 は 16 mm の手前で過負荷停止する。体積は保たれているので材料の勘定の不具合ではなく、スケジュールがこのラインの能力に収まっていないという別の話（README 0-3 の 27）。参考として毎回出す', w: 'README 0-3' },
+    ] },
     { v: '2.10.0', base: '7a2bd4d', date: '2026-09-12', title: '5 つのマスタを 1 つのビュワーにまとめる', items: [
       { t: '材質・ソーキング・パス・ブラシ・ブラシノッチを «同じ器» で読めるようにした。マスタごとに別の窓を開けると «この記号はどこで見るのか» を毎回思い出すことになる。切替は見出しの隣に常に出し、いまどこに居るかを隠さない', w: '#dlg-soak / UIManager.MASTERS' },
       { t: '1 マスタ ＝ 定義の 1 行（一覧の行を作る rows と、右の中身を作る detail）にした。一覧の描き方・検索・キー操作・件数の出し方はマスタをまたいで 1 つで済む —— 器を 5 つ書くと、直すときも 5 か所になる', w: 'UIManager.MASTERS / _soakRows / _soakRender' },
@@ -8026,6 +8035,26 @@ class SlabState {
   }
   /** 材料座標 u の «その場所の» 板厚 [mm]（前のパスが残したもの） */
   hAt(u) { return this.hProf[Math.round(Num.clamp(u, 0, 1) * (SlabState.NPROF - 1))]; }
+  /**
+   * 材料座標 u の «いまの» 板厚 [mm]。パスの途中では、もう通った側は出側バッファ
+   * （_hNext）が、まだ通っていない側は入側（hProf）が «いまの厚み» を持っている。
+   * hAt は入側だけを見るので、パスの途中で «もう圧延した所» を厚いまま読む。
+   */
+  hNow(u) {
+    const i = Math.round(Num.clamp(u, 0, 1) * (SlabState.NPROF - 1));
+    return this._hCov[i] > 0 ? this._hNext[i] : this.hProf[i];
+  }
+  /**
+   * 板の材料体積 [mm³]。長手プロファイルの積分 × 板幅。
+   * «板厚 × 板長» はパスが終わっているときしか正しくない（途中で止めると、もう
+   * 圧延した所まで入側の厚みで数えてしまう）。体積保存を測るときはこちらを使う。
+   */
+  get matVolume() {
+    const N = SlabState.NPROF;
+    let sum = 0;
+    for (let i = 0; i < N; i++) sum += this.hNow(i / (N - 1)) * ((i === 0 || i === N - 1) ? 0.5 : 1);
+    return sum * this.length / (N - 1) * this.width;
+  }
   /** 炉出し・搬送ですでに付いている端部の温度落ちを置く（長さは呼び出し時の板長で見る） */
   resetEndChill() {
     const EC = CONFIG.MATERIAL.END_CHILL, N = SlabState.NPROF, L = Math.max(this.length, 1);
@@ -8054,22 +8083,49 @@ class SlabState {
    */
   cropProfile(end, frac) {
     if (!(frac > 0 && frac < 0.9)) return;
-    const N = SlabState.NPROF, h = new Float32Array(N), d = new Float64Array(N);
-    for (let i = 0; i < N; i++) {
+    const N = SlabState.NPROF;
+    /* 新しい材料座標 i に来るのは、古い座標のどこか（＝ 引き伸ばしの逆写像）。 */
+    const srcOf = (i) => {
       const u = i / (N - 1);
-      const src = end > 0 ? u * (1 - frac) : frac + u * (1 - frac);
-      const p = src * (N - 1), a = Math.floor(p), b = Math.min(a + 1, N - 1), w = p - a;
-      h[i] = this.hProf[a] * (1 - w) + this.hProf[b] * w;
-      d[i] = this.dTProf[a] * (1 - w) + this.dTProf[b] * w;
-    }
-    const q = new Float64Array(N);
+      return (end > 0 ? u * (1 - frac) : frac + u * (1 - frac)) * (N - 1);
+    };
+    const lerp = (arr, p) => { const a = Math.floor(p), b = Math.min(a + 1, N - 1), w = p - a;
+                               return arr[a] * (1 - w) + arr[b] * w; };
+    const h = new Float32Array(N), hn = new Float32Array(N);
+    const d = new Float64Array(N), q = new Float64Array(N), cov = new Float64Array(N);
     for (let i = 0; i < N; i++) {
-      const u = i / (N - 1);
-      const src = end > 0 ? u * (1 - frac) : frac + u * (1 - frac);
-      const p = src * (N - 1), a = Math.floor(p), b = Math.min(a + 1, N - 1), w = p - a;
-      q[i] = this._qProf[a] * (1 - w) + this._qProf[b] * w;
+      const p = srcOf(i);
+      h[i]  = lerp(this.hProf, p);
+      /* 【要】出側バッファ（_hNext）は «出側バッファのまま» 付け替える。
+       * ここを入側（hProf）から作り直していたため、パスの途中で端を切ると、その
+       * パスがそこまで書いた出側の板厚が «入側の厚いまま» に戻っていた。
+       * 戻された区間はそのパスの残りでは二度と書かれない（材料座標は一方向にしか
+       * 進まない）ので、次のパスは «圧延済みなのに厚いまま» の板を入側として読み、
+       * 質量流の比 gap/h_in が小さくなりすぎて入側の端が進まず、板が伸びすぎる。
+       * これが素材長 2,000 / 3,000 で体積が «作られて» いた原因
+       *（実測: パス 20 の途中で _hNext[0] が 26.3 → 36.2 に戻っていた）。 */
+      hn[i] = lerp(this._hNext, p);
+      d[i]  = lerp(this.dTProf, p);
+      q[i]  = lerp(this._qProf, p);
+      cov[i] = lerp(this._hCov, p);            // 重み付き平均の «重み» も一緒に動かす
     }
-    this.hProf.set(h); this._hNext.set(h); this.dTProf.set(d); this._qProf.set(q);
+    this.hProf.set(h); this._hNext.set(hn); this.dTProf.set(d); this._qProf.set(q);
+    /* 重みの «貯め» は、付け替えたあとの平均と辻褄が合うように作り直す
+     * （A と W を別々に補間すると比がずれ、次の書き込みで値が飛ぶ）。 */
+    this._hCov.set(cov);
+    for (let i = 0; i < N; i++) this._hAcc[i] = hn[i] * cov[i];
+    /* 「このパスで書けた範囲」と「前に書いた材料座標」も同じ写像で動かす。
+     * 動かさないと、端の埋め戻し（endGauge）が切る前の位置を指す。 */
+    const newOf = (p) => (end > 0 ? p / (1 - frac) : (p - frac * (N - 1)) / (1 - frac));
+    if (this._wHi >= this._wLo) {
+      const a = Num.clamp(Math.round(newOf(this._wLo)), 0, N - 1);
+      const b = Num.clamp(Math.round(newOf(this._wHi)), 0, N - 1);
+      this._wLo = Math.min(a, b); this._wHi = Math.max(a, b);
+    }
+    const uNew = (u) => Num.clamp(end > 0 ? u / (1 - frac) : (u - frac) / (1 - frac), 0, 1);
+    if (this._uPrev !== null) this._uPrev = uNew(this._uPrev);
+    if (this._qHi >= this._qLo) { const a = uNew(this._qLo), b = uNew(this._qHi);
+                                  this._qLo = Math.min(a, b); this._qHi = Math.max(a, b); }
   }
   /** 材料座標 u の温度偏差 [K]（端部の冷え。平均からの差） */
   dTAt(u) { return this.dTProf[Math.round(Num.clamp(u, 0, 1) * (SlabState.NPROF - 1))]; }
