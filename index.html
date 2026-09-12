@@ -1491,6 +1491,15 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.1.1', base: '6a34b99', date: '2026-09-12', title: '整合検査が黙って落ちていた 4 件を直す（うち 1 件は実装の不具合）', items: [
+      { t: 'スケジュール生成が、テーブルに載る限界を «丸めのぶんだけ» 超えていた。表に出す板厚は 0.1 mm 刻みに丸めるのに、制約は丸める前の値で当てていたので、ぎりぎりで決めた 18.029 mm が表では 18.0 mm になり、そのぶん板が伸びて載らなくなる。制約を 0.1 mm 刻みの厚い側へ切り上げた（実測: 406 mm 鋳造のロットで第 17 パスが入側テーブルを 117 mm 超えていた → 0 mm）', w: 'Rolling.buildSchedule' },
+      { t: 'テーブルの «板を置ける長さ» が 2 か所にあり、生成側（SAFE_CLEAR 3,000 ＋ 端の余裕 4,000）と検査側（8,000 直書き）で 1,000 mm 食い違っていた。Rolling.tableUsable() の 1 か所にして、生成も検査も同じ長さを見るようにした', w: 'Rolling.tableUsable / TABLE.END_CLEAR' },
+      { t: '板モードでは最終パスもテーブルの上で終わるので、«作れてしまうが載らない» 組み合わせが出る（560 mm → 20 mm・素材長 3,450 mm で最終パス 92.5 m に対し入側テーブル 73.1 m）。圧延そのものはできるので、成立判定の警告として出すようにした', w: 'Rolling.scheduleFeasibility' },
+      { t: 'コイル押えの判定が «sin が 0.5 より大きい» で、仕様どおりの極角 30°（sin 30° ＝ 0.5 ちょうど）で落ちていた。CONFIG.COILER.HOLD.ANGLE と一致するかを見る形に変えた', w: 'tools/eval.mjs' },
+      { t: 'ピット炉の深さの判定が、9 基バンクにする前の CONFIG.FURNACE.DEPTH を読んでいて undefined だった。炉ごとの深さ（SPEC[].H）のいちばん浅いもので見る形にした', w: 'tools/eval.mjs' },
+      { t: '吊上げ高さの判定が «1,500 mm より大きい» という数値そのものを見ていて、揚程 7,500 mm に合わせて 1,400 にした変更で落ちていた。«炉蓋を越え、転倒機へ立てかける高さより上にあるか» を見る形にした（実測: 下端 2,300 mm ／ 炉蓋 380 mm ／ 吊上げ 4,025 ＞ 立てかけ 2,295 mm）', w: 'tools/eval.mjs' },
+      { t: '«参考»（合否に数えず数値だけ出す）の仕組みを整合検査にも入れた。最初の項目は «入力できる最大の板長 4,200 mm が、いちばん浅い炉 4,050 mm に立つか» —— 実機で長尺材をどの炉へ入れているかが未確認のため（README 0-3）', w: 'tools/eval.mjs' },
+    ] },
     { v: '2.1.0', base: 'ea66d69', date: '2026-09-12', title: 'ワニ口を «2 枚板» に直し、冷却を 4 系統に分け、形状モニタと履歴ビュワーを足す', items: [
       // --- 版数の管理（ご指摘の確認）---
       { t: '版数の管理が適正でなかった。過去の版が 2〜6 コミット・14〜31 項目なのに、1.22.0 だけに 47 コミット・115 項目が溜まっていた（8〜10 倍）。しかも fb460f1 の表題は «VER.1.22.0 ——» で、本来そこで締めるつもりだったのに以後 28 コミットを同じ版へ足し続けていた。«画面の版数 → base → 実装» を一本で辿る設計が壊れていたので、実際のコミット境界で 5 版に分け直した', w: 'VERSION.LOG' },
@@ -2492,6 +2501,10 @@ const CONFIG = {
     EROLL: { D_END: 380, D_MID: 377.1, BARREL: 857, JOURNAL_D: 150, JOURNAL_L: 120,
              COLLAR_D: 175, COLLAR_L: 40, Z_OUT: 1100, MAT: 'SCM440' },
     X_MIN: -121800, X_MAX: 80100,
+    /* テーブル端の安全代 [mm]。板の «置ける長さ» は テーブル長 − SAFE_CLEAR（噛み出し余裕）
+     * − END_CLEAR（端の余裕）。スケジュール生成も検査も Rolling.tableUsable() 経由で
+     * ここだけを見る（以前は生成側が 4,000、検査側が 5,000 相当と食い違っていた）。 */
+    END_CLEAR: 4000,
     /* テーブル区分（図面「各テーブルローラ本数」と区間長）。x0/x1 はミル中心からの距離 [mm]、
      * side −1 = 入側 / +1 = 出側。pitch は «ミル側から» の軸間の並びで、図面の
      * 「370×11 460×2」をそのまま "460 370×11 460" と書く（460 は両端）。
@@ -5864,6 +5877,17 @@ const Rolling = {
     return { steadyPeak: steady * P.PEAK_K, tailPeak: tail * P.TAIL_K };
   },
   /**
+   * そのパスが «終わる側» のテーブルで、板を置ける長さ [mm]。
+   * テーブル長から噛み出し余裕（SAFE_CLEAR）と端の安全代（TABLE.END_CLEAR）を引く。
+   * 数値の出どころをここ 1 か所にして、スケジュール生成（buildSchedule）も
+   * 検査（tools/eval.mjs）も同じ長さを見る。
+   *   dir > 0 … 出側で終わるパス ／ dir < 0 … 入側で終わるパス
+   */
+  tableUsable(dir) {
+    return (dir > 0 ? Math.abs(CONFIG.TABLE.X_MAX) : Math.abs(CONFIG.TABLE.X_MIN))
+           - CONFIG.SAFE_CLEAR - CONFIG.TABLE.END_CLEAR;
+  },
+  /**
    * パススケジュールを板厚・板幅から生成する。
    * 1パスあたりの圧下量は「噛み込み角」「圧下率」「圧延荷重」の3つで律速し、
    * 速度は質量流に合わせて上げたうえで主機動力の定格で頭打ちにする。
@@ -5895,8 +5919,7 @@ const Rolling = {
     let h = h0, T = temp;
     // 各パスが終わる側のテーブルに板が載りきる必要がある（載らない厚みまでは薄くできない）。
     // コイルモードでは最終パスだけがこの制約から外れ、巻取機へ巻き取る。
-    const sideUsable = (dir) => (dir > 0 ? Math.abs(CONFIG.TABLE.X_MAX) : Math.abs(CONFIG.TABLE.X_MIN))
-                                - CONFIG.SAFE_CLEAR - 4000;
+    const sideUsable = (dir) => Rolling.tableUsable(dir);
     let coilPass = -1;
     /* 速度の見当。«圧下量を決める側» と «最終表を作る側» が別々の見当を持つと、同じパスを
      * 違う速度＝違うパス時間＝違う温度で評価してしまい、選んだときは荷重上限内だったパスが
@@ -5989,7 +6012,11 @@ const Rolling = {
       if (dFin <= cap) { d = dFin; if (coil) coilPass = idx; }
       else {
         d = cap;
-        const hMin = L0 * h0 / sideUsable(dir);                // これ以上薄くするとテーブルに載らない
+        /* これ以上薄くするとテーブルに載らない板厚。表に出す板厚は 0.1 mm 刻みに丸めるので、
+         * 制約もその刻みの «厚い側» へ切り上げる —— 切り上げないと、制約ぎりぎりで決めた
+         * 18.029 mm が表では 18.0 mm になり、丸めたぶんだけ板が伸びて載らなくなる
+         * （実測: 406 mm 鋳造のロットで第 17 パスが入側テーブルを 117 mm 超えていた）。 */
+        const hMin = Math.ceil(L0 * h0 / sideUsable(dir) * 10) / 10;
         d = Math.min(d, h - hMin);
         // 各パスは所定時間内に通し切る必要がある。そのために必要な速度で定格動力を
         // 超えるなら圧下量を落とす。長いパスほど速く通す必要があるので後段で効く。
@@ -6098,6 +6125,25 @@ const Rolling = {
       reasons.push(`第 ${over.pass} パスの予測荷重 ${fmt(maxF)} が非常最大 ${M.LIMIT_FORCE_T.toLocaleString()} t を超えます`);
     } else if (maxF > M.RATED_FORCE_T * 0.9) {                        // 常用最大に余裕が無い
       notes.push(`予測荷重 ${fmt(maxF)} は常用最大 ${M.RATED_FORCE_T.toLocaleString()} t に対して余裕がありません`);
+    }
+    /* 板がテーブルに載るか。可逆圧延なのでパスごとに «終わる側» が変わり、入側と出側で
+     * 長さが違う（Rolling.tableUsable）。コイルモードでは最終パスだけが巻取機へ巻き取るので
+     * 対象外だが、板モードでは最後までテーブルの上で終わる —— 目標板厚を薄くすると
+     * «作れてしまうが載らない» 組み合わせが出る（実測: 560 mm → 20 mm・素材長 3,450 mm で
+     * 最終パス 92.5 m に対し入側テーブル 73.1 m）。圧延そのものはできるので警告に留める。 */
+    {
+      const L0 = CONFIG.SLAB.LEN_DEFAULT, h0 = sch[0]?.gap ?? 0, over = [];
+      for (const q of sch) {
+        if (q.coil || !h0) continue;
+        const len = L0 * h0 / q.gap, u = Rolling.tableUsable(q.dir);
+        if (len > u) over.push({ pass: q.pass, len, u });
+      }
+      if (over.length) {
+        const w = over[0];
+        notes.push(`第 ${w.pass} パス以降の板 ${(w.len / 1000).toFixed(1)} m が`
+                 + `${w.u === Rolling.tableUsable(1) ? '出側' : '入側'}テーブルの ${(w.u / 1000).toFixed(1)} m に載りません`
+                 + `（目標板厚を上げるか、素材を短くしてください）`);
+      }
     }
     // 熱間域を割るパスは «警告» にする（運転はできる）。どのパスから割るかまで示す。
     const hot = alloy.T_ROLL[0], below = sch.filter(q => q.tEnd < hot);
