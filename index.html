@@ -862,21 +862,21 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
 /* --- 圧延条件 / ブラシ条件の登録・編集モーダル（見た目は 1 式を共有する） ------
    決める順（材料 → 仕上げ → 冷却）に区切り、下に «この条件の見積り» を常に出す。
    入れた値がどんなロットになるかを見ながら決められるので、推測させない。 */
-#dlg-lot, #dlg-brush { border:none; padding:0; border-radius:var(--r-l); background:var(--s-1); color:var(--ink-1);
+#dlg-lot, #dlg-brush, #dlg-req { border:none; padding:0; border-radius:var(--r-l); background:var(--s-1); color:var(--ink-1);
   width:min(740px,94vw); max-height:90vh; box-shadow:var(--shadow-2); }
 #dlg-lot::backdrop, #dlg-brush::backdrop { background:rgba(12,18,26,.42); backdrop-filter:blur(2px); }
-#dlg-lot form, #dlg-brush form { display:flex; flex-direction:column; max-height:90vh; }
-#dlg-lot header, #dlg-brush header { flex:none; display:flex; align-items:center; gap:12px; padding:15px 18px;
+#dlg-lot form, #dlg-brush form, #dlg-req form { display:flex; flex-direction:column; max-height:90vh; }
+#dlg-lot header, #dlg-brush header, #dlg-req header { flex:none; display:flex; align-items:center; gap:12px; padding:15px 18px;
   border-bottom:1px solid var(--line); }
-#dlg-lot h2, #dlg-brush h2 { margin:0; font-size:14px; font-weight:800; letter-spacing:.04em; }
-#dlg-lot h2 i, #dlg-brush h2 i { opacity:.6; margin-right:5px; }
-#dlg-lot .x, #dlg-brush .x { margin-left:auto; width:30px; height:30px; border-radius:8px; border:1px solid var(--line);
+#dlg-lot h2, #dlg-brush h2, #dlg-req h2 { margin:0; font-size:14px; font-weight:800; letter-spacing:.04em; }
+#dlg-lot h2 i, #dlg-brush h2 i, #dlg-req h2 i { opacity:.6; margin-right:5px; }
+#dlg-lot .x, #dlg-brush .x, #dlg-req .x { margin-left:auto; width:30px; height:30px; border-radius:8px; border:1px solid var(--line);
   background:var(--s-1); color:var(--ink-3); cursor:pointer; }
-#dlg-lot .x:hover, #dlg-brush .x:hover { color:var(--ink-1); border-color:var(--ink-3); }
-#dlg-lot .lot-body, #dlg-brush .lot-body { flex:1 1 auto; overflow:auto; padding:16px 18px; display:flex; flex-direction:column; gap:15px; }
-#dlg-lot .lot-grp h3, #dlg-brush .lot-grp h3 { margin:0 0 9px; font-size:11px; font-weight:800; color:var(--ink-2);
+#dlg-lot .x:hover, #dlg-brush .x:hover, #dlg-req .x:hover { color:var(--ink-1); border-color:var(--ink-3); }
+#dlg-lot .lot-body, #dlg-brush .lot-body, #dlg-req .lot-body { flex:1 1 auto; overflow:auto; padding:16px 18px; display:flex; flex-direction:column; gap:15px; }
+#dlg-lot .lot-grp h3, #dlg-brush .lot-grp h3, #dlg-req .lot-grp h3 { margin:0 0 9px; font-size:11px; font-weight:800; color:var(--ink-2);
   display:flex; align-items:center; gap:7px; letter-spacing:.06em; }
-#dlg-lot .lot-grp h3 .n, #dlg-brush .lot-grp h3 .n { width:17px; height:17px; border-radius:50%; background:var(--accent); color:#fff;
+#dlg-lot .lot-grp h3 .n, #dlg-brush .lot-grp h3 .n, #dlg-req .lot-grp h3 .n { width:17px; height:17px; border-radius:50%; background:var(--accent); color:#fff;
   font-size:9.5px; display:inline-flex; align-items:center; justify-content:center; }
 #dlg-lot .grid, #dlg-brush .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px 14px; }
 #dlg-lot .f, #dlg-brush .f { display:flex; flex-direction:column; gap:5px; min-width:0; }
@@ -890,14 +890,32 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
 #dlg-lot .segf button, #dlg-brush .segf button { flex:1; height:26px; border:0; border-radius:6px; background:transparent; cursor:pointer;
   font:inherit; font-size:11px; font-weight:700; color:var(--ink-2); }
 #dlg-lot .segf button[aria-pressed="true"], #dlg-brush .segf button[aria-pressed="true"] { background:var(--s-1); color:var(--accent); box-shadow:var(--shadow-1); }
-#dlg-lot .lot-est, #dlg-brush .lot-est { border:1px solid var(--line); border-radius:var(--r-m); background:var(--s-2); padding:11px 13px;
+#dlg-lot .lot-est, #dlg-brush .lot-est, #dlg-req .lot-est { border:1px solid var(--line); border-radius:var(--r-m); background:var(--s-2); padding:11px 13px;
   font-size:11px; line-height:1.85; color:var(--ink-2); }
-#dlg-lot .lot-est b, #dlg-brush .lot-est b { color:var(--ink-1); font-variant-numeric:tabular-nums; }
-#dlg-lot .lot-est .warn, #dlg-brush .lot-est .warn { color:var(--crit); font-weight:700; }
-#dlg-lot .lot-est .note, #dlg-brush .lot-est .note { color:#8a5b00; }
-#dlg-lot footer, #dlg-brush footer { flex:none; display:flex; justify-content:flex-end; gap:9px; padding:13px 18px;
+#dlg-lot .lot-est b, #dlg-brush .lot-est b, #dlg-req .lot-est b { color:var(--ink-1); font-variant-numeric:tabular-nums; }
+#dlg-lot .lot-est .warn, #dlg-brush .lot-est .warn, #dlg-req .lot-est .warn { color:var(--crit); font-weight:700; }
+#dlg-lot .lot-est .note, #dlg-brush .lot-est .note, #dlg-req .lot-est .note { color:#8a5b00; }
+#dlg-lot footer, #dlg-brush footer, #dlg-req footer { flex:none; display:flex; justify-content:flex-end; gap:9px; padding:13px 18px;
   border-top:1px solid var(--line); background:var(--s-2); }
-#dlg-lot footer .btn, #dlg-brush footer .btn { width:auto; padding:0 18px; height:34px; }
+#dlg-lot footer .btn, #dlg-brush footer .btn, #dlg-req footer .btn { width:auto; padding:0 18px; height:34px; }
+/* 実績データの一覧。1 件 ＝ «何を測るか／いま何で代用しているか／入ると何が決まるか» の
+   3 段。分類で区切って、上から «効くもの» の順に並べる（README 0 節と同じ並び）。 */
+#dlg-req { width:min(940px,96vw); }
+#dlg-req:not([open]) { display:none; }
+#dlg-req .rq-g { margin:0 0 14px; }
+#dlg-req .rq-g > h4 { margin:0 0 7px; font-size:10.5px; font-weight:800; letter-spacing:.06em; color:var(--ink-3); }
+#dlg-req .rq { display:grid; grid-template-columns:64px 1fr; gap:0 12px; padding:9px 11px; border:1px solid var(--line);
+  border-radius:var(--r-m); background:var(--s-2); margin-bottom:7px; }
+#dlg-req .rq .id { font-size:10px; font-weight:800; color:var(--accent); font-family:ui-monospace,monospace;
+  align-self:start; padding-top:2px; letter-spacing:.02em; }
+#dlg-req .rq .it { font-size:12.5px; font-weight:700; color:var(--ink-1); line-height:1.5; }
+#dlg-req .rq .mt { font-size:10.5px; color:var(--ink-3); line-height:1.7; margin-top:3px; }
+#dlg-req .rq .mt b { color:var(--ink-2); font-weight:700; }
+#dlg-req .rq .fx { font-size:10.5px; color:var(--ink-2); line-height:1.7; margin-top:3px; }
+#dlg-req .rq.has { border-color:var(--accent-2); background:var(--accent-soft); }
+#dlg-req footer { justify-content:flex-start; align-items:center; font-size:11px; color:var(--ink-3); }
+#dlg-req footer .sp { flex:1 1 auto; }
+#dlg-req .rq .got { font-size:10.5px; font-weight:800; color:var(--accent); margin-top:3px; }
 /* ブラシ条件だけの追加。表は «パス × 条件» の 5 列（ブラシ・掛ける長さ・ノッチ・押し付け）。
    列ごとに要る幅が違うので固定レイアウトで割り付ける —— 均等割りだと «標準» のような
    短い値の列にまで幅が取られ、長い «SN（ソフトナイロン）» のほうが切れる。 */
@@ -908,8 +926,8 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
 #dlg-brush table.brush-tb col.c-notch { width:22%; }
 #dlg-brush table.brush-tb col.c-press { width:15%; }
 #dlg-brush table.brush-tb select { width:100%; min-width:0; }
-#dlg-brush .brush-note { margin:0 0 9px; font-size:10.5px; color:var(--ink-3); line-height:1.7; }
-#dlg-brush .brush-note b { color:var(--ink-2); }
+#dlg-brush .brush-note, #dlg-req .brush-note { margin:0 0 9px; font-size:10.5px; color:var(--ink-3); line-height:1.7; }
+#dlg-brush .brush-note b, #dlg-req .brush-note b { color:var(--ink-2); }
 #dlg-brush table.brush-tb { width:100%; border-collapse:collapse; font-size:11.5px; }
 #dlg-brush table.brush-tb th { text-align:left; font-size:10px; font-weight:800; color:var(--ink-3);
   padding:0 8px 7px; letter-spacing:.05em; white-space:nowrap; }
@@ -943,7 +961,8 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
     <i class="fa-solid fa-industry"></i>
     <div>
       <div class="n">熱間圧延機シミュレータ<button id="btn-ver" class="ver" type="button"
-        title="版数と変更履歴を見る（V）" aria-haspopup="dialog">VER.–</button></div>
+        title="版数と変更履歴を見る（V）" aria-haspopup="dialog">VER.–</button><button id="btn-req" class="ver" type="button"
+        title="実績データ —— いま推定で置いている量と、測っていただきたいもの（D）" aria-haspopup="dialog">実績データ</button></div>
       <div class="sub">アルミニウム熱間可逆圧延機 / 4-High Reversing Mill</div>
     </div>
     <button id="btn-collapse" title="メニューをたたむ（M）" aria-label="メニューをたたむ"><i class="fa-solid fa-chevron-left"></i></button>
@@ -1611,6 +1630,41 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   </footer>
 </dialog>
 
+<!-- 実績データ（測っていただきたいもの）。«何が分かれば何が決まるか» を一覧で見せ、
+     記入用のテンプレート（CSV）を出して、記入されたものを読み戻す。
+     形式を CSV 1 枚にしてあるのは «Excel でそのまま開けて、そのまま返せる» ため。 -->
+<dialog id="dlg-req" aria-labelledby="dlg-req-ttl">
+  <form method="dialog" id="req-form">
+    <header>
+      <h2 id="dlg-req-ttl"><i class="fa-solid fa-clipboard-list"></i> 実績データ（測っていただきたいもの）</h2>
+      <button class="x" value="cancel" type="submit" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+    <div class="lot-body">
+      <section class="lot-grp">
+        <h3><span class="n">1</span> 記入用のテンプレートを出す</h3>
+        <p class="brush-note">CSV を 1 枚出します。Excel でそのまま開けて、<b>値の欄を埋めて上書き保存（CSV のまま）</b>して
+          返していただければ、そのまま読み戻せます。<b>例</b>の行は書き方の見本なので、消しても残しても構いません
+          —— 読むのは <b>種別が «実績»</b> の行だけです。<b>材質</b>の欄は、材質で変わる項目のときだけ埋めてください。</p>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="btn-req-tpl" type="button"><i class="fa-solid fa-download"></i>テンプレートを出す（CSV）</button>
+          <button class="btn btn-ghost" id="btn-req-read" type="button"><i class="fa-solid fa-upload"></i>記入したものを読み込む</button>
+          <input type="file" id="req-file" accept=".csv,text/csv" hidden>
+        </div>
+        <div class="lot-est" id="req-read" hidden></div>
+      </section>
+      <section class="lot-grp">
+        <h3><span class="n">2</span> いま測っていただきたいもの</h3>
+        <div id="req-list"></div>
+      </section>
+    </div>
+    <footer>
+      <span id="req-count"></span>
+      <span class="sp"></span>
+      <button class="btn btn-ghost" value="cancel" type="submit">閉じる</button>
+    </footer>
+  </form>
+</dialog>
+
 <script type="importmap">
 { "imports": {
   "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -1645,6 +1699,15 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.9.0', base: '9b9c4f7', date: '2026-09-12', title: '実績データの記入表 —— «何が分かれば何が決まるか» を一覧にし、CSV で往復させる', items: [
+      { t: '«いま推定で置いている量» と «それが実測で置き換わると何が決まるか» を 16 件の表にした。画面・記入表・評価器がこの 1 か所だけを見る —— README に手で書いた一覧は必ず古くなる', w: 'CONFIG.DATAREQ' },
+      { t: '記入用のテンプレートを CSV にした。Excel でそのまま開けて、値の欄を埋めて上書き保存すれば同じ画面で読み戻せる。xlsx で出すと記入したものを読み戻せない（本アプリは xlsx を書けるが読めない）', w: 'DataReq.template / read' },
+      { t: '1 項目につき «例» を 1 行と «記入欄» を要る点数ぶん並べる。条件を振るもの（パス間時間・停止時間・押し付けなど 6 件）は 2 点以上ないと傾きが取れないので、記入欄もその数だけ出す', w: 'DataReq.template' },
+      { t: '読み戻しでは «読めたもの» と «読めなかったもの» の両方を出す。黙って捨てると «入れたのに効かない» が起きる —— 点数が足りない項目・記入欄のままの項目・表に無い項目ID を、それぞれ名前で言う', w: 'UIManager.reqRead' },
+      { t: 'Excel は BOM が無いと UTF-8 と判らず日本語が化けるので付けて出す。読むときは BOM も引用符の中の区切り・改行も自前で読む（備考に «カンマ, と "引用符" と改行» を入れても往復する）', w: 'DataReq.parse / cell' },
+      { t: '画面は分類ごとに «何を測るか／いま何で代用しているか／入ると何が決まるか» の 3 段で出す。読み込んだ項目は色を変えて、何がそろって何が残っているかが一目で分かるようにした', w: '#dlg-req / UIManager._reqRender' },
+      { t: '判定を作った —— tools/datareq.mjs に 13 件（表の整合・«入る先» が CONFIG に実在すること・記入表の往復）、tools/uicheck.mjs に 5 件（一覧が全部出る・画面に収まる・CSV が BOM つきで出る・読み込むと一覧に反映される）', w: 'tools/datareq.mjs / uicheck.mjs' },
+    ] },
     { v: '2.8.0', base: '5534757', date: '2026-09-12', title: 'ブラシマスタ／ブラシノッチマスタ —— 記号で持ち、押し付け具合を足す', items: [
       { t: 'ブラシ条件を記号ごとにひとまとめにした。ロット（サンプル）から記号で呼べるようにするため。読むのは Brush の 1 か所だけで、物理も画面もそこを見る。いま入っている B5 は 5000 系の実機条件で、出どころを src 欄に書いてある', w: 'CONFIG.BRUSH.MASTER / Brush' },
       { t: 'ブラシノッチマスタを表にした。段・周波数・備考の 3 列で、«5 ノッチだけ 15 Hz» という実機のイレギュラー設定はそのまま持つ（丸めて直すと実機と違うものを回すことになる）。除去力の基準 HZ_REF が表の 3 ノッチと一致していることも判定に入れた', w: 'CONFIG.BRUSH.NOTCH / Brush.hz' },
@@ -3138,6 +3201,85 @@ const CONFIG = {
    * 表は «いただいた形» のまま 1 行 1 レコードの配列で置き、列の意味は KEYS が持つ。
    * 加工した値（シミュレータが使う境界条件）は Soak が導出する —— 元の表は書き換えない。
    * ========================================================================= */
+  /* ===== 実績データ（測っていただきたいもの）の一覧 ==========================
+   * «いま推定で置いている量» と «それが実測で置き換わったとき何が決まるか» を 1 か所に持つ。
+   * 画面の «実績データ» と、記入用のテンプレート（CSV）と、評価器がここだけを見る ——
+   * README に手で書いた一覧は必ず古くなる（CLAUDE.md「数値の出どころを 1 か所にする」）。
+   *
+   * 列の意味は KEYS が持つ。
+   *   id      記入表で行を突き合わせる記号
+   *   group   分類（README 0 節の «いま最も効く»／«モデルの係数»／«未解決» に対応）
+   *   item    測っていただきたいもの
+   *   cond    条件の欄（無ければ null ＝ 1 点だけの値）
+   *   condU   その条件の単位
+   *   sweep   その条件を «振る» のか（true）、«どれについての値か» を書く欄なのか（false）。
+   *           振るものは 2 点以上ないと傾きが取れない —— そこだけ点数を求める
+   *   meas    測る量／ measU その単位
+   *   nMin    要る点数（条件を振るものは 2 点以上ないと傾きが取れない）
+   *   now     いま代わりに使っている値（推定なら «推定» と書く）
+   *   fixes   これが入ると何が決まるか
+   *   where   入る先（CONFIG の場所）
+   *   exCond / exVal / exNote  記入例
+   */
+  DATAREQ: {
+    KEYS: ['id', 'group', 'item', 'cond', 'condU', 'sweep', 'meas', 'measU', 'nMin', 'now', 'fixes', 'where',
+           'exCond', 'exVal', 'exNote'],
+    ROWS: [
+      ['CROP', '効く', '実機のクロップ長（頭・尻それぞれ）', '端（頭／尻）', '—', false, 'クロップ長', 'mm', 2,
+       '推定（ワニ口長 ＋ 固定値）', 'ワニ口の張り出しの 3 係数（SLAB.OVERHANG）を合わせられます',
+       'CONFIG.SLAB.OVERHANG', '頭', '400', '26 → 16 mm のパスの前'],
+      ['LOADT', '効く', '同じ材質でパス間時間を変えたときの圧延荷重', 'パス間時間', 's', true, '圧延荷重', 't', 2,
+       '未実装（組織の履歴を荷重へ返していない）',
+       '待ち時間が長い ＝ 再結晶が進む ＝ 荷重が下がる、の傾きから係数を同定できます',
+       'CONFIG.MICRO', '12', '1850', '26 → 16 mm・420 ℃・80 mpm・A5052'],
+      ['ECCT', '効く', '圧延を止めていた時間と、そのあとの偏芯量', '停止時間', 'min', true, '偏芯の半振幅', 'µm', 2,
+       '推定（到達 20 µm・時定数 45 / 150 s）', '熱偏芯の大きさと時定数（GAUGE_MODEL.ECC_TH）を較正できます',
+       'CONFIG.MILL.GAUGE_MODEL.ECC_TH', '5', '18', 'BUR 上下どちらか・板厚 16 mm 前後'],
+      ['PICKUP', '効く', '抽出から持ちかかりまでの実時間と、そのあいだの扱い', null, null, false, '経過時間', 'min', 1,
+       '10 分（推定）',
+       'E 操業の炉出 530 ℃ から 433 ℃ まで自然放熱では 3.4 時間かかります。実時間が分かれば持ちかかり温度をソーキング条件から出せます',
+       'CONFIG.SUPPLY.HOLD_MIN', null, '—', '途中で水が掛かる／床に置く などがあれば備考へ'],
+      ['LNA', '係数', '材質ごとの圧延荷重の実績（1 パスぶんで可）', '材質', '—', false, '圧延荷重', 't', 1,
+       'A1100 の実機ロットからの推定', '構成式の絶対値 LN_A を材質ごとに較正できます（Q・n・α は公表値のまま）',
+       'CONFIG.ALLOYS[].LN_A', 'A5083', '2100', '入側 26 → 出側 16 mm・420 ℃・80 mpm・板幅 1330'],
+      ['GD2', '係数', '主電動機の GD²（回転子慣性）', null, null, false, 'GD²', 't·m²', 1,
+       '推定 2.9 t·m²/台（外形から）', 'ロール慣性の過渡（立ち上げ・制動）が銘板の値になります',
+       'CONFIG.DRIVE.ROTOR_*', null, '—', '銘板の値。台数もあわせて'],
+      ['NOLOAD', '係数', '無負荷（空転）で主機が食う動力', '速度', 'mpm', true, '動力', 'kW', 2,
+       '軸受摩擦係数 0.003（文献の中央値）', '軸受の摩擦損失が直に決まります（文献の幅 0.002〜0.005 で圧延トルクの 1.8〜4.5 %）',
+       'CONFIG.DRIVE.MU_BEARING', '120', '—', '板を噛んでいない状態で'],
+      ['MODUL', '係数', 'ミル定数の 5 mm より先（高荷重側）', '荷重', 't', true, 'ロールの伸び', 'mm', 2,
+       '最後の増分 296 t/mm のまま外挿', '伸び 5 mm（荷重 1,314 t）より先が実測になります。本アプリは最大 3,200 t まで行きます',
+       'CONFIG.MILL.MODULUS_TABLE', '2000', '—', 'キスロールでの荷重 − 伸び'],
+      ['FLUX', '係数', '板面冷却の実流量（4 系統それぞれ）と濡らす面積', '系統', '—', false, '流量', 'L/min', 4,
+       '上面 1.2・下面 1.4 kg/m²s（推定）', '上がり温度の合わせ込みをロール抜熱の側から外せます（tools/coolfit.mjs）',
+       'CONFIG.MATERIAL.COOLANT.SPRAY', '出側 上面', '—', 'ヘッダの本数・ノズル数もあれば'],
+      ['DIACRL', '係数', '上下ロールの径差と、そのときの反りの実測', '径差（上 − 下）', 'mm', true, '丈反り（定尺 1 m）', 'mm', 2,
+       'CURL_K = 1.0（第一近似）', '周速差のうち板の伸びの差として残る割合が決まります',
+       'CONFIG.MILL.DIA_DIFF.CURL_K', '0.5', '—', '先端の浮き上がり量もあれば'],
+      ['BPRESS', '係数', 'ブラシの押し付けを変えたときのコーティングの減り', '押し付け', '段', true, 'コーティング厚', 'µm', 2,
+       '標準 1.0 に対し 弱 0.7 / 強 1.3（推定）', '押し付けの倍率が決まります（BRUSH.PRESS）',
+       'CONFIG.BRUSH.PRESS', '弱', '—', '同じ砥粒・同じノッチ・同じ時間で'],
+      ['A1100', '確認', 'A1100 ロットの上がり温度と圧延後の板長', null, null, false, '上がり温度', '℃', 1,
+       '未提供（本アプリ 353 ℃ / 299 m）', '2 つ目の較正点になります（いまは A5052 の 1 点だけ）',
+       'tools/calib.mjs', null, '—', '板長もあわせて [m]'],
+      ['PASSM', '表', 'パス記号ごとの圧下配分の表', 'パス記号', '—', false, '通る板厚', 'mm', 1,
+       '記号 1 つ（S23。較正ロットの実績から起こした則）', 'パスマスタに行を足すだけで効きます',
+       'CONFIG.PASS.ROWS', 'S23', '—', 'クロップまでのパス数と板厚、クロップ後のパス数と板厚'],
+      ['BRUSHM', '表', 'ブラシ記号ごとの条件の表', 'ブラシ記号', '—', false, 'F-5〜F の条件', '—', 1,
+       '記号 1 つ（B5。5000 系の実機条件）', 'ブラシマスタに行を足すだけで効きます',
+       'CONFIG.BRUSH.MASTER.ROWS', 'B5', '—', '種類・掛ける長さ・ノッチ・押し付け'],
+      ['ECCAGC', '未解決', '偏芯補償の方式と効き（実機の AGC が持つノッチフィルタ相当）', null, null, false, '板厚の振れ', 'µm', 1,
+       '仕組みは実装済み・整定が未解決（既定は «切»）', '長手の板厚の振れが実力（±50 µm）に入ります',
+       'CONFIG.AGC.ECC', null, '—', '補償の入切それぞれで測れると比べられます'],
+      ['JAW', '未解決', 'ワニ口の «あごの開きが板厚の何割か»', null, null, false, '開き ÷ 板厚', '—', 1,
+       '推定（板厚の半分で頭打ち）', 'あごの開き方が実機の見え方になります',
+       'CONFIG.SLAB.OVERHANG', null, '—', '真横から・スケールになる物を添えた写真でも可'],
+    ],
+    /* 記入表の列。テンプレートを出すときも、読み込むときも、この 1 か所を見る。 */
+    CSV: ['種別', '項目ID', '項目', '材質', '条件', '条件の値', '条件の単位', '測った量', '値', '単位', '測定日', '備考'],
+    KIND_EX: '例', KIND_BLANK: '記入欄', KIND_REAL: '実績',
+  },
   /* ===== パスマスタ —— 圧下の «配分» を記号で持つ ============================
    * 実機は «パス記号» で圧下の配分を決める —— クロップまで何パスで何 mm 落とすか、
    * クロップから最終まで何パスで上げるか。ここはその表。
@@ -5715,6 +5857,102 @@ const Sect = {
  * 書いてあったか» を照らせるようにするため —— 加工した値で上書きすると戻せない。
  * ここは «表を引く» ことだけをする。熱サイクルの組み立てと温度の計算はこの下。
  * ========================================================================== */
+/* =============================================================================
+ * 実績データ（測っていただきたいもの）の 1 か所。
+ *
+ * 表そのものは CONFIG.DATAREQ。ここは «記入用のテンプレートを作る» と
+ * «記入されたものを読む» だけをする。画面も評価器もここを通る。
+ *
+ * 形式は CSV 1 枚にした。Excel でそのまま開けて、そのまま返せる —— xlsx で出すと
+ * 記入したものを読み戻せない（本アプリは xlsx を書けるが読めない）。
+ * ========================================================================== */
+const DataReq = {
+  rec(row) {
+    const k = CONFIG.DATAREQ.KEYS, o = {};
+    for (let i = 0; i < k.length; i++) o[k[i]] = row[i] ?? null;
+    return o;
+  },
+  all() { return CONFIG.DATAREQ.ROWS.map(DataReq.rec); },
+  get ids() { return CONFIG.DATAREQ.ROWS.map(r => r[0]); },
+  of(id) { const r = CONFIG.DATAREQ.ROWS.find(q => q[0] === id); return r ? DataReq.rec(r) : null; },
+  /** 分類ごとにまとめる（画面の並び順はこの 1 か所で決まる）。 */
+  groups() {
+    const g = new Map();
+    for (const r of DataReq.all()) { if (!g.has(r.group)) g.set(r.group, []); g.get(r.group).push(r); }
+    return [...g.entries()].map(([name, rows]) => ({ name, rows }));
+  },
+  /* --- CSV ------------------------------------------------------------- */
+  /** 1 セル。区切り・引用符・改行を含むときだけ引用する（Excel の既定と同じ扱い）。 */
+  cell(v) {
+    const t = v === null || v === undefined ? '' : String(v);
+    return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  },
+  /**
+   * 記入用のテンプレート。1 項目につき «例» を 1 行と «記入欄» を要る点数ぶん並べる。
+   * 例の行はそのまま消して使っても、上書きして使ってもよいように、種別で分けてある。
+   */
+  template() {
+    const D = CONFIG.DATAREQ, out = [];
+    out.push(D.CSV.map(DataReq.cell).join(','));
+    for (const r of DataReq.all()) {
+      const base = (kind, condV, val, note) => [kind, r.id, r.item, '', r.cond ?? '', condV ?? '',
+                                                 r.condU ?? '', r.meas ?? '', val ?? '', r.measU ?? '', '', note ?? ''];
+      out.push(base(D.KIND_EX, r.exCond, r.exVal, r.exNote).map(DataReq.cell).join(','));
+      for (let i = 0; i < Math.max(1, r.nMin); i++) out.push(base(D.KIND_BLANK, '', '', '').map(DataReq.cell).join(','));
+    }
+    /* Excel は BOM が無いと UTF-8 と判らず日本語が化ける。付けて出す。 */
+    return '﻿' + out.join('\r\n') + '\r\n';
+  },
+  /** CSV 1 枚を行の配列へ。引用符の中の区切り・改行も読む。 */
+  parse(text) {
+    const src = String(text ?? '').replace(/^﻿/, '');
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < src.length; i++) {
+      const c = src[i];
+      if (q) {
+        if (c === '"') { if (src[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += c;
+      } else if (c === '"') q = true;
+      else if (c === ',') { row.push(cell); cell = ''; }
+      else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+      else if (c !== '\r') cell += c;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter(r => r.some(v => String(v).trim() !== ''));
+  },
+  /**
+   * 記入された CSV を読む。返すのは «読めたもの» と «読めなかったもの» の両方 ——
+   * 黙って捨てると «入れたのに効かない» が起きる。
+   *   rows   種別が «実績» で値が入っている行（項目ID ごとにまとめる）
+   *   unknown 表に無い項目ID
+   *   blank  記入欄のまま（値が空）の項目ID
+   */
+  read(text) {
+    const D = CONFIG.DATAREQ, table = DataReq.parse(text);
+    if (!table.length) return { head: [], byId: new Map(), n: 0, unknown: [], blank: [], rows: [] };
+    const head = table[0].map(v => String(v).trim());
+    const col = Object.fromEntries(D.CSV.map(k => [k, head.indexOf(k)]));
+    const get = (r, k) => (col[k] >= 0 ? String(r[col[k]] ?? '').trim() : '');
+    const byId = new Map(), unknown = new Set(), blank = new Set(), rows = [];
+    for (const r of table.slice(1)) {
+      const kind = get(r, '種別'), id = get(r, '項目ID');
+      if (!id || kind === D.KIND_EX) continue;                 // 例の行は読まない
+      if (!DataReq.of(id)) { unknown.add(id); continue; }
+      const val = get(r, '値');
+      if (val === '' || val === '—') { blank.add(id); continue; }
+      const o = { id, alloy: get(r, '材質'), cond: get(r, '条件'), condV: get(r, '条件の値'),
+                  meas: get(r, '測った量'), val, unit: get(r, '単位'),
+                  date: get(r, '測定日'), note: get(r, '備考') };
+      rows.push(o);
+      if (!byId.has(id)) byId.set(id, []); byId.get(id).push(o);
+    }
+    /* 要る点数に届いているか。条件を振るものは 2 点無いと傾きが取れない。 */
+    const short = [];
+    for (const [id, list] of byId) { const r = DataReq.of(id); if (list.length < r.nMin) short.push({ id, have: list.length, need: r.nMin }); }
+    return { head, byId, rows, n: rows.length, unknown: [...unknown], blank: [...blank], short };
+  },
+};
+
 /* =============================================================================
  * ブラシマスタ／ブラシノッチマスタを «使える形» にする 1 か所。
  *
@@ -17333,6 +17571,10 @@ class UIManager {
     on('brush-form', 'submit', (e) => { if (e.submitter?.value === 'ok') this._brushCommit(); });
     on('brush-reset', 'click', () => { this._brushWrite(Brush.rows($('brush-id').value)); this._brushPreview(); });
     on('btn-brush', 'click', () => this.openBrushDialog());
+    on('btn-req', 'click', () => this.openReqDialog());
+    on('btn-req-tpl', 'click', () => this.reqTemplate());
+    on('btn-req-read', 'click', () => $('req-file').click());
+    on('req-file', 'change', (e) => { const f = e.target.files[0]; if (f) this.reqRead(f); e.target.value = ''; });
     on('btn-plan-clear', 'click', () => this.planClear());
     on('btn-plan-save', 'click', () => this.planSave());
     on('btn-plan-export', 'click', () => this.planExport());
@@ -17404,6 +17646,7 @@ class UIManager {
       else if (k === 'l') this.setLabels(!this.labelsOn);
       else if (k === 'z') this.setZoneBadges(!this.zonesOn);
       else if (k === 's') this.setShapeMon(!this.shapeMonOn);
+      else if (k === 'd') this.openReqDialog();
       else if (k === 'v') this.toggleVersion();
       else if (k === 'm') this.setSidebar(document.body.classList.contains('sb-collapsed'));
       else if (k === 'c') this.setCutaway(this.cutaway === 'half' ? 'xray' : this.cutaway === 'xray' ? 'solid' : 'half');
@@ -17946,6 +18189,69 @@ class UIManager {
       `<div>除去の強さ <b>${(rel * 100).toFixed(0)} %</b>（記号 ${escHtml($('brush-id').value)} ＝ 100 %）` +
       (rel < 0.5 ? ' <span class="note">△ 弱め: コーティングが厚くなり、板への移着が出やすくなります</span>'
        : rel > 2 ? ' <span class="note">△ 強め: コーティングが薄くなり、スリップ・噛み込み失敗が出やすくなります</span>' : '') + `</div>`;
+  }
+  /* --- 実績データ（測っていただきたいもの）--------------------------------
+   * 一覧・テンプレート・読み戻しの 3 つだけ。中身は CONFIG.DATAREQ が持ち、
+   * ここは «見せる» と «ファイルにする／ファイルから読む» をつなぐだけ。 */
+  openReqDialog() {
+    this._reqRender();
+    $('dlg-req').showModal();
+  }
+  _reqRender(read = null) {
+    const e = escHtml;
+    $('req-list').innerHTML = DataReq.groups().map(g => `<div class="rq-g"><h4>${e(this._reqGroupName(g.name))}</h4>`
+      + g.rows.map(r => {
+        const got = read && read.byId.get(r.id);
+        const how = r.cond
+          ? `<b>${e(r.cond)}</b>${r.condU && r.condU !== '—' ? `［${e(r.condU)}］` : ''} を振って <b>${e(r.meas)}</b>`
+            + `${r.measU && r.measU !== '—' ? `［${e(r.measU)}］` : ''} を <b>${r.nMin} 点以上</b>`
+          : `<b>${e(r.meas)}</b>${r.measU && r.measU !== '—' ? `［${e(r.measU)}］` : ''} を 1 点`;
+        return `<div class="rq${got ? ' has' : ''}">`
+          + `<div class="id">${e(r.id)}</div>`
+          + `<div><div class="it">${e(r.item)}</div>`
+          + `<div class="mt">測り方 ${how} ／ いま ${e(r.now)}</div>`
+          + `<div class="fx">→ ${e(r.fixes)}（${e(r.where)}）</div>`
+          + (got ? `<div class="got"><i class="fa-solid fa-circle-check"></i> 読み込み済み ${got.length} 点`
+                   + `（${got.map(q => e(`${q.condV || ''}${q.condV ? ' → ' : ''}${q.val} ${q.unit || ''}`)).join(' ／ ')}）</div>` : '')
+          + `</div></div>`;
+      }).join('') + `</div>`).join('');
+    $('req-count').textContent = `${DataReq.ids.length} 件`
+      + (read ? ` ／ 読み込み ${read.n} 行・${read.byId.size} 項目` : '');
+  }
+  /** 分類の見出し。README 0 節の並びと同じ言い方にそろえる。 */
+  _reqGroupName(k) {
+    return { '効く': 'いま最も効くもの', '係数': 'モデルの係数 —— 推定を実測に置き換えられるもの',
+             '確認': '確認のための 2 つ目の較正点', '表': 'マスタの表（記号ごと）',
+             '未解決': '未解決 —— 原因が特定できていないもの' }[k] || k;
+  }
+  /** 記入用のテンプレートを出す。中身は DataReq が作る（画面はファイルにするだけ）。 */
+  reqTemplate() {
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    saveBlob(new Blob([DataReq.template()], { type: 'text/csv;charset=utf-8' }),
+             `HotMill_実績データ記入表_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.csv`);
+  }
+  /** 記入されたものを読む。読めたもの・読めなかったものを «どちらも» 出す。 */
+  async reqRead(file) {
+    try {
+      const r = DataReq.read(await file.text());
+      this._reqRender(r);
+      const box = $('req-read'); box.hidden = false;
+      const e = escHtml, lines = [];
+      lines.push(`<div><b>${r.n} 行</b>（${r.byId.size} 項目）を読みました。</div>`);
+      if (r.short?.length) lines.push(`<div class="note">△ 点数が足りない項目: `
+        + r.short.map(q => `${e(q.id)}（${q.have} / ${q.need} 点）`).join('・')
+        + ` —— 条件を振るものは点数がそろわないと傾きが取れません</div>`);
+      if (r.blank.length) lines.push(`<div class="note">記入欄のままの項目: ${r.blank.map(e).join('・')}</div>`);
+      if (r.unknown.length) lines.push(`<div class="note">△ 表に無い項目ID: ${r.unknown.map(e).join('・')}`
+        + ` —— 行は無視しました（項目ID を書き替えていないか確かめてください）</div>`);
+      if (!r.n) lines.push(`<div class="note">△ 種別が «実績» で値の入った行がありません。`
+        + `記入欄の «種別» を <b>実績</b> にして、値を入れてください</div>`);
+      box.innerHTML = lines.join('');
+      this.bus.emit('SYS_MESSAGE', { text: `実績データを ${r.n} 行читали`.replace('читали', '読みました'), kind: 'info' });
+    } catch (err) {
+      $('req-read').hidden = false;
+      $('req-read').innerHTML = `<div class="note">△ 読めませんでした: ${escHtml(err.message)}</div>`;
+    }
   }
   openBrushDialog() {
     this._buildBrushForm();

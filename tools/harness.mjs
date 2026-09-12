@@ -44,7 +44,7 @@ export async function openApp(opts = {}) {
     `.fa-solid,.fa-regular,.fa-brands,.fas,.far,.fab{display:inline-block;width:1em;height:1em;}` }));
   await page.route('**/index.html', r => {
     let h = fs.readFileSync(target, 'utf8');
-    h = h.replace(/\bnew App\(\);/, 'window.__CFG = CONFIG; window.__VER = VERSION; window.__WRAP = Wrapper; window.__ROLL = Rolling; window.__DRIVE = Drive; window.__SCRAP = Scrap; window.__CRADLE = Cradle; window.__CHAIN = CableChain; window.__LAYOUT = Layout; window.__SOAK = Soak; window.__MATCODE = MatCode; window.__PASS = Pass; window.__BRUSH = Brush; window.__SECT = Sect; window.__Store = Store; window.__Xlsx = Xlsx; window.__RollingLog = RollingLog; window.__app = new App();');
+    h = h.replace(/\bnew App\(\);/, 'window.__CFG = CONFIG; window.__VER = VERSION; window.__WRAP = Wrapper; window.__ROLL = Rolling; window.__DRIVE = Drive; window.__SCRAP = Scrap; window.__CRADLE = Cradle; window.__CHAIN = CableChain; window.__LAYOUT = Layout; window.__SOAK = Soak; window.__MATCODE = MatCode; window.__PASS = Pass; window.__BRUSH = Brush; window.__DATAREQ = DataReq; window.__SECT = Sect; window.__Store = Store; window.__Xlsx = Xlsx; window.__RollingLog = RollingLog; window.__app = new App();');
     h = h.replace(/"three":\s*"[^"]+"/, '"three": "/__three__"');
     h = h.replace(/"three\/addons\/":\s*"[^"]+"/, '"three/addons/": "/x/examples/jsm/"');
     r.fulfill({ contentType: 'text/html', body: h });

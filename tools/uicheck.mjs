@@ -248,6 +248,53 @@ for (const w of widths) {
        `幅 上面 ${sm.g.widTop} / 下面 ${sm.g.widBot} 文字（${sm.g.wnum}）／ 丈 上面 ${sm.g.lenTop} / 下面 ${sm.g.lenBot} 文字（${sm.g.lnum}）／ 反りの線 ${sm.g.warp} 本`);
     ok('切替ボタンで «反り» へ戻れる', sm.back === 'warp', `戻り先 ${sm.back}`);
 
+    /* 実績データ（測っていただきたいもの）。一覧が出ること・画面に収まること・
+     * テンプレートが本当にファイルとして出ること・記入したものを読み戻せることを見る。
+     * «出して → 記入して → 読み戻す» が通らないとテンプレートは飾りになる。 */
+    const rq = await page.evaluate(async () => {
+      const A = window.__app, D = window.__DATAREQ, $ = (id) => document.getElementById(id);
+      // 出したファイルを掴まえる（実際のダウンロードはしない）
+      const blobs = [];
+      const realCreate = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click;
+      URL.createObjectURL = (b) => { blobs.push(b); return 'blob:test'; };
+      HTMLAnchorElement.prototype.click = function () {};
+      A.ui.openReqDialog();
+      const box = $('dlg-req').getBoundingClientRect();
+      const items = $('dlg-req').querySelectorAll('.rq').length;
+      const heads = [...$('dlg-req').querySelectorAll('.rq-g > h4')].map(h => h.textContent);
+      $('btn-req-tpl').click();
+      const blob = blobs[blobs.length - 1];
+      const text = blob ? await blob.text() : '';
+      /* Blob.text() は先頭の BOM を «取り除いて» 返すので、BOM があるかは生のバイトで見る
+       * —— 文字列で見ると «BOM を付けていない» のと区別が付かない。 */
+      const head3 = blob ? new Uint8Array((await blob.arrayBuffer()).slice(0, 3)) : new Uint8Array();
+      const bom = head3[0] === 0xef && head3[1] === 0xbb && head3[2] === 0xbf;
+      // 記入欄をすべて «実績» にして値を入れ、読み込みの経路そのものを通す
+      const filled = D.parse(text).map((c, i) => {
+        if (i === 0 || c[0] !== window.__CFG.DATAREQ.KIND_BLANK) return c;
+        const d = c.slice(); d[0] = window.__CFG.DATAREQ.KIND_REAL; d[8] = '1'; return d;
+      }).map(c => c.map(D.cell).join(',')).join('\r\n');
+      await A.ui.reqRead(new File(['﻿' + filled], 'x.csv', { type: 'text/csv' }));
+      const got = $('dlg-req').querySelectorAll('.rq.has').length;
+      const readTx = $('req-read').textContent;
+      const count = $('req-count').textContent;
+      $('dlg-req').close();
+      URL.createObjectURL = realCreate; HTMLAnchorElement.prototype.click = realClick;
+      return { items, heads, n: D.ids.length, blobs: blobs.length, bytes: text.length,
+               csv: text.replace(/^\ufeff/, '').startsWith('種別,'), bom, got, readTx, count,
+               inView: box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1 && box.left >= -1 && box.top >= -1,
+               w: Math.round(box.width), h: Math.round(box.height) };
+    });
+    ok('実績データの一覧が «測っていただきたいもの» を全部出す', rq.items === rq.n,
+       `${rq.items} / ${rq.n} 件 ／ 分類 ${rq.heads.length} 区分`);
+    ok('実績データが画面に収まる', rq.inView, `${rq.w} × ${rq.h} px`);
+    ok('テンプレートが CSV として出る（Excel 用の BOM つき）',
+       rq.blobs === 1 && rq.csv && rq.bom && rq.bytes > 800,
+       `${rq.blobs} 本 ／ ${rq.bytes} 文字 ／ 見出し ${rq.csv ? 'あり' : 'なし'} ／ BOM ${rq.bom ? 'あり' : 'なし'}`);
+    ok('記入したものを読み込むと、読めた項目が一覧で分かる', rq.got === rq.n,
+       `読み込み済みの表示 ${rq.got} / ${rq.n} 件 ／ ${rq.count}`);
+    ok('読み込みの結果に «読めた行数» が出る', /行/.test(rq.readTx), rq.readTx.slice(0, 80));
+
     /* 変更履歴ビュワー。36 版・466 項目を «探せる» ことが作り直しの目的なので、
      * 探す道具（検索・分類・版の選択）が実際に効くか、画面に収まるかを測る。 */
     const vv = await page.evaluate(() => {
