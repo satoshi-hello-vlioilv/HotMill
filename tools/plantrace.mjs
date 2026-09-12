@@ -174,15 +174,17 @@ const out = await page.evaluate(async () => {
     Z.EB.on = true;  Z.EB.flow = 0.6;
     Z.XB.on = true;  Z.XB.flow = 1.0;
     K.MATERIAL.SOAK_PATTERN = 'A'; K.MATERIAL.PASS_ID = window.__PASS.ids[0];
-    const want = snap(), wantSoak = 'A', wantPass = window.__PASS.ids[0];
+    K.MATERIAL.BRUSH_ID = window.__BRUSH.ids[0];
+    const want = snap(), wantSoak = 'A', wantPass = window.__PASS.ids[0], wantBrush = window.__BRUSH.ids[0];
     const lot = ui._lotOf();
     // いったん全部ひっくり返してから呼び戻す（戻っていないのに «元のまま» で通らないように）
     for (const z of Object.values(Z)) { z.on = !z.on; z.flow = 0.15; }
-    K.MATERIAL.SOAK_PATTERN = ''; K.MATERIAL.PASS_ID = '';
+    K.MATERIAL.SOAK_PATTERN = ''; K.MATERIAL.PASS_ID = ''; K.MATERIAL.BRUSH_ID = '';
     let threw = null;
     try { ui._applyLot(lot); } catch (e) { threw = String(e && e.message || e); }
     R.round = { threw, want, got: snap(), wantSoak, gotSoak: K.MATERIAL.SOAK_PATTERN,
-                wantPass, gotPass: window.__PASS.current(), lotHasZones: !!lot.zones };
+                wantPass, gotPass: window.__PASS.current(),
+                wantBrush, gotBrush: window.__BRUSH.current(), lotHasZones: !!lot.zones };
   }
   ui._planStop(); clearTimeout(ui.plan.t);
 
@@ -274,9 +276,11 @@ ok('ロットが冷却 4 系統の入切と水量をそのまま持つ', o.round
 ok('呼び戻すと冷却 4 系統が元の入切・水量に戻る',
    JSON.stringify(o.round.want) === JSON.stringify(o.round.got),
    `記録 ${JSON.stringify(o.round.want)} ／ 呼び戻し ${JSON.stringify(o.round.got)}`);
-ok('呼び戻すとマスタの記号（ソーキング・パス）も戻る',
-   o.round.gotSoak === o.round.wantSoak && o.round.gotPass === o.round.wantPass,
-   `ソーキング ${o.round.wantSoak} → ${o.round.gotSoak} ／ パス ${o.round.wantPass} → ${o.round.gotPass}`);
+ok('呼び戻すとマスタの記号（ソーキング・パス・ブラシ）も戻る',
+   o.round.gotSoak === o.round.wantSoak && o.round.gotPass === o.round.wantPass
+   && o.round.gotBrush === o.round.wantBrush,
+   `ソーキング ${o.round.wantSoak} → ${o.round.gotSoak} ／ パス ${o.round.wantPass} → ${o.round.gotPass}`
+ + ` ／ ブラシ ${o.round.wantBrush} → ${o.round.gotBrush}`);
 ok('板からはみ出していない（横）', o.fit.panelOverflowX <= 1 && o.fit.ctlOverflowX <= 1 && o.fit.bodyOverflowX <= 1, JSON.stringify(o.fit));
 ok(`見出しと操作列が重ならない（${o.fit.headerOverlap} px）`, o.fit.headerOverlap <= 1, o.fit.headerOverlap);
 

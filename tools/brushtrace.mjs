@@ -57,7 +57,7 @@ const out = await page.evaluate(() => {
     // 全材質が同じ既定（材質別の上書きはまだ入れていない）
     const keys = Object.keys(K.ALLOYS);
     ok('いまは全材質が同じ既定条件（材質別に上書きできる）',
-       keys.every(k => R.brushPlan(k) === B.DEFAULT), `${keys.length} 材質 ／ 上書き ${Object.keys(B.BY_ALLOY).length} 件`);
+       keys.every(k => R.brushPlan(k) === window.__BRUSH.rows()), `${keys.length} 材質 ／ 上書き ${Object.keys(B.BY_ALLOY).length} 件`);
     // 上書きが効くこと
     B.BY_ALLOY.__T = [{ at: 3, brush: 'HN', cov: 1, notch: 6 }];
     const hit = R.brushAt(K.SCHEDULE.length - 4, K.SCHEDULE.length, '__T');
@@ -65,6 +65,52 @@ const out = await page.evaluate(() => {
     delete B.BY_ALLOY.__T;
     ok('材質ごとの上書きが効き、書いていないパスには掛からない', hit && hit.brush === 'HN' && miss === null,
        hit ? `F-3 → ${hit.brush} N${hit.notch} ／ F-5 → ${miss ? miss.brush : '掛けない'}` : '上書きが効かない');
+  }
+  // --- 3-2. マスタとして整合しているか（ブラシ記号・ノッチ・押し付け）---
+  {
+    const M = window.__BRUSH;
+    const ids = M.ids, dupB = ids.filter((v, i) => ids.indexOf(v) !== i);
+    ok('ブラシ記号に重複が無い', dupB.length === 0, dupB.length ? dupB.join(' / ') : `${ids.length} 記号`);
+    ok('どの記号にも «出どころ» が書いてある（推定をそれと分からない形で置かない）',
+       M.all().every(m => !!m.src), M.all().map(m => `${m.id}: ${m.src || 'なし'}`).join(' ／ '));
+    ok('どの記号も F-5〜F の 6 行を持つ',
+       M.all().every(m => m.rows.length === 6 && [5, 4, 3, 2, 1, 0].every(a => m.rows.some(r => r.at === a))),
+       M.all().map(m => `${m.id} ${m.rows.length} 行`).join(' ／ '));
+    ok('表に無い記号では値を作らず、既定の記号へ落ちる',
+       M.rows('存在しない記号') === M.rows(K.BRUSH.DEFAULT_ID), `落ちた先 ${K.BRUSH.DEFAULT_ID}`);
+    /* ブラシノッチマスタ。10 Hz 刻みの中で 5 ノッチだけ 15 Hz という実機のイレギュラー設定を
+     * «丸めて直さない» ことが要 —— 直すと実機と違うものを回すことになる。 */
+    const hz = [1, 2, 3, 4, 5, 6].map(n => M.hz(n));
+    ok('ブラシノッチマスタが実機の設定どおり（5 ノッチだけ 15 Hz）',
+       JSON.stringify(hz) === JSON.stringify([10, 20, 30, 40, 15, 60]), hz.join(' / ') + ' Hz');
+    ok('段の外を指しても表の端へ丸める（勝手な周波数を作らない）',
+       M.hz(0) === 10 && M.hz(99) === 60, `0 → ${M.hz(0)} Hz ／ 99 → ${M.hz(99)} Hz`);
+    ok('除去力の基準（HZ_REF）が表の 3 ノッチと一致する', K.BRUSH.HZ_REF === M.hz(3),
+       `HZ_REF ${K.BRUSH.HZ_REF} Hz ／ 3 ノッチ ${M.hz(3)} Hz`);
+    /* 押し付け具合。標準は 1.0（＝ いまの挙動を変えない）で、弱・強はその上下。 */
+    ok('押し付け具合の «標準» が 1.0（既定は挙動を変えない）', M.pressK(K.BRUSH.PRESS_DEF) === 1,
+       M.presses().map(q => `${q.label} ${q.k}`).join(' / '));
+    ok('押し付けが単調（弱 ＜ 標準 ＜ 強）',
+       M.pressK('weak') < M.pressK('normal') && M.pressK('normal') < M.pressK('strong'),
+       M.presses().map(q => `${q.label} ${q.k}`).join(' < '));
+    ok('書かれていない押し付けは標準として読む（欠けても壊れない）',
+       M.pressK(undefined) === 1 && M.pressK('でたらめ') === 1, `未指定 ${M.pressK(undefined)} ／ 未知 ${M.pressK('でたらめ')}`);
+  }
+  // --- 3-3. 押し付け具合が «除去» に効くか ---
+  {
+    /* 同じ条件で押し付けだけを変えたとき、コーティングの減り方が変わること。
+     * 物理側（PhysicsEngine._coating）まで繋がっているかを、係数ではなく実際の減りで見る。 */
+    const B2 = K.BRUSH, sp = B2.SPEC.SN;
+    const run = (press) => {
+      const pk = window.__BRUSH.pressK(press);
+      let coat = B2.C_NOM * 2;
+      const k = sp.REM * (window.__BRUSH.hz(3) / B2.HZ_REF) * pk;
+      for (let t = 0; t < 60; t += 0.1) coat = Math.max(0, coat - B2.K_REM * k * coat * 0.1);
+      return coat;
+    };
+    const w = run('weak'), n = run('normal'), st = run('strong');
+    ok('押し付けを強くすると速く落ちる（弱 ＞ 標準 ＞ 強 の残り厚）', w > n && n > st,
+       `60 s 当てたあと 弱 ${w.toFixed(2)} ／ 標準 ${n.toFixed(2)} ／ 強 ${st.toFixed(2)} µm`);
   }
   // --- 4. パスの指定が «最終パスから数えて» になっているか ---
   {
@@ -149,14 +195,14 @@ const ui = await page.evaluate(async () => {
   U._brushCommit();
   const plan = R.brushPlan('A1100');
   ok('材質ごとの条件が登録される（A1100 に F-3 だけ HN・6 ノッチ）',
-     plan !== K.BRUSH.DEFAULT && plan.filter(r => r.brush).length === 1
+     plan !== window.__BRUSH.rows() && plan.filter(r => r.brush).length === 1
      && plan.find(r => r.at === 3).brush === 'HN' && plan.find(r => r.at === 3).notch === 6,
      plan.filter(r => r.brush).map(r => `F-${r.at} ${r.brush} ${r.cov * 100}% N${r.notch}`).join(' ／ ') || '登録されていない');
-  ok('ほかの材質は既定のまま', R.brushPlan('A5052') === K.BRUSH.DEFAULT,
+  ok('ほかの材質は既定のまま', R.brushPlan('A5052') === window.__BRUSH.rows(),
      `A5052 は上書き ${K.BRUSH.BY_ALLOY.A5052 ? 'あり' : 'なし'}`);
   // 既定に戻すと上書きが消える
-  U._brushWrite(K.BRUSH.DEFAULT); U._brushCommit();
-  ok('既定と同じ内容を登録すると上書きが消える', R.brushPlan('A1100') === K.BRUSH.DEFAULT,
+  U._brushWrite(window.__BRUSH.rows()); U._brushCommit();
+  ok('既定と同じ内容を登録すると上書きが消える', R.brushPlan('A1100') === window.__BRUSH.rows(),
      `上書き ${Object.keys(K.BRUSH.BY_ALLOY).length} 件`);
   ok('条件の強さが «既定を 100 %» として出る', /除去の強さ/.test($('brush-est').textContent),
      $('brush-est').textContent.replace(/\s+/g, ' ').trim().slice(0, 90));

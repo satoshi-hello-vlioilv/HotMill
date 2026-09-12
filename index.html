@@ -898,8 +898,16 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
 #dlg-lot footer, #dlg-brush footer { flex:none; display:flex; justify-content:flex-end; gap:9px; padding:13px 18px;
   border-top:1px solid var(--line); background:var(--s-2); }
 #dlg-lot footer .btn, #dlg-brush footer .btn { width:auto; padding:0 18px; height:34px; }
-/* ブラシ条件だけの追加。表は «パス × 条件» の 4 列で、行の高さを揃えて読みやすくする */
-#dlg-brush { width:min(680px,94vw); }
+/* ブラシ条件だけの追加。表は «パス × 条件» の 5 列（ブラシ・掛ける長さ・ノッチ・押し付け）。
+   列ごとに要る幅が違うので固定レイアウトで割り付ける —— 均等割りだと «標準» のような
+   短い値の列にまで幅が取られ、長い «SN（ソフトナイロン）» のほうが切れる。 */
+#dlg-brush { width:min(820px,96vw); }
+#dlg-brush table.brush-tb { table-layout:fixed; }
+#dlg-brush table.brush-tb col.c-brush { width:30%; }
+#dlg-brush table.brush-tb col.c-cov   { width:22%; }
+#dlg-brush table.brush-tb col.c-notch { width:22%; }
+#dlg-brush table.brush-tb col.c-press { width:15%; }
+#dlg-brush table.brush-tb select { width:100%; min-width:0; }
 #dlg-brush .brush-note { margin:0 0 9px; font-size:10.5px; color:var(--ink-3); line-height:1.7; }
 #dlg-brush .brush-note b { color:var(--ink-2); }
 #dlg-brush table.brush-tb { width:100%; border-collapse:collapse; font-size:11.5px; }
@@ -1520,14 +1528,20 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
     </header>
     <div class="lot-body">
       <section class="lot-grp">
-        <h3><span class="n">1</span> 材質</h3>
-        <div class="grid"><div class="f"><span class="lb">この条件を使う材質</span><select id="brush-alloy"></select></div></div>
+        <h3><span class="n">1</span> もとにする記号と、使う材質</h3>
+        <div class="grid">
+          <div class="f"><span class="lb">ブラシ記号（マスタ）</span><select id="brush-id"></select></div>
+          <div class="f"><span class="lb">この条件を使う材質</span><select id="brush-alloy"></select></div>
+        </div>
+        <p class="brush-note" id="brush-src"></p>
       </section>
       <section class="lot-grp">
         <h3><span class="n">2</span> パスごとの条件</h3>
-        <p class="brush-note">F が最終パス。F-2 は 2 つ手前。<b>掛ける長さ</b>は板の長手方向で何割に当てるか（頭から数える）。</p>
+        <p class="brush-note">F が最終パス。F-2 は 2 つ手前。<b>掛ける長さ</b>は板の長手方向で何割に当てるか（頭から数える）。
+          <b>ノッチ</b>はインバータ周波数の段（ブラシノッチマスタ）、<b>押し付け</b>はワークロールへの押し込み具合です。</p>
         <table class="brush-tb" id="brush-tb">
-          <thead><tr><th>パス</th><th>ブラシ</th><th>掛ける長さ</th><th>ノッチ（強さ）</th></tr></thead>
+          <colgroup><col><col class="c-brush"><col class="c-cov"><col class="c-notch"><col class="c-press"></colgroup>
+          <thead><tr><th>パス</th><th>ブラシ</th><th>掛ける長さ</th><th>ノッチ（回転数）</th><th>押し付け</th></tr></thead>
           <tbody></tbody>
         </table>
       </section>
@@ -1631,6 +1645,15 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.8.0', base: '5534757', date: '2026-09-12', title: 'ブラシマスタ／ブラシノッチマスタ —— 記号で持ち、押し付け具合を足す', items: [
+      { t: 'ブラシ条件を記号ごとにひとまとめにした。ロット（サンプル）から記号で呼べるようにするため。読むのは Brush の 1 か所だけで、物理も画面もそこを見る。いま入っている B5 は 5000 系の実機条件で、出どころを src 欄に書いてある', w: 'CONFIG.BRUSH.MASTER / Brush' },
+      { t: 'ブラシノッチマスタを表にした。段・周波数・備考の 3 列で、«5 ノッチだけ 15 Hz» という実機のイレギュラー設定はそのまま持つ（丸めて直すと実機と違うものを回すことになる）。除去力の基準 HZ_REF が表の 3 ノッチと一致していることも判定に入れた', w: 'CONFIG.BRUSH.NOTCH / Brush.hz' },
+      { t: '«押し付け具合» を足した（弱・標準・強）。ワークロールへの押し込みは実機の操作項目で、これが無いとブラシ条件を «種類・長さ・ノッチ» の 3 つでしか言えない。除去は 掛ける長さ × 砥粒 × 周波数 × 押し付け で効く', w: 'CONFIG.BRUSH.PRESS / PhysicsEngine._coating' },
+      { t: '押し付けの倍率（弱 0.7 / 強 1.3）は推定値。押し付けを変えたときに除去がどれだけ変わるかの実測が無い（README 0-2 の 26）。既定はどの行も «標準»（1.0）なので、この推定はいまの挙動を変えていない', w: 'CONFIG.BRUSH.PRESS' },
+      { t: 'ブラシ条件の画面に «もとにする記号» の選択と «押し付け» の列を足し、表を固定レイアウトにした。均等割りだと «標準» のような短い値の列にまで幅が取られ、長い «SN（ソフトナイロン）» のほうが切れる（実測）。ブラシの選択は記号と番手（SN 10S-80-K）にし、正式名称は title で出す', w: '#dlg-brush / UIManager._buildBrushForm' },
+      { t: 'ロットの条件にブラシ記号を足した。ソーキング・パスと合わせて 3 つの記号がロットに残るので、«どの条件で通したか» ごと再現できる', w: 'UIManager.dims / _applyLot / DEMO_LOT' },
+      { t: '判定を作った —— tools/brushtrace.mjs に 11 件（記号の重複・出どころ欄・6 行そろっているか・表に無い記号で値を作らないこと・5 ノッチ 15 Hz・段の外の丸め・HZ_REF と表の一致・押し付けの標準が 1.0・単調性・欠けても壊れないこと・押し付けが実際に除去へ効くこと）、tools/plantrace.mjs の往復にブラシ記号を足した', w: 'tools/brushtrace.mjs / plantrace.mjs' },
+    ] },
     { v: '2.7.0', base: '71bafd7', date: '2026-09-12', title: 'パスマスタ —— 圧下の配分を «記号» で持ち、サンプルと連動させる', items: [
       { t: '圧下の配分をパス記号ごとの表にした。実機はパス記号で «クロップまで何パスで何 mm 落とすか／クロップから最終まで何パスで上げるか» を決めるので、その形で持つ。読むのは Pass の 1 か所だけで、スケジュールの生成もそこを見る', w: 'CONFIG.PASS / Pass' },
       { t: '配分則を書いていた PROCESS.PRACTICE を外した。同じ値が 2 か所にあると片方だけ古くなる —— 出どころはパスマスタ 1 か所にした（生成した 23 パスは 530→65→56→46→36→26→16→8 mm で変わっていない）', w: 'PROCESS / Rolling.buildSchedule' },
@@ -4311,22 +4334,55 @@ const CONFIG = {
       SN: { key: 'SN', label: 'SN（ソフトナイロン）', code: '10S-80-K', grit: 'Al₂O₃', type: 'チャンネル', dens: '小', REM: 0.65, EVEN: 0.70 },
       MN: { key: 'MN', label: 'MN（マイルドナイロン）', code: '6R-240-3H', grit: 'SiC',  type: 'ディスク',  dens: '大', REM: 0.30, EVEN: 1.00 },
     },
-    /* ノッチ（押し付けの段）とインバータ周波数 [Hz]。1〜6 の 6 段で 10 Hz 刻みだが、
-     * 5 ノッチだけ 15 Hz という実機のイレギュラー設定。除去力は周波数に比例させる。 */
-    NOTCH_HZ: [10, 20, 30, 40, 15, 60],
+    /* ===== ブラシノッチマスタ ==========================================
+     * ノッチ（段）ごとのインバータ周波数 [Hz]。1〜6 の 6 段で 10 Hz 刻みだが、
+     * 5 ノッチだけ 15 Hz という実機のイレギュラーな設定をそのまま持つ。
+     * 除去力は周波数に比例させる。 */
+    NOTCH: {
+      KEYS: ['no', 'hz', 'note'],
+      ROWS: [
+        [1, 10, null],
+        [2, 20, null],
+        [3, 30, '除去力の基準（HZ_REF）'],
+        [4, 40, null],
+        [5, 15, '実機のイレギュラー設定 —— 4 ノッチ 40 Hz から 15 Hz へ落ちる'],
+        [6, 60, null],
+      ],
+    },
     HZ_REF: 30,                            // 除去力の基準周波数（3 ノッチ）
-    /* ブラシ条件は «最終パスから数えたパス» で持つ（F が最終、F-2 は 2 つ手前）。
-     * 既定は 5000 系の実機条件 —— F-5〜F-3 は SN を全長、F-2 は SN を全長の半分。
-     * cov は «板の長手方向で何割に掛けるか»。材質別に上書きできる（BY_ALLOY）。 */
-    DEFAULT: [
-      { at: 5, brush: 'SN', cov: 1.0,  notch: 3 },
-      { at: 4, brush: 'SN', cov: 1.0,  notch: 3 },
-      { at: 3, brush: 'SN', cov: 1.0,  notch: 3 },
-      { at: 2, brush: 'SN', cov: 0.5,  notch: 3 },
-      { at: 1, brush: null, cov: 0,    notch: 3 },
-      { at: 0, brush: null, cov: 0,    notch: 3 },
+    /* ===== 押し付け具合 ================================================
+     * ブラシをワークロールへどれだけ押し込むか。段で持つ（実機の操作がそうなっている）。
+     * 【k は推定値】押し付けを変えたときに除去がどれだけ変わるかの実測が無いので、
+     * «標準を 1.0 として弱で 3 割落ち、強で 3 割増し» と置いた（README 0-2）。
+     * 既定はどの行も «標準» なので、この推定はいまの挙動を変えていない。 */
+    PRESS: [
+      { key: 'weak',   label: '弱', k: 0.7 },
+      { key: 'normal', label: '標準', k: 1.0 },
+      { key: 'strong', label: '強', k: 1.3 },
     ],
-    BY_ALLOY: {},                          // 材質ごとの上書き（UI から入る）
+    PRESS_DEF: 'normal',
+    /* ===== ブラシマスタ ================================================
+     * ブラシ条件は «最終パスから数えたパス» で持つ（F が最終、F-2 は 2 つ手前）。
+     * 1 行 ＝ 1 パスで、ブラシの種類・掛ける長さの割合（cov）・ノッチ・押し付け具合。
+     *
+     * 記号ごとにひとまとめにして、ロット（サンプル）から記号で呼べるようにする。
+     * 【いま入っている記号は 1 つだけ】実機の «ブラシ記号ごとの表» はまだいただいて
+     * いない。B5 は 5000 系の実機条件で、出どころを src 欄に書いてある。 */
+    MASTER: {
+      KEYS: ['id', 'name', 'aim', 'rows', 'src'],
+      ROWS: [
+        ['B5', '5000 系 標準', 'F-5〜F-3 は SN を全長、F-2 は SN を全長の半分', [
+          { at: 5, brush: 'SN', cov: 1.0,  notch: 3, press: 'normal' },
+          { at: 4, brush: 'SN', cov: 1.0,  notch: 3, press: 'normal' },
+          { at: 3, brush: 'SN', cov: 1.0,  notch: 3, press: 'normal' },
+          { at: 2, brush: 'SN', cov: 0.5,  notch: 3, press: 'normal' },
+          { at: 1, brush: null, cov: 0,    notch: 3, press: 'normal' },
+          { at: 0, brush: null, cov: 0,    notch: 3, press: 'normal' },
+        ], '実機条件（5000 系）'],
+      ],
+    },
+    DEFAULT_ID: 'B5',
+    BY_ALLOY: {},                          // 材質ごとの上書き（UI から入る。記号より優先）
     /* コーティングの状態量 [µm]。C_NOM は «いまの摩擦係数 0.32 が成り立っている» 標準の厚み。
      * 生成は圧延した長さに対して積み、面圧と温度で増える。除去はブラシに比例する 1 次遅れ。 */
     C_NOM: 6.0, C_LO: 2.5, C_HI: 12.0,     // 標準／これ未満でスリップ域／これ超で移着域
@@ -4528,6 +4584,9 @@ const CONFIG = {
     /* 圧下配分のパス記号（CONFIG.PASS.ROWS の記号）。'' なら既定（CONFIG.PASS.DEFAULT）。
      * 実機の «パス記号ごとの表» はまだいただいていないので、いまは記号が 1 つしかない。 */
     PASS_ID: '',
+    /* ブラシ条件の記号（CONFIG.BRUSH.MASTER.ROWS の記号）。'' なら既定（BRUSH.DEFAULT_ID）。
+     * 材質ごとの上書き（BRUSH.BY_ALLOY）があればそちらが優先する。 */
+    BRUSH_ID: '',
     ALLOY: 'A5052',                                    // 選択中の材質（ALLOYS のキー）
     TREF: 450,                                         // 変形抵抗モデルの基準温度
     // 可逆圧延で材料温度を決める主因はロール抜熱。H_ROLL は «界面の» 接触熱伝達率で、
@@ -5657,6 +5716,43 @@ const Sect = {
  * ここは «表を引く» ことだけをする。熱サイクルの組み立てと温度の計算はこの下。
  * ========================================================================== */
 /* =============================================================================
+ * ブラシマスタ／ブラシノッチマスタを «使える形» にする 1 か所。
+ *
+ * CONFIG.BRUSH は «記号ごとのブラシ条件»（MASTER）、«ノッチごとの周波数»（NOTCH）、
+ * «押し付け具合の段»（PRESS）を表として持つ。ここは表を引くだけ。
+ * ========================================================================== */
+const Brush = {
+  rec(row) {
+    const k = CONFIG.BRUSH.MASTER.KEYS, o = {};
+    for (let i = 0; i < k.length; i++) o[k[i]] = row[i] ?? null;
+    return o;
+  },
+  all() { return CONFIG.BRUSH.MASTER.ROWS.map(Brush.rec); },
+  get ids() { return CONFIG.BRUSH.MASTER.ROWS.map(r => r[0]); },
+  of(id) { const r = CONFIG.BRUSH.MASTER.ROWS.find(q => q[0] === id); return r ? Brush.rec(r) : null; },
+  /** いま効いているブラシ記号（明示の選択が無ければ既定）。 */
+  current() {
+    const sel = CONFIG.MATERIAL.BRUSH_ID;
+    return (sel && Brush.of(sel)) ? sel : CONFIG.BRUSH.DEFAULT_ID;
+  },
+  /** その記号の «最終パスから数えた 6 行»。引けなければ既定の記号の行。 */
+  rows(id = Brush.current()) { return (Brush.of(id) || Brush.of(CONFIG.BRUSH.DEFAULT_ID) || Brush.all()[0]).rows; },
+  /* --- ブラシノッチマスタ --- */
+  notches() { const K = CONFIG.BRUSH.NOTCH.KEYS; return CONFIG.BRUSH.NOTCH.ROWS.map(r => Object.fromEntries(K.map((k, i) => [k, r[i] ?? null]))); },
+  get notchCount() { return CONFIG.BRUSH.NOTCH.ROWS.length; },
+  /** ノッチ（1〜6）のインバータ周波数 [Hz]。表に無い段は端へ丸める。 */
+  hz(notch) {
+    const R = CONFIG.BRUSH.NOTCH.ROWS;
+    return R[Num.clamp(Math.round(notch), 1, R.length) - 1][1];
+  },
+  /* --- 押し付け具合 --- */
+  presses() { return CONFIG.BRUSH.PRESS; },
+  press(key) { return CONFIG.BRUSH.PRESS.find(p => p.key === key) || CONFIG.BRUSH.PRESS.find(p => p.key === CONFIG.BRUSH.PRESS_DEF); },
+  /** 押し付け具合の «除去への倍率»。書かれていなければ標準（1.0）。 */
+  pressK(key) { return Brush.press(key).k; },
+};
+
+/* =============================================================================
  * パスマスタを «使える形» にする 1 か所。
  *
  * CONFIG.PASS は圧下の配分を記号ごとに持つ表（1 行 1 レコード）。ここは表を引いて、
@@ -6123,8 +6219,8 @@ const Rolling = {
    */
   /** その材質のブラシ条件（最終パスから数えた 6 行。F が最終、F-5 が 5 つ手前） */
   brushPlan(alloyKey = CONFIG.MATERIAL.ALLOY) {
-    const B = CONFIG.BRUSH;
-    return B.BY_ALLOY[alloyKey] || B.DEFAULT;
+    /* 材質ごとの上書き（画面で作ったもの）があればそれ、無ければ選んでいる記号の表。 */
+    return CONFIG.BRUSH.BY_ALLOY[alloyKey] || Brush.rows();
   },
   /** そのパスに掛かるブラシ条件。範囲外（F-6 より前）は «掛けない» ＝ null。 */
   brushAt(passIndex, nPass, alloyKey = CONFIG.MATERIAL.ALLOY) {
@@ -6132,11 +6228,8 @@ const Rolling = {
     const row = Rolling.brushPlan(alloyKey).find(r => r.at === back);
     return row && row.brush ? row : null;
   },
-  /** ノッチ（1〜6）のインバータ周波数 [Hz]。5 ノッチだけ 15 Hz という実機の設定。 */
-  brushHz(notch) {
-    const T = CONFIG.BRUSH.NOTCH_HZ;
-    return T[Num.clamp(Math.round(notch), 1, T.length) - 1];
-  },
+  /** ノッチ（1〜6）のインバータ周波数 [Hz]。表はブラシノッチマスタ（Brush.hz）。 */
+  brushHz(notch) { return Brush.hz(notch); },
   /**
    * ロールコーティングの厚みが摩擦係数に掛ける倍率。標準の厚み C_NOM で 1.0 になり、
    * 厚いほど大きい（噛み込みが良くなる）。上下に頭打ちを置く。
@@ -8116,7 +8209,7 @@ class MillState {
     /* ロールコーティング（ワークロールに凝着したアルミ＋酸化物＋圧延油の層）。
      * coat は厚み [µm]、coatSd はそのムラ。brush* はいまブラシが当たっているかと、その条件。 */
     this.coat = CONFIG.BRUSH.C_NOM; this.coatSd = 0;
-    this.brushKey = null; this.brushHz = 0; this.brushOn = false; this.passLen = 0; this.brushAngle = 0;
+    this.brushKey = null; this.brushHz = 0; this.brushOn = false; this.brushPress = null; this.passLen = 0; this.brushAngle = 0;
     this.rollTemp = CONFIG.MILL.ROLL_T0;       // ワークロール表面温度 [℃]（板から温まる）
     this.brTemp = CONFIG.MILL.ROLL_T0;         // バックアップロール温度 [℃]（WR から熱をもらう）
     this.bendingForce = 0;                     // 3D 表現用（0〜1）
@@ -8564,7 +8657,7 @@ const Xlsx = {
  * «どのソーキング・どの圧下配分で通したか» ごと再現できる。 */
 const DEMO_LOT = { alloy: 'A5052', cast: 560, scalp: 15, width: 1330, length: 3450, temp: 433,
                    target: 8, trim: 15, mode: 'COIL', cool: 'WATER', entry: false, exit: true,
-                   soak: 'E', pass: 'S23',
+                   soak: 'E', pass: 'S23', brush: 'B5',
                    /* 実機ロットの冷却: 上面は出側のみ、下面は常時 ON（入側・出側とも）。
                     * entry / exit は古い記録との互換で残している粗い値で、真実はこちら。 */
                    zones: { ET: { on: false, flow: 1 }, XT: { on: true, flow: 1 },
@@ -11097,11 +11190,12 @@ class PhysicsEngine {
     m.brushOn = !!(row && within && s.inBite);
     m.brushKey = m.brushOn ? row.brush : null;
     m.brushHz  = m.brushOn ? Rolling.brushHz(row.notch) : 0;
+    m.brushPress = m.brushOn ? (row.press || B.PRESS_DEF) : null;
     if (m.brushOn) {
-      const sp = B.SPEC[row.brush];
-      const k = sp.REM * (m.brushHz / B.HZ_REF);
+      const sp = B.SPEC[row.brush], pk = Brush.pressK(row.press);
+      const k = sp.REM * (m.brushHz / B.HZ_REF) * pk;
       m.coat   = Math.max(0, m.coat - B.K_REM * k * m.coat * dt);
-      m.coatSd = Math.max(0, m.coatSd - B.SD_REM * sp.EVEN * (m.brushHz / B.HZ_REF) * m.coatSd * dt);
+      m.coatSd = Math.max(0, m.coatSd - B.SD_REM * sp.EVEN * (m.brushHz / B.HZ_REF) * pk * m.coatSd * dt);
     }
   }
 
@@ -17142,7 +17236,7 @@ class UIManager {
                   width: +$('rng-init-wid').value, length: +$('rng-init-len').value,
                   temp: +$('rng-init-temp').value, alloy: $('sel-alloy').value,
                   target, trim: +$('rng-trim').value,
-                  soak: CONFIG.MATERIAL.SOAK_PATTERN || '', pass: Pass.current() };
+                  soak: CONFIG.MATERIAL.SOAK_PATTERN || '', pass: Pass.current(), brush: Brush.current() };
       const AL = Rolling.alloy(d.alloy);
       d.mode = Rolling.finishMode(target);
       this._dims = d;
@@ -17237,7 +17331,7 @@ class UIManager {
     on('btn-plan-new', 'click', () => this.openLotDialog());
     on('lot-form', 'submit', (e) => { if (e.submitter?.value === 'ok') this._lotCommit(); });
     on('brush-form', 'submit', (e) => { if (e.submitter?.value === 'ok') this._brushCommit(); });
-    on('brush-reset', 'click', () => { this._brushWrite(CONFIG.BRUSH.DEFAULT); this._brushPreview(); });
+    on('brush-reset', 'click', () => { this._brushWrite(Brush.rows($('brush-id').value)); this._brushPreview(); });
     on('btn-brush', 'click', () => this.openBrushDialog());
     on('btn-plan-clear', 'click', () => this.planClear());
     on('btn-plan-save', 'click', () => this.planSave());
@@ -17574,6 +17668,7 @@ class UIManager {
     /* マスタの記号。ロットに書かれていなければ触らない（古い記録との互換） */
     if (lot.soak !== undefined) { CONFIG.MATERIAL.SOAK_PATTERN = lot.soak || ''; set('sel-soak', lot.soak || ''); }
     if (lot.pass && Pass.of(lot.pass)) { CONFIG.MATERIAL.PASS_ID = lot.pass; set('sel-pass', lot.pass); }
+    if (lot.brush && Brush.of(lot.brush)) CONFIG.MATERIAL.BRUSH_ID = lot.brush;
     this._soakPickInfo?.(); this._passPickInfo?.();
     const SC = CONFIG.MATERIAL.STRIP_COOL;
     if (lot.cool && SC.MODES[lot.cool]) this.bus.emit('CMD_SET_STRIP_COOL', lot.cool);
@@ -17786,27 +17881,43 @@ class UIManager {
     const B = CONFIG.BRUSH;
     $('brush-alloy').innerHTML = Object.entries(CONFIG.ALLOYS).map(([v, a]) => `<option value="${v}">${a.name}</option>`).join('');
     $('brush-alloy').oninput = () => this._brushWrite(Rolling.brushPlan($('brush-alloy').value));
+    $('brush-id').innerHTML = Brush.all().map(m => `<option value="${escHtml(m.id)}">${escHtml(m.id)} ${escHtml(m.name)}</option>`).join('');
+    $('brush-id').value = Brush.current();
+    $('brush-id').oninput = () => { CONFIG.MATERIAL.BRUSH_ID = $('brush-id').value;
+      this._brushWrite(Brush.rows($('brush-id').value)); this._brushSrc(); };
     const tb = $('brush-tb').tBodies[0];
-    this._brushEls = B.DEFAULT.map(row => {
+    this._brushEls = Brush.rows().map(row => {
       const tr = document.createElement('tr');
       const label = row.at === 0 ? 'F' : `F-${row.at}`;
       const sub = row.at === 0 ? '最終パス' : `${row.at} つ手前`;
       tr.innerHTML = `<td class="pn">${label}<small>${sub}</small></td>`;
       const mk = (html) => { const td = document.createElement('td'); td.innerHTML = html; tr.appendChild(td); return td.firstElementChild; };
       const br = mk(`<select><option value="">— 掛けない</option>`
-        + Object.values(B.SPEC).map(sp => `<option value="${sp.key}">${sp.label}　${sp.code}</option>`).join('') + `</select>`);
+        + Object.values(B.SPEC).map(sp => `<option value="${sp.key}" title="${escHtml(sp.label)} ${escHtml(sp.code)}">`
+          + `${sp.key}　${sp.code}</option>`).join('') + `</select>`);
       const cov = mk(`<select>` + [100, 75, 50, 25].map(v => `<option value="${v / 100}">${v} %（全長の${v === 100 ? 'すべて' : v === 50 ? '半分' : v / 100}）</option>`).join('') + `</select>`);
-      const nt = mk(`<select>` + B.NOTCH_HZ.map((hz, i) => `<option value="${i + 1}">${i + 1} ノッチ（${hz} Hz）</option>`).join('') + `</select>`);
-      const sync = () => { tr.classList.toggle('off', !br.value); cov.disabled = nt.disabled = !br.value; this._brushPreview(); };
-      br.oninput = sync; cov.oninput = () => this._brushPreview(); nt.oninput = () => this._brushPreview();
+      const nt = mk(`<select>` + Brush.notches().map(q => `<option value="${q.no}">${q.no} ノッチ（${q.hz} Hz）</option>`).join('') + `</select>`);
+      const pr = mk(`<select>` + Brush.presses().map(q => `<option value="${q.key}">${q.label}</option>`).join('') + `</select>`);
+      const sync = () => { tr.classList.toggle('off', !br.value); cov.disabled = nt.disabled = pr.disabled = !br.value; this._brushPreview(); };
+      br.oninput = sync; cov.oninput = () => this._brushPreview();
+      nt.oninput = () => this._brushPreview(); pr.oninput = () => this._brushPreview();
       tb.appendChild(tr);
-      return { at: row.at, br, cov, nt, sync };
+      return { at: row.at, br, cov, nt, pr, sync };
     });
+    this._brushSrc();
+  }
+  /** いま選んでいる記号の «出どころ» を出す（推定をそれと分からない形で置かないため）。 */
+  _brushSrc() {
+    const m = Brush.of($('brush-id').value) || Brush.of(Brush.current());
+    const el = $('brush-src'); if (!el || !m) return;
+    el.innerHTML = `<b>${escHtml(m.id)}</b> ${escHtml(m.name)} —— ${escHtml(m.aim ?? '')}`
+      + ` ／ 出どころ ${escHtml(m.src ?? '—')}`;
   }
   _brushWrite(plan) {
     for (const e of this._brushEls) {
       const row = plan.find(r => r.at === e.at) || { brush: null, cov: 1, notch: 3 };
       e.br.value = row.brush || ''; e.cov.value = String(row.cov || 1); e.nt.value = String(row.notch || 3);
+      e.pr.value = row.press || CONFIG.BRUSH.PRESS_DEF;
       e.sync();
     }
   }
@@ -17814,25 +17925,32 @@ class UIManager {
     /* 掛けないパスは «掛ける長さ 0»。そう正規化しておかないと、画面に残っている長さの
      * 選択のせいで «既定と同じ内容» が同じと判定されない。 */
     return this._brushEls.map(e => ({ at: e.at, brush: e.br.value || null,
-                                      cov: e.br.value ? +e.cov.value : 0, notch: +e.nt.value }));
+                                      cov: e.br.value ? +e.cov.value : 0, notch: +e.nt.value,
+                                      press: e.pr.value }));
+  }
+  /** 除去の «力積» ＝ 掛ける長さ × 砥粒 × 周波数 × 押し付け。条件の強さを 1 つの数で比べる。 */
+  static brushPower(rows) {
+    const B = CONFIG.BRUSH;
+    return rows.filter(r => r.brush).reduce(
+      (a, r) => a + r.cov * B.SPEC[r.brush].REM * Rolling.brushHz(r.notch) / B.HZ_REF * Brush.pressK(r.press), 0);
   }
   _brushPreview() {
     const B = CONFIG.BRUSH, rows = this._brushRead().filter(r => r.brush);
-    const on = rows.map(r => `${r.at === 0 ? 'F' : 'F-' + r.at} ${B.SPEC[r.brush].key} ${r.cov * 100} % / ${Rolling.brushHz(r.notch)} Hz`);
-    // 除去の «力積»（掛ける長さ × 砥粒 × 周波数）で条件の強さを一目で比べられるようにする
-    const power = rows.reduce((a, r) => a + r.cov * B.SPEC[r.brush].REM * Rolling.brushHz(r.notch) / B.HZ_REF, 0);
-    const base = B.DEFAULT.filter(r => r.brush)
-      .reduce((a, r) => a + r.cov * B.SPEC[r.brush].REM * Rolling.brushHz(r.notch) / B.HZ_REF, 0);
+    const on = rows.map(r => `${r.at === 0 ? 'F' : 'F-' + r.at} ${B.SPEC[r.brush].key} ${r.cov * 100} %`
+      + ` / ${Rolling.brushHz(r.notch)} Hz / 押し付け ${Brush.press(r.press).label}`);
+    const power = UIManager.brushPower(rows);
+    const base = UIManager.brushPower(Brush.rows($('brush-id').value));
     const rel = base > 0 ? power / base : 0;
     $('brush-est').innerHTML =
       `<div>掛けるパス <b>${rows.length}</b> ／ ${on.join(' ・ ') || '掛けない'}</div>` +
-      `<div>除去の強さ <b>${(rel * 100).toFixed(0)} %</b>（既定 ＝ 100 %）` +
+      `<div>除去の強さ <b>${(rel * 100).toFixed(0)} %</b>（記号 ${escHtml($('brush-id').value)} ＝ 100 %）` +
       (rel < 0.5 ? ' <span class="note">△ 弱め: コーティングが厚くなり、板への移着が出やすくなります</span>'
        : rel > 2 ? ' <span class="note">△ 強め: コーティングが薄くなり、スリップ・噛み込み失敗が出やすくなります</span>' : '') + `</div>`;
   }
   openBrushDialog() {
     this._buildBrushForm();
     const key = CONFIG.MATERIAL.ALLOY;
+    $('brush-id').value = Brush.current(); this._brushSrc();
     $('brush-alloy').value = key;
     this._brushWrite(Rolling.brushPlan(key));
     this._brushPreview();
@@ -17841,7 +17959,7 @@ class UIManager {
   _brushCommit() {
     const key = $('brush-alloy').value, rows = this._brushRead();
     // 既定と同じなら上書きを持たない（«材質ごとの違い» が一覧で見て分かるようにする）
-    const same = JSON.stringify(rows) === JSON.stringify(CONFIG.BRUSH.DEFAULT);
+    const same = JSON.stringify(rows) === JSON.stringify(Brush.rows($('brush-id').value));
     if (same) delete CONFIG.BRUSH.BY_ALLOY[key];
     else CONFIG.BRUSH.BY_ALLOY[key] = rows;
     this.bus.emit('SYS_MESSAGE', { text: `ブラシ条件を登録しました（${CONFIG.ALLOYS[key].name}${same ? '・既定と同じ' : ''}）`, kind: 'info' });
