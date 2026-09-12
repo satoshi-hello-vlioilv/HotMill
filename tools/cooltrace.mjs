@@ -93,14 +93,18 @@ const out = await page.evaluate(() => {
      `狙い ±${ba.aim.toFixed(0)} mm（板幅 ${w} の ${(B.AIM_FRAC * 100).toFixed(0)} %）`);
   ok('狙いが板の中（エッジより内側）にある', ba.aim < w / 2, `±${ba.aim.toFixed(0)} / エッジ ±${(w / 2).toFixed(0)}`);
 
-  /* ---------- ⑤ 面のスイッチが板の «上下差» に効く ----------------------------- */
-  const SC = K.MATERIAL.STRIP_COOL, keepS = { t: SC.TOP, b: SC.BOT };
+  /* ---------- ⑤ 面のスイッチが板の «上下差» に効く -----------------------------
+   * 冷却は 4 系統（入側上面 ET / 出側上面 XT / 入側下面 EB / 出側下面 XB）で、
+   * ON/OFF はその 1 か所にしかない。TOP / BOT / ENTRY / EXIT は «4 系統から導いた
+   * 読み取り専用» なので、そこへ代入しても何も起きない（以前ここで代入していて、
+   * 切ったつもりのまま両面の値を比べ、いつも同じ数字を見ていた）。 */
+  const Z = K.MATERIAL.STRIP_COOL.ZONES, keepS = { eb: Z.EB.on, xb: Z.XB.on };
   const hOf = (top) => PE.stripFilm(430, top).h;
-  SC.TOP = true; SC.BOT = false;
+  Z.EB.on = false; Z.XB.on = false;
   const only = { top: hOf(true), bot: hOf(false) };
-  SC.TOP = true; SC.BOT = true;
+  Z.EB.on = true; Z.XB.on = true;
   const both = { top: hOf(true), bot: hOf(false) };
-  SC.TOP = keepS.t; SC.BOT = keepS.b;
+  Z.EB.on = keepS.eb; Z.XB.on = keepS.xb;
   R.faceSw = { only, both };
   ok('下面を切ると下面の板面冷却が止まる', only.bot === 0 && both.bot > 0,
      `上面のみ ${only.bot} / 両面 ${both.bot.toFixed(0)} W/m²K`);

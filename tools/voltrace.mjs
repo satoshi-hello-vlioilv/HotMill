@@ -6,29 +6,22 @@
 //
 // 合否に数えるのは «板 ＋ 切り落とした材料 ＝ 素材» —— これが体積保存の法。
 // «板だけの体積» はクロップで落ちたぶん必ず減るので、合否には数えず参考に出す。
-// 出荷時のロット（530 × 1,330 × 3,450）だけを合否に数える。
-// «素材長を変えたとき» は、いま未解決の不具合が出ることが分かっているので（下記）、
-// 合否には数えずに数値だけを毎回出す —— 直ったことを数字で確かめられるようにするため。
 //
-//   実測（VER.1.22.0 時点、A5052・560 鋳込み・片面 15 面削・433 ℃・幅 1,330）:
-//     素材長 3,450 → 板の体積のずれ  −0.4 %   （正常）
-//     素材長 3,000 → 板の体積のずれ +20.7 %   ★未解決
-//     素材長 2,600 → 板の体積のずれ  +0.3 %   （正常）
-//     素材長 2,400 → 板の体積のずれ  −0.5 %   （正常）
-//     素材長 2,000 → 板の体積のずれ +29.7 %   ★未解決
-//   長さに対して単調ではないので、原因は «素材長» そのものではない。
+// 板の材料体積は «長手プロファイルの積分»（SlabState.matVolume）で数える。
+// «板厚 × 板長» はパスが終わっているときしか正しくない —— 過負荷などでパスの途中で
+// 止まると、もう圧延した部分まで入側の厚みで数えてしまう。
 //
-//   どこで壊れるかは実測で分かっている（tools/voltrace.mjs を作るまでに測ったこと）:
-//     ・分かれるのは «16 mm へ入るパス» の 1 本だけ。そこまでは正常（ずれ 0.1 % 以内）。
-//     ・そのパスの途中で、板の «平均板厚» hEff（＝ _vol / length）が出側ギャップ 16.1 mm を
-//       割り込んで 12.41 mm まで落ちる。パスの途中の板は «入側 26 mm の部分» と
-//       «出側 16 mm の部分» でできているので、平均が 16 mm を割ることは物理的に起こらない。
-//     ・板の «材料としての体積» _vol は正しく保たれている（1,053,732 mm²·幅 のまま動かない）。
-//       走るのは «幾何» の側 —— length ＝ xMax − xMin が材料より速く伸びる。
-//     ・その結果、素材長 2,000 でも 2,600 でも、このパスの終わりで板長が同じ ≒ 85 m に着く。
-//       つまり伸びを決めているのが «入ってきた板の長さ» ではなくなっている。
-//   ＝ 板の «材料の勘定（_vol）» と «幾何（xMin / xMax）» が食い違う。どちらが先に狂うかは
-//   未特定。直すには板端の進み方（PhysicsEngine の板の前後端の更新）を見る必要がある。
+// 【直した不具合】素材長 3,000 / 2,000 で体積が «作られて» いた（+21.8 % / +134.7 %）。
+// 原因は SlabState.cropProfile —— 端を切ったときの材料座標の張り直しで、そのパスが
+// そこまで書いた «出側» の板厚（_hNext）を «入側»（hProf）から作り直していた。
+// パスの途中で切ると、もう圧延した区間が «入側の厚いまま» に戻り、そこは材料座標が
+// 一方向にしか進まないのでそのパスでは二度と書かれない。次のパスはそれを入側として
+// 読むので、質量流の比 gap/h_in が小さくなりすぎて入側の端が進まず、板が伸びすぎる。
+// 実測（素材長 2,000・パス 20 の途中で切ったとき）:
+//     _hNext[0] が 26.3 → 36.2 に戻り、プロファイルの 0..180 番が 36.1 のまま残った
+//     → 次のパス（26 → 16 mm）で板長が 40.2 → 85.3 m（正しくは 65.4 m）
+// 出側バッファは «出側バッファのまま» 張り直し、重み・書けた範囲・材料座標も
+// 一緒に動かすようにして直した。
 //
 //   node tools/voltrace.mjs
 import { openApp, installHelpers } from './harness.mjs';
@@ -54,13 +47,17 @@ const measure = async (length) => {
      * 満杯の角材として数えてしまう。板の論理長がカットの前後でどれだけ減ったかを
      * 積むほうが、材料の勘定としては正しい。 */
     let cutV = 0, cutLen = 0, cuts = 0, prevLen = null, prevTh = null, prevCuts = 0;
+    /* 板の材料体積は «長手プロファイルの積分»（SlabState.matVolume）で数える。
+     * «板厚 × 板長» はパスが終わっているときしか正しくない —— 過負荷などで途中で
+     * 止まると、もう圧延した部分まで入側の厚みで数えてしまう（実測: 素材長 2,000 で
+     * +86 % のずれに «見えて» いた。材料そのものは保たれていた）。 */
     window.__ff((p) => {
       const s = p.slab, m = p.mill;
-      const V = s.thickness * s.width * s.length;
+      const V = s.matVolume;
       if (v0 === null) v0 = V;
       if (prevLen !== null && p.finish.cropCutsAll > prevCuts) {
         const d = prevLen - s.length;                 // このカットで板が短くなった長さ
-        if (d > 0) { cutLen += d; cutV += d * prevTh * s.width; }
+        if (d > 0) { cutLen += d; cutV += d * prevTh * s.width; }   // 切った端の厚みは «そのときの» 板厚
         cuts = p.finish.cropCutsAll;
       }
       prevCuts = p.finish.cropCutsAll; prevLen = s.length; prevTh = s.thickness;
@@ -97,14 +94,18 @@ for (const length of LENGTHS) {
   rows.push({ length, sched, tripped, th: +end.th.toFixed(2), len_m: +(end.len / 1000).toFixed(1),
               ideal_m: +(lenIdeal / 1000).toFixed(1), dStrip: +dStrip.toFixed(1), dTotal: +dTotal.toFixed(1),
               dCut: +dCut.toFixed(1), cutLen: Math.round(end.cutLen), cuts: end.cuts });
+  /* 体積保存はどの素材長でも成り立たなければならない。素材長で «たまたま» 通るのを
+   * 見逃さないよう、全部を合否に数える（ここが 3,000 / 2,000 で壊れていた）。 */
+  ok(`素材長 ${length} で «板 ＋ 切り落とした材料» が素材と合う（±${TOL} %）`,
+     Math.abs(dCut) <= TOL, `${dCut.toFixed(1)} %（板長 ${(end.len / 1000).toFixed(1)} m・`
+     + `出側 ${end.th.toFixed(2)} mm・切り落とし ${end.cuts} 回 計 ${Math.round(end.cutLen)} mm`
+     + `${tripped ? '・過負荷で途中停止' : ''}）`);
   if (length === SHIP) {
     /* 体積保存の «法» は «板 ＋ 切り落とした材料 ＝ 素材» であって、«板だけ» ではない。
      * クロップで落とした材料は板から消えるのが正しいので、板だけを見る判定は
      * «どれだけクロップしたか» を測っているにすぎない（クロップ長は実機の実測が
      * まだ無く、いまは長すぎることが分かっている —— README の残件「実機のクロップ長」）。
      * そこで合否に数えるのは «板 ＋ 切り落とし» のほうにし、板だけのずれは参考に回す。 */
-    ok(`出荷時のロット（素材長 ${SHIP}）で «板 ＋ 切り落とした材料» が素材と合う（±${TOL} %）`,
-       Math.abs(dCut) <= TOL, `${dCut.toFixed(1)} %（切り落とし ${end.cuts} 回・計 ${Math.round(end.cutLen)} mm）`);
     ok(`出荷時のロットが過負荷で止まらない`, !tripped, tripped ? '停止' : '完走');
     ok(`（参考）板だけのずれ ＝ クロップで落ちた割合`, Math.abs(dStrip) <= TOL,
        `${dStrip.toFixed(1)} %／板長 ${(end.len / 1000).toFixed(1)} m・クロップ前の理論 ${(lenIdeal / 1000).toFixed(1)} m`
@@ -121,16 +122,15 @@ for (const r of rows) {
     + `${r.tripped ? '  ※過負荷停止' : ''}`);
 }
 /* «板だけ» のずれはクロップで落ちたぶんなので、不具合の印にはならない。
- * 体積が本当に壊れているのは «板 ＋ 切り落とし» が素材と合わない素材長だけ。
- * これで 3450 と 2400（板だけでは −4.5 % / −5.8 %）が «正常» 側へ移り、
- * 残る不具合は 3000 と 2000 の 2 つに絞られた。 */
-const stray = rows.filter(r => r.length !== SHIP && Math.abs(r.dCut) > TOL);
-if (stray.length) {
-  console.log(`\n★ 未解決（合否には数えていません）: 素材長 ${stray.map(r => r.length).join(' / ')} で`
-    + `«板 ＋ 切り落とし» が素材と ${stray.map(r => (r.dCut > 0 ? '+' : '') + r.dCut + ' %').join(' / ')} ずれます`
-    + `（＝ 体積が «作られて» いる）。`);
-  console.log('  長さに対して単調ではないので、原因は素材長そのものではなくスケジュールの形の側にあります。原因は未特定です。');
-  console.log('  クロップで落ちたぶんを数えると、3450 と 2400 は «板だけ» では外れて見えても体積は保たれています。');
+ * 体積が本当に壊れているのは «板 ＋ 切り落とし» が素材と合わない素材長だけ。 */
+/* 過負荷でパスの途中で止まった素材長は «参考» として毎回出す。体積は保たれていても、
+ * そのスケジュールがこのラインで通らないことは別の問題として見えていたほうがよい。 */
+const trip = rows.filter(r => r.tripped);
+if (trip.length) {
+  console.log(`\n参考: 素材長 ${trip.map(r => r.length).join(' / ')} は過負荷で途中停止します`
+    + `（${trip.map(r => `${r.th.toFixed(2)} mm・${r.len_m} m`).join(' / ')}）。`);
+  console.log('  体積は保たれているので «材料の勘定» の不具合ではありません。スケジュールがこのラインの能力に');
+  console.log('  収まっていない、という別の話です（残件«短い素材のスケジュール»）。');
 }
 
 console.log('');
@@ -138,5 +138,5 @@ for (const c of checks) console.log(`${c.ref ? '??  ' : c.pass ? 'OK  ' : 'NG  '
 const bad = checks.filter(c => !c.pass && !c.ref);
 const nRef = checks.filter(c => c.ref).length;
 console.log(`\nRESULT: ${bad.length ? 'FAIL' : 'PASS'} (${checks.length - nRef - bad.length}/${checks.length - nRef}`
-  + `、参考 ${nRef + stray.length} 件)`);
+  + `、参考 ${nRef} 件)`);
 process.exit(bad.length ? 1 : 0);

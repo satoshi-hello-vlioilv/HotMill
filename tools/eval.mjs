@@ -221,7 +221,10 @@ const run = async () => {
     if (!P.mill.passLine) return { skipped: '旧版には該当する構造が無いため対象外' };
     const C = window.__CFG || null;
     const out = [];
-    const ok = (name, cond, detail) => out.push({ name, pass: !!cond, detail });
+    /* ref = true は «参考» —— しきい値に実機の裏づけが無い項目。合否には数えず、
+     * 数値だけを毎回出す（README «判定の帯に裏づけが無いときは参考として出す»）。 */
+    const ok = (name, cond, detail, ref = false) =>
+      out.push({ name: (ref ? '?? ' : '') + name, pass: ref ? true : !!cond, detail, ...(ref ? { ref: true } : {}) });
 
     // CONFIG をアプリ内から取り出す（モジュールスコープなので状態経由で再構成する）
     const M = { WR_D: P.mill.wrTopY - P.mill.passLine - P.mill.gap };   // = WR 半径
@@ -329,12 +332,26 @@ const run = async () => {
     for (const q of sch) {
       if (q.coil) continue;                                  // 巻取パスはコイルに巻き取るので対象外
       const L = L0 * th0 / q.gap;
-      const side = (q.dir > 0 ? Math.abs(CFG.X_MAX) : Math.abs(CFG.X_MIN)) - 8000;
-      const over = L - side;
+      // 使える長さの出どころは実装と同じ 1 か所（以前はここに 8,000 と直書きしていて、
+      // 実装の «SAFE_CLEAR 3,000 ＋ END_CLEAR 4,000» と 1,000 mm 食い違っていた）
+      const over = L - R2.tableUsable(q.dir);
       if (over > overMax) { overMax = over; overPass = q.pass; }
     }
     ok('巻取パス以外はテーブルに載る', overMax <= 0,
        `最大超過 ${overMax.toFixed(0)} mm（第${overPass}パス）/ 全${sch.length}パス`);
+    /* 板モード（目標 > COIL_MAX_TH）は最終パスもテーブルの上で終わる。載らない組み合わせは
+     * 生成できてしまうので、成立判定が «載りません» と言うことを見る（黙って作らない）。 */
+    {
+      const hPlate = K.SLAB.FINISH.COIL_MAX_TH * 2;                 // 板モードのいちばん薄い側
+      const p2 = R2.buildSchedule(th0, hPlate, W0, CFG.TEMP_DEFAULT, { coil: false, length: L0 });
+      const worst = p2.reduce((a, q) => Math.max(a, L0 * th0 / q.gap - R2.tableUsable(q.dir)), -Infinity);
+      const fe = R2.scheduleFeasibility(p2, undefined, false);
+      const said = fe.notes.some(n => n.includes('載りません'));
+      ok('板モードでテーブルに載らないスケジュールは «載らない» と言う',
+         worst <= 0 ? !said : said,
+         worst <= 0 ? `${hPlate} mm 目標は載る（余裕 ${(-worst / 1000).toFixed(1)} m）`
+                    : `${hPlate} mm 目標は ${(worst / 1000).toFixed(1)} m はみ出す → 警告 ${said ? 'あり' : 'なし'}`);
+    }
     const last = sch[sch.length - 1];
     ok('最終パスが巻取パスで出側に向かう', !!last && last.coil === true && Math.sign(last.dir) === CFG.FLIP,
        `第${last?.pass}パス ${last?.gap.toFixed(1)} mm coil=${last?.coil} dir=${last?.dir}`);
@@ -527,8 +544,14 @@ const run = async () => {
         const d = FV.holdDir, ang = Math.atan2(d.y, d.x) * 180 / Math.PI;
         ok('コイル押えの軸がコイルの中心軸を向いている（半径方向のラム）',
            Math.abs(Math.hypot(d.x, d.y) - 1) < 1e-6, `向き ${ang.toFixed(1)}°`);
-        ok('コイル押えがコイルの «上» から当たる（巻き広がりを押さえる）', d.y > 0.5,
-           `極角 ${ang.toFixed(1)}°`);
+        /* «上から当たる» の中身は 2 つ —— コイルの上半分に当たること（巻き広がりは上へ出る）と、
+         * 当てる位置が実機の «2 時» であること。位置の数値は CONFIG.COILER.HOLD.ANGLE が
+         * 1 か所で持つので、ここはそれと一致するかだけを見る。以前は «sin が 0.5 より大きい»
+         * を見ていて、仕様どおりの 30°（sin 30° ＝ 0.5 ちょうど）で落ちていた。 */
+        const polar = Math.abs(ang) > 90 ? 180 - Math.abs(ang) : Math.abs(ang);
+        const want = 180 - C.HOLD.ANGLE;
+        ok('コイル押えがコイルの «上» から当たる（巻き広がりを押さえる）',
+           d.y > 0 && Math.abs(polar - want) < 0.5, `極角 ${polar.toFixed(1)}°（仕様 ${want}°）`);
         const rm = FV.holdRam.position.x / sc + C.X;
         ok('コイル押えの受けがサイドトリマー架構の側にある',
            Math.abs(rm - K.TRIMMER.X) <= 2600, `胴 x=${rm.toFixed(0)}（トリマー ${K.TRIMMER.X}）`);
@@ -617,11 +640,27 @@ const run = async () => {
        `対応板厚 ${K.CROP_SHEAR.MAX_TH} mm 以下`);
 
     // ---- ピット炉・装入クレーン ----
-    const pitDepth = CFG.FURNACE_DEPTH;
-    ok('ピット炉深さ ≥ 最大スラブ長', pitDepth >= CFG.LEN_MAX,
-       `深さ ${pitDepth} mm ≥ ${CFG.LEN_MAX} mm`);
-    ok('吊上げ高さで炉口・転倒機を越える', CFG.HOIST_CLEAR > 1500,
-       `床上クリアランス ${CFG.HOIST_CLEAR} mm`);
+    /* ピット炉はスラブを «立てて» 入れる（Layout.supplyPath の炉底 ＝ −深さ ＋ 板長/2）。
+     * 深さは炉ごとに違う（実機の表）ので、いちばん浅い炉で見る。以前は CONFIG.FURNACE.DEPTH
+     * という «9 基バンクにする前の» 1 つの値を読んでいて、undefined で落ちていた。 */
+    const depths = K.FURNACE.SPEC.map(f => f.H), dMin = Math.min(...depths);
+    ok('いちばん浅いピット炉でも既定の板長のスラブが立つ', dMin >= CFG.LEN_DEFAULT,
+       `最小 ${dMin} mm（炉 ${depths.map(v => v / 1000 + 'm').join(' / ')}）≥ 既定の板長 ${CFG.LEN_DEFAULT} mm`);
+    /* 参考: 入力できる最大の板長（LEN_MAX）は、浅いほうの炉には立たない。実機で長尺材を
+     * どの炉へ入れているかは未確認なので合否には数えない（README 0-3）。 */
+    ok('入力できる最大の板長が、いちばん浅い炉にも立つ', dMin >= CFG.LEN_MAX,
+       `最小 ${dMin} mm ／ 入力できる最大の板長 ${CFG.LEN_MAX} mm（差 ${dMin - CFG.LEN_MAX} mm）`, true);
+    /* 吊上げ高さ。«HOIST_CLEAR がいくつか» ではなく «越えるかどうか» を見る —— 以前は
+     * 1,500 mm より大きいことを見ていて、揚程 7,500 mm に合わせて 1,400 にした変更で
+     * 落ちていた（検査のほうが古かった）。 */
+    {
+      const LY = window.__LAYOUT, len = CFG.LEN_DEFAULT;
+      const sp = LY.supplyPath({ thickness: CFG.CAST_DEFAULT, length: len, alloyKey: K.MATERIAL.ALLOY }, passLine);
+      const botHi = sp.yHi - len / 2;                       // 吊り上げたときのスラブ下端
+      ok('吊上げ高さで炉蓋を越え、転倒機へ立てかける高さより上にある',
+         botHi > K.FURNACE.LID_T && sp.yHi > sp.yStand,
+         `下端 ${botHi.toFixed(0)} mm（炉蓋 ${K.FURNACE.LID_T} mm）／ 吊上げ ${sp.yHi.toFixed(0)} ＞ 立てかけ ${sp.yStand.toFixed(0)} mm`);
+    }
 
     // ---- 版数と変更履歴 ----
     // «画面に出ている版» と «コードの版» がずれると、更新したのに直っていないのか
@@ -642,12 +681,35 @@ const run = async () => {
       ok('全ての版が base（作業を始めたコミット）を持ち、重複しない',
          V.LOG.every(r => /^[0-9a-f]{7,40}$/.test(r.base || '')) && new Set(V.LOG.map(r => r.base)).size === V.LOG.length,
          V.LOG.map(r => r.base).join(' < '));
+      /* 版が «溜まっていないか»。1 つの版に変更点を積み続けると、画面の版数が動かないまま
+       * 中身だけが変わり、«どの版で何が入ったか» を辿れなくなる（実際そうなった ——
+       * 1.22.0 に 115 項目・47 コミットが溜まり、過去の版の 8〜10 倍になっていた）。
+       * 過去の版の中央値を物差しにして、先頭の版がその 3 倍を超えたら知らせる。 */
+      {
+        const ns = V.LOG.slice(1).map(r => r.items.length).sort((a, b) => a - b);
+        const med = ns.length ? ns[ns.length >> 1] : 0;
+        const top = V.LOG[0].items.length;
+        ok('最新の版に変更点が溜まりすぎていない（過去の中央値の 3 倍以内）',
+           med === 0 || top <= med * 3,
+           `最新 ${top} 件 / 過去の中央値 ${med} 件（上限 ${med * 3} 件）`);
+      }
       ok('全ての版に日付・表題・変更点がある',
          V.LOG.every(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.title && r.items?.length),
          `変更点 ${V.LOG.reduce((a, r) => a + r.items.length, 0)} 件`);
       const rels = document.querySelectorAll('#ver-log .rel');
       ok('履歴パネルが全ての版を描く', rels.length === V.LOG.length && rels[0].classList.contains('is-cur'),
          `${rels.length} 版 / 先頭に «現在» の印`);
+      /* 分類は w から機械で決める。«受け皿»（KINDS の最後）に落ちすぎていたら、
+       * 括りが実態と合っていないということ（探すための括りとして役に立たない）。 */
+      {
+        const items = V.LOG.flatMap(r => r.items), last = V.KINDS[V.KINDS.length - 1];
+        const c = {}; for (const it of items) { const k = V.kind(it.w).k; c[k] = (c[k] || 0) + 1; }
+        ok('全ての変更点に分類が付き、合計が一致する',
+           V.KINDS.reduce((a, k) => a + (c[k.k] || 0), 0) === items.length,
+           V.KINDS.map(k => `${k.nm} ${c[k.k] || 0}`).join(' / '));
+        ok('受け皿の分類に半分以上が落ちていない', (c[last.k] || 0) <= items.length / 2,
+           `${last.nm} ${c[last.k] || 0} 件 / 全 ${items.length} 件`);
+      }
     }
 
     return { checks: out, failed: out.filter(x => !x.pass).length };
