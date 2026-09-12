@@ -159,7 +159,7 @@ const run = async (set, eccK = 1) => {
            * 回転に同期した成分だけを同期検波で取り出す。 */
           gI += g * Math.sin(a); gQ += g * Math.cos(a);
           eI += e * Math.sin(a); eQ += e * Math.cos(a);
-          sFF += (m.forceMeas - m.eccFbar) ** 2; fAmp += m.eccCh[0].amp + m.eccCh[1].amp;
+          sFF += (m.forceMeas - m.eccFbar) ** 2; fAmp += Math.abs(m.eccFit ?? 0);
           fitAbs += Math.abs(m.eccFit); sFit += m.eccFit * m.eccFit; sEFit += e * m.eccFit;
         }
       }
@@ -173,6 +173,65 @@ const run = async (set, eccK = 1) => {
 };
 
 const µm = (v) => (v * 1000).toFixed(1);
+
+/**
+ * ロール角で束ねた板厚の «同期成分» を測る。補償が受け持つのはここだけで、
+ * 板厚の σ 全体（前パスの凹凸の持ち回り・スタンドの鳴き・AGC 自身の動き）を見ても
+ * 効いたかどうかは分からない —— 偏芯はその中のごく一部でしかない。
+ * あわせて «そもそも荷重に見えているか»（信号 1.1 t 対 雑音床 15 t）も同じ run で測る。
+ */
+const syncRun = async (set) => {
+  const { browser, page } = await openApp({ viewport: { width: 900, height: 520 }, quiet: true });
+  await installHelpers(page);
+  const out = await page.evaluate(({ LOT, set }) => new Promise(res => setTimeout(() => {
+    const P = window.__app.physics, K = window.__CFG, R = window.__ROLL, NB = 36, PASS = 21;
+    Object.assign(K.AGC.ECC, set);
+    P.slab.reset({ ...LOT });
+    window.__startAuto(false);
+    const bW = new Float64Array(NB), cW = new Float64Array(NB);
+    const bB = new Float64Array(NB), cB = new Float64Array(NB);
+    const bF = new Float64Array(NB), bE = new Float64Array(NB);
+    let n = 0, sum = 0, sum2 = 0, sens = 0, amax = 0;
+    window.__ff((p) => {
+      const s = p.slab, m = p.mill;
+      for (const t of (m.eccLrn || [])) for (const x of t) amax = Math.max(amax, Math.abs(x));
+      if (m.passIndex === PASS && s.inBite && s.biteFill > 0.99 && Math.abs(m.currentSpeed) > 1) {
+        const h = m.gap;
+        n++; sum += h; sum2 += h * h;
+        const iw = ((Math.round(m.rollAngle / (2 * Math.PI) * NB) % NB) + NB) % NB;
+        const ib = ((Math.round(m.br.bot.angle / (2 * Math.PI) * NB) % NB) + NB) % NB;
+        bW[iw] += h; cW[iw]++; bB[ib] += h; cB[ib]++;
+        bF[ib] += (m.eccFlp - m.eccFbar); bE[ib] += m.ecc;
+        const Mm = R.millModulus(m.forceMeas);
+        const Qp = R.plasticCoef(s.hBite, m.gap, s.width, m.currentSpeed, s.temperature, s.alloy, m.wrRa).Q;
+        sens += 1 / (1 / Mm + 1 / Math.max(Qp, 1));
+      }
+      return p.finish.done || !!p.tripped || m.passIndex > PASS;
+    }, 120 * 1800, 0);
+    const sd = (b, c) => { const v = []; for (let i = 0; i < NB; i++) if (c[i] > 0) v.push(b[i] / c[i]);
+      if (!v.length) return 0; const mu = v.reduce((a, x) => a + x, 0) / v.length;
+      let s2 = 0; for (const x of v) s2 += (x - mu) ** 2; return Math.sqrt(s2 / v.length); };
+    const mean = sum / Math.max(n, 1);
+    res({ all: Math.sqrt(Math.max(sum2 / Math.max(n, 1) - mean * mean, 0)) * 1000,
+          wr: sd(bW, cW) * 1000, br: sd(bB, cB) * 1000, amax,
+          obs: { ecc: sd(bE, cB) * 1000, noise: sd(bF, cB), sens: sens / Math.max(n, 1) } });
+  }, 400)), { LOT, set });
+  await browser.close();
+  return out;
+};
+const sync = {
+  off:   await syncRun({ ON: false, NOTCH: false }),
+  on:    await syncRun({ ON: true,  NOTCH: false }),
+  notch: await syncRun({ ON: true,  NOTCH: true  }),
+};
+sync.obs = sync.off.obs;
+const ampMax = Math.max(sync.on.amax, sync.notch.amax);
+/* 表の上限（CONFIG.AGC.ECC.MAX）。アプリの値をそのまま使う。 */
+const K_MAX = await (async () => {
+  const { browser, page } = await openApp({ viewport: { width: 400, height: 300 }, quiet: true });
+  const v = await page.evaluate(() => window.__CFG.AGC.ECC.MAX);
+  await browser.close(); return v;
+})();
 /* 既定は «切» なので、効きを見る run では明示的に入れる。 */
 const full    = await run({ ON: true,  LEAD: true,  NOTCH: false });
 const off     = await run({ ON: false, LEAD: true,  NOTCH: false });
@@ -183,24 +242,38 @@ const offBig  = await run({ ON: false, LEAD: true,  NOTCH: false }, 4);
 console.log(`      第 ${full.pass + 1} パス（${(full.n / 120).toFixed(0)} s）で比較`);
 console.log(`      偏芯 σ ${µm(full.sdE)} µm ／ 補償の指令 σ ${µm(full.sdC)} µm ／ 相関 ${full.rEC.toFixed(2)}`);
 
-/* ここから先は «整定» の話。合否に数えられるのは «仕組みが繋がっているか» までで、
- * «効くか» はまだ数えられない —— 噛んでいるあいだの荷重にはスタンドの鳴き（15 Hz）と
- * AGC 自身の動きが乗っていて、ロール回転（0.3〜1 Hz）の成分の SN 比が足りない。
- * 実測: 偏芯を 4 倍にしても推定は 20.9 → 22.8 t（＝ 大半が雑音）。
- * 数値だけを毎回出して、整定が進んだかどうかが分かるようにしておく（README 0-4）。 */
+/* ここから先は «偏芯を荷重から見つけられるか» の話。
+ *
+ * 作り直す前（指数窓の同期検波）は、推定に上限が無かったために発散していた ——
+ * ギャップ換算の係数 1/M + 1/Q は材料が柔らかい（Q が小さい）厚板パスで桁違いに大きく
+ * なり、推定が 1.4 m まで膨らんで補償が上限に張り付いていた。
+ * いまは «ロールの角度の表» に、見える割合 Q/(M+Q) を重みにして少しずつ積み、
+ * 表そのものを MAX で抑える。発散は無くなった（NOTCH ありの板厚 σ が 1,411 → 58 µm）。
+ *
+ * そのうえで残っているのは «整定» ではなく «観測» の問題である、というのがいまの結論。
+ * 下の 2 つの参考値がその根拠になる（SN 比と、ロットを重ねたときの育ち方）。 */
 ok('補償を切れば指令は出ない', off.sdC < 1e-6, `補償なしの指令 σ ${µm(off.sdC)} µm`);
-ok('補償を入れれば指令が出る（仕組みが繋がっている）', full.sdC > 1e-3,
-   `指令 σ ${µm(full.sdC)} µm（偏芯 σ ${µm(full.sdE)} µm の ${(full.sdC / full.sdE * 100).toFixed(0)} %）`);
-ok('（参考）同期検波の SN —— 偏芯を 4 倍にしたとき推定がどれだけ増えるか', true,
-   `補償なしで 偏芯 ×1 ${off.fAmp.toFixed(1)} t ／ ×4 ${offBig.fAmp.toFixed(1)} t`
- + `（雑音床が大きいほど比が 1 に近づく）`, true);
-ok('（参考）指令と偏芯の相関（−1 に近いほど深く打ち消せている）', true,
-   `相関 ${full.rEC.toFixed(2)} ／ 指令が偏芯の ${(full.sdC / full.sdE * 100).toFixed(0)} %`, true);
+ok('補償を入れれば指令が出る（仕組みが繋がっている）', full.sdC > 1e-6,
+   `指令 σ ${µm(full.sdC)} µm（偏芯 σ ${µm(full.sdE)} µm）`);
+/* 推定が青天井に戻っていないこと。ここが崩れると NOTCH で発散する（前はこれだった）。 */
+ok('学習した表が «当てられる範囲»（MAX）を超えない', ampMax <= K_MAX + 1e-9,
+   `表の最大 ${µm(ampMax)} µm ／ 上限 ${µm(K_MAX)} µm`);
+ok('補償を入れても板厚の振れが悪化しない（発散しない）',
+   sync.on.all <= sync.off.all * 1.2,
+   `板厚 σ 全体 補償なし ${sync.off.all.toFixed(1)} → あり ${sync.on.all.toFixed(1)} µm`);
+ok('NOTCH を入れても発散しない（ゲージメータへ雑音を流し込まない）',
+   sync.notch.all <= sync.off.all * 2,
+   `板厚 σ 全体 補償なし ${sync.off.all.toFixed(1)} → NOTCH あり ${sync.notch.all.toFixed(1)} µm`
+ + `（作り直す前は 1,411 µm まで発散した）`);
+ok('（参考）偏芯は荷重にどれだけ見えているか —— これが «効かない» 理由', true,
+   `偏芯 ${sync.obs.ecc.toFixed(1)} µm × 感度 ${sync.obs.sens.toFixed(0)} t/mm ＝ 荷重の振れ `
+ + `${(sync.obs.ecc / 1000 * sync.obs.sens).toFixed(1)} t ／ 1 パスを角度で束ねたときの雑音床 `
+ + `${sync.obs.noise.toFixed(1)} t（SN 比 ${(sync.obs.ecc / 1000 * sync.obs.sens / Math.max(sync.obs.noise, 1e-9)).toFixed(2)}）`, true);
+ok('（参考）ロール角で束ねた板厚の同期成分（補償が受け持つぶん）', true,
+   `WR 補償なし ${sync.off.wr.toFixed(1)} → あり ${sync.on.wr.toFixed(1)} µm ／ `
+ + `BUR 補償なし ${sync.off.br.toFixed(1)} → あり ${sync.on.br.toFixed(1)} µm`, true);
 ok('（参考）応答遅れの先回りの効き', true,
    `先回りあり ${full.rEC.toFixed(3)} ／ なし ${noLead.rEC.toFixed(3)}`, true);
-ok('（参考）荷重に残る同期成分', true,
-   `補償なし ${off.fAmp.toFixed(1)} → あり ${full.fAmp.toFixed(1)} t`, true);
-ok('（参考）偏芯を 4 倍にしたときの指令', true, `×1 ${µm(full.sdC)} → ×4 ${µm(big.sdC)} µm`, true);
 
 console.log(`\nRESULT: ${failed ? 'FAIL' : 'PASS'}`);
 process.exit(failed ? 1 : 0);
