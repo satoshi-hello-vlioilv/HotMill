@@ -642,6 +642,18 @@ const run = async () => {
       ok('全ての版が base（作業を始めたコミット）を持ち、重複しない',
          V.LOG.every(r => /^[0-9a-f]{7,40}$/.test(r.base || '')) && new Set(V.LOG.map(r => r.base)).size === V.LOG.length,
          V.LOG.map(r => r.base).join(' < '));
+      /* 版が «溜まっていないか»。1 つの版に変更点を積み続けると、画面の版数が動かないまま
+       * 中身だけが変わり、«どの版で何が入ったか» を辿れなくなる（実際そうなった ——
+       * 1.22.0 に 115 項目・47 コミットが溜まり、過去の版の 8〜10 倍になっていた）。
+       * 過去の版の中央値を物差しにして、先頭の版がその 3 倍を超えたら知らせる。 */
+      {
+        const ns = V.LOG.slice(1).map(r => r.items.length).sort((a, b) => a - b);
+        const med = ns.length ? ns[ns.length >> 1] : 0;
+        const top = V.LOG[0].items.length;
+        ok('最新の版に変更点が溜まりすぎていない（過去の中央値の 3 倍以内）',
+           med === 0 || top <= med * 3,
+           `最新 ${top} 件 / 過去の中央値 ${med} 件（上限 ${med * 3} 件）`);
+      }
       ok('全ての版に日付・表題・変更点がある',
          V.LOG.every(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.title && r.items?.length),
          `変更点 ${V.LOG.reduce((a, r) => a + r.items.length, 0)} 件`);
