@@ -252,45 +252,115 @@ canvas { display:block; }
   background:linear-gradient(135deg,transparent 46%,var(--line) 46%,var(--line) 54%,transparent 54%,
              transparent 66%,var(--line) 66%,var(--line) 74%,transparent 74%); }
 
-/* ---------- 版数と変更履歴のダイアログ ---------- */
+/* ---------- 版数と変更履歴のビュワー ----------
+   36 版・466 項目ある。縦に流すだけの一覧では «どの版で何が変わったか» を探せないので、
+   «絞ってから読む» 形にしてある —— 上で検索と分類、左で版を選び、右でその版の中身を読む。
+   分類は w（どこに入ったか）から機械で決めるので、項目を足しても付け忘れが起きない。
+   色は分類と 1 対 1（--k-* ）。同じ色が別の意味を持たないよう、他の用途には使わない。 */
 #dlg-ver {
-  width:min(680px,92vw); max-height:82vh; padding:0; border:none; border-radius:var(--r-l);
+  --k-phys:#1c5cab; --k-spec:#0f8f84; --k-view:#a1479a; --k-ui:#c2410c; --k-eval:#0ca30c; --k-doc:#7d8c95;
+  width:min(1180px,95vw); height:min(880px,88vh); padding:0; border:none; border-radius:var(--r-l);
   background:var(--s-1); color:var(--ink-1); box-shadow:var(--shadow-2); overflow:hidden;
+  display:flex; flex-direction:column;
 }
 #dlg-ver::backdrop { background:rgba(18,25,29,.42); backdrop-filter:blur(2px); }
 #dlg-ver header {
-  display:flex; align-items:flex-start; gap:12px; padding:15px 18px;
+  display:flex; align-items:center; gap:14px; padding:13px 16px; flex:none;
   color:#fff; background:linear-gradient(135deg,#1b262c 0%,#2c3d47 100%);
 }
-#dlg-ver header .ttl { font-weight:800; font-size:14px; letter-spacing:.06em; }
-#dlg-ver header .sub { font-size:10.5px; opacity:.66; margin-top:3px; line-height:1.6; }
+#dlg-ver header .ttl { font-weight:800; font-size:14px; letter-spacing:.06em; white-space:nowrap; }
+#dlg-ver header .sub { font-size:10.5px; opacity:.62; margin-top:3px; line-height:1.55; }
 #dlg-ver header .sub code { font-family:ui-monospace,Consolas,monospace; opacity:.9; }
-#btn-ver-close { margin-left:auto; flex:none; width:30px; height:30px; border-radius:8px; font-size:13px;
+/* 検索は «いちばん最初に手が伸びる» ので、見出しの隣・常に同じ位置に置く */
+#dlg-ver .find { margin-left:auto; flex:none; position:relative; display:flex; align-items:center; }
+#dlg-ver .find > i { position:absolute; left:10px; font-size:11px; opacity:.55; pointer-events:none; }
+#ver-q {
+  width:268px; height:30px; padding:0 28px 0 28px; border-radius:8px; font-family:var(--font); font-size:11.5px;
+  border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.10); color:#fff; outline:none;
+}
+#ver-q::placeholder { color:rgba(255,255,255,.5); }
+#ver-q:focus { border-color:rgba(255,255,255,.55); background:rgba(255,255,255,.17); }
+#ver-q::-webkit-search-cancel-button { display:none; }
+#ver-q-clr { position:absolute; right:4px; width:22px; height:22px; border:none; border-radius:6px; font-size:11px;
+  background:transparent; color:rgba(255,255,255,.7); cursor:pointer; }
+#ver-q-clr:hover { background:rgba(255,255,255,.18); color:#fff; }
+#btn-ver-close { flex:none; width:30px; height:30px; border-radius:8px; font-size:13px;
   border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; cursor:pointer; }
 #btn-ver-close:hover { background:rgba(255,255,255,.2); }
-#dlg-ver .log { padding:6px 18px 14px; overflow-y:auto; max-height:calc(82vh - 132px); }
-#dlg-ver .rel { padding:13px 0; border-bottom:1px solid var(--line-2); }
-#dlg-ver .rel:last-child { border-bottom:none; }
-#dlg-ver .rel .hd { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; }
-#dlg-ver .rel .no { font-weight:800; font-size:12px; letter-spacing:.06em; font-variant-numeric:tabular-nums;
+/* 分類の絞り込み。件数を出すのは «押す前に、押した結果の量が分かる» ようにするため */
+#ver-kinds { display:flex; gap:6px; flex-wrap:wrap; align-items:center; flex:none;
+  padding:8px 16px; background:var(--s-2); border-bottom:1px solid var(--line); }
+#ver-kinds .kb {
+  display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 10px; cursor:pointer;
+  border:1px solid var(--line); border-radius:999px; background:var(--s-1); color:var(--ink-2);
+  font-family:var(--font); font-size:11px; font-weight:700; letter-spacing:.02em;
+}
+#ver-kinds .kb:hover { border-color:var(--ink-3); }
+#ver-kinds .kb .dot { width:8px; height:8px; border-radius:50%; background:var(--kc,var(--ink-3)); flex:none; }
+#ver-kinds .kb .n { font-variant-numeric:tabular-nums; font-weight:800; color:var(--ink-3); }
+#ver-kinds .kb[aria-pressed="true"] { color:#fff; border-color:transparent; background:var(--kc,var(--ink-2)); }
+#ver-kinds .kb[aria-pressed="true"] .n { color:rgba(255,255,255,.78); }
+#ver-kinds .kb[aria-pressed="true"] .dot { background:rgba(255,255,255,.9); }
+#dlg-ver .body { flex:1; min-height:0; display:flex; }
+/* 左＝版の並び。«いつ・何の版か» だけを出して、中身は右で読む */
+#ver-log { flex:none; width:296px; overflow-y:auto; border-right:1px solid var(--line); background:var(--s-2); }
+#dlg-ver .rel {
+  display:block; width:100%; text-align:left; padding:9px 12px 9px 14px; cursor:pointer;
+  border:none; border-bottom:1px solid var(--line-2); border-left:3px solid transparent;
+  background:transparent; color:inherit; font-family:var(--font);
+}
+#dlg-ver .rel:hover { background:var(--s-3); }
+#dlg-ver .rel.is-sel { background:var(--s-1); border-left-color:var(--accent); }
+#dlg-ver .rel .hd { display:flex; align-items:baseline; gap:8px; }
+#dlg-ver .rel .no { font-weight:800; font-size:11.5px; letter-spacing:.04em; font-variant-numeric:tabular-nums;
   color:var(--ink-2); }
-#dlg-ver .rel .ttl { font-weight:700; font-size:12.5px; color:var(--ink-1); }
-#dlg-ver .rel .dt { margin-left:auto; font-size:10.5px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
-#dlg-ver .rel .base { font-family:ui-monospace,Consolas,monospace; font-size:10px; color:var(--ink-3);
-  background:var(--s-2); border:1px solid var(--line-2); border-radius:var(--r-s); padding:1px 6px; }
-#dlg-ver .rel .cur { padding:1px 7px; border-radius:999px; font-size:9.5px; font-weight:800; letter-spacing:.06em;
-  background:var(--accent-soft); color:var(--accent); border:1px solid #c5d9f2; }
 #dlg-ver .rel.is-cur .no { color:var(--accent); }
-#dlg-ver .rel ul { margin:8px 0 0; padding:0; list-style:none; }
-#dlg-ver .rel li { display:flex; gap:10px; align-items:baseline; padding:3px 0; font-size:11.5px;
-  color:var(--ink-2); line-height:1.65; }
-#dlg-ver .rel li::before { content:"–"; color:var(--ink-3); flex:none; }
-#dlg-ver .rel li .w { margin-left:auto; flex:none; font-family:ui-monospace,Consolas,monospace; font-size:10px;
+#dlg-ver .rel .dt { font-size:10px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+#dlg-ver .rel .n { margin-left:auto; flex:none; font-size:9.5px; font-weight:800; font-variant-numeric:tabular-nums;
+  color:var(--ink-3); background:var(--s-3); border-radius:999px; padding:1px 7px; }
+#dlg-ver .rel.is-sel .n { background:var(--accent-soft); color:var(--accent); }
+#dlg-ver .rel .ttl { display:block; margin-top:3px; font-size:11.5px; line-height:1.5; color:var(--ink-1);
+  overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+#dlg-ver .rel .cur { padding:1px 6px; border-radius:999px; font-size:9px; font-weight:800;
+  letter-spacing:.04em; background:var(--accent-soft); color:var(--accent); border:1px solid #c5d9f2; }
+#dlg-ver .rel .bar { display:flex; gap:2px; margin-top:5px; height:3px; border-radius:2px; overflow:hidden; }
+#dlg-ver .rel .bar i { display:block; height:100%; background:var(--kc); }
+/* 右＝選んだ版の中身 */
+#ver-detail { flex:1; min-width:0; overflow-y:auto; padding:14px 20px 18px; }
+#ver-detail .dh { padding-bottom:11px; border-bottom:1px solid var(--line); }
+#ver-detail .dv { font-weight:800; font-size:17px; letter-spacing:.04em; font-variant-numeric:tabular-nums;
+  color:var(--accent); }
+#ver-detail .dv .cur { margin-left:8px; padding:2px 8px; border-radius:999px; font-size:9.5px; font-weight:800;
+  letter-spacing:.06em; background:var(--accent-soft); color:var(--accent); border:1px solid #c5d9f2;
+  vertical-align:3px; }
+#ver-detail .dttl { margin-top:5px; font-size:13px; font-weight:700; line-height:1.6; color:var(--ink-1); }
+#ver-detail .dmeta { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:8px;
+  font-size:10.5px; color:var(--ink-3); }
+#ver-detail .dmeta code { font-family:ui-monospace,Consolas,monospace; font-size:10px; color:var(--ink-2);
+  background:var(--s-2); border:1px solid var(--line-2); border-radius:var(--r-s); padding:2px 7px; }
+#ver-detail .cp { border:1px solid var(--line); border-radius:var(--r-s); background:var(--s-1); cursor:pointer;
+  font-family:var(--font); font-size:10px; color:var(--ink-2); padding:2px 8px; }
+#ver-detail .cp:hover { border-color:var(--ink-3); }
+#ver-detail .kgrp { margin-top:14px; }
+#ver-detail .kh { display:flex; align-items:center; gap:7px; font-size:10.5px; font-weight:800; letter-spacing:.06em;
+  color:var(--kc); }
+#ver-detail .kh .dot { width:8px; height:8px; border-radius:50%; background:var(--kc); flex:none; }
+#ver-detail .kh .n { color:var(--ink-3); font-weight:700; font-variant-numeric:tabular-nums; }
+#ver-detail .kh::after { content:""; flex:1; height:1px; background:var(--line-2); }
+#ver-detail ul { margin:6px 0 0; padding:0; list-style:none; }
+#ver-detail li { display:flex; gap:10px; align-items:baseline; padding:4px 0 4px 15px; font-size:11.5px;
+  color:var(--ink-2); line-height:1.7; border-left:2px solid var(--line-2); margin-left:3px; }
+#ver-detail li:hover { border-left-color:var(--kc); }
+#ver-detail li .w { margin-left:auto; flex:none; font-family:ui-monospace,Consolas,monospace; font-size:10px;
   color:var(--ink-3); background:var(--s-2); border:1px solid var(--line-2); border-radius:var(--r-s); padding:1px 6px;
-  white-space:nowrap; }
-#dlg-ver footer { display:flex; gap:16px; flex-wrap:wrap; padding:10px 18px; background:var(--s-2);
-  border-top:1px solid var(--line); font-size:10.5px; color:var(--ink-3); }
+  white-space:nowrap; max-width:34%; overflow:hidden; text-overflow:ellipsis; }
+#dlg-ver mark { background:#fdf0c2; color:var(--ink-1); border-radius:3px; padding:0 1px; }
+#ver-detail .none { padding:28px 4px; font-size:11.5px; color:var(--ink-3); line-height:1.8; }
+#dlg-ver footer { display:flex; gap:16px; flex-wrap:wrap; align-items:center; flex:none;
+  padding:9px 16px; background:var(--s-2); border-top:1px solid var(--line); font-size:10.5px; color:var(--ink-3); }
 #dlg-ver footer b { color:var(--ink-2); font-family:ui-monospace,Consolas,monospace; margin-right:4px; }
+#ver-count { font-weight:700; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+#dlg-ver footer .sp { margin-left:auto; }
 
 /* ---------- 状態行（メニューから分離したメッセージ置き場） ----------
    「今どうなっていて、次に何をするか」は運転中ずっと読むものなので、計器のすぐ上に
@@ -1361,15 +1431,29 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   <header>
     <div>
       <div class="ttl">版数と変更履歴</div>
-      <div class="sub">新しい版が上。<code>base</code> はその版の作業を始めたコミットで、<code>git log base..次の版の base</code> でその版の差分が読めます。</div>
+      <div class="sub">左で版を選び、右でその版の中身を読みます。<code>base</code> はその版の作業を始めたコミット。</div>
+    </div>
+    <div class="find">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input id="ver-q" type="search" placeholder="変更点を探す（/ キー）" autocomplete="off" spellcheck="false"
+             aria-label="変更点を探す">
+      <button id="ver-q-clr" type="button" title="検索を消す" aria-label="検索を消す" hidden>
+        <i class="fa-solid fa-xmark"></i></button>
     </div>
     <button id="btn-ver-close" type="button" title="閉じる（Esc）" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
   </header>
-  <div class="log" id="ver-log"></div>
+  <div id="ver-kinds" role="group" aria-label="分類で絞り込む"></div>
+  <div class="body">
+    <div class="log" id="ver-log" role="listbox" aria-label="版の一覧"></div>
+    <div class="detail" id="ver-detail"></div>
+  </div>
   <footer>
+    <span id="ver-count"></span>
+    <span class="sp"></span>
     <span><b>x</b> 機構の作り直し・設計の前提が変わる改修</span>
     <span><b>y</b> 設備や機能の追加・図面の反映</span>
     <span><b>z</b> 不具合修正・数値の調整</span>
+    <span><b>↑↓</b> 版を移る</span>
   </footer>
 </dialog>
 
@@ -1407,6 +1491,34 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.1.0', base: 'ea66d69', date: '2026-09-12', title: 'ワニ口を «2 枚板» に直し、冷却を 4 系統に分け、形状モニタと履歴ビュワーを足す', items: [
+      // --- 版数の管理（ご指摘の確認）---
+      { t: '版数の管理が適正でなかった。過去の版が 2〜6 コミット・14〜31 項目なのに、1.22.0 だけに 47 コミット・115 項目が溜まっていた（8〜10 倍）。しかも fb460f1 の表題は «VER.1.22.0 ——» で、本来そこで締めるつもりだったのに以後 28 コミットを同じ版へ足し続けていた。«画面の版数 → base → 実装» を一本で辿る設計が壊れていたので、実際のコミット境界で 5 版に分け直した', w: 'VERSION.LOG' },
+      { t: '二度と溜まらないよう «最新の版の項目数が過去の中央値の 3 倍を超えていないか» を判定に足した。115 項目（中央値 14 の 8 倍）はこれがあれば起きた時点で落ちていた', w: 'tools/eval.mjs' },
+      // --- 反り（ご指摘の確認）---
+      { t: '«入側冷却を入れてもほぼ反らない» の原因が分かった。反りのモデルは生きていて、原因は下面スプレーが上面の冷却を打ち消していること —— 反りを作るのは上下の «差» なので、上面をいくら冷やしても下面が同じだけ冷えれば差が付かない。実測: 下面ありでは入側の有無で 22 → 21 mm（変わらない）、下面を切ると 22 → 72 mm（3.3 倍）', w: 'tools/curlbal.mjs' },
+      // --- ワニ口とクロップ長（ご提供の観察と写真）---
+      { t: 'ワニ口の形が実機と違っていた。芯が付いて行かず全長がそのまま «口» になる（中が空洞に見える）形だったが、実機の端材は中が詰まっていて、表裏の 2 枚が芯より少し先まで出て先端を作る。芯が CORE の割合だけ付いて行くようにし、開くのは差のぶん（gator·(1−CORE)）だけにした', w: 'Rolling.endOffset / gatorMouth' },
+      { t: 'あごの折れ込みも «口» の中だけにした（以前は端部欠陥の帯全体で折れていた）', w: 'Rolling.endJaw' },
+      { t: '長さを実機の帯（300〜長くても 500 mm）に入れた。実測で最大 915 mm（舌 457 ＋ ワニ口 457）と 2 倍以上あったので TH_K 3.0 → 1.4、WID_K 0.30 → 0.14。最大 427 mm・口の長さ 75 mm になった', w: 'SLAB.OVERHANG' },
+      { t: 'クロップ長は元から «端部欠陥長 ＋ 固定値（MARGIN 120 mm）» の形だったので、欠陥長が正しくなったぶんそのまま直った —— 要求 1,035 mm（3 カット × 350）→ 547 mm（2 カット × 300）', w: 'Rolling.cropLen' },
+      { t: '判定を新しい形に書き直した（72/72）—— 中が詰まっていること、口の長さが «表面の先端 − 芯の先端» に一致すること、口の外では開かないこと、折れ込みは口の奥で 0 になること', w: 'tools/modeltrace.mjs / curltrace.mjs' },
+      // --- 冷却を 4 系統に（ご要望）---
+      { t: '板面冷却を 入側上面・出側上面・入側下面・出側下面 の 4 系統に分け、それぞれに ON/OFF と水量（定格に対する %）を持たせた。実機では弁が別なので、まとめて 1 つにしていたのが実態と違っていた', w: 'STRIP_COOL.ZONES' },
+      { t: '数値の出どころを 1 か所にした —— 物理・描画・UI がすべて STRIP_COOL.zone(top, entry) を通る。従来の ENTRY / EXIT / TOP / BOT は 4 系統から導く読み取り専用にして、残った呼び出しが黙って食い違わないようにした', w: 'STRIP_COOL.zone / faceOn' },
+      { t: '水量は 2 経路で効く —— 液流束がそのまま増減し（上面はプールが温まってサブクール度が消え、抜熱が落ちる）、濡れ続けている面積も減る（定格で飽和）', w: 'PhysicsEngine.surfaceCool / stripFilm' },
+      { t: '下面は実機では常時 ON とのご回答なので、既定を «上面は出側のみ・下面は常時» にした。反りを作るのは上下の «差» なので、いまの設定で差が付いているかを操作パネルにその場で出す', w: 'UIManager._buildStripCool' },
+      // --- 板の形状モニタ ---
+      { t: '板の断面（幅方向）と側面（丈方向）を折れ線で描く小窓を足した。クラウン µm・平坦度 I-unit・反り mm は計器に数値で出ているが、中高なのか耳伸びなのか、頭が厚いのか尻が厚いのかは形で見るほうが速い', w: 'UIManager._shapeMon' },
+      { t: '板厚の変動は板厚そのものに対して極小（16 mm に対し数十 µm）なので、板厚方向だけ倍率を掛ける。倍率は変動幅から自動で決め（固定倍率だと厚板で潰れ薄板で振り切れる）、誇張していることを画面に明記する', w: 'UIManager._shapeMon' },
+      // --- 変更履歴ビュワー（ご指摘）---
+      { t: '変更履歴が見にくかった。36 版・466 項目を縦に流すだけで、«どの版で何が変わったか» を探す手がかりが無かった。«絞る → 選ぶ → 読む» の 3 段に作り直した —— 上で検索と分類、左で版を選び、右でその版の中身を読む', w: 'UIManager._verRender' },
+      { t: '変更点の分類を w（どこに入ったか）から機械で決めるようにした。項目ごとに手で持たせると足すたびに付け忘れるため。分類は 6 つ（物理・制御 114／設備値・材料 107／3D・部品 90／画面・操作 73／評価器 67／資料 15）で、色は分類と 1 対 1', w: 'VERSION.KINDS / kind' },
+      { t: '左の一覧に分類の帯を出した —— 開く前に «この版は何を触った版か» が色の比で分かる。絞り込み中は «該当 / 全体» の件数を版ごとに出す', w: 'UIManager._verRender' },
+      { t: '検索は変更点の本文と w の両方に当て、当たった所を目印で囲む。語は正規表現ではなくただの文字列として扱う（. や ( を打っても壊れない）', w: 'UIManager._verMark' },
+      { t: 'HTML への逃がしが無く、w の «<title>» がタグとして解釈されていた。画面と Excel が同じ 1 つの逃がしを使うようにした', w: 'escHtml' },
+      { t: '判定を足した —— ビュワーが画面に収まる・開くとすぐ探せる・検索が版と項目を絞る・分類で絞るとその分類だけが出る・版を押すと右がその版になる・«<title>» がタグになっていない。あわせて、分類が全項目に付き受け皿に落ちすぎていないことも見る', w: 'tools/uicheck.mjs / eval.mjs' },
+    ] },
     { v: '2.0.1', base: 'b9d929c', date: '2026-09-12', title: '資料を «いまと、これから» だけに整理する', items: [
       // --- 資料の整理 ---
       { t: 'README が «終わった作業の記録» で埋まっていた（349 KB / 1,781 行 → 156 KB）。変更履歴が 2 か所にあり、README 自身が «版数・日付・履歴の真実は VERSION の 1 か所だけ» と書いているのに、その横に 9 版ぶんの «今回の対応» 表を並べていた。README 側を落とし、履歴は VERSION.LOG に一本化した', w: 'README.md' },
@@ -2018,6 +2130,23 @@ const VERSION = {
   get now() { return VERSION.LOG[0]; },
   /** 画面に出す表記。«VER.1.0.0» */
   get label() { return VERSION.PREFIX + VERSION.now.v; },
+  /* 変更点の «分類»。項目ごとに手で持たせると足すたびに付け忘れるので、
+   * w（どこに入ったか）から機械で決める。上から最初に当たったものが分類で、
+   * 最後の 1 つが受け皿。«探すための括り» であって、どこに入ったかの真実は w のほう。
+   * 色は #dlg-ver の --k-* と 1 対 1（同じ色が別の意味を持たないようにする）。 */
+  KINDS: [
+    { k: 'eval', nm: '評価器',      re: /^tools\// },
+    { k: 'doc',  nm: '資料',        re: /^(README|docs|CLAUDE\.md|VERSION|index\.html|<title>)/ },
+    { k: 'ui',   nm: '画面・操作',  re: /^[#.@-]|^body|^details\.|UIManager|RollingLog|Store\b|Xlsx|Zip|bus\.on|^App\b/ },
+    { k: 'view', nm: '3D・部品',    re: /^(Parts|Layout|G|MAT|Sect|TongRig|CoilGeometry|ParticleField|World3D|Wrapper|WrapperBelt|LabelView|CableChain|Cradle|Scrap|RollShop)\b|View\b/ },
+    { k: 'phys', nm: '物理・制御',  re: /^(Rolling|PhysicsEngine|Drive|Ramp|FinishController|FinishState|MillState|SlabState|SupplyController)\b|State\.|^writeHeat|^buildSchedule|^vSeed/ },
+    { k: 'spec', nm: '設備値・材料', re: /.*/ },
+  ],
+  /** 変更点 1 件の分類を返す（必ず何かを返す） */
+  kind(w) {
+    const s = String(w ?? '');
+    return VERSION.KINDS.find(k => k.re.test(s)) || VERSION.KINDS[VERSION.KINDS.length - 1];
+  },
 };
 
 /* =============================================================================
@@ -6968,6 +7097,11 @@ const Store = {
  * XLSX ならシートを分けられるので、外部ライブラリを足さずに «最小限だけ» 書く。
  * 文字列は inlineStr で持つ（共有文字列表を作らない）ぶん短く済む。
  */
+/** HTML / XML へ «文字として» 入れるための逃がし。画面と Excel の両方がこれを使う
+ *  （w に <title> のような値があり、そのまま入れるとタグとして解釈されてしまう）。 */
+const escHtml = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');   // 属性値にもそのまま置けるよう " まで逃がす
+
 const Zip = {
   _T: (() => { const t = new Uint32Array(256);
     for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
@@ -6996,7 +7130,7 @@ const Zip = {
   },
 };
 const Xlsx = {
-  esc: (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+  esc: escHtml,
   col(i) { let s = ''; i++; while (i > 0) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = (i - r - 1) / 26; } return s; },
   /** rows: 値の二次元配列（数値はそのまま数値セル、それ以外は文字セル）。 */
   sheet(rows) {
@@ -14470,28 +14604,159 @@ class UIManager {
   }
 
   /**
-   * 版数バッジと変更履歴。表記も中身も VERSION だけを見るので、
+   * 版数バッジと変更履歴ビュワー。表記も中身も VERSION だけを見るので、
    * 更新のたびに直す場所は VERSION.LOG の 1 か所で済む。
+   *
+   * 36 版・466 項目を «縦に流す» と何も探せない（それが作り直した理由）。
+   * 「絞る → 選ぶ → 読む」の 3 段に分け、絞り込みの状態は 2 つだけにしてある ——
+   *   verQ    検索語（変更点の本文と w のどちらにも当てる）
+   *   verKind 分類（空 = 全て）
+   * 選んでいる版 verSel は «版数» で持つ。絞り込みで並びが変わっても選択が飛ばない。
    */
   _buildVersion() {
     $('btn-ver').textContent = VERSION.label;
     document.title = `${document.title.replace(/\s+VER\..*$/, '')} ${VERSION.label}`;   // タブでも版が分かる
-    $('ver-log').innerHTML = VERSION.LOG.map((r, i) => `
-      <div class="rel${i === 0 ? ' is-cur' : ''}">
-        <div class="hd">
-          <span class="no">${VERSION.PREFIX}${r.v}</span>
-          ${i === 0 ? '<span class="cur">現在</span>' : ''}
-          <span class="ttl">${r.title}</span>
-          <span class="dt">${r.date}</span>
-          <span class="base" title="この版の作業を始めたコミット（git log ${r.base}..${VERSION.LOG[i - 1]?.base ?? 'HEAD'}）">${r.base}</span>
-        </div>
-        <ul>${r.items.map(q => `<li><span>${q.t}</span>${q.w ? `<span class="w">${q.w}</span>` : ''}</li>`).join('')}</ul>
-      </div>`).join('');
+    this.verQ = '';
+    this.verKind = '';
+    this.verSel = VERSION.LOG[0].v;
+    // 分類ボタン。件数を先に出すのは «押す前に、押した結果の量が分かる» ようにするため
+    const all = VERSION.LOG.reduce((a, r) => a + r.items.length, 0);
+    const cnt = {};
+    for (const r of VERSION.LOG) for (const q of r.items) { const k = VERSION.kind(q.w).k; cnt[k] = (cnt[k] || 0) + 1; }
+    $('ver-kinds').innerHTML =
+      `<button class="kb" type="button" data-k="" aria-pressed="true">すべて<span class="n">${all}</span></button>` +
+      VERSION.KINDS.map(k => `<button class="kb" type="button" data-k="${k.k}" aria-pressed="false"
+        style="--kc:var(--k-${k.k})"><span class="dot"></span>${k.nm}<span class="n">${cnt[k.k] || 0}</span></button>`).join('');
+    $('ver-kinds').addEventListener('click', (e) => {
+      const b = e.target.closest('.kb'); if (!b) return;
+      this.verKind = b.dataset.k === this.verKind ? '' : b.dataset.k;
+      this._verRender();
+    });
+    $('ver-q').addEventListener('input', (e) => { this.verQ = e.target.value; this._verRender(); });
+    $('ver-q-clr').addEventListener('click', () => { $('ver-q').value = ''; this.verQ = ''; this._verRender(); $('ver-q').focus(); });
+    $('ver-log').addEventListener('click', (e) => {
+      const r = e.target.closest('.rel'); if (!r) return;
+      this.verSel = r.dataset.v; this._verRender();
+    });
+    // ↑↓ で版を移る。検索欄に居ても効かせる（打ちながら結果を送れる）
+    $('dlg-ver').addEventListener('keydown', (e) => {
+      if (e.key === '/' && !e.target.matches('input')) { e.preventDefault(); $('ver-q').focus(); $('ver-q').select(); return; }
+      const d = { ArrowDown: 1, ArrowUp: -1, PageDown: 5, PageUp: -5 }[e.key];
+      if (d === undefined) return;
+      const vs = this._verRows().map(x => x.r.v); if (!vs.length) return;
+      const i = Math.max(0, vs.indexOf(this.verSel));
+      e.preventDefault();
+      this.verSel = vs[Math.min(vs.length - 1, Math.max(0, i + d))];
+      this._verRender(true);
+    });
+    this._verRender();
   }
+
+  /**
+   * 絞り込みを当てた «版ごとの行» を返す。左の一覧と右の中身、キー操作が
+   * 同じものを見るように、絞り込みの計算はここ 1 か所だけに置く。
+   *   its      その版の、絞り込みに残った変更点
+   *   titleHit 版数か表題そのものが検索語に当たったか
+   */
+  _verRows() {
+    const q = this.verQ.trim().toLowerCase(), kd = this.verKind;
+    const rows = VERSION.LOG.map(r => ({
+      r,
+      its: r.items.filter(it => (!kd || VERSION.kind(it.w).k === kd)
+                             && (!q || (it.t + ' ' + (it.w || '')).toLowerCase().includes(q))),
+      titleHit: !!q && (r.title.toLowerCase().includes(q) || (VERSION.PREFIX + r.v).toLowerCase().includes(q)),
+    }));
+    // 絞り込みが無ければ全ての版（どの版も変更点を 1 件以上持つ）。検索中は表題だけの一致も残す
+    return rows.filter(x => x.its.length || x.titleHit);
+  }
+
+  /** 検索語を目印で囲む。語は正規表現ではなくただの文字列として扱う（. や ( を打っても壊れない） */
+  _verMark(s) {
+    const raw = String(s ?? ''), q = this.verQ.trim().toLowerCase();
+    if (!q) return escHtml(raw);
+    const lo = raw.toLowerCase();
+    let out = '', i = 0, j;
+    while ((j = lo.indexOf(q, i)) >= 0) {
+      out += escHtml(raw.slice(i, j)) + '<mark>' + escHtml(raw.slice(j, j + q.length)) + '</mark>';
+      i = j + q.length;
+    }
+    return out + escHtml(raw.slice(i));
+  }
+
+  /** 左の一覧・右の中身・下の件数を、いまの絞り込みで描き直す */
+  _verRender(scroll = false) {
+    const rows = this._verRows(), q = this.verQ.trim();
+    $('ver-q-clr').hidden = !q;
+    for (const b of $('ver-kinds').querySelectorAll('.kb')) b.setAttribute('aria-pressed', String(b.dataset.k === this.verKind));
+    if (!rows.some(x => x.r.v === this.verSel)) this.verSel = rows.length ? rows[0].r.v : null;
+
+    $('ver-log').innerHTML = rows.map(({ r, its }) => {
+      const cur = r === VERSION.LOG[0], sel = r.v === this.verSel;
+      // 分類の帯。«この版は何を触った版か» が、開く前に色の比で分かる
+      const by = {};
+      for (const it of r.items) { const k = VERSION.kind(it.w).k; by[k] = (by[k] || 0) + 1; }
+      const bar = VERSION.KINDS.filter(k => by[k.k])
+        .map(k => `<i style="--kc:var(--k-${k.k});flex:${by[k.k]}"></i>`).join('');
+      return `<button class="rel${cur ? ' is-cur' : ''}${sel ? ' is-sel' : ''}" type="button" role="option"
+          aria-selected="${sel}" data-v="${escHtml(r.v)}">
+        <span class="hd"><span class="no">${VERSION.PREFIX}${this._verMark(r.v)}</span>
+          ${cur ? '<span class="cur">現在</span>' : ''}
+          <span class="dt">${r.date}</span>
+          <span class="n">${q || this.verKind ? `${its.length}/${r.items.length}` : r.items.length}</span></span>
+        <span class="ttl">${this._verMark(r.title)}</span>
+        <span class="bar">${bar}</span>
+      </button>`;
+    }).join('');
+    if (scroll) $('ver-log').querySelector('.is-sel')?.scrollIntoView({ block: 'nearest' });
+
+    const hit = rows.reduce((a, x) => a + x.its.length, 0);
+    const total = VERSION.LOG.reduce((a, r) => a + r.items.length, 0);
+    $('ver-count').textContent = q || this.verKind
+      ? `${rows.length} 版 / ${hit} 件が該当（全 ${VERSION.LOG.length} 版 ${total} 件）`
+      : `${VERSION.LOG.length} 版 / ${total} 件`;
+    this._verDetail(rows.find(x => x.r.v === this.verSel));
+  }
+
+  /** 右の中身。分類ごとにまとめて出す（同じ話が続くほうが読みやすい） */
+  _verDetail(row) {
+    const el = $('ver-detail');
+    if (!row) {
+      el.innerHTML = `<div class="none">該当する変更点がありません。<br>検索語を短くするか、分類の «すべて» を押してください。</div>`;
+      return;
+    }
+    const { r, its } = row, i = VERSION.LOG.indexOf(r), cur = i === 0;
+    const range = `git log ${r.base}..${VERSION.LOG[i - 1]?.base ?? 'HEAD'}`;
+    const shown = its.length ? its : r.items;     // 表題だけが当たった版は、中身を全部出す
+    const groups = VERSION.KINDS
+      .map(k => ({ k, list: shown.filter(it => VERSION.kind(it.w).k === k.k) }))
+      .filter(g => g.list.length);
+    el.innerHTML = `
+      <div class="dh">
+        <div class="dv">${VERSION.PREFIX}${r.v}${cur ? '<span class="cur">現在</span>' : ''}</div>
+        <div class="dttl">${this._verMark(r.title)}</div>
+        <div class="dmeta">
+          <span>${r.date}</span><span>変更点 ${shown.length} 件${its.length && its.length < r.items.length ? `（該当 / 全 ${r.items.length} 件）` : ''}</span>
+          <code title="この版の作業を始めたコミットから、次の版の手前まで">${range}</code>
+          <button class="cp" type="button" data-cp="${escHtml(range)}">複製</button>
+        </div>
+      </div>
+      ${groups.map(g => `<div class="kgrp" style="--kc:var(--k-${g.k.k})">
+        <div class="kh"><span class="dot"></span>${g.k.nm}<span class="n">${g.list.length}</span></div>
+        <ul>${g.list.map(it => `<li><span>${this._verMark(it.t)}</span>${it.w ? `<span class="w" title="${escHtml(it.w)}">${this._verMark(it.w)}</span>` : ''}</li>`).join('')}</ul>
+      </div>`).join('')}`;
+    el.querySelector('.cp')?.addEventListener('click', (e) => {
+      const b = e.currentTarget;
+      navigator.clipboard?.writeText(b.dataset.cp)
+        .then(() => { b.textContent = '複製しました'; setTimeout(() => { b.textContent = '複製'; }, 1600); })
+        .catch(() => { b.textContent = '複製できません'; setTimeout(() => { b.textContent = '複製'; }, 1600); });
+    });
+    el.scrollTop = 0;
+  }
+
   /** 変更履歴を開閉する。開いている間はキー操作を奪わない（dialog が受ける） */
   toggleVersion(open = !$('dlg-ver').open) {
     const d = $('dlg-ver');
-    if (open) { if (!d.open) d.showModal(); } else d.close();
+    if (open) { if (!d.open) d.showModal(); $('ver-q').focus(); } else d.close();
   }
 
   /**

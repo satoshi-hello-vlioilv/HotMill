@@ -660,6 +660,17 @@ const run = async () => {
       const rels = document.querySelectorAll('#ver-log .rel');
       ok('履歴パネルが全ての版を描く', rels.length === V.LOG.length && rels[0].classList.contains('is-cur'),
          `${rels.length} 版 / 先頭に «現在» の印`);
+      /* 分類は w から機械で決める。«受け皿»（KINDS の最後）に落ちすぎていたら、
+       * 括りが実態と合っていないということ（探すための括りとして役に立たない）。 */
+      {
+        const items = V.LOG.flatMap(r => r.items), last = V.KINDS[V.KINDS.length - 1];
+        const c = {}; for (const it of items) { const k = V.kind(it.w).k; c[k] = (c[k] || 0) + 1; }
+        ok('全ての変更点に分類が付き、合計が一致する',
+           V.KINDS.reduce((a, k) => a + (c[k.k] || 0), 0) === items.length,
+           V.KINDS.map(k => `${k.nm} ${c[k.k] || 0}`).join(' / '));
+        ok('受け皿の分類に半分以上が落ちていない', (c[last.k] || 0) <= items.length / 2,
+           `${last.nm} ${c[last.k] || 0} 件 / 全 ${items.length} 件`);
+      }
     }
 
     return { checks: out, failed: out.filter(x => !x.pass).length };

@@ -189,6 +189,54 @@ for (const w of widths) {
        `上面 ${sm.widTop} / 下面 ${sm.widBot} 文字（${sm.wnum}）`);
     ok('丈方向の側面（上面・下面）が描けている', sm.lenTop > 40 && sm.lenBot > 40,
        `上面 ${sm.lenTop} / 下面 ${sm.lenBot} 文字（${sm.lnum}）`);
+
+    /* 変更履歴ビュワー。36 版・466 項目を «探せる» ことが作り直しの目的なので、
+     * 探す道具（検索・分類・版の選択）が実際に効くか、画面に収まるかを測る。 */
+    const vv = await page.evaluate(() => {
+      const A = window.__app, V = window.__VER, $ = (id) => document.getElementById(id);
+      A.ui.toggleVersion(true);
+      const box = $('dlg-ver').getBoundingClientRect();
+      const rows = () => $('ver-log').querySelectorAll('.rel').length;
+      const lis = () => $('ver-detail').querySelectorAll('li').length;
+      const all = rows(), allLi = lis(), focus = document.activeElement?.id;
+      // 検索 —— どの版にも出てこない語で 0 版、よく出る語で «全部より少ないが 0 ではない»
+      const find = (q) => { const el = $('ver-q'); el.value = q; el.dispatchEvent(new Event('input')); return { r: rows(), li: lis() }; };
+      const none = find('該当しないはずの語zzz');
+      const some = find('ワニ口');
+      const someTxt = $('ver-detail').textContent;
+      find('');
+      // 分類 —— 評価器だけに絞ると、右に出る項目が全て tools/ になる
+      $('ver-kinds').querySelector('[data-k="eval"]').click();
+      const kRows = rows();
+      const kW = [...$('ver-detail').querySelectorAll('li .w')].map(e => e.textContent);
+      $('ver-kinds').querySelector('[data-k="eval"]').click();
+      // 版の選択 —— 2 つめの版を押すと右の見出しがその版になる
+      const second = $('ver-log').querySelectorAll('.rel')[1];
+      second.click();
+      const head = $('ver-detail').querySelector('.dv')?.textContent || '';
+      const want = V.PREFIX + second.dataset.v;
+      $('ver-log').querySelectorAll('.rel')[0].click();
+      // w に <title> のような値がある。タグとして解釈されていないこと
+      const raw = $('ver-detail').innerHTML + $('ver-log').innerHTML;
+      A.ui.toggleVersion(false);
+      return { all, allLi, focus, none, some, kRows, kW, head, want,
+               inView: box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1 && box.left >= -1 && box.top >= -1,
+               w: Math.round(box.width), h: Math.round(box.height),
+               nVer: V.LOG.length, nItem: V.LOG.reduce((a, r) => a + r.items.length, 0),
+               strayTitle: /<title>/i.test(raw), hitTxt: /ワニ口/.test(someTxt) };
+    });
+    ok('変更履歴ビュワーが画面に収まる', vv.inView, `${vv.w} × ${vv.h} px（${vv.nVer} 版 ${vv.nItem} 件）`);
+    ok('開くとすぐ探せる（検索欄に焦点があり、先頭の版の中身が出ている）',
+       vv.focus === 'ver-q' && vv.allLi > 0 && vv.all === vv.nVer,
+       `焦点 ${vv.focus} / 版 ${vv.all} / 先頭の版の項目 ${vv.allLi} 件`);
+    ok('検索が版と項目の両方を絞る',
+       vv.none.r === 0 && vv.none.li === 0 && vv.some.r > 0 && vv.some.r < vv.nVer && vv.hitTxt,
+       `当たらない語 ${vv.none.r} 版 ／ «ワニ口» ${vv.some.r} 版（選んだ版で ${vv.some.li} 件）`);
+    ok('分類で絞ると、その分類の項目だけが出る',
+       vv.kRows > 0 && vv.kRows <= vv.nVer && vv.kW.length > 0 && vv.kW.every(w => w.startsWith('tools/')),
+       `評価器 ${vv.kRows} 版 ／ 出た項目 ${vv.kW.length} 件すべて tools/`);
+    ok('版を押すと右がその版になる', vv.head.startsWith(vv.want), `押した版 ${vv.want} / 右の見出し ${vv.head.trim()}`);
+    ok('w の «<title>» がタグとして解釈されていない', !vv.strayTitle, vv.strayTitle ? '生の <title> が混ざっている' : '文字として出ている');
   }
   await browser.close();
 }
