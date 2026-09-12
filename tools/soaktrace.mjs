@@ -72,6 +72,7 @@ const R = await page.evaluate(() => {
                roundTrip, unknownJis: M.jisOf('zzz'), unknownCodes: M.codesFor('9999').length,
                perAlloy, noSample, currentOf, general: S.GENERAL,
                lotPattern: C.MATERIAL.SOAK_PATTERN, lotTempC: C.SLAB.TEMP_DEFAULT, holdMin: C.SUPPLY.HOLD_MIN,
+               chargeN: C.FURNACE.CHARGE_N,
                pick: S.pickupC('E', 'A5052'),
                needMin: S.coolMinutesTo(C.SLAB.TEMP_DEFAULT, 'E', 'A5052') };
   return { n: ids.length, ids, dup, orphan: [...new Set(orphan)], noSteps, badNo, stageBad, mc,
@@ -148,6 +149,10 @@ ok('（参考）自然放熱だけで実機の持ちかかり温度まで落ち�
    R.mc.needMin === null ? '落ちません'
      : `${R.mc.needMin.toFixed(0)} 分 ＝ ${(R.mc.needMin / 60).toFixed(1)} 時間`
        + `（いま置いている待ち時間は ${R.mc.holdMin} 分）`, true);
+/* 分かっている機構（ご教示）: 1 炉 10 本程度の釜組から 1 ロット抜くたびに天面のふたが開く。
+ * 炉内が一時的に冷えることは確かだが、これだけでは 91 K には届かない。 */
+ok('釜組の本数が «幾何の上限» ではなく実機の運用値で入っている',
+   R.mc.chargeN === 10, `1 炉あたり ${R.mc.chargeN} 本（幾何の上限は 1〜6 号 14 本・7・8 号 16 本）`);
 
 console.log(`\nRESULT: ${failed ? 'FAIL' : 'PASS'}`);
 process.exit(failed ? 1 : 0);

@@ -1000,6 +1000,11 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <div class="derived" id="der-target"></div>
         </div>
         <div class="fld">
+          <div class="top"><span class="k">パス（圧下の配分）</span></div>
+          <select id="sel-pass" class="sel" aria-label="パス記号"></select>
+          <div class="derived" id="der-pass"></div>
+        </div>
+        <div class="fld">
           <div class="top"><span class="k">仕上げ形態</span><span class="v" id="lbl-finish"></span></div>
           <div class="derived">板厚から自動で決まります。10 mm 以下はコイル巻取、10 mm 超は板材（30 mm 以下は 30 mm シャー、75 mm 以下は 75 mm シャーで定尺に切り分けてパイラーへ、75 mm 超はクレーンで板置き場へ）。</div>
         </div>
@@ -1626,6 +1631,17 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.7.0', base: '71bafd7', date: '2026-09-12', title: 'パスマスタ —— 圧下の配分を «記号» で持ち、サンプルと連動させる', items: [
+      { t: '圧下の配分をパス記号ごとの表にした。実機はパス記号で «クロップまで何パスで何 mm 落とすか／クロップから最終まで何パスで上げるか» を決めるので、その形で持つ。読むのは Pass の 1 か所だけで、スケジュールの生成もそこを見る', w: 'CONFIG.PASS / Pass' },
+      { t: '配分則を書いていた PROCESS.PRACTICE を外した。同じ値が 2 か所にあると片方だけ古くなる —— 出どころはパスマスタ 1 か所にした（生成した 23 パスは 530→65→56→46→36→26→16→8 mm で変わっていない）', w: 'PROCESS / Rolling.buildSchedule' },
+      { t: 'パスマスタは «通る板厚をそのまま並べた表»（plateSeq / finishSeq）も持てる。実機の表をいただいたら行に並べるだけで、則ではなく表のとおりに落ちる（設備の上限で 1 パスで届かないぶんは手前にパスが増える）', w: 'Rolling.buildSchedule' },
+      { t: 'どの記号にも «出どころ»（src）の欄を置いた。推定値をそれと分からない形で置かないため。いま入っている S23 は較正ロット（A5052・530 → 8 mm・23 パス）の実績から起こした則で、実機のパス記号ごとの表はまだ無い', w: 'CONFIG.PASS.ROWS' },
+      { t: '素材の設定に «パス（圧下の配分）» の選択を足した。いま効いている配分を «クロップまで 17 パスで 530 → 65 mm／クロップから 6 パスで 8 mm» と、実機がパス記号で言うのと同じ区切りで出す。数は則を実際に通して数えたもので、手で書いた値ではない', w: '#sel-pass / UIManager._passPickInfo' },
+      { t: 'ロットの条件にマスタの記号（ソーキング・パス）を持たせた。«どのソーキング・どの圧下配分で通したか» が残らないと同じロットを再現できない —— サンプルとの連動はここが要', w: 'UIManager.dims / _lotOf / _applyLot' },
+      { t: '計画からロットの条件を呼び戻すと必ず例外で止まっていた。冷却を 4 系統に分けた VER.2.1.0 で STRIP_COOL.ENTRY / EXIT が読み取り専用（どちらかの面が入っているか）になったのに、書き戻しがそこへ代入していた。ロットが 4 系統の入切と水量をそのまま持つ形にして直した —— 側の 1 ビットでは «下面は常時 ON» の実機の既定を書き戻せない', w: 'UIManager._applyLot / _lotOf / DEMO_LOT' },
+      { t: '釜組の本数（1 炉あたり 10 本程度）を入れた。収容能力から出る幾何の上限（1〜6 号 14 本・7・8 号 16 本）とは別で、実機は上限いっぱいには詰めない。1 ロット抜くたびに天面のふたが開いて炉内が冷えるという機構の前提になる', w: 'FURNACE.CHARGE_N' },
+      { t: '判定を作った —— tools/passtrace.mjs に 12 件（表の整合・出どころ欄・表に無い記号で値を作らないこと・実機の較正ロットの区切り 17／6 パスと 65 → 26 が 4 パス・26 → 16 → 8・サンプルとの連動・seq の表が効くこと）、tools/plantrace.mjs に 4 件（呼び戻しで例外が出ない・冷却 4 系統と記号がそのまま往復する）、tools/soaktrace.mjs に 1 件（釜組の本数）', w: 'tools/passtrace.mjs / plantrace.mjs' },
+    ] },
     { v: '2.6.0', base: '5d2056f', date: '2026-09-12', title: '材質マスタ（社内材質記号 ↔ JIS 記号 169 件）と、較正の基準ロットの操業パターン', items: [
       { t: '社内材質記号と JIS 記号の対応表（169 件・40 JIS 記号）をいただいたので材質マスタとして入れた。実機の書きもの（操業基準・帳票）は社内記号、本アプリの材質は JIS 記号で、この橋渡しが無いと «A5052 のソーキングはどれか» が引けない', w: 'CONFIG.MATCODE' },
       { t: '引くところを 1 か所にまとめた —— 社内記号 → JIS／JIS → 社内記号（複数）／材質 → 操業基準に代表材として載っている記号。対応表に無い記号では記号を «作らない»（null と空を返す）', w: 'MatCode' },
@@ -3099,6 +3115,38 @@ const CONFIG = {
    * 表は «いただいた形» のまま 1 行 1 レコードの配列で置き、列の意味は KEYS が持つ。
    * 加工した値（シミュレータが使う境界条件）は Soak が導出する —— 元の表は書き換えない。
    * ========================================================================= */
+  /* ===== パスマスタ —— 圧下の «配分» を記号で持つ ============================
+   * 実機は «パス記号» で圧下の配分を決める —— クロップまで何パスで何 mm 落とすか、
+   * クロップから最終まで何パスで上げるか。ここはその表。
+   *
+   * 1 行 1 レコード（列の意味は KEYS）。読むのは Pass の 1 か所だけで、
+   * パススケジュールの生成（Rolling.buildSchedule）もそこを見る。
+   *
+   * 【いま入っている記号は 1 つだけ】実機の «パス記号ごとの表» はまだいただいていない。
+   * S23 は較正ロット（A5052・530 → 8 mm・23 パス）の実績から起こした配分則で、出どころを
+   * src 欄に書いてある。記号が増えたら行を足すだけで効く（README 0-3 «パス記号ごとの表»）。
+   *
+   * 【seq 欄】厚板段・仕上げ段とも «通る板厚をそのまま並べた表» を持てる。実機の表を
+   * いただいたらここへ入れれば、則ではなく表のとおりに落ちる（物理の上限はその上から効く）。
+   * いまは則で組むので null。 */
+  PASS: {
+    KEYS: {
+      PASSES: ['id', 'name', 'aim', 'use', 'hCrop', 'first', 'draftPlate', 'redPlate', 'plateSeq',
+               'draftFinish', 'redLast', 'redLast2', 'finishSeq', 'vPlate', 'vFinish', 'hFinish', 'vCoil', 'src'],
+    },
+    /* 厚板段: 初パスは軽圧下（first）、以後 draftPlate の定圧下。板厚 × redPlate が draftPlate を
+     *         下回ったら圧下率 redPlate（5 mm 丸め）で落とし、クロップ厚 hCrop にぴたり着ける。
+     * 仕上げ段（コイル）: 目標から上へ組む。最終パス圧下率 redLast（張力あり）、その前 redLast2、
+     *         そこから hCrop まで draftFinish の定圧下。
+     * 板材の仕上げ段: hCrop から目標まで draftFinish の定圧下。
+     * 速度: 厚板段・仕上げ段は vPlate、出側 hFinish 以下は vFinish、巻取パスは vCoil。
+     * 定圧下 30 mm の理由（鋳造組織の耳割れ・噛み込み・トルクのどれか）は本データからは決められない。 */
+    ROWS: [
+      ['S23', '標準', '厚板段は定圧下 30 mm、仕上げ段は目標から上へ組む', null, 65, 10, 30, 0.19, null,
+       10, 0.50, 0.38, null, 120, 80, 20, 50, '実機ロット A5052 530 → 8 mm 23 パス（クロップまで 17・以後 6）'],
+    ],
+    DEFAULT: 'S23',
+  },
   /* ===== 材質マスタ —— 社内材質記号 ↔ JIS 記号 ==============================
    * 実機の帳票も操業基準（SOAK）も «社内材質記号» で書かれていて、本アプリの材質は
    * JIS 記号で持っている。橋渡しの一覧（169 件）をいただいたのでそのまま入れる。
@@ -3769,7 +3817,12 @@ const CONFIG = {
       ['T', '低温保持', '低温保持厳禁。チャージ後直ちに昇温開始（点火時装入）。スラブのフクレチェックを実施'],
     ],
   },
-  FURNACE: { SOAK_DT: 50, N: 9, X1: -121800, GROUPS: [3, 3, 2, 1], GAPS: [1200, 8000, 4000], IN_GAP: 800, Z: 9700,
+  /* 釜組（1 炉に入れるロットの本数）。収容能力から出る «幾何の上限» は 1〜6 号で 14 本・
+   * 7・8 号で 16 本だが、実機で組むのは 1 炉あたり 10 本程度（ご教示 2026-09-12）。
+   * 上限いっぱいには詰めない。この値は «炉内がどう冷えるか» を考えるときの前提になる ——
+   * 1 ロット取り出すたびに天面のふたが開いて熱が逃げ、減ってくると次の釜組の冷えた
+   * ロットを差し込むこともある（残件«抽出から持ちかかりまでの温度»）。 */
+  FURNACE: { CHARGE_N: 10, SOAK_DT: 50, N: 9, X1: -121800, GROUPS: [3, 3, 2, 1], GAPS: [1200, 8000, 4000], IN_GAP: 800, Z: 9700,
              WALL: 500, LID_T: 380,
              /* 炉ごとの仕様（実機の表）。L×W×H は内法 [mm]、CAP は最大収容能力 [t]。
               *   L（X）… バンクの並び方向。スラブは板厚の面を突き合わせて «段» に並ぶ
@@ -4341,7 +4394,7 @@ const CONFIG = {
      *   A5052 / 呼び厚 560・片面 15 面削 → 530 / 1,330 W × 3,450 L / 炉出し 433 ℃ / 目標 8 mm コイル
      * 実機は 530 → 65（17 パス・120 mpm）→ 26（4 パス）→ 16（80 mpm）→ 8（50 mpm・巻取）の
      * 23 パスで通し、上がり 360 ℃・板長 219.4 m。本アプリの自動生成もこの配分を再現する
-     * （PROCESS.PRACTICE）。板は圧延で L0·h0/h まで伸び、巻取パス以外は入側／出側テーブルに
+     * （パスマスタ CONFIG.PASS）。板は圧延で L0·h0/h まで伸び、巻取パス以外は入側／出側テーブルに
      * 載り切る必要がある —— 3,450 mm・16 mm で 113 m（出側テーブル 80.1 m の外へ出るのは
      * 巻取パスの前段だけで、そのパスは入側へ戻る側なので成立する）。 */
     LEN_MIN: 2000, LEN_MAX: 4200, LEN_DEFAULT: 3450,
@@ -4472,6 +4525,9 @@ const CONFIG = {
      * «5000系かつプレート用途» で、基準ロットはコイル材なので当たらない —— 残るのは
      * 一般材の E 操業。 */
     SOAK_PATTERN: 'E',
+    /* 圧下配分のパス記号（CONFIG.PASS.ROWS の記号）。'' なら既定（CONFIG.PASS.DEFAULT）。
+     * 実機の «パス記号ごとの表» はまだいただいていないので、いまは記号が 1 つしかない。 */
+    PASS_ID: '',
     ALLOY: 'A5052',                                    // 選択中の材質（ALLOYS のキー）
     TREF: 450,                                         // 変形抵抗モデルの基準温度
     // 可逆圧延で材料温度を決める主因はロール抜熱。H_ROLL は «界面の» 接触熱伝達率で、
@@ -4757,18 +4813,9 @@ const CONFIG = {
               * 3 分）から逆算すると 1 パスあたり圧延そのもの 2〜7 s ＋ 段取り 5〜7 s。従来の 30 s は
               * 予測の温度落ちを過大にしていた。 */
              PASS_OVERHEAD: 6,
-             /* 実操業の圧下配分則（実機データ A5052・530 → 8 mm・23 パスより）。
-              *   厚板段: 初パスは軽圧下（FIRST_DRAFT）、以後 DRAFT_PLATE の定圧下。板厚 × RED_PLATE が
-              *           DRAFT_PLATE を下回ったら圧下率 RED_PLATE（5 mm 丸め）で落とし、クロップ厚 H_CROP に
-              *           ぴたり着ける。速度は V_PLATE。
-              *   仕上げ段（コイル）: 目標から上へ組む。最終パス圧下率 RED_LAST（張力あり）、その前 RED_LAST2、
-              *           そこから H_CROP まで DRAFT_FINISH の定圧下。出側 H_FINISH 以下は V_FINISH、巻取パスは V_COIL。
-              *   板材の仕上げ段: H_CROP から目標まで DRAFT_FINISH の定圧下。
-              * 定圧下 30 mm の理由（鋳造組織の耳割れ・噛み込み・トルクのどれか）は本データからは決められない。
-              * 物理の上限（噛み込み角・荷重・動力）はこの則の上から別に効く。 */
-             PRACTICE: { FIRST_DRAFT: 10, DRAFT_PLATE: 30, RED_PLATE: 0.19, H_CROP: 65,
-                         DRAFT_FINISH: 10, RED_LAST: 0.50, RED_LAST2: 0.38,
-                         V_PLATE: 120, V_FINISH: 80, H_FINISH: 20, V_COIL: 50 } },
+             /* 実操業の圧下配分則は «パスマスタ»（CONFIG.PASS）が持つ。ここには置かない ——
+              * 同じ値が 2 か所にあると片方だけ古くなる。読むのは Pass.practice() の 1 か所。
+              * 物理の上限（噛み込み角・荷重・動力）はこの則の上から別に効く。 */ },
 
   // パススケジュールは板厚・板幅から Rolling.buildSchedule() が生成する（初期値は空）
   SCHEDULE: [],
@@ -5609,6 +5656,37 @@ const Sect = {
  * 書いてあったか» を照らせるようにするため —— 加工した値で上書きすると戻せない。
  * ここは «表を引く» ことだけをする。熱サイクルの組み立てと温度の計算はこの下。
  * ========================================================================== */
+/* =============================================================================
+ * パスマスタを «使える形» にする 1 か所。
+ *
+ * CONFIG.PASS は圧下の配分を記号ごとに持つ表（1 行 1 レコード）。ここは表を引いて、
+ * パススケジュールの生成が読む形（practice）へ直すだけ。値はここでは作らない。
+ * ========================================================================== */
+const Pass = {
+  /** 表の行（配列）を名前つきにする。列の意味は CONFIG.PASS.KEYS の 1 か所だけが持つ。 */
+  rec(row) {
+    const k = CONFIG.PASS.KEYS.PASSES, o = {};
+    for (let i = 0; i < k.length; i++) o[k[i]] = row[i] ?? null;
+    return o;
+  },
+  all() { return CONFIG.PASS.ROWS.map(Pass.rec); },
+  get ids() { return CONFIG.PASS.ROWS.map(r => r[0]); },
+  /** パス記号 → その行。無ければ null。 */
+  of(id) { const r = CONFIG.PASS.ROWS.find(q => q[0] === id); return r ? Pass.rec(r) : null; },
+  /** いま効いているパス記号（明示の選択が無ければ既定）。 */
+  current() {
+    const sel = CONFIG.MATERIAL.PASS_ID;
+    return (sel && Pass.of(sel)) ? sel : CONFIG.PASS.DEFAULT;
+  },
+  /**
+   * 圧下配分則。パススケジュールの生成（Rolling.buildSchedule）が読む形。
+   * 記号が引けないときは既定の行へ落とす —— 値をここで作らない（表に無い則は無い）。
+   */
+  practice(id = Pass.current()) {
+    return Pass.of(id) || Pass.of(CONFIG.PASS.DEFAULT) || Pass.all()[0];
+  },
+};
+
 /* =============================================================================
  * 材質マスタ —— 社内材質記号 ↔ JIS 記号の橋渡し 1 か所。
  *
@@ -7130,25 +7208,36 @@ const Rolling = {
      * 表では上限を大きく超える（実測で 55 % 超過）。板厚だけの関数にして 1 か所にまとめる。 */
     /* 速度は実操業則: 厚板段・仕上げ段は V_PLATE、出側 H_FINISH 以下は V_FINISH、巻取パスは V_COIL。
      * ここから動力上限（短時間過負荷込み）で落とす。 */
-    const PR = P.PRACTICE;
-    const vSeed = (hOut, isCoil = false) => Math.min(vMax, isCoil ? PR.V_COIL : hOut <= PR.H_FINISH ? PR.V_FINISH : PR.V_PLATE);
-    /* 実操業の圧下配分則（PROCESS.PRACTICE）。厚板段はクロップ厚まで、仕上げ段は目標から上へ組む。 */
-    const hCrop = Math.max(Math.min(PR.H_CROP, h0 - 1), hTarget);
-    const finishSeq = (() => {                         // 仕上げ段の «通る板厚»（小さい順）
+    const PR = Pass.practice(opts.pass);
+    const vSeed = (hOut, isCoil = false) => Math.min(vMax, isCoil ? PR.vCoil : hOut <= PR.hFinish ? PR.vFinish : PR.vPlate);
+    /* 実操業の圧下配分則（パスマスタ CONFIG.PASS）。厚板段はクロップ厚まで、仕上げ段は目標から上へ組む。 */
+    const hCrop = Math.max(Math.min(PR.hCrop, h0 - 1), hTarget);
+    /* 仕上げ段の «通る板厚»（小さい順）。パスマスタが表（finishSeq）を持っていればそれを
+     * そのまま使い、無ければ則で組む —— 実機の表をいただいたら行に入れるだけで効く。 */
+    const finishSeq = (() => {
+      const given = PR.finishSeq;
+      if (given && given.length) return given.slice().sort((a, b) => a - b).filter(v => v < hCrop - 0.5 && v > hTarget + 0.5);
       const seq = [];
       if (coil) {
-        let x = hTarget / (1 - PR.RED_LAST); seq.push(Math.round(x));
-        x = seq[0] / (1 - PR.RED_LAST2); seq.push(Math.round(x));
-        while (seq[seq.length - 1] + PR.DRAFT_FINISH < hCrop - 0.5) seq.push(seq[seq.length - 1] + PR.DRAFT_FINISH);
+        let x = hTarget / (1 - PR.redLast); seq.push(Math.round(x));
+        x = seq[0] / (1 - PR.redLast2); seq.push(Math.round(x));
+        while (seq[seq.length - 1] + PR.draftFinish < hCrop - 0.5) seq.push(seq[seq.length - 1] + PR.draftFinish);
       } else {
-        let x = hTarget; while (x + PR.DRAFT_FINISH < hCrop - 0.5) { x += PR.DRAFT_FINISH; seq.push(x); }
+        let x = hTarget; while (x + PR.draftFinish < hCrop - 0.5) { x += PR.draftFinish; seq.push(x); }
       }
       return seq.filter(v => v < hCrop - 0.5 && v > hTarget + 0.5);
     })();
+    /* 厚板段の «通る板厚»（大きい順）。こちらも表があればそのとおりに落とす。 */
+    const plateSeq = (PR.plateSeq && PR.plateSeq.length)
+      ? PR.plateSeq.slice().sort((a, b) => b - a).filter(v => v < h0 - 0.5 && v > hCrop + 0.5) : null;
     const practiceDraft = (hh, idx) => {
       if (hh > hCrop + 0.5) {                          // 厚板段
-        let d = idx === 0 ? PR.FIRST_DRAFT
-              : (hh * PR.RED_PLATE >= PR.DRAFT_PLATE ? PR.DRAFT_PLATE : Math.max(5, Math.round(hh * PR.RED_PLATE / 5) * 5));
+        if (plateSeq) {
+          const nxt2 = plateSeq.filter(v => v < hh - 0.5)[0] ?? hCrop;
+          return Math.max(hh - nxt2, 1);
+        }
+        let d = idx === 0 ? PR.first
+              : (hh * PR.redPlate >= PR.draftPlate ? PR.draftPlate : Math.max(5, Math.round(hh * PR.redPlate / 5) * 5));
         if (hh - d - hCrop < d * 0.5) d = hh - hCrop;  // 端数は最後の厚板パスに寄せてクロップ厚にぴたり着ける
         return Math.max(d, 1);
       }
@@ -8471,8 +8560,15 @@ const Xlsx = {
  * 先頭はこのアプリの既定（実機からいただいたロット）そのもので、
  * プリセットを押さなければ、左メニューで決めた条件がそのままキューに入る。
  */
+/* 既定のサンプルロット（実機の較正ロットそのもの）。マスタの記号まで持たせてあるので、
+ * «どのソーキング・どの圧下配分で通したか» ごと再現できる。 */
 const DEMO_LOT = { alloy: 'A5052', cast: 560, scalp: 15, width: 1330, length: 3450, temp: 433,
-                   target: 8, trim: 15, mode: 'COIL', cool: 'WATER', entry: false, exit: true };
+                   target: 8, trim: 15, mode: 'COIL', cool: 'WATER', entry: false, exit: true,
+                   soak: 'E', pass: 'S23',
+                   /* 実機ロットの冷却: 上面は出側のみ、下面は常時 ON（入側・出側とも）。
+                    * entry / exit は古い記録との互換で残している粗い値で、真実はこちら。 */
+                   zones: { ET: { on: false, flow: 1 }, XT: { on: true, flow: 1 },
+                            EB: { on: true,  flow: 1 }, XB: { on: true, flow: 1 } } };
 const PRESETS = [
   { name: '実機サンプル（既定）', loop: 'none', lots: [{ ...DEMO_LOT }],
     desc: 'A5052 560 mm 鋳造・片面 15 面削 → 530 mm、1,330 × 3,450、炉出し 433 ℃、8 mm コイル。実機からいただいたロットそのものです。' },
@@ -9747,7 +9843,7 @@ class PhysicsEngine {
     CONFIG.SLAB.TARGET_TH = Num.clamp(CONFIG.SLAB.TARGET_TH, fin.TH_MIN, fin.TH_MAX);
     this.finish.mode = Rolling.finishMode(CONFIG.SLAB.TARGET_TH);
     CONFIG.SCHEDULE = Rolling.buildSchedule(th, CONFIG.SLAB.TARGET_TH, spec.width, spec.temp,
-                        { coil: this.finish.mode === 'COIL', length: spec.length });
+                        { coil: this.finish.mode === 'COIL', length: spec.length, pass: spec.pass });
     this.mill.rollTemp = CONFIG.MILL.ROLL_T0; this.mill.brTemp = CONFIG.MILL.ROLL_T0;
     this.mill.gap = this.mill.targetGap = this.mill.screw = this.mill.screwCmd = th;
     this.mill.stretch = 0; this.mill.stretchV = 0; this.mill.forceMeas = 0; this.mill.trim = 0; this.mill.gaugeH = null; this.mill._gq.length = 0;
@@ -16084,7 +16180,7 @@ class UIManager {
    */
   _buildVersion() {
     this._buildSoak();
-    this._buildSoakPick();
+    this._buildSoakPick(); this._buildPassPick();
     $('btn-ver').textContent = VERSION.label;
     document.title = `${document.title.replace(/\s+VER\..*$/, '')} ${VERSION.label}`;   // タブでも版が分かる
     this.verQ = '';
@@ -16366,6 +16462,49 @@ class UIManager {
     sel.addEventListener('change', (e) => { CONFIG.MATERIAL.SOAK_PATTERN = e.target.value; this._soakPickInfo(); });
     this._soakPickInfo();
   }
+  /**
+   * 素材の設定にある «パス（圧下の配分）» の選択。状態の出どころは
+   * CONFIG.MATERIAL.PASS_ID の 1 つで、画面もスケジュールの生成もそこを見る。
+   */
+  _buildPassPick() {
+    const sel = $('sel-pass');
+    sel.innerHTML = Pass.all().map(p => `<option value="${escHtml(p.id)}">${escHtml(p.id)} ${escHtml(p.name)}`
+      + ` —— ${escHtml(p.aim ?? '')}</option>`).join('');
+    sel.value = Pass.current();
+    sel.addEventListener('change', (e) => {
+      CONFIG.MATERIAL.PASS_ID = e.target.value;
+      this._passPickInfo(); this._slabChanged();
+    });
+    this._passPickInfo();
+  }
+  /**
+   * いま効いているパス配分を 1 行で。«クロップまで何パスで何 mm»／«クロップから何パスで最終へ»
+   * —— 実機がパス記号で言っているのと同じ区切りで出す。数は則を «実際に通して» 数えたもので、
+   * 手で書いた値ではない（物理の上限で削られたパスもそのまま数に出る）。
+   */
+  _passPickInfo() {
+    const el = $('der-pass'); if (!el) return;
+    const p = Pass.of(Pass.current()); if (!p) { el.textContent = 'パス記号が選ばれていません。'; return; }
+    /* いまの素材で «実際に通して» 数える。dims() は画面を書き替えるので呼ばず、
+     * 直前に読んだ値（_dims）を使う —— 無ければ既定のロット。 */
+    const S = CONFIG.SLAB, d = this._dims;
+    const h0 = d ? d.cast - 2 * d.scalp : S.CAST_DEFAULT - 2 * S.SCALP_DEFAULT;
+    const hT = d ? d.target : S.FINISH.DEFAULT;
+    const coil = Rolling.finishMode(hT) === 'COIL';
+    const sch = Rolling.buildSchedule(h0, hT, d ? d.width : S.WID_DEFAULT,
+      d ? d.temp : S.TEMP_DEFAULT, { coil, length: d ? d.length : S.LEN_DEFAULT,
+      alloy: d ? d.alloy : CONFIG.MATERIAL.ALLOY, pass: p.id });
+    const hCrop = Math.max(Math.min(p.hCrop, h0 - 1), hT);
+    /* 厚板段 ＝ «クロップ厚に着くまで» なので、ちょうど 65 mm を出すパスも厚板段に数える
+     * （> で数えると実機の 17／6 が 16／7 にずれる）。 */
+    const nPlate = sch.filter(q => q.gap >= hCrop - 0.5).length;
+    el.innerHTML = `クロップまで <b>${nPlate}</b> パスで ${h0.toFixed(0)} → <b>${hCrop.toFixed(0)} mm</b>`
+      + `（初パス ${p.first} mm・以後 ${p.draftPlate} mm 定圧下、板厚 × ${(p.redPlate * 100).toFixed(0)} % が`
+      + ` それを下回ったら圧下率で）／ クロップから <b>${sch.length - nPlate}</b> パスで`
+      + ` <b>${hT.toFixed(hT < 10 ? 1 : 0)} mm</b> へ（合計 ${sch.length} パス）`
+      + `<br><span style="color:var(--ink-3)">速度 厚板 ${p.vPlate} ／ 出側 ${p.hFinish} mm 以下 ${p.vFinish}`
+      + ` ／ 巻取 ${p.vCoil} mpm ・ 出どころ ${escHtml(p.src ?? '—')}</span>`;
+  }
   /** いま効いているソーキング条件を 1 行で。«探させず・思い出させず» のための既定の説明。 */
   /**
    * 材質マスタの行 —— その JIS 記号に対応する «社内材質記号»。
@@ -16412,7 +16551,8 @@ class UIManager {
         + ` <b>${pk.toC.toFixed(0)} ℃</b>（炉出 ${pk.fromC} ℃ から ${pk.minutes} 分で −${pk.dropC.toFixed(0)} K）。`
         + `実機の持ちかかりは ${inC} ℃ で <b>${(pk.toC - inC).toFixed(0)} K</b> 合いません`
         + (need ? `—— 自然放熱だけで ${inC} ℃ まで落ちるには <b>${(need / 60).toFixed(1)} 時間</b>かかります。` : '。')
-        + `理由が分かっていないので、素材の温度は入力値をそのまま使っています`
+        + `1 炉 ${CONFIG.FURNACE.CHARGE_N} 本程度の釜組から 1 ロット抜くたびに天面のふたが開いて炉内が冷えますが、`
+        + `それだけでは届きません。理由が分かっていないので、素材の温度は入力値をそのまま使っています`
         + `（残件«抽出から持ちかかりまでに落ちる理由»）。</span>` : '');
   }
 
@@ -16996,13 +17136,17 @@ class UIManager {
     this.dims = () => {
       const FIN = CONFIG.SLAB.FINISH;
       const target = Num.clamp(+$('rng-target').value || FIN.DEFAULT, FIN.TH_MIN, FIN.TH_MAX);
+      /* マスタの記号もロットの条件の一部として持つ —— «どのソーキング・どの圧下配分で
+       * 通したか» が残らないと、同じロットを再現できない（サンプルとの連動はここが要）。 */
       const d = { cast: this.cast, scalp: +$('rng-init-scalp').value,
                   width: +$('rng-init-wid').value, length: +$('rng-init-len').value,
                   temp: +$('rng-init-temp').value, alloy: $('sel-alloy').value,
-                  target, trim: +$('rng-trim').value };
+                  target, trim: +$('rng-trim').value,
+                  soak: CONFIG.MATERIAL.SOAK_PATTERN || '', pass: Pass.current() };
       const AL = Rolling.alloy(d.alloy);
       d.mode = Rolling.finishMode(target);
       this._dims = d;
+      this._passPickInfo?.();          // 板厚・目標が変わればパス数も変わる
       if (document.activeElement !== $('num-target')) $('num-target').value = target;
       $('lbl-finish').innerHTML = d.mode === 'COIL'
         ? '<span class="badge"><i class="fa-solid fa-arrows-spin"></i> コイル（巻取）</span>'
@@ -17408,7 +17552,12 @@ class UIManager {
   /** いま左メニューで決めている条件を 1 ロットぶんの記録として取り出す。 */
   _lotOf() {
     const SC = CONFIG.MATERIAL.STRIP_COOL;
-    return { ...this.dims(), cool: SC.MODE, entry: SC.ENTRY, exit: SC.EXIT };
+    /* 冷却は 4 系統（入側/出側 × 上面/下面）それぞれに入切と水量がある。ロットには
+     * その 4 つをそのまま持つ —— «入側 ON» の 1 ビットでは、下面入側だけ入っている
+     * 実機の既定（下面は常時 ON）を書き戻せない。
+     * entry / exit は古い記録との互換のために残す «読み取り» の値。 */
+    return { ...this.dims(), cool: SC.MODE, entry: SC.ENTRY, exit: SC.EXIT,
+             zones: Object.fromEntries(Object.entries(SC.ZONES).map(([k, z]) => [k, { on: z.on, flow: z.flow }])) };
   }
   /** ロットの条件を左メニューへ流し込み、そのまま反映する（画面と運転が食い違わない）。 */
   _applyLot(lot) {
@@ -17422,10 +17571,26 @@ class UIManager {
     set('rng-init-scalp', lot.scalp); set('rng-init-wid', lot.width);
     set('rng-init-len', lot.length); set('rng-init-temp', lot.temp);
     set('rng-trim', lot.trim); set('rng-target', lot.target); set('num-target', lot.target);
+    /* マスタの記号。ロットに書かれていなければ触らない（古い記録との互換） */
+    if (lot.soak !== undefined) { CONFIG.MATERIAL.SOAK_PATTERN = lot.soak || ''; set('sel-soak', lot.soak || ''); }
+    if (lot.pass && Pass.of(lot.pass)) { CONFIG.MATERIAL.PASS_ID = lot.pass; set('sel-pass', lot.pass); }
+    this._soakPickInfo?.(); this._passPickInfo?.();
     const SC = CONFIG.MATERIAL.STRIP_COOL;
     if (lot.cool && SC.MODES[lot.cool]) this.bus.emit('CMD_SET_STRIP_COOL', lot.cool);
-    if (lot.entry !== undefined) SC.ENTRY = !!lot.entry;
-    if (lot.exit !== undefined) SC.EXIT = !!lot.exit;
+    /* SC.ENTRY / SC.EXIT は «どちらかの面が入っているか» の読み取り専用なので、
+     * 書き戻しは系統（ZONES）へ入れる。ここへ代入していたため、計画から条件を
+     * 呼び戻すと必ず例外で止まっていた（冷却を 4 系統に分けた VER.2.1.0 から）。 */
+    if (lot.zones) {
+      for (const [k, z] of Object.entries(lot.zones)) {
+        const t = SC.ZONES[k]; if (!t || !z) continue;
+        if (z.on !== undefined) t.on = !!z.on;
+        if (z.flow !== undefined) t.flow = Math.max(0, +z.flow);
+      }
+    } else {                                   // 古い記録: 側の 1 ビットしか無い
+      const side = (entry, v) => { for (const top of [true, false]) SC.zone(top, entry).on = !!v; };
+      if (lot.entry !== undefined) side(true, lot.entry);
+      if (lot.exit !== undefined) side(false, lot.exit);
+    }
     this._syncStripCool(); this._coolSide();
     this.bus.emit('CMD_SET_SLAB', this.dims());
   }
@@ -17596,7 +17761,7 @@ class UIManager {
   _lotPreview() {
     const d = this._lotRead(), AL = Rolling.alloy(d.alloy), th = d.cast - 2 * d.scalp;
     const coil = d.mode === 'COIL';
-    const sch = Rolling.buildSchedule(th, d.target, d.width, d.temp, { coil, length: d.length, alloy: d.alloy });
+    const sch = Rolling.buildSchedule(th, d.target, d.width, d.temp, { coil, length: d.length, alloy: d.alloy, pass: d.pass });
     const feas = Rolling.scheduleFeasibility(sch, AL, coil);
     const outLen = d.length * th / d.target, mass = th * d.width * d.length * 1e-9 * AL.RHO / 1000;
     const CR = CONFIG.CRANE, gripMax = CR.TONG.W_MAX - 2 * CR.TONG.JAW_T, warn = [];

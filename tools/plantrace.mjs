@@ -159,6 +159,31 @@ const out = await page.evaluate(async () => {
   ui._planStep(false); step.push([ui.plan.i, ui.plan.running]);          // 先頭へ戻る
   ui.setPlanLoop('lot'); ui._planStep(false); step.push([ui.plan.i, ui.plan.running]);   // 同じロット
   R.step = step;
+
+  /* --- ロットの条件が «そのまま» 往復するか -------------------------------
+   * 計画に登録 → 呼び戻し、で条件が元へ戻らないと «同じロットをもう一度» ができない。
+   * 冷却は 4 系統（入側/出側 × 上面/下面）それぞれに入切と水量があり、ここを側の
+   * 1 ビットに丸めていたため、呼び戻しで例外が出て計画がまるごと止まっていた。
+   * マスタの記号（ソーキング・パス）も条件の一部なので、一緒に往復を見る。 */
+  {
+    const SC = K.MATERIAL.STRIP_COOL, Z = SC.ZONES;
+    const snap = () => Object.fromEntries(Object.entries(Z).map(([k, z]) => [k, `${z.on ? 1 : 0}:${z.flow.toFixed(2)}`]));
+    // わざと既定と違う状態を作る（4 系統すべてを別々の値に）
+    Z.ET.on = true;  Z.ET.flow = 0.4;
+    Z.XT.on = false; Z.XT.flow = 0.9;
+    Z.EB.on = true;  Z.EB.flow = 0.6;
+    Z.XB.on = true;  Z.XB.flow = 1.0;
+    K.MATERIAL.SOAK_PATTERN = 'A'; K.MATERIAL.PASS_ID = window.__PASS.ids[0];
+    const want = snap(), wantSoak = 'A', wantPass = window.__PASS.ids[0];
+    const lot = ui._lotOf();
+    // いったん全部ひっくり返してから呼び戻す（戻っていないのに «元のまま» で通らないように）
+    for (const z of Object.values(Z)) { z.on = !z.on; z.flow = 0.15; }
+    K.MATERIAL.SOAK_PATTERN = ''; K.MATERIAL.PASS_ID = '';
+    let threw = null;
+    try { ui._applyLot(lot); } catch (e) { threw = String(e && e.message || e); }
+    R.round = { threw, want, got: snap(), wantSoak, gotSoak: K.MATERIAL.SOAK_PATTERN,
+                wantPass, gotPass: window.__PASS.current(), lotHasZones: !!lot.zones };
+  }
   ui._planStop(); clearTimeout(ui.plan.t);
 
   // --- 11. 板の中身がはみ出していないか（見切れ検査）---
@@ -243,6 +268,15 @@ ok(`時系列の分解能が 100 ms（${o.sampleHz} Hz・実測の平均 ${o.dt}
 ok('繰り返しなし: 末尾まで行くと止まる', o.step[0][0] === 1 && o.step[0][1] === true && o.step[1][1] === false, JSON.stringify(o.step));
 ok('キュー全体: 末尾の次は先頭へ戻る', o.step[2][0] === 0 && o.step[2][1] === true, JSON.stringify(o.step[2]));
 ok('1 ロット: 同じロットを繰り返す', o.step[3][0] === 0 && o.step[3][1] === true, JSON.stringify(o.step[3]));
+ok('ロットの条件を呼び戻しても例外が出ない', !o.round.threw, o.round.threw || '例外なし');
+ok('ロットが冷却 4 系統の入切と水量をそのまま持つ', o.round.lotHasZones,
+   o.round.lotHasZones ? '4 系統を記録' : '側の 1 ビットしか無い');
+ok('呼び戻すと冷却 4 系統が元の入切・水量に戻る',
+   JSON.stringify(o.round.want) === JSON.stringify(o.round.got),
+   `記録 ${JSON.stringify(o.round.want)} ／ 呼び戻し ${JSON.stringify(o.round.got)}`);
+ok('呼び戻すとマスタの記号（ソーキング・パス）も戻る',
+   o.round.gotSoak === o.round.wantSoak && o.round.gotPass === o.round.wantPass,
+   `ソーキング ${o.round.wantSoak} → ${o.round.gotSoak} ／ パス ${o.round.wantPass} → ${o.round.gotPass}`);
 ok('板からはみ出していない（横）', o.fit.panelOverflowX <= 1 && o.fit.ctlOverflowX <= 1 && o.fit.bodyOverflowX <= 1, JSON.stringify(o.fit));
 ok(`見出しと操作列が重ならない（${o.fit.headerOverlap} px）`, o.fit.headerOverlap <= 1, o.fit.headerOverlap);
 
