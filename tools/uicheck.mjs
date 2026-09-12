@@ -226,6 +226,46 @@ for (const w of widths) {
                strayTitle: /<title>/i.test(raw), hitTxt: /ワニ口/.test(someTxt) };
     });
     ok('変更履歴ビュワーが画面に収まる', vv.inView, `${vv.w} × ${vv.h} px（${vv.nVer} 版 ${vv.nItem} 件）`);
+    /* «開いていないダイアログは出ていない»。dialog に display を指で書くと、ブラウザ既定の
+     * display:none を上書きして閉じたまま画面に出る（実際そうなっていた）。 */
+    const closed = await page.evaluate(() => {
+      const A = window.__app;
+      A.ui.toggleVersion(false); A.ui.toggleSoak?.(false);
+      const d = (id) => ({ open: document.getElementById(id).open,
+                           disp: getComputedStyle(document.getElementById(id)).display });
+      return { ver: d('dlg-ver'), soak: d('dlg-soak') };
+    });
+    ok('閉じているダイアログが画面に出ていない',
+       closed.ver.disp === 'none' && closed.soak.disp === 'none',
+       `変更履歴 ${closed.ver.disp} ／ ソーキングマスタ ${closed.soak.disp}`);
+    /* ソーキングマスタ。39 の操業パターンが «絞って選んで読める» こと。 */
+    const sk = await page.evaluate(() => {
+      const A = window.__app, $ = (id) => document.getElementById(id);
+      A.ui.toggleSoak(true);
+      const box = $('dlg-soak').getBoundingClientRect();
+      const n0 = $('soak-list').querySelectorAll('.pat').length;
+      const det0 = $('soak-detail').textContent.length;
+      const find = (q) => { const e = $('soak-q'); e.value = q; e.dispatchEvent(new Event('input'));
+        return $('soak-list').querySelectorAll('.pat').length; };
+      const byMat = find('52S');                      // 代表材で引ける
+      const none = find('該当しないはずの語zzz');
+      find('');
+      const second = $('soak-list').querySelectorAll('.pat')[1];
+      const id2 = second.dataset.id; second.click();
+      const head = $('soak-detail').querySelector('.dv')?.textContent || '';
+      A.ui.toggleSoak(false);
+      return { n0, det0, byMat, none, id2, head,
+               inView: box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1 && box.left >= -1 && box.top >= -1,
+               w: Math.round(box.width), h: Math.round(box.height),
+               nPat: window.__SOAK ? window.__SOAK.ids.length : 0 };
+    });
+    ok('ソーキングマスタが画面に収まり、全パターンが出る',
+       sk.inView && sk.n0 > 30 && sk.det0 > 400,
+       `${sk.w} × ${sk.h} px ／ ${sk.n0} パターン ／ 中身 ${sk.det0} 文字`);
+    ok('ソーキングマスタが «代表材» でも探せる', sk.byMat > 0 && sk.byMat < sk.n0 && sk.none === 0,
+       `«52S» で ${sk.byMat} 件 ／ 当たらない語で ${sk.none} 件`);
+    ok('操業パターンを押すと右がその中身になる', sk.head.trim() === sk.id2,
+       `押した ${sk.id2} ／ 右の見出し ${sk.head.trim()}`);
     ok('開くとすぐ探せる（検索欄に焦点があり、先頭の版の中身が出ている）',
        vv.focus === 'ver-q' && vv.allLi > 0 && vv.all === vv.nVer,
        `焦点 ${vv.focus} / 版 ${vv.all} / 先頭の版の項目 ${vv.allLi} 件`);

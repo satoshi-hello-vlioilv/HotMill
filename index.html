@@ -263,6 +263,9 @@ canvas { display:block; }
   background:var(--s-1); color:var(--ink-1); box-shadow:var(--shadow-2); overflow:hidden;
   display:flex; flex-direction:column;
 }
+/* display:flex を指で書くと、ブラウザ既定の «開いていない dialog は display:none» を
+   上書きしてしまい、閉じているのに画面に出たままになる。開いているときだけ flex にする。 */
+#dlg-ver:not([open]) { display:none; }
 #dlg-ver::backdrop { background:rgba(18,25,29,.42); backdrop-filter:blur(2px); }
 #dlg-ver header {
   display:flex; align-items:center; gap:14px; padding:13px 16px; flex:none;
@@ -361,6 +364,76 @@ canvas { display:block; }
 #dlg-ver footer b { color:var(--ink-2); font-family:ui-monospace,Consolas,monospace; margin-right:4px; }
 #ver-count { font-weight:700; color:var(--ink-2); font-variant-numeric:tabular-nums; }
 #dlg-ver footer .sp { margin-left:auto; }
+
+/* ---------- ソーキングマスタのビュワー ----------
+   実機の操業基準（39 パターン）は一覧では読めないので、変更履歴ビュワーと同じ
+   «絞る → 選ぶ → 読む» の形にする。左で操業パターンを選び、右でその中身
+   （熱サイクル・炉温設定・判定ロジック・対象材・規制）を読む。 */
+#dlg-soak {
+  width:min(1180px,95vw); height:min(880px,88vh); padding:0; border:none; border-radius:var(--r-l);
+  background:var(--s-1); color:var(--ink-1); box-shadow:var(--shadow-2); overflow:hidden;
+  display:flex; flex-direction:column;
+}
+#dlg-soak:not([open]) { display:none; }   /* #dlg-ver と同じ理由 */
+#dlg-soak::backdrop { background:rgba(18,25,29,.42); backdrop-filter:blur(2px); }
+#dlg-soak header {
+  display:flex; align-items:center; gap:14px; padding:13px 16px; flex:none;
+  color:#fff; background:linear-gradient(135deg,#1b262c 0%,#2c3d47 100%);
+}
+#dlg-soak header .ttl { font-weight:800; font-size:14px; letter-spacing:.06em; white-space:nowrap; }
+#dlg-soak header .sub { font-size:10.5px; opacity:.62; margin-top:3px; line-height:1.55; }
+#dlg-soak .find { margin-left:auto; flex:none; position:relative; display:flex; align-items:center; }
+#dlg-soak .find > i { position:absolute; left:10px; font-size:11px; opacity:.55; pointer-events:none; }
+#soak-q {
+  width:268px; height:30px; padding:0 28px; border-radius:8px; font-family:var(--font); font-size:11.5px;
+  border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.10); color:#fff; outline:none;
+}
+#soak-q::placeholder { color:rgba(255,255,255,.5); }
+#soak-q:focus { border-color:rgba(255,255,255,.55); background:rgba(255,255,255,.17); }
+#soak-q::-webkit-search-cancel-button { display:none; }
+#btn-soak-close { flex:none; width:30px; height:30px; border-radius:8px; font-size:13px;
+  border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; cursor:pointer; }
+#btn-soak-close:hover { background:rgba(255,255,255,.2); }
+#dlg-soak .body { flex:1; min-height:0; display:flex; }
+#soak-list { flex:none; width:288px; overflow-y:auto; border-right:1px solid var(--line); background:var(--s-2); }
+#dlg-soak .pat {
+  display:block; width:100%; text-align:left; padding:9px 12px 9px 14px; cursor:pointer;
+  border:none; border-bottom:1px solid var(--line-2); border-left:3px solid transparent;
+  background:transparent; color:inherit; font-family:var(--font);
+}
+#dlg-soak .pat:hover { background:var(--s-3); }
+#dlg-soak .pat.is-sel { background:var(--s-1); border-left-color:var(--accent); }
+#dlg-soak .pat .hd { display:flex; align-items:baseline; gap:8px; }
+#dlg-soak .pat .id { font-weight:800; font-size:12px; letter-spacing:.04em; color:var(--accent); min-width:28px; }
+#dlg-soak .pat .nm { font-size:11.5px; font-weight:700; color:var(--ink-1); }
+#dlg-soak .pat .st { margin-left:auto; flex:none; font-size:9.5px; font-weight:800; color:var(--ink-3);
+  background:var(--s-3); border-radius:999px; padding:1px 7px; }
+#dlg-soak .pat .aim { display:block; margin-top:3px; font-size:11px; line-height:1.5; color:var(--ink-2);
+  overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+#soak-detail { flex:1; min-width:0; overflow-y:auto; padding:14px 20px 18px; }
+#soak-detail .dh { padding-bottom:11px; border-bottom:1px solid var(--line); }
+#soak-detail .dv { font-weight:800; font-size:17px; letter-spacing:.04em; color:var(--accent); }
+#soak-detail .dttl { margin-top:5px; font-size:13px; font-weight:700; line-height:1.6; color:var(--ink-1); }
+#soak-detail .dmeta { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:8px;
+  font-size:10.5px; color:var(--ink-3); }
+#soak-detail .dmeta code { font-family:ui-monospace,Consolas,monospace; font-size:10px; color:var(--ink-2);
+  background:var(--s-2); border:1px solid var(--line-2); border-radius:var(--r-s); padding:2px 7px; }
+#soak-detail h4 { margin:16px 0 6px; font-size:10.5px; font-weight:800; letter-spacing:.06em; color:var(--ink-2);
+  display:flex; align-items:center; gap:7px; }
+#soak-detail h4::after { content:""; flex:1; height:1px; background:var(--line-2); }
+#soak-detail table { width:100%; border-collapse:collapse; font-size:11px; }
+#soak-detail th { text-align:left; font-weight:700; color:var(--ink-3); font-size:10px; padding:3px 8px 3px 0;
+  border-bottom:1px solid var(--line-2); white-space:nowrap; }
+#soak-detail td { padding:4px 8px 4px 0; border-bottom:1px solid var(--line-2); color:var(--ink-2);
+  line-height:1.6; vertical-align:top; }
+#soak-detail td.n { font-variant-numeric:tabular-nums; white-space:nowrap; }
+#soak-detail td b { color:var(--ink-1); }
+#soak-detail .warn td { background:#fdf6e8; }
+#soak-detail .none { padding:6px 0; font-size:11px; color:var(--ink-3); }
+#dlg-soak mark { background:#fdf0c2; color:var(--ink-1); border-radius:3px; padding:0 1px; }
+#dlg-soak footer { display:flex; gap:16px; flex-wrap:wrap; align-items:center; flex:none;
+  padding:9px 16px; background:var(--s-2); border-top:1px solid var(--line); font-size:10.5px; color:var(--ink-3); }
+#soak-count { font-weight:700; color:var(--ink-2); font-variant-numeric:tabular-nums; }
 
 /* ---------- 状態行（メニューから分離したメッセージ置き場） ----------
    「今どうなっていて、次に何をするか」は運転中ずっと読むものなので、計器のすぐ上に
@@ -871,6 +944,12 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <div class="top"><span class="k">材質（JIS 合金）</span></div>
           <select id="sel-alloy" class="sel" aria-label="材質"></select>
           <div class="derived" id="der-alloy"></div>
+        </div>
+        <div class="fld">
+          <div class="top"><span class="k">ソーキング（均質化熱処理）</span>
+            <button class="mini" id="btn-soak" type="button" title="ソーキングマスタ（実機の操業基準 39 パターン）を開く">マスタ</button></div>
+          <select id="sel-soak" class="sel" aria-label="操業パターン"></select>
+          <div class="derived" id="der-soak"></div>
         </div>
         <div class="fld">
           <div class="top"><span class="k">呼び厚（鋳造厚）</span></div>
@@ -1430,6 +1509,32 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   </form>
 </dialog>
 
+<dialog id="dlg-soak">
+  <header>
+    <div>
+      <div class="ttl">ソーキングマスタ</div>
+      <div class="sub">実機の操業基準（均質化熱処理）。左で操業パターンを選び、右でその中身を読みます。</div>
+    </div>
+    <div class="find">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input id="soak-q" type="search" placeholder="記号・目的・材料で探す" autocomplete="off" spellcheck="false"
+             aria-label="操業パターンを探す">
+    </div>
+    <button id="btn-soak-close" type="button" title="閉じる（Esc）" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+  </header>
+  <div class="body">
+    <div id="soak-list" role="listbox" aria-label="操業パターンの一覧"></div>
+    <div id="soak-detail"></div>
+  </div>
+  <footer>
+    <span id="soak-count"></span>
+    <span><b>1 段</b> 昇温 → 均熱</span>
+    <span><b>2 段</b> 昇温 → 第1均熱 → 冷却／第2昇温 → 第2均熱</span>
+    <span><b>成行</b> 昇温速度の規定なし</span>
+    <span><b>H→L</b> 炉温を落とす判定温度（設定温度ではない）</span>
+  </footer>
+</dialog>
+
 <dialog id="dlg-ver">
   <header>
     <div>
@@ -1494,6 +1599,18 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.4.0', base: '591fe07', date: '2026-09-12', title: 'ソーキングマスタ —— 実機の操業基準 39 パターンを表のまま入れ、ビュワーを作る', items: [
+      { t: 'ソーキング（均質化熱処理）の実機の操業基準をいただいたので、10 の表（操業パターン／炉温設定／熱サイクル／炉／測温点／判定ロジック／対象材／合金温度制約／時間規制／運用規制）を «いただいた形のまま» 入れた。加工した値で上書きすると «元は何と書いてあったか» を照らせなくなるので、表は 1 行 1 レコードの配列、列の意味は KEYS の 1 か所だけが持つ', w: 'CONFIG.SOAK' },
+      { t: '表を引くところを 1 か所にまとめた —— 行を名前つきにする／パターンで絞る／炉番から炉の群（#1〜6 G1・#7・8 G2・#9 G3）／炉温設定を記号で引く／最後の均熱段の設定温度（持ちかかり温度の出どころ）／保持時間の合計／代表材から操業パターンを引く', w: 'Soak' },
+      { t: '設定温度の書き方に 2 つの癖がある。«590(G2:600)» は炉の群で値が変わる書き方、«550→530(G2:540)» は途中で落とす書き方。混ざると «540→530(G2:550→540)» のようになり、括弧の最初の数（550）を取ると実際の 540 と 10 K ずれる。括弧の中をその規則で読み直す形にした', w: 'Soak.parseSetC' },
+      { t: '«H→L» は炉温を落とす «判定温度» であって設定温度ではない、と表に明記されている。均熱の設定として使わないよう、記号のまま持って区別している', w: 'CONFIG.SOAK.TEMPS' },
+      { t: 'ソーキングマスタのビュワーを作った。変更履歴ビュワーと同じ «絞る → 選ぶ → 読む» —— 記号・目的・材料で探し、左で操業パターンを選び、右で熱サイクル・炉温設定・判定ロジック・対象材・温度と時間の上限・運用規制・測温点を読む', w: '#dlg-soak / UIManager._soakRender' },
+      { t: '素材の設定に «ソーキング» の選択を足した。既定は «自動（材質から引く）» で、材質 → 社内材質記号 → 代表材 → 操業パターン と辿る。いま効いている条件（段数・最後の均熱温度・保持の下限・規制の有無）を 1 行で出す', w: '#sel-soak / UIManager._soakPickInfo' },
+      { t: '材質表に «社内材質記号» を足した。実機の操業基準は JIS 記号ではなく社内記号（52S・3S・75S・61S …）で書かれているため。引けたのは 5 つだけで、A1050・A1100・A5083 は表に代表材が無いので null のまま —— 推測で埋めていない（README 0-3 の 24）', w: 'ALLOYS[].soak' },
+      { t: '較正の基準ロット（A5052・持ちかかり 433 ℃）がどの操業パターンかが分からないことが見えた。52S は A 操業（均熱 480 ℃）だが、抽出から持ちかかりまでの 10 分では放射と対流で 3 K しか下がらない計算で、実測の −47 K が説明できない（README 0-3 の 23）', w: 'README 0-3' },
+      { t: '閉じているダイアログが画面に出たままになっていた。dialog に display を指で書くと、ブラウザ既定の «開いていない dialog は display:none» を上書きしてしまう。変更履歴ビュワーを作ったとき（VER.2.1.1）から入っていた', w: '#dlg-ver / #dlg-soak' },
+      { t: '判定を作った —— tools/soaktrace.mjs に 11 件（参照切れ・段番号の連番・M1 の段数と M3 の均熱段の噛み合い・判定温度と設定温度の区別・設定温度の読み方・炉の群・代表材からの引き当て）、tools/uicheck.mjs に 4 件（閉じたダイアログが出ていない・ビュワーが画面に収まる・代表材で探せる・押すと右が変わる）', w: 'tools/soaktrace.mjs / uicheck.mjs' },
+    ] },
     { v: '2.3.0', base: '4d9a92d', date: '2026-09-12', title: '偏芯を «停止時間の抜熱ムラ» から出す —— 熱履歴モデルと、荷重の回転同期成分からの補償', items: [
       // --- 熱偏芯（ご指摘の «停止時間の抜熱ムラ»）---
       { t: '偏芯の出どころが «研削で決まる現品の振れ» しか無かった。ご指摘のとおり実機で効くのは «圧延の停止時間の抜熱ムラ» なので、熱履歴として入れた。ロールの周方向を 36 分割して «角度ごとの温まり具合» を持ち、バイトに居る角度だけが熱い板と向かい合って温まる。動いていれば全周が順番にバイトを通るので差が付かず、止めるとそこだけ育つ', w: 'PhysicsEngine._eccThermal / GAUGE_MODEL.ECC_TH' },
@@ -2930,6 +3047,626 @@ const CONFIG = {
    * 温度差がついている（実機の見立てで 50 K 前後。ソーキングの保持時間でどこまで均されて
    * いるかは炉ごとに違うので、ここは «抽出時の差» として 1 つ持つ）。
    * 抽出から圧延までの待ちでどれだけ均されるかは SlabState.pitProfile が解く。 */
+  /* ===========================================================================
+   * ソーキング（均質化熱処理）のマスタ。実機の操業基準（2026-09 提供）をそのまま持つ。
+   * 表は «いただいた形» のまま 1 行 1 レコードの配列で置き、列の意味は KEYS が持つ。
+   * 加工した値（シミュレータが使う境界条件）は Soak が導出する —— 元の表は書き換えない。
+   * ========================================================================= */
+  SOAK: {
+    /* 列の名前。表を «そのままの形» で持つので、意味づけはここ 1 か所。 */
+    KEYS: {
+      PATTERNS: ['id', 'name', 'doc', 'rev', 'date', 'scope', 'stages', 'aim', 'pairRule'],
+      TEMPS:    ['pattern', 'group', 'code', 'tempC', 'note'],
+      STEPS:    ['pattern', 'no', 'type', 'setC', 'rampMode', 'rampLimitCH', 'holdH', 'holdType', 'note'],
+      FURNACES: ['no', 'group', 'zones', 'coolH', 'note'],
+      PROBES:   ['pattern', 'group', 'type', 'place', 'mount', 'cond'],
+      TRIGGERS: ['pattern', 'event', 'point', 'tempC', 'action'],
+      MATERIALS:['pattern', 'class', 'className', 'cond', 'sample'],
+      LIMITS:   ['target', 'tempC', 'phenomenon', 'patterns', 'note'],
+      TIMELIM:  ['pattern', 'target', 'from', 'to', 'hours', 'action'],
+      RULES:    ['pattern', 'kind', 'text'],
+    },
+    /* M1 操業パターン */
+    PATTERNS: [
+      ['A', 'Ａ操業', 'Q-S-PIT-SA0', 'R01', '2000-10-05', '#1-6/#7-8', '1段', '肌荒れ防止・低温持掛', null],
+      ['A1', 'Ａ１操業', 'Q-S-PIT-SA1', null, null, '#1-6/#7-8', '1段', '2000系H/O済スラブ局部溶融防止', null],
+      ['A2', 'Ａ２操業', 'Q-S-PIT-SA2', null, null, '#1-6/#7-8', '1段', '7000系局部溶融防止', null],
+      ['A3', 'Ａ３操業', 'Q-S-PIT-SA3', null, null, '#1-6/#7-8', '1段', 'BA93耳割れ対策', null],
+      ['A8', 'Ａ８操業', 'Q-S-PIT-SA8', null, null, '#1-6/#7-8', '1段', '2000系H/O未処理スラブ均質化', null],
+      ['B', 'Ｂ操業', 'Q-S-PIT-SB0', 'R01', null, '#1-6/#7-8', '1段', 'Mg2Si固溶促進・バーニング抑制', null],
+      ['C', 'Ｃ操業', 'Q-S-PIT-SC0', null, null, '#1-6/#7-8', '2段', '絞り性・方向性/抗張力コントロール', null],
+      ['C1', 'Ｃ１操業', 'Q-S-PIT-SC1', 'R01', '2014-05-10', '#1-6/#7-8/#9', '2段', 'アルマイト色調バラツキ抑制', 'C3・C5と合釜不可'],
+      ['C3', 'Ｃ３操業', 'Q-S-PIT-SC3', 'R01', '2012-08-23', '#1-6/#7-8', '2段', 'Fe固溶/析出調整・巾方向強度バラツキ防止', 'C5と合釜不可'],
+      ['C5', 'Ｃ５操業', 'Q-S-PIT-SC5', 'R01', '2011-03-22', '#1-6/#7-8', '2段', 'Mn固溶（高温長時間保持）', null],
+      ['E', 'Ｅ操業', 'Q-S-PIT-SE0', 'R01', null, '#1-6/#7-8', '1段', '一般材・スラブ上下温度差低減', null],
+      ['E5', 'Ｅ５操業', 'Q-S-PIT-SE5', null, null, '#1-6/#7-8', '1段', '陰極コンデンサー箔地・上下温度差低減', 'E操業と同釜可（530℃5hrs以上保持）'],
+      ['EX', 'ＥＸ操業', 'Q-S-PIT-SEX', null, '2009-07-07', '#1-6/#7-8', '1段', '固溶量制限（アルマイトb値減回避）', 'E5と合釜不可'],
+      ['F', 'Ｆ操業', 'Q-S-PIT-SF0', 'R01', '1999-03-31', '#1-6/#7-8', '2段', 'β相固溶・バーニング防止', null],
+      ['F4', 'Ｆ４操業', 'Q-S-PIT-SF4', 'R03', '2012-08-22', '#1-6/#7-8', '2段', 'NP56耳割れ対策・Mn析出促進', null],
+      ['H', 'Ｈ操業', 'Q-S-PIT-SH0', null, null, '#1-6/#7-8', '2段', 'Mn固溶→析出・結晶粒径制御', 'H2と合釜時は冷却まで25hrs以上'],
+      ['H1', 'Ｈ１操業', 'Q-S-PIT-SH1', 'R02', '2000-09-01', '#1-6/#7-8', '2段', 'Al-Fe晶出物のAl3Fe変態', 'H2と合釜時は冷却まで25hrs以上'],
+      ['H2', 'Ｈ２操業', 'Q-S-PIT-SH2', null, null, '#1-6/#7-8', '1段', 'Al3Fe変態・アルマイト色調差防止', null],
+      ['H3', 'Ｈ３操業', 'Q-S-PIT-SH3', null, null, '#1-6/#7-8', '2段', '中低圧コンデンサー材', null],
+      ['H4', 'Ｈ４操業', 'Q-S-PIT-SH4', 'R01', null, '#1-6/#7-8', '2段', '不純物固溶・テーブルスリ跡防止', null],
+      ['H5', 'Ｈ５操業', 'Q-S-PIT-SH5', null, '2011-03-22', '#1-6/#7-8', '2段', 'Fe系化合物再固溶/析出（H簡易版）', '合釜不可'],
+      ['J', 'Ｊ操業', 'Q-S-PIT-SJ0', null, null, '#1-6/#7-8', '1段', 'Mg固溶（β相共晶温度以下）', null],
+      ['J0', 'Ｊ０（ゼロ）操業', 'Q-S-PIT-SJ', null, '2002-12-04', '#1-6/#7-8', '1段', '75S黒皮ソーキング', null],
+      ['J1', 'Ｊ１操業', 'Q-S-PIT-SJ1', 'R02', '1999-03-31', '#1-6/#7-8', '1段', 'Mg2Si析出防止（ブリスタ対策）', null],
+      ['J3', 'Ｊ３操業', 'Q-S-PIT-SJ3', null, null, '#1-6/#7-8', '1段', 'Mg2Si粗大化・耐硝酸溶解性向上', null],
+      ['K', 'Ｋ操業', 'Q-S-PIT-SK0', 'R02', '2001-02-07', '#1-6/#7-8', '1段', '微量不純物(Fe,Si,Cu)析出量制御', null],
+      ['L', 'Ｌ操業', 'Q-S-PIT-SL0', null, null, '#1-6/#7-8', '2段', '中間焼鈍省略', null],
+      ['M', 'Ｍ操業', 'Q-S-PIT-SM0', null, null, '#1-6/#7-8', '1段', '自然発色合金の色調制御', null],
+      ['M1', 'Ｍ１操業', 'Q-S-PIT-SM1', 'R02', '2001-10-19', '#1-6/#7-8', '1段', 'Al6Fe→Al3Fe相変態抑制', null],
+      ['M5', 'Ｍ５操業', 'Q-S-PIT-SM5', 'R01', '2000-09-01', '#1-6/#7-8', '1段', '(100)結晶方位バラツキ抑制・低温持掛', null],
+      ['P', 'Ｐ操業', 'Q-S-PIT-SP0', null, null, '#1-6/#7-8', '2段', 'Mn・Mg固溶（耳割れ対策）', 'P操業品はC操業でも可'],
+      ['Q', 'Ｑ操業', 'Q-S-PIT-SQ0', null, '2008-04-28', '#1-6/#7-8/#9', '2段', '中間焼鈍省略材', '合釜不可'],
+      ['R', 'Ｒ操業', 'Q-S-PIT-SR0', null, null, '#1-6/#7-8', '2段', 'Mg2Si固溶＋粗大析出（T651プレート）', '間引き禁止'],
+      ['S1', 'Ｓ１操業', 'Q-S-PIT-SS1', null, null, '#1-6/#7-8', '1段', '固溶・均質化（PS08）', 'S3と合釜時はS3基準に準ずる'],
+      ['S5', 'Ｓ５操業', 'Q-S-PIT-SS5', 'R02', '2012-06-13', '#1-6/#7-8', '1段', 'Mn固溶（高温長時間保持）', '前釜装入不可：F・F4操業'],
+      ['T', 'Ｔ操業', 'Q-S-PIT-ST0', null, '2001-09-01', '#1-6/#7-8', '2段', 'スラブ均質化・テーブルスリ跡防止', null],
+      ['V', 'Ｖ操業', 'Q-S-PIT-SV0', null, null, '#1-6/#7-8', '2段', '第2相析出物(Fe,Si,Mn)固溶量制御', null],
+      ['W', 'Ｗ操業', 'Q-S-PIT-SW0', null, '2001-09-01', '#1-6/#7-8', '2段', 'β相固溶・粒界強度低下防止', null],
+      ['Y', 'Ｙ操業', 'Q-S-PIT-SY0', null, '2011-03-22', '#1-6/#7-8', '1段', 'クラッド皮材耳割れ防止（A操業より高温）', null],
+    ],
+    /* M2 炉温設定。set_code: H/H1/H2 ＝ 昇温段の雰囲気設定、H→L ＝ 炉温を落とす判定温度
+     * （設定温度ではない）、L/L1/L2 ＝ 均熱段の雰囲気設定。group: G1 ＝ #1〜6、G2 ＝ #7・8、G3 ＝ #9 */
+    TEMPS: [
+      ['A', 'ALL', 'H', 550, null],
+      ['A', 'ALL', 'H→L', 480, null],
+      ['A', 'ALL', 'L', 480, null],
+      ['A1', 'ALL', 'H', 500, null],
+      ['A1', 'ALL', 'H→L', 480, null],
+      ['A1', 'ALL', 'L', 480, null],
+      ['A2', 'ALL', 'H', 500, null],
+      ['A2', 'ALL', 'H→L', 480, null],
+      ['A2', 'ALL', 'L', 480, null],
+      ['A3', 'ALL', 'H', 550, null],
+      ['A3', 'ALL', 'H→L', 480, null],
+      ['A3', 'ALL', 'L', 480, null],
+      ['A8', 'ALL', 'H', 500, null],
+      ['A8', 'ALL', 'H→L', 480, null],
+      ['A8', 'ALL', 'L', 480, null],
+      ['B', 'ALL', 'H', 580, 'Mg2Si溶融595℃に対しバーニング抑制のため580設定'],
+      ['B', 'ALL', 'H→L', 550, null],
+      ['B', 'ALL', 'L', 550, null],
+      ['C', 'G1', 'H1', 610, '昇温が遅い場合ヘッド620℃まで可'],
+      ['C', 'G1', 'H1→L1', 590, null],
+      ['C', 'G1', 'L1', 590, null],
+      ['C', 'G1', 'L2', 480, null],
+      ['C', 'G2', 'H1', 610, '昇温が遅い場合ヘッド620℃まで可'],
+      ['C', 'G2', 'H1→L1', 590, null],
+      ['C', 'G2', 'L1', 600, null],
+      ['C', 'G2', 'L2', 480, null],
+      ['C1', 'G1', 'H1', 610, 'H1≦610℃厳守'],
+      ['C1', 'G1', 'H1→L1', 590, null],
+      ['C1', 'G1', 'L1', 590, null],
+      ['C1', 'G1', 'L2', 480, null],
+      ['C1', 'G2', 'H1', 610, 'H1≦610℃厳守'],
+      ['C1', 'G2', 'H1→L1', 590, null],
+      ['C1', 'G2', 'L1', 600, null],
+      ['C1', 'G2', 'L2', 480, null],
+      ['C1', 'G3', 'H1', 610, '#9炉はG1と同設定'],
+      ['C1', 'G3', 'H1→L1', 590, null],
+      ['C1', 'G3', 'L1', 590, null],
+      ['C1', 'G3', 'L2', 480, null],
+      ['C3', 'ALL', 'H1', 610, null],
+      ['C3', 'ALL', 'H1→L1', 590, null],
+      ['C3', 'ALL', 'L1', 590, null],
+      ['C3', 'ALL', 'L2', 480, null],
+      ['C5', 'ALL', 'H1', 610, null],
+      ['C5', 'ALL', 'H1→L1', 590, null],
+      ['C5', 'ALL', 'L1', 590, null],
+      ['C5', 'ALL', 'L2', 480, null],
+      ['E', 'G1', 'H', 600, '昇温が遅い場合 Al系610℃まで上昇可'],
+      ['E', 'G1', 'H→L', 540, '一番速い測温点が540℃到達で雰囲気600→550'],
+      ['E', 'G1', 'L', 530, '1時間均熱後に550→530へ降下'],
+      ['E', 'G2', 'H', 600, '昇温が遅い場合 Al系610℃まで上昇可'],
+      ['E', 'G2', 'H→L', 540, null],
+      ['E', 'G2', 'L', 540, '雰囲気設定に対し実体温度が-10℃となるため+10℃高く設定'],
+      ['E5', 'G1', 'H', 590, '昇温が遅い場合 Al系610℃／Al-Mg系600℃まで上昇可'],
+      ['E5', 'G1', 'H→L', 540, '一番速い測温点が540℃到達で雰囲気590→540'],
+      ['E5', 'G1', 'L', 530, null],
+      ['E5', 'G2', 'H', 590, null],
+      ['E5', 'G2', 'H→L', 550, '一番速い測温点が540℃到達で雰囲気590→550'],
+      ['E5', 'G2', 'L', 540, null],
+      ['EX', 'G1', 'H', 600, null],
+      ['EX', 'G1', 'H→L', 540, '一番速い測温点が540℃到達で雰囲気600→550'],
+      ['EX', 'G1', 'L', 530, null],
+      ['EX', 'G2', 'H', 600, null],
+      ['EX', 'G2', 'H→L', 540, null],
+      ['EX', 'G2', 'L', 540, null],
+      ['F', 'ALL', 'H1', 490, null],
+      ['F', 'ALL', 'H1→L1', 440, null],
+      ['F', 'ALL', 'L1', 440, null],
+      ['F', 'ALL', 'L1→H2', 430, '上（上側測温点で判定）'],
+      ['F', 'ALL', 'H2', 540, null],
+      ['F', 'ALL', 'H2→L2', 525, null],
+      ['F', 'ALL', 'L2', 525, null],
+      ['F4', 'ALL', 'H1', 490, null],
+      ['F4', 'ALL', 'H1→L1', 440, null],
+      ['F4', 'ALL', 'L1', 440, null],
+      ['F4', 'ALL', 'H2', 540, null],
+      ['F4', 'ALL', 'H2→L2', 525, null],
+      ['F4', 'ALL', 'L2', 525, null],
+      ['H', 'ALL', 'H1', 620, null],
+      ['H', 'ALL', 'H1→L1', 610, null],
+      ['H', 'ALL', 'L1', 610, null],
+      ['H', 'ALL', 'L2', 480, 'カバー開度300〜400mmで4hrかけ実体480℃へ'],
+      ['H1', 'ALL', 'H1', 620, null],
+      ['H1', 'ALL', 'H1→L1', 610, '上（上側測温点で判定）'],
+      ['H1', 'ALL', 'L1', 610, null],
+      ['H1', 'ALL', 'L2', 530, 'R01で480→530に修正（記入ミス修正）'],
+      ['H2', 'ALL', 'H', 620, null],
+      ['H2', 'ALL', 'H→L', 610, null],
+      ['H2', 'ALL', 'L', 610, '炉内強制冷却は行わない'],
+      ['H3', 'ALL', 'H', 620, null],
+      ['H3', 'ALL', 'H1→L1', 610, null],
+      ['H3', 'ALL', 'L1', 610, null],
+      ['H3', 'ALL', 'L2', 480, null],
+      ['H4', 'ALL', 'H1', 620, 'R01で雰囲気610→620に修正'],
+      ['H4', 'ALL', 'H→L1', 610, 'R01で第1均熱590→610に修正'],
+      ['H4', 'ALL', 'L1', 610, null],
+      ['H4', 'ALL', 'L2', 560, '板だれによるテーブルスリ跡防止'],
+      ['H5', 'ALL', 'H1', 620, null],
+      ['H5', 'ALL', 'H→L1', 610, null],
+      ['H5', 'ALL', 'L1', 610, null],
+      ['H5', 'ALL', 'L2', 480, null],
+      ['J', 'ALL', 'H', 450, null],
+      ['J', 'ALL', 'H→L', 430, null],
+      ['J', 'ALL', 'L', 430, null],
+      ['J0', 'ALL', 'H', 450, null],
+      ['J0', 'ALL', 'H→L', 430, null],
+      ['J0', 'ALL', 'L', 430, null],
+      ['J1', 'ALL', 'H', 450, null],
+      ['J1', 'ALL', 'H→L', 430, null],
+      ['J1', 'ALL', 'L', 430, null],
+      ['J3', 'ALL', 'H', 450, null],
+      ['J3', 'ALL', 'H→L', 430, null],
+      ['J3', 'ALL', 'L', 430, null],
+      ['K', 'ALL', 'H', 590, null],
+      ['K', 'ALL', 'H→L', 550, null],
+      ['K', 'ALL', 'L', 550, 'R02以前は560℃。特性悪化のため550℃に引下げ'],
+      ['L', 'ALL', 'H1', 610, null],
+      ['L', 'ALL', 'H1→L1', 550, '上カップルで判定'],
+      ['L', 'ALL', 'L1', 560, null],
+      ['L', 'ALL', 'L2', 480, null],
+      ['M', 'ALL', 'H', 480, null],
+      ['M', 'ALL', 'H→L', 450, null],
+      ['M', 'ALL', 'L', 450, null],
+      ['M1', 'ALL', 'H', 500, null],
+      ['M1', 'ALL', 'H→L', 450, null],
+      ['M1', 'ALL', 'L', 450, null],
+      ['M5', 'ALL', 'H', 500, null],
+      ['M5', 'ALL', 'H→L', 450, null],
+      ['M5', 'ALL', 'L', 450, null],
+      ['P', 'ALL', 'H', 610, null],
+      ['P', 'ALL', 'H1→L1', 590, null],
+      ['P', 'ALL', 'L1', 590, null],
+      ['P', 'ALL', 'L2', 530, '冷却はカバー全開'],
+      ['Q', 'ALL', 'H1', 610, null],
+      ['Q', 'ALL', 'H1→L1', 580, '全測温点の最低温度が580℃超で第1均熱開始'],
+      ['Q', 'ALL', 'L1', 590, null],
+      ['Q', 'ALL', 'L2', 380, '380℃±20℃で第2均熱入かつ完了（急速冷却）'],
+      ['R', 'ALL', 'H1', 580, 'Mg2Si溶融595℃に対しバーニング防止'],
+      ['R', 'ALL', 'H1→L1', 550, null],
+      ['R', 'ALL', 'L1', 550, null],
+      ['R', 'ALL', 'L2', 480, 'Mg2Si粗大析出・持掛温度の共通化'],
+      ['S1', 'G1', 'H', 610, null],
+      ['S1', 'G1', 'H→L', 590, null],
+      ['S1', 'G1', 'L1', 590, null],
+      ['S1', 'G2', 'H', 610, null],
+      ['S1', 'G2', 'H→L', 590, null],
+      ['S1', 'G2', 'L1', 600, null],
+      ['S5', 'G1', 'H', 610, null],
+      ['S5', 'G1', 'H→L', 590, null],
+      ['S5', 'G1', 'L', 590, null],
+      ['S5', 'G2', 'H', 610, null],
+      ['S5', 'G2', 'H→L', 590, null],
+      ['S5', 'G2', 'L', 600, null],
+      ['T', 'ALL', 'H1', 610, null],
+      ['T', 'ALL', 'H→L1', 590, null],
+      ['T', 'ALL', 'L1', 600, null],
+      ['T', 'ALL', 'L2', 560, '板だれによるテーブルスリ跡防止'],
+      ['V', 'G1', 'H1', 610, null],
+      ['V', 'G1', 'H1→L1', 590, null],
+      ['V', 'G1', 'L1', 590, null],
+      ['V', 'G1', 'L2', 460, null],
+      ['V', 'G2', 'H1', 610, null],
+      ['V', 'G2', 'H1→L1', 590, null],
+      ['V', 'G2', 'L1', 600, null],
+      ['V', 'G2', 'L2', 460, null],
+      ['W', 'ALL', 'H1', 490, null],
+      ['W', 'ALL', 'H1→L1', 440, null],
+      ['W', 'ALL', 'L1', 440, null],
+      ['W', 'ALL', 'L1→H2', 430, '上（上側測温点で判定）'],
+      ['W', 'ALL', 'H2', 500, null],
+      ['W', 'ALL', 'H2→L2', 480, null],
+      ['W', 'ALL', 'L2', 480, '粒界強度低下によるエッヂクラック・ワニ口裂け防止'],
+      ['Y', 'ALL', 'H', 540, null],
+      ['Y', 'ALL', 'H→L', 520, null],
+      ['Y', 'ALL', 'L', 520, null],
+    ],
+    /* M3 熱サイクルステップ —— シミュレータの境界条件。
+     * rampMode: 成行 ＝ 昇温速度の規定なし／規制 ＝ rampLimitCH を適用
+     * holdType: 下限 ＝ 最低保持時間／上限 ＝ 超過禁止／固定 */
+    STEPS: [
+      ['A', 1, '昇温', 550, '成行', null, null, null, null],
+      ['A', 2, '均熱', 480, null, null, 1, '下限', null],
+      ['A1', 1, '昇温', 500, '規制', 100, null, null, '14Sは510℃で局部溶融'],
+      ['A1', 2, '均熱', 480, null, null, 1, '下限', null],
+      ['A2', 1, '昇温', 500, '規制', 100, null, null, null],
+      ['A2', 2, '均熱', 480, null, null, 3, '下限', '均熱時間3時間（注意）'],
+      ['A3', 1, '昇温', 550, '成行', null, null, null, null],
+      ['A3', 2, '均熱', 480, null, null, 3, '下限', '耳割れ対策で1hr→3hrsへ変更'],
+      ['A8', 1, '昇温', 500, '規制', 100, null, null, null],
+      ['A8', 2, '均熱', 480, null, null, 8, '下限', null],
+      ['B', 1, '昇温', 580, '成行', null, null, null, null],
+      ['B', 2, '均熱', 550, null, null, 1, '下限', null],
+      ['C', 1, '昇温', 610, '成行', null, null, null, '昇温遅い場合ヘッド620℃まで可'],
+      ['C', 2, '第1均熱', '590(G2:600)', null, null, 15, '下限', '図中に1hrの別記載あり（要確認）'],
+      ['C', 3, '冷却', '燃焼停止・カバー全開', null, null, 5, '下限', '冷却開始から最低5時間'],
+      ['C', 4, '第2均熱', 480, null, null, 1, '下限', '実体480℃到達後に再点火。カバー閉は550℃付近'],
+      ['C1', 1, '昇温', 610, '成行', null, null, null, 'H1≦610℃厳守'],
+      ['C1', 2, '第1均熱', '590(G2:600)', null, null, 15, '下限', '#1-8は上カップル580℃、#9は実体線580℃で保持開始'],
+      ['C1', 3, '冷却', '燃焼停止・カバー全開（急冷）', null, null, 5, '下限', '徐冷だと耐力値が下限を切るため急冷'],
+      ['C1', 4, '第2均熱', 480, null, null, 1, '下限', null],
+      ['C3', 1, '昇温', 610, '成行', null, null, null, null],
+      ['C3', 2, '第1均熱', 590, null, null, 15, '下限', null],
+      ['C3', 3, '冷却', 'カバー開', null, null, 5, '下限', null],
+      ['C3', 4, '第2均熱', 480, null, null, 3, '下限', '総所要 約23hrs'],
+      ['C5', 1, '昇温', 610, '成行', null, null, null, null],
+      ['C5', 2, '第1均熱', 590, null, null, 15, '下限', null],
+      ['C5', 3, '冷却', 'カバー開', null, null, 5, '下限', null],
+      ['C5', 4, '第2均熱', 480, null, null, 5, '下限', '総所要 約25hrs'],
+      ['E', 1, '昇温', 600, '成行', null, null, null, '最速測温点540℃で雰囲気600→550'],
+      ['E', 2, '均熱', '550→530(G2:540)', null, null, 1, '下限', '最遅測温点530℃で均熱入り。1hr後に雰囲気降下'],
+      ['EX', 1, '昇温', 600, '成行', null, null, null, '最速測温点540℃で雰囲気600→550'],
+      ['EX', 2, '均熱', '550→530(G2:540)', null, null, 1, '下限', '最遅測温点530℃で均熱入り'],
+      ['EX', 3, '保持上限', '530(G2:540)', null, null, 20, '上限', '20hr超過で圧延した場合はロット保留'],
+      ['E5', 1, '昇温', 590, '成行', null, null, null, '最速測温点540℃で雰囲気590→540(G2:550)'],
+      ['E5', 2, '均熱', '540→530(G2:550→540)', null, null, 5, '下限', '最遅測温点530℃到達から5hrs後に圧延開始可'],
+      ['F', 1, '昇温', 490, '成行', null, null, null, null],
+      ['F', 2, '第1均熱', 440, null, null, 1, '下限', 'R01で第1均熱保持を追加。図中に10hrs/8hrsの記載あり（要確認）'],
+      ['F', 3, '第2昇温', 540, '成行', null, null, null, '上側測温点430℃で第2昇温開始'],
+      ['F', 4, '第2均熱', 525, null, null, 1, '下限', null],
+      ['F4', 1, '昇温', 490, '成行', null, null, null, null],
+      ['F4', 2, '第1均熱', 440, null, null, 4, '下限', '440℃4時間保持でβ相固溶'],
+      ['F4', 3, '第2昇温', 540, '成行', null, null, null, null],
+      ['F4', 4, '第2均熱', 525, null, null, 1, '下限', null],
+      ['H', 1, '昇温', 620, '成行', null, null, null, null],
+      ['H', 2, '第1均熱', 610, null, null, 10, '下限', '装入〜冷却開始まで約25hrs'],
+      ['H', 3, '冷却', 'カバー開度300〜400mm', null, null, 4, '固定', '4時間後の実体温度が480℃になるよう開度調整'],
+      ['H', 4, '第2均熱', 480, null, null, 21, '下限', '総所要 約50hrs'],
+      ['H1', 1, '昇温', 620, '成行', null, null, null, null],
+      ['H1', 2, '第1均熱', 610, null, null, 10, '下限', '装入〜冷却まで約25hrs'],
+      ['H1', 3, '冷却', 'カバー全開', null, null, null, null, null],
+      ['H1', 4, '第2均熱', 530, null, null, 1, '下限', null],
+      ['H2', 1, '昇温', 620, '成行', null, null, null, '低温保持禁止。チャージ後直ちに昇温開始'],
+      ['H2', 2, '均熱', 610, null, null, 10, '下限', '総所要 約25hrs。炉内強制冷却は行わない'],
+      ['H3', 1, '昇温', 620, '成行', null, null, null, null],
+      ['H3', 2, '第1均熱', 610, null, null, 10, '下限', '装入〜冷却まで約25hrs'],
+      ['H3', 3, '冷却', 'カバー開', null, null, null, null, null],
+      ['H3', 4, '第2均熱', 480, null, null, 1, '下限', null],
+      ['H4', 1, '昇温', 620, '成行', null, null, null, null],
+      ['H4', 2, '第1均熱', 610, null, null, 10, '下限', null],
+      ['H4', 3, '冷却', 'カバー開', '成行', null, null, null, null],
+      ['H4', 4, '第2均熱', 560, null, null, 1, '下限', null],
+      ['H5', 1, '昇温', 620, '成行', null, null, null, null],
+      ['H5', 2, '第1均熱', 610, null, null, 5, '下限', 'H操業の簡易バージョン'],
+      ['H5', 3, '冷却', 'カバー開', null, null, null, null, null],
+      ['H5', 4, '第2均熱', 480, null, null, 5, '下限', null],
+      ['J', 1, '昇温', 450, '成行', null, 10, null, '図中の昇温側に10hrs記載'],
+      ['J', 2, '均熱', 430, null, null, 10, '下限', 'β相共晶温度以下でMg固溶'],
+      ['J0', 1, '昇温', 450, '成行', null, null, null, null],
+      ['J0', 2, '均熱', 430, null, null, 12, '下限', null],
+      ['J1', 1, '昇温', 450, '規制', 100, null, null, '75Sは低温でバーニング'],
+      ['J1', 2, '均熱', 430, null, null, 1, '下限', null],
+      ['J3', 1, '昇温', 450, '成行', null, null, null, null],
+      ['J3', 2, '均熱', 430, null, null, 3, '下限', 'Mg2Si粗大化・析出完了'],
+      ['K', 1, '昇温', 590, '成行', null, null, null, '低温保持禁止。チャージ後直ちに昇温開始'],
+      ['K', 2, '均熱', 550, null, null, 7, '下限', '低温側測温点（上実体線）540℃で均熱入り'],
+      ['L', 1, '昇温', 610, '成行', null, null, null, null],
+      ['L', 2, '第1均熱', 560, null, null, 1, '下限', '上カップル550℃で判定'],
+      ['L', 3, '冷却', '成行', null, null, null, null, null],
+      ['L', 4, '第2均熱', 480, null, null, 1, '下限', null],
+      ['M', 1, '昇温', 480, '成行', null, 10, null, '図中の昇温側に10hrs記載'],
+      ['M', 2, '均熱', 450, null, null, 14, '下限', null],
+      ['M1', 1, '昇温', 500, '成行', null, 10, null, '図中の昇温側に10hrs記載'],
+      ['M1', 2, '均熱', 450, null, null, 1, '下限', null],
+      ['M5', 1, '昇温', 500, '成行', null, null, null, '低温保持禁止（点火時装入の規制はR01で解除）'],
+      ['M5', 2, '均熱', 450, null, null, 5, '下限', '450℃保持では鋳塊組織の再結晶が起こらない'],
+      ['P', 1, '昇温', 610, '成行', null, null, null, null],
+      ['P', 2, '第1均熱', 590, null, null, 1, '下限', null],
+      ['P', 3, '冷却', 'カバー全開', '成行', null, null, null, null],
+      ['P', 4, '第2均熱', 530, null, null, 1, '下限', null],
+      ['Q', 1, '昇温', 610, '成行', null, null, null, '全測温点の最低温度が580℃超で第1均熱開始'],
+      ['Q', 2, '第1均熱', 590, null, null, 1, '下限', '第2均熱が5hrs超過見込みの場合は第1均熱を延長'],
+      ['Q', 3, '冷却', '急速冷却', null, null, null, null, '冷却目安 #1-3:6.5h／#4-6:5h／#7-8:5h／#9:3.5h'],
+      ['Q', 4, '第2均熱', 380, null, null, 5, '上限', '全測温点の最高温度400℃以下かつ380±20℃で第2均熱入＝完了'],
+      ['R', 1, '昇温', 580, '成行', null, null, null, null],
+      ['R', 2, '第1均熱', 550, null, null, 1, '下限', null],
+      ['R', 3, '冷却', 'カバー開', null, null, 5, '下限', null],
+      ['R', 4, '第2均熱', 480, null, null, 1, '下限', null],
+      ['S1', 1, '昇温', 610, '成行', null, null, null, 'スラブ高温部が100℃になるまで燃焼しない（結露フクレ防止）'],
+      ['S1', 2, '均熱', '590(G2:600)', null, null, 15, '下限', '図中に1hrsの別記載あり（要確認）'],
+      ['S5', 1, '昇温', 610, '成行', null, null, null, null],
+      ['S5', 2, '均熱', '590(G2:600)', null, null, 5, '下限', '均熱入り後の温度低下可、ただし再均熱5hrs確保のこと'],
+      ['T', 1, '昇温', 610, '成行', null, null, null, '低温保持厳禁。チャージ後直ちに昇温開始（点火時装入）'],
+      ['T', 2, '第1均熱', 600, null, null, 3, '下限', '判定は590℃'],
+      ['T', 3, '冷却', 'カバー開', '成行', null, null, null, null],
+      ['T', 4, '第2均熱', 560, null, null, 1, '下限', null],
+      ['V', 1, '昇温', 610, '成行', null, null, null, null],
+      ['V', 2, '第1均熱', '590(G2:600)', null, null, 15, '下限', null],
+      ['V', 3, '冷却', 'カバー開（上昇のみ）', null, null, 2, null, '下実体温度515℃でカバーを閉じゆっくり冷却'],
+      ['V', 4, '第2均熱', 460, null, null, 7, '下限', '保持時間上限規制は撤廃済（旧R04まで10hr以内）'],
+      ['W', 1, '昇温', 490, '成行', null, null, null, null],
+      ['W', 2, '第1均熱', 440, null, null, 1, '下限', null],
+      ['W', 3, '第2昇温', 500, '成行', null, null, null, '上側測温点430℃で第2昇温開始'],
+      ['W', 4, '第2均熱', 480, null, null, 1, '下限', null],
+      ['Y', 1, '昇温', 540, '成行', null, null, null, null],
+      ['Y', 2, '均熱', 520, null, null, 1, '下限', null],
+    ],
+    /* M4 炉 */
+    FURNACES: [
+      [1, 'G1', 1, 6.5, null],
+      [2, 'G1', 1, 6.5, null],
+      [3, 'G1', 1, 6.5, null],
+      [4, 'G1', 1, 5.0, null],
+      [5, 'G1', 1, 5.0, null],
+      [6, 'G1', 1, 5.0, null],
+      [7, 'G2', 2, 5.0, '2ゾーンカップルあり'],
+      [8, 'G2', 2, 5.0, '2ゾーンカップルあり'],
+      [9, 'G3', null, 3.5, 'C1・Q操業のみ適用対象'],
+    ],
+    /* M5 測温点。type: カップル ＝ 雰囲気／実体線 ＝ スラブ実体 */
+    PROBES: [
+      ['A', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['A', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['A', 'G1', '実体線', 'テーブル側スラブ下より400mm', '条件付', 'クラッド及びクラッド皮材(4000系)投入時のみ'],
+      ['A', 'G2', '実体線', 'テーブル側スラブ下より400mm', '条件付', 'クラッド及びクラッド皮材(4000系)投入時のみ'],
+      ['A1', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['A1', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['A1', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['A2', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['A2', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['A2', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['A3', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['A3', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['A3', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['A8', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['A8', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['A8', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['B', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['B', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['B', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['C', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['C', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['C', 'ALL', '実体線', 'なし', 'なし', null],
+      ['C1', 'G1', 'カップル', '1ゾーン上・下', '常時', '対象材に取付'],
+      ['C1', 'G2', 'カップル', '1ゾーン上・下', '常時', '対象材に取付。2ゾーンには配置しない'],
+      ['C1', 'G3', 'カップル', '上・センター', '常時', '対象材に取付'],
+      ['C1', 'G1', '実体線', 'テーブル側スラブ上より200mm', '条件付', '対象材2本以上で取付。スラブ上部・低温側。温度管理には使用しない'],
+      ['C1', 'G2', '実体線', 'テーブル側スラブ上より200mm', '条件付', '対象材2本以上で取付。スラブ上部・低温側。温度管理には使用しない'],
+      ['C1', 'G3', '実体線', '炉内東側スラブ東端より200mm', '常時', '対象材1本に取付。#9炉は実体線で温度管理する'],
+      ['C3', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['C3', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['C3', 'ALL', '実体線', '有り', '常時', '位置の明記なし（要確認）'],
+      ['C5', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['C5', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['C5', 'ALL', '実体線', 'なし', 'なし', null],
+      ['E', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['E', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['E', 'ALL', '実体線', 'なし', 'なし', null],
+      ['E5', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['E5', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['E5', 'ALL', '実体線', 'なし', 'なし', null],
+      ['EX', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['EX', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['EX', 'ALL', '実体線', 'なし', 'なし', null],
+      ['F', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['F', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['F', 'ALL', '実体線', 'なし', 'なし', null],
+      ['F4', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['F4', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['F4', 'ALL', '実体線', 'なし', 'なし', null],
+      ['H', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['H', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['H', 'ALL', '実体線', 'なし', 'なし', null],
+      ['H1', 'G1', 'カップル', '1ゾーン上・下', '常時', 'スラブ低温部で温度管理を行う'],
+      ['H1', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['H1', 'ALL', '実体線', 'なし', 'なし', null],
+      ['H2', 'G1', 'カップル', '1ゾーン下', '常時', 'G1は1ゾーン下のみ'],
+      ['H2', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['H2', 'ALL', '実体線', 'なし', 'なし', null],
+      ['H3', 'G1', 'カップル', '1ゾーン下', '常時', 'G1は1ゾーン下のみ'],
+      ['H3', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['H3', 'ALL', '実体線', 'なし', 'なし', null],
+      ['H4', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['H4', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['H4', 'ALL', '実体線', 'なし', 'なし', null],
+      ['H5', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['H5', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['H5', 'ALL', '実体線', 'なし', 'なし', null],
+      ['J', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['J', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['J', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['J0', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['J0', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['J0', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['J1', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['J1', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['J1', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['J3', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['J3', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['J3', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['K', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['K', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['K', 'ALL', '実体線', '3N8Y・3N8Xスラブの上から400mm', '条件付', '3N8Y・3N8Xが入っている場合に取付し管理する'],
+      ['L', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['L', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['L', 'ALL', '実体線', 'なし', 'なし', null],
+      ['M', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['M', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['M', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['M1', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['M1', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['M1', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '常時', null],
+      ['M5', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['M5', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['M5', 'ALL', '実体線', 'なし', 'なし', null],
+      ['P', 'G1', 'カップル', '1ゾーン下', '常時', 'G1は1ゾーン下のみ'],
+      ['P', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['P', 'ALL', '実体線', 'なし', 'なし', null],
+      ['Q', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['Q', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['Q', 'G1G2', '実体線', 'テーブル側の高温側（下側）', '常時', null],
+      ['Q', 'G3', '実体線', '低温側1箇所', '常時', '#9炉はカップルと低温側1箇所に実体線設置'],
+      ['R', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['R', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['R', 'ALL', '実体線', 'なし', 'なし', null],
+      ['S1', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['S1', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['S1', 'ALL', '実体線', 'なし', 'なし', null],
+      ['S5', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['S5', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['S5', 'ALL', '実体線', 'なし', 'なし', null],
+      ['T', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['T', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['T', 'ALL', '実体線', '一番長い高純材の上から400mm', '条件付', '高純材が入っている場合に取付し管理する'],
+      ['V', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['V', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['V', 'ALL', '実体線', 'なし', 'なし', null],
+      ['W', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['W', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['W', 'ALL', '実体線', 'なし', 'なし', null],
+      ['Y', 'G1', 'カップル', '1ゾーン上・下', '常時', null],
+      ['Y', 'G2', 'カップル', '1ゾーン上・下＋2ゾーン下', '常時', null],
+      ['Y', 'ALL', '実体線', 'テーブル側スラブ下より400mm', '条件付', 'クラッド皮材(4000系)に取付'],
+    ],
+    /* M6 判定ロジック（トリガ条件） */
+    TRIGGERS: [
+      ['A', '均熱入り', '最遅測温点', 480, '保持1hr開始'],
+      ['E', '雰囲気降下', '最速測温点', 540, '雰囲気600→550'],
+      ['E', '均熱入り', '最遅測温点', 530, '均熱入り、1hr後圧延開始可'],
+      ['E', '過加熱防止', '時間経過（均熱1hr後）', null, '雰囲気550→530（G2は540）'],
+      ['E5', '雰囲気降下', '最速測温点', 540, '雰囲気590→540（G2は550）'],
+      ['E5', '過加熱防止', '最遅測温点530℃到達の1hr後', 530, '雰囲気540→530（G2は550→540）'],
+      ['E5', '圧延開始可', '最遅測温点530℃到達の5hrs後', 530, '圧延開始可'],
+      ['EX', '雰囲気降下', '最速測温点', 540, '雰囲気600→550'],
+      ['EX', '均熱入り', '最遅測温点', 530, '均熱入り、1hr後圧延開始可'],
+      ['C', '再点火', '実体', 480, '第2均熱のため再点火'],
+      ['C', 'カバー閉', '実体', 550, '550℃付近でカバー閉'],
+      ['C1', '第1均熱保持開始', '上カップル（#1-8）', 580, '保持開始'],
+      ['C1', '第1均熱保持開始', '実体線（#9炉）', 580, '保持開始。第2昇温保持開始も同様'],
+      ['F', '第2昇温開始', '上側測温点', 430, 'L1→H2へ移行'],
+      ['W', '第2昇温開始', '上側測温点', 430, 'L1→H2へ移行'],
+      ['K', '均熱入り', '低温側測温点（上実体線）', 540, '均熱入り（R02で550→540に変更）'],
+      ['L', '第1均熱判定', '上カップル', 550, 'H1→L1'],
+      ['Q', '第1均熱開始', '全測温点の最低温度', 580, '580℃超えてから第1均熱開始'],
+      ['Q', '第2均熱入＝完了', '全測温点の最高温度', '380±20', '400℃以下かつ380±20℃到達'],
+      ['S1', '燃焼開始', 'スラブ高温部', 100, '100℃になるまで燃焼しない（結露フクレ防止）'],
+      ['V', 'カバー閉', '下実体温度', 515, 'カバーを閉じゆっくり冷却'],
+      ['H', '冷却制御', '実体（4時間後）', 480, 'カバー開度300〜400mmで調整'],
+    ],
+    /* M7 対象材 */
+    MATERIALS: [
+      ['A', 'A-a', '高純度絞り材', 'Al純度99.8%以上かつ絞り性能要求', null],
+      ['A', 'A-b', '光輝・クラッド系', '光輝材／クラッド皮材／クラッド材', '5MB'],
+      ['A', 'A-c', '5000系プレート材', '5000系かつプレート用途', '52S, F52S'],
+      ['A', 'A-d', '5000系クリア塗装材', '5000系かつクリア塗装', null],
+      ['A1', '-', '2000系H/O処理済', 'Al-Cu系(2000系)焼入合金、蒲原工場他でH/O処理済スラブ', '14S, 17S'],
+      ['A2', '-', '7000系焼入合金', 'Al-Zn-Mg系(7000系)焼入合金、および7MB(Mg3.2%)', '74S, U74S, 7MB'],
+      ['A3', '-', 'BA93', 'BA93', 'BA93'],
+      ['A8', '-', '2000系名古屋スラブ', 'Al-Cu系(2000系)焼入合金でH/O未処理の名古屋スラブ', '14S, 17S'],
+      ['B', '-', '61S・CAL材', 'CALで溶体化→焼入処理する61S、CAL材', '61S'],
+      ['B', '-', 'B操業可', 'QF焼入れの61S、STN系、2ST印刷板、995、2ST一般板', null],
+      ['C', '-', '絞り材', '絞り性を要求される材料', null],
+      ['C1', '-', '東陽理化学向け', '東陽理化学向け', '505A, B505, 505C, 505D'],
+      ['C3', '-', '高Fe箔地他', '中間焼鈍抜き高Fe箔地、LB5T', 'HF95, LB5T'],
+      ['C5', '-', 'クラッド芯材', '黒皮のクラッド芯材', 'C305'],
+      ['E', '-', '一般材', '一般材', null],
+      ['E5', '-', '陰極コンデンサー箔地', 'TNC-H 陰極用コンデンサー箔地材', 'TNC-H'],
+      ['EX', '-', '東陽理化学向けA52S', '東陽理化学向け', 'A52S'],
+      ['F', '-', 'Al-Mg系高力合金', 'Al-Mg系高力合金', 'NP56, 5182, 5454系'],
+      ['F4', '-', 'NP56コイル／プレート', 'NP56：コイル材は火延巾1400mm以上、プレート材は全火延巾', 'NP56'],
+      ['F4', '-', 'Y54S', 'Y54S 用途：ホイールナツヤマ', 'Y54S'],
+      ['H', '-', 'Al-Mn系加工材', 'Al-Mn系の加工材', '3S'],
+      ['H1', '-', 'Al-Fe系', 'Al-Fe系の材料', 'FTA'],
+      ['H2', '-', '2ST系パネル材', '高品質アルマイト性要求の2ST系パネル材（黒皮ソーキング→M1操業）', '2ST系'],
+      ['H2', '-', '高純材', '高純材', '3N8M, TNE'],
+      ['H3', '-', '東洋アルミ向', '中低圧コンデンサー材（最終箔調質O材）', '3N8X'],
+      ['H4', '-', '東洋向', 'コンデンサー用箔地', null],
+      ['H5', '-', '東洋アルミ向け箔地', '東洋アルミ向け箔地', 'AFX5'],
+      ['J', '-', '磁気ディスク材', '純Al-高Mg系 磁気ディスク材', 'S3M, M4M'],
+      ['J0', '-', '75S黒皮', '75S黒皮ソーキング（HO処理）', '75S'],
+      ['J1', '-', '75S・MD材', '75S、MD材', '75S, MD材'],
+      ['J3', '-', 'LMA5プレート材', 'LMA5 プレート材', 'LMA5'],
+      ['K', '-', '低圧コンデンサー箔地', '低圧コンデンサー用箔地', '3N8G, 3N8Y, 3N8X'],
+      ['K', '-', '高圧コンデンサー箔地', '高圧コンデンサー用箔地', '-99J, -99S'],
+      ['L', '-', 'フジPS板', 'S995 フジPS板', 'S995'],
+      ['M', '-', '自然発色合金', 'Al-Si系 自然発色合金', '4001, 4101'],
+      ['M1', '-', 'Al-Fe系材料', 'Al-Fe系材料', 'FHA, AF65'],
+      ['M1', '-', '2ST系パネル材', '黒皮ソーキング後の2ST系パネル材', '2ST系'],
+      ['M5', '-', '高純Al陽極箔', '高純Al中高圧コンデンサ用陽極箔、508厚スラブ', '3N8M'],
+      ['P', '-', 'Al-Mn-Mg系', 'Al-Mn-Mg系合金', 'NR34, 3004'],
+      ['Q', '-', '富士フィルム向PS版', 'G951またはS951、用途コードF729に限る（中間焼鈍省略材）', 'G951, S951'],
+      ['R', '-', 'T651プレート材', '61S・R61S、板厚30mm以上、調質T651のプレート材', '61S, R61S'],
+      ['S1', '-', 'PS08', 'PS08（Al-0.45%Mg-0.23%Si-0.32%Fe）', 'PS08'],
+      ['S5', '-', '電池材', '電池材', 'LB**, 3S'],
+      ['S5', '-', '陰極箔地', '陰極箔地', 'TN**'],
+      ['T', '-', '東海向コンデンサー箔地', '東海向コンデンサー用箔地（陽極・陰極材）', null],
+      ['V', '-', '米国フジ向PS板', 'PS35 米国フジ向PS板', 'PS35'],
+      ['W', '-', 'Al-Mg系合金', 'Al-Mg系合金', '7MB, N531, N532, 5982'],
+      ['Y', '-', 'Nikkei Siam向クラッド皮材', 'Nikkei Siam向けクラッド皮材', '4343, 4045, 4143'],
+    ],
+    /* M8 合金温度制約（上限管理の根拠値） */
+    LIMITS: [
+      ['4445（ブレージングシート皮材）', '575〜591', '溶解温度が低い', 'A', '雰囲気・実体とも上限厳守'],
+      ['14S（Cu4.5%, Mg0.5%）', 510, '局部溶融', 'A1, A8', '雰囲気・実体とも上限厳守'],
+      ['7000系焼入合金', null, '局部溶融', 'A2', '雰囲気・実体とも上限厳守'],
+      ['Mg2Si', 595, '溶融', 'B, R', '雰囲気を580℃としバーニング防止'],
+      ['β相', 450, '共晶温度', 'F, F4, W, J', '440℃までの第1昇温でβ相を固溶'],
+      ['75S', null, '低温でバーニング', 'J0, J1', '雰囲気・実体とも上限厳守'],
+      ['純Al-高Mg系', null, 'バーニング（組織脆化）', 'J', '上限管理を厳しく行う'],
+      ['C1対象材', 610, '雰囲気上限', 'C1', 'H1≦610℃厳守'],
+    ],
+    /* M9 時間規制（上限側） */
+    TIMELIM: [
+      ['EX', 'A52S', '均熱入り', '圧延開始', 20, 'ロットを保留しカードを引き上げる。当該ソーキング続行し別ロットに振替え'],
+      ['J1', 'MD材', '1hr保持後', '圧延終了', 9, null],
+      ['K', '3N8Y, 3N8X', '均熱保持完了', '圧延開始', 9, null],
+      ['L', 'S995', '保持1hr後', '圧延', 2, null],
+      ['M', '4001, 4101', '均熱入り', '圧延完了', 18, '一旦400℃まで降温、様子を見て再度450℃昇温し均熱なしで圧延'],
+      ['M1', 'FHA, 2ST黒皮ソーキング材', '均熱入り', '圧延終了', 5, '均熱後6時間での圧延完了を第一条件として厳守'],
+      ['S5', 'LB5M, 3S(デンチ**,フウコウ**)', '均熱入り', '圧延開始', 15, 'トラブル時再昇温手順を参照。超過時は熱延終了後に異常ロット提出'],
+      ['S5', 'LB5M, 3S', '圧延開始', '圧延終了', 10, null],
+      ['Q', 'G951, S951', '第2均熱完了', '圧延完了', 5, '6時間超過時は圧延せず第1均熱からやり直し'],
+    ],
+    /* M10 スケジュール・運用規制 */
+    RULES: [
+      ['A', 'なし', null],
+      ['C1', '合釜', 'C3・C5ソーキングと合釜不可'],
+      ['C1', '配置', '#7・8炉は2ゾーンカップルに配置しない。対象材スラブが他より丈が大きく短い場合はスタッフに連絡しカップルで温度管理しない'],
+      ['C3', '合釜', 'C5ソーキングと合釜不可'],
+      ['E5', '合釜', 'E操業と同釜の場合、530℃で5時間以上保持してから圧延'],
+      ['EX', '合釜', 'E5と合釜不可（現場への伝達が不明確になるため）'],
+      ['EX', 'スケジュール', '計画停止などの間際にスケジュールすることは避ける'],
+      ['H', '合釜', 'H2と合釜の時は冷却まで25時間以上かける'],
+      ['H1', '合釜', 'H2と合釜の時は冷却まで25時間以上かける'],
+      ['H1', '代替', 'FTAはH1ソーキング→熱延の代わりにH2黒皮ソーキング→面削→Eソーキング→熱延としてもよい'],
+      ['H2', '低温保持', '低温保持禁止。チャージ後直ちに昇温開始（点火時装入）。ただし炉内雰囲気100℃以下なら連休前日にカバー開のまま装入可'],
+      ['H5', '合釜', '性能バラツキ抑制のため合釜不可'],
+      ['K', '低温保持', '低温保持禁止。チャージ後直ちに昇温開始。ただし炉内雰囲気100℃以下なら連休前日にカバー開のまま装入可'],
+      ['M5', '低温保持', '低温保持禁止。チャージ後直ちに昇温開始。点火時装入の規制はR01で解除（450℃保持では再結晶しないため）'],
+      ['P', '代替', 'P操業品はC操業でも可'],
+      ['Q', '合釜', '合釜不可（中間焼鈍省略材）'],
+      ['Q', 'スケジュール', '当該釜前にプレート圧延等を避けた方が良い（やり直し発生時の影響回避）'],
+      ['R', '間引き', '間引き禁止（低温保持でMg2Siの微細析出が起こり再結晶阻止作用が働くため）'],
+      ['S1', '合釜', 'S3と合釜になる場合はS3操業基準に準ずる'],
+      ['S5', '前釜', '前釜装入不可：F・F4操業（電池材の異物圧込み対策）'],
+      ['T', '低温保持', '低温保持厳禁。チャージ後直ちに昇温開始（点火時装入）。スラブのフクレチェックを実施'],
+    ],
+  },
   FURNACE: { SOAK_DT: 50, N: 9, X1: -121800, GROUPS: [3, 3, 2, 1], GAPS: [1200, 8000, 4000], IN_GAP: 800, Z: 9700,
              WALL: 500, LID_T: 380,
              /* 炉ごとの仕様（実機の表）。L×W×H は内法 [mm]、CAP は最大収容能力 [t]。
@@ -3585,8 +4322,12 @@ const CONFIG = {
   /* 材質。pit は «その材質を焼くピット炉の番号»（1 起点、FURNACE.N 以内）。
    * 同じ炉に違う合金を入れると材質ごとの均熱条件を作れないので、実機と同じく炉を分ける。
    * 8・9 番炉は予備（この 7 材質では使わない）。 */
+  /* soak —— ソーキングマスタ（CONFIG.SOAK）の «代表材» と突き合わせる社内材質記号。
+   * 実機の操業基準は JIS 記号ではなく社内記号（52S・3S・75S・61S …）で書かれているので、
+   * ここが «JIS ↔ 社内» の橋渡しになる。null は «いただいた表に代表材が無い» という意味で、
+   * 推測で埋めていない（社内材質の一覧は材質マスタの残件。README 0-3）。 */
   ALLOYS: {
-    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 26.202, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
+    A1050: { name: 'A1050  純アルミ',        soak: null, pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 26.202, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
     /* A1100 は実機ロット（2026-09 提供、607T）の材質。1050 との違いは Cu 0.12 % ぶんの
      * 固溶強化で、変形抵抗はわずかに高い。3 つの係数は «別々の役割» で決めてある:
      *   m —— ひずみ速度依存。最終パス（22 → 7.9 mm・94 mpm で平均 1,064 t）で較正。
@@ -3597,13 +4338,13 @@ const CONFIG = {
      *         b をそのままにすると Q_fit が 99（公表の −37 %）まで落ち、«最終パスの荷重を
      *         温度依存を弱めて買う» ことになる（実測して見つけた）。
      *   C —— 絶対値。上の 2 つを決めたあと、厚板段の荷重帯（287〜520 t、板幅 1,070）で合わせる。 */
-    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 27.517, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
-    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 30.106, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
-    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 27.959, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
-    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 27.092, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
-    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 26.694, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
-    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 22.588, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
-    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 34.306, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
+    A1100: { name: 'A1100  純アルミ（Cu 添加）', soak: null, pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 27.517, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
+    A3003: { name: 'A3003  Al-Mn（既定）',    soak: '3S', pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 30.106, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
+    A4045: { name: 'A4045  Al-Si（ろう材）',  soak: '4045', pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 27.959, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
+    A5052: { name: 'A5052  Al-2.5Mg',       soak: '52S', pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 27.092, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
+    A5083: { name: 'A5083  Al-4.5Mg',       soak: null, pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 26.694, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
+    A6061: { name: 'A6061  Al-Mg-Si',       soak: '61S', pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 22.588, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
+    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    soak: '75S', pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 34.306, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
   },
 
   /* 幅方向の形状（クラウン・平坦度・幅広がり・据わり）の諸元。
@@ -3623,6 +4364,9 @@ const CONFIG = {
            SPREAD_C: 0.95, SPREAD_K: 0.707, POISSON: 0.33, WARP_GAUGE: 1000 },
 
   MATERIAL: {
+    /* 選んでいるソーキングの操業パターン（CONFIG.SOAK.PATTERNS の記号）。
+     * 空なら «材質から自動»（ALLOYS[].soak → 代表材 → 操業パターン）。 */
+    SOAK_PATTERN: '',
     ALLOY: 'A5052',                                    // 選択中の材質（ALLOYS のキー）
     TREF: 450,                                         // 変形抵抗モデルの基準温度
     // 可逆圧延で材料温度を決める主因はロール抜熱。H_ROLL は «界面の» 接触熱伝達率で、
@@ -4752,6 +5496,110 @@ const Sect = {
 /* =============================================================================
  * 3. ROLLING MODEL —— 圧延理論（純関数。状態を持たない＝単体で検証できる）
  * ========================================================================== */
+/* =============================================================================
+ * ソーキング（均質化熱処理）のマスタを «使える形» にする 1 か所。
+ *
+ * CONFIG.SOAK は実機の操業基準をいただいた «表のまま» 持っている（1 行 1 レコードの
+ * 配列で、列の意味は CONFIG.SOAK.KEYS）。表をそのまま残すのは、後から «元は何と
+ * 書いてあったか» を照らせるようにするため —— 加工した値で上書きすると戻せない。
+ * ここは «表を引く» ことだけをする。熱サイクルの組み立てと温度の計算はこの下。
+ * ========================================================================== */
+const Soak = {
+  /** 表の行（配列）を名前つきにする。列の意味は CONFIG.SOAK.KEYS の 1 か所だけが持つ。 */
+  rec(table, row) {
+    const k = CONFIG.SOAK.KEYS[table], o = {};
+    for (let i = 0; i < k.length; i++) o[k[i]] = row[i];
+    return o;
+  },
+  all(table) { return (CONFIG.SOAK[table] || []).map(r => Soak.rec(table, r)); },
+  /** そのパターンの行だけ。 */
+  of(table, pattern) { return Soak.all(table).filter(r => r.pattern === pattern); },
+  /** 操業パターンの一覧（記号の配列）と 1 件の引き当て。 */
+  get ids() { return CONFIG.SOAK.PATTERNS.map(r => r[0]); },
+  pattern(id) { return Soak.all('PATTERNS').find(p => p.id === id) || null; },
+  /** 炉番（1〜9）から炉の群（G1 ＝ #1〜6 ／ G2 ＝ #7・8 ／ G3 ＝ #9）。 */
+  groupOf(no) { const f = Soak.all('FURNACES').find(q => q.no === no); return f ? f.group : 'G1'; },
+  /** その炉の群に効く行だけを残す（group が ALL の行はどの群にも効く）。 */
+  forGroup(rows, group) { return rows.filter(r => r.group === 'ALL' || r.group === group); },
+  /**
+   * 炉温設定を «記号 → ℃» で引く。群に固有の行があればそれ、無ければ ALL の行。
+   *   H / H1 / H2 …… 昇温段の雰囲気設定（オーバーシュート設定）
+   *   H→L / H1→L1 … 炉温を落とす «判定温度»。設定温度ではないので、これを
+   *                   均熱の設定として使ってはいけない
+   *   L / L1 / L2 …… 均熱段の雰囲気設定
+   */
+  tempOf(pattern, group, code) {
+    const rows = Soak.of('TEMPS', pattern).filter(r => r.code === code);
+    const hit = rows.find(r => r.group === group) || rows.find(r => r.group === 'ALL');
+    return hit ? hit.tempC : null;
+  },
+  /** そのパターンの熱サイクル（M3）を step_no の順で。 */
+  steps(pattern) { return Soak.of('STEPS', pattern).sort((a, b) => a.no - b.no); },
+  /**
+   * «最後の均熱段» の設定温度 [℃]。抽出直前のスラブがいる雰囲気なので、
+   * 持ちかかり温度の出どころになる。setC は «590(G2:600)» のように群別の値が
+   * 書かれていることがあるので、その群の値を取り出す。
+   */
+  finalHoldC(pattern, group = 'G1') {
+    const st = Soak.steps(pattern).filter(q => /均熱/.test(q.type || ''));
+    const last = st[st.length - 1];
+    return last ? Soak.parseSetC(last.setC, group) : null;
+  },
+  /**
+   * M3 の atmos_set_c を数に直す。«590(G2:600)» は群で値が変わる書き方、
+   * «550→530(G2:540)» は «途中で落とす» 書き方（落とした先を取る）、
+   * «カバー開» のように温度でないものは null。
+   */
+  parseSetC(v, group = 'G1') {
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'number') return v;
+    const s = String(v);
+    /* «→» は «途中で落とす» 書き方なので、抽出時に効いているのは最後の値。
+     * 群に固有の括弧の中にも «→» が入ることがある（E5 の «540→530(G2:550→540)»）ので、
+     * 括弧の中を取り出してから同じ規則で読む —— 括弧の «最初の数» を取ると 550 になり、
+     * 実際の 540 と 10 K ずれる。 */
+    const last = (t) => { const n = String(t).match(/\d+/g); return n ? +n[n.length - 1] : null; };
+    const g = s.match(new RegExp('[(（]?\\s*' + group + '\\s*[:：]\\s*([^)）]*)'));
+    if (g) return last(g[1]);
+    return last(s.split(/[(（]/)[0]);
+  },
+  /** そのパターンの «段数»（1 段 / 2 段）。M1 の値をそのまま。 */
+  stages(pattern) { const p = Soak.pattern(pattern); return p ? p.stages : null; },
+  /** 保持時間の合計 [h]（下限として書かれているものだけを足す）。 */
+  holdHours(pattern) {
+    return Soak.steps(pattern).reduce((a, q) => a + (q.holdType === '下限' && q.holdH ? q.holdH : 0), 0);
+  },
+  /** その材料記号（代表材）を持つパターン。«52S» などで引く。 */
+  patternsForSample(sample) {
+    const s = String(sample || '').toUpperCase();
+    return Soak.all('MATERIALS')
+      .filter(r => String(r.sample || '').toUpperCase().split(/[,、]\s*/).includes(s))
+      .map(r => r.pattern);
+  },
+  /**
+   * 材質（JIS 記号）から操業パターンを自動で引く。橋渡しは ALLOYS[].soak（社内材質記号）。
+   * 実機の操業基準は社内記号で書かれていて、1 つの社内記号が複数の操業に載ることがある
+   * （3S は H 操業と S5 操業）ので、候補を «全部» 返す。どれを使うかは運転が決める。
+   */
+  autoFor(alloyKey = CONFIG.MATERIAL.ALLOY) {
+    const code = CONFIG.ALLOYS[alloyKey]?.soak;
+    return code ? Soak.patternsForSample(code) : [];
+  },
+  /** いま効いている操業パターン（明示の選択が無ければ材質から自動で引いた先頭）。 */
+  current(alloyKey = CONFIG.MATERIAL.ALLOY) {
+    const sel = CONFIG.MATERIAL.SOAK_PATTERN;
+    if (sel && Soak.pattern(sel)) return sel;
+    return Soak.autoFor(alloyKey)[0] || null;
+  },
+  /** そのパターンに掛かる上限の規制（M8 温度 / M9 時間 / M10 運用）。 */
+  limits(pattern) {
+    const inList = (v) => String(v || '').split(/[,、]\s*/).includes(pattern);
+    return { temp: Soak.all('LIMITS').filter(r => inList(r.patterns)),
+             time: Soak.of('TIMELIM', pattern),
+             rule: Soak.of('RULES', pattern).filter(r => r.kind !== 'なし') };
+  },
+};
+
 const Rolling = {
   /** 選択中の材質 */
   alloy(key = CONFIG.MATERIAL.ALLOY) { return CONFIG.ALLOYS[key] || CONFIG.ALLOYS[CONFIG.MATERIAL.ALLOY]; },
@@ -15031,6 +15879,8 @@ class UIManager {
    * 選んでいる版 verSel は «版数» で持つ。絞り込みで並びが変わっても選択が飛ばない。
    */
   _buildVersion() {
+    this._buildSoak();
+    this._buildSoakPick();
     $('btn-ver').textContent = VERSION.label;
     document.title = `${document.title.replace(/\s+VER\..*$/, '')} ${VERSION.label}`;   // タブでも版が分かる
     this.verQ = '';
@@ -15168,6 +16018,167 @@ class UIManager {
         .catch(() => { b.textContent = '複製できません'; setTimeout(() => { b.textContent = '複製'; }, 1600); });
     });
     el.scrollTop = 0;
+  }
+
+  /**
+   * ソーキングマスタのビュワー。変更履歴ビュワーと同じ «絞る → 選ぶ → 読む» の作り。
+   * 39 の操業パターンは一覧では読めないので、左で選び、右でその中身だけを読む。
+   * 表示するのは CONFIG.SOAK（いただいた表そのもの）で、加工した値は出さない
+   * —— «実機の基準に何と書いてあるか» を確かめる場所だから。
+   */
+  _buildSoak() {
+    this.soakQ = '';
+    this.soakSel = Soak.ids[0];
+    $('soak-q').addEventListener('input', (e) => { this.soakQ = e.target.value; this._soakRender(); });
+    $('soak-list').addEventListener('click', (e) => {
+      const b = e.target.closest('.pat'); if (!b) return;
+      this.soakSel = b.dataset.id; this._soakRender();
+    });
+    $('dlg-soak').addEventListener('keydown', (e) => {
+      const d = { ArrowDown: 1, ArrowUp: -1, PageDown: 5, PageUp: -5 }[e.key];
+      if (d === undefined) return;
+      const ids = this._soakRows().map(r => r.p.id); if (!ids.length) return;
+      e.preventDefault();
+      const i = Math.max(0, ids.indexOf(this.soakSel));
+      this.soakSel = ids[Math.min(ids.length - 1, Math.max(0, i + d))];
+      this._soakRender(true);
+    });
+    this._soakRender();
+  }
+  /** 検索を当てたパターンの行。左の一覧と右の中身が同じものを見るよう 1 か所に置く。 */
+  _soakRows() {
+    const q = this.soakQ.trim().toLowerCase();
+    return Soak.all('PATTERNS').map(p => ({ p })).filter(({ p }) => {
+      if (!q) return true;
+      const mats = Soak.of('MATERIALS', p.id).map(m => `${m.className} ${m.cond} ${m.sample}`).join(' ');
+      return `${p.id} ${p.name} ${p.aim} ${mats}`.toLowerCase().includes(q);
+    });
+  }
+  _soakMark(v) {
+    const raw = String(v ?? ''), q = this.soakQ.trim().toLowerCase();
+    if (!q) return escHtml(raw);
+    const lo = raw.toLowerCase();
+    let out = '', i = 0, j;
+    while ((j = lo.indexOf(q, i)) >= 0) {
+      out += escHtml(raw.slice(i, j)) + '<mark>' + escHtml(raw.slice(j, j + q.length)) + '</mark>';
+      i = j + q.length;
+    }
+    return out + escHtml(raw.slice(i));
+  }
+  _soakRender(scroll = false) {
+    const rows = this._soakRows();
+    if (!rows.some(r => r.p.id === this.soakSel)) this.soakSel = rows.length ? rows[0].p.id : null;
+    $('soak-list').innerHTML = rows.map(({ p }) => `
+      <button class="pat${p.id === this.soakSel ? ' is-sel' : ''}" type="button" role="option"
+        aria-selected="${p.id === this.soakSel}" data-id="${escHtml(p.id)}">
+        <span class="hd"><span class="id">${this._soakMark(p.id)}</span>
+          <span class="nm">${this._soakMark(p.name)}</span>
+          <span class="st">${escHtml(p.stages ?? '')}</span></span>
+        <span class="aim">${this._soakMark(p.aim ?? '')}</span>
+      </button>`).join('');
+    if (scroll) $('soak-list').querySelector('.is-sel')?.scrollIntoView({ block: 'nearest' });
+    $('soak-count').textContent = this.soakQ.trim()
+      ? `${rows.length} / ${Soak.ids.length} パターン`
+      : `${Soak.ids.length} パターン`;
+    this._soakDetail(this.soakSel);
+  }
+  _soakDetail(id) {
+    const el = $('soak-detail');
+    const p = id && Soak.pattern(id);
+    if (!p) { el.innerHTML = '<div class="none">該当する操業パターンがありません。</div>'; return; }
+    const e = escHtml, mk = (v) => this._soakMark(v);
+    const nz = (v) => (v === null || v === undefined || v === '' ? '–' : e(v));
+    const tbl = (head, body) => body.length
+      ? `<table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`
+      : '<div class="none">なし</div>';
+    const steps = Soak.steps(id).map(q => `<tr><td class="n">${q.no}</td><td><b>${nz(q.type)}</b></td>`
+      + `<td class="n">${nz(q.setC)}</td><td class="n">${nz(q.rampMode)}${q.rampLimitCH ? ` ${q.rampLimitCH} ℃/h` : ''}</td>`
+      + `<td class="n">${q.holdH !== null ? q.holdH + ' h' : '–'}${q.holdType ? `（${q.holdType}）` : ''}</td>`
+      + `<td>${nz(q.note)}</td></tr>`).join('');
+    const temps = Soak.of('TEMPS', id).map(q => `<tr><td class="n">${nz(q.group)}</td><td class="n"><b>${nz(q.code)}</b></td>`
+      + `<td class="n">${nz(q.tempC)} ℃</td><td>${nz(q.note)}</td></tr>`).join('');
+    const trig = Soak.of('TRIGGERS', id).map(q => `<tr><td><b>${nz(q.event)}</b></td><td>${nz(q.point)}</td>`
+      + `<td class="n">${nz(q.tempC)}</td><td>${nz(q.action)}</td></tr>`).join('');
+    const mats = Soak.of('MATERIALS', id).map(q => `<tr><td class="n">${nz(q.class)}</td><td><b>${mk(q.className)}</b></td>`
+      + `<td>${mk(q.cond)}</td><td class="n">${mk(q.sample)}</td></tr>`).join('');
+    const probes = Soak.of('PROBES', id).map(q => `<tr><td class="n">${nz(q.group)}</td><td>${nz(q.type)}</td>`
+      + `<td>${nz(q.place)}</td><td class="n">${nz(q.mount)}</td><td>${nz(q.cond)}</td></tr>`).join('');
+    const lim = Soak.limits(id);
+    const limT = lim.temp.map(q => `<tr class="warn"><td><b>${nz(q.target)}</b></td><td class="n">${nz(q.tempC)} ℃</td>`
+      + `<td>${nz(q.phenomenon)}</td><td>${nz(q.note)}</td></tr>`).join('');
+    const limH = lim.time.map(q => `<tr class="warn"><td><b>${nz(q.target)}</b></td>`
+      + `<td>${nz(q.from)} → ${nz(q.to)}</td><td class="n">${nz(q.hours)} h</td><td>${nz(q.action)}</td></tr>`).join('');
+    const rules = lim.rule.map(q => `<tr><td class="n"><b>${nz(q.kind)}</b></td><td>${nz(q.text)}</td></tr>`).join('');
+    const g1 = Soak.finalHoldC(id, 'G1'), g2 = Soak.finalHoldC(id, 'G2');
+    el.innerHTML = `
+      <div class="dh">
+        <div class="dv">${e(p.id)}</div>
+        <div class="dttl">${mk(p.name)} —— ${mk(p.aim ?? '')}</div>
+        <div class="dmeta">
+          <span>${nz(p.stages)}</span><span>対象炉 ${nz(p.scope)}</span>
+          <code>${nz(p.doc)}${p.rev ? ' ' + e(p.rev) : ''}</code>
+          ${p.date ? `<span>${e(p.date)}</span>` : ''}
+          <span>最後の均熱 ${g1 === null ? '–' : g1 + ' ℃'}${g2 !== null && g2 !== g1 ? `（#7・8 は ${g2} ℃）` : ''}</span>
+          ${p.pairRule ? `<span>合釜 ${e(p.pairRule)}</span>` : ''}
+        </div>
+      </div>
+      <h4>熱サイクル（シミュレータの境界条件）</h4>
+      ${tbl(['段', '種別', '雰囲気設定 ℃', '昇温', '保持', '備考'], steps)}
+      <h4>炉温設定</h4>
+      ${tbl(['炉群', '記号', '温度', '備考'], temps)}
+      <h4>判定ロジック（トリガ）</h4>
+      ${tbl(['イベント', '判定点', '℃', 'アクション'], trig)}
+      <h4>対象材</h4>
+      ${tbl(['区分', '区分名', '判定条件', '代表材'], mats)}
+      ${limT ? `<h4>温度の上限（守らないと溶ける・焼ける）</h4>${tbl(['対象', '制約温度', '現象', '備考'], limT)}` : ''}
+      ${limH ? `<h4>時間の上限</h4>${tbl(['対象材', '起点 → 終点', '制限', '超過時の処置'], limH)}` : ''}
+      ${rules ? `<h4>運用の規制</h4>${tbl(['種別', '内容'], rules)}` : ''}
+      <h4>測温点</h4>
+      ${tbl(['炉群', '種別', '配置', '取付', '条件'], probes)}`;
+    el.scrollTop = 0;
+  }
+  /**
+   * 素材の設定にある «ソーキング» の選択。«自動（材質から）» か、操業パターンを直接。
+   * 状態の出どころは CONFIG.MATERIAL.SOAK_PATTERN の 1 つで、画面も物理もそこを見る。
+   */
+  _buildSoakPick() {
+    const sel = $('sel-soak');
+    sel.innerHTML = '<option value="">自動（材質から引く）</option>'
+      + Soak.all('PATTERNS').map(p => `<option value="${escHtml(p.id)}">${escHtml(p.id)} ${escHtml(p.name)}`
+        + ` —— ${escHtml(p.aim ?? '')}</option>`).join('');
+    sel.value = CONFIG.MATERIAL.SOAK_PATTERN || '';
+    sel.addEventListener('change', (e) => { CONFIG.MATERIAL.SOAK_PATTERN = e.target.value; this._soakPickInfo(); });
+    this._soakPickInfo();
+  }
+  /** いま効いているソーキング条件を 1 行で。«探させず・思い出させず» のための既定の説明。 */
+  _soakPickInfo() {
+    const el = $('der-soak'); if (!el) return;
+    const key = CONFIG.MATERIAL.ALLOY, code = CONFIG.ALLOYS[key]?.soak;
+    const id = Soak.current(key), p = id && Soak.pattern(id);
+    const auto = !CONFIG.MATERIAL.SOAK_PATTERN;
+    if (!p) {
+      el.innerHTML = auto
+        ? `${escHtml(key)} に対応する社内材質記号が実機の操業基準の表にありません`
+          + `（社内材質の一覧は材質マスタの残件）。操業パターンを直接選んでください。`
+        : '操業パターンが選ばれていません。';
+      return;
+    }
+    const grp = Soak.groupOf(Layout.pitOf(key) + 1);
+    const hold = Soak.finalHoldC(id, grp), hrs = Soak.holdHours(id);
+    const lim = Soak.limits(id);
+    const cand = Soak.autoFor(key);
+    el.innerHTML = `<b>${escHtml(id)}</b> ${escHtml(p.name)}（${escHtml(p.stages ?? '')}）`
+      + ` ／ 最後の均熱 <b>${hold === null ? '–' : hold + ' ℃'}</b>`
+      + ` ／ 保持の下限 合計 ${hrs} h`
+      + (auto && code ? ` ／ 自動: ${escHtml(code)} → ${cand.join('・')}` : '')
+      + (lim.time.length ? ` ／ <span style="color:var(--serious)">時間規制あり</span>` : '')
+      + (lim.temp.length ? ` ／ <span style="color:var(--serious)">温度上限あり</span>` : '');
+  }
+
+  /** ソーキングマスタを開閉する。 */
+  toggleSoak(open = !$('dlg-soak').open) {
+    const d = $('dlg-soak');
+    if (open) { if (!d.open) d.showModal(); $('soak-q').focus(); } else d.close();
   }
 
   /** 変更履歴を開閉する。開いている間はキー操作を奪わない（dialog が受ける） */
@@ -15437,6 +16448,8 @@ class UIManager {
         + `実効ひずみ速度感受性 m_eff = ${m450.toFixed(3)}（450 ℃・1/s）→ ${m400.toFixed(3)}（400 ℃・10/s）`
         + ` ※ m は定数ではなく tanh(ασ)/(n·ασ) で条件から決まる<br>`
         + `密度 ${a.RHO} kg/m³ ／ 熱伝導率 ${a.K} W/mK ／ 端部欠陥係数 ${a.end.toFixed(1)}`;
+      // 材質を変えると «自動で引くソーキング» も変わるので、同じところで書き直す
+      this._soakPickInfo?.();
     };
     sel.addEventListener('change', () => { applyRange(); this._slabChanged(); });
     applyRange();
@@ -15882,6 +16895,9 @@ class UIManager {
       CONFIG.AGC.ECC.ON = e.target.checked;
       this.toast(e.target.checked ? '偏芯補償を入れました' : '偏芯補償を切りました', 'info');
     });
+    on('btn-soak', 'click', () => this.toggleSoak(true));
+    on('btn-soak-close', 'click', () => this.toggleSoak(false));
+    $('dlg-soak').addEventListener('click', e => { if (e.target === $('dlg-soak')) this.toggleSoak(false); });
     on('btn-ver', 'click', () => this.toggleVersion(true));
     on('btn-ver-close', 'click', () => this.toggleVersion(false));
     // 背景（バックドロップ）を押したら閉じる。dialog 自身が Esc を受ける
