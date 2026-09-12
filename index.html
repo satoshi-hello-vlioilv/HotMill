@@ -1491,6 +1491,20 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.2.0', base: '8363a77', date: '2026-09-12', title: '圧下装置を実機の仕様にする —— 電動圧下 2 速・油圧圧下 5 Hz・荷重の 2 段リミット', items: [
+      // --- 電動圧下と油圧圧下を分ける ---
+      { t: '圧下を «電動» と «油圧» の 2 段に分けた。実機はパスとパスのあいだの位置決めが電動圧下（2 速切換式）、パスの中の細かい補正（AGC）が油圧圧下で、速さも遅れも桁が違う。以前はどちらも «一次遅れ 0.55 s ＋ 70 mm/s»（どちらも推定値）の 1 本だった', w: 'MillState.stepScrew' },
+      { t: '電動圧下装置を実機仕様で持った —— 高速 1 台 110/220 kW D.C.（0/500/1000/1250 rpm・減速比 27.5:1）／ 低速 2 台 52 kW D.C.（0/550 rpm・440:1）、圧下速度 高速 0/8.5/17/21.2 mm/s ・低速 0/583 µm/s、手動レバー 0.1 / 1 mm/s、レベリング 0.1 mm/s・side（O.S. と D.S. の差では 0.2 mm/s）', w: 'MILL.SCREW' },
+      { t: '油圧圧下装置を実機仕様で持った —— シリンダ径 Φ1,060・圧力 210 kgf/cm²（吐出 250・背圧 40）・ストローク max 60 mm（有効 52 mm）・速度 約 3 mm/s（荷重 1,500 t 時）・周波数応答 5 Hz（±50 µm・CPC モード・90° 位相遅れ）。検算: 受圧面積 8,825 cm² × 210 kgf/cm² × 2 本 ＝ 3,706 t で、圧延機の max 荷重 3,920 t と同じ桁', w: 'MILL.HYD' },
+      { t: '«5 Hz で 90° 位相遅れ» は一次遅れでは書けない（一次遅れの位相は 90° に漸近するだけで届かない）ので、固有振動数 ωn ＝ 2π·5 の 2 次系にした。減衰比も仕様から出る —— «そのとき ±50 µm 出る»（＝ ωn で振幅が落ちていない）と «90° 遅れ» を同時に満たすのは |H(jωn)| ＝ 1/(2ζ) ＝ 1、つまり ζ ＝ 0.5 のときだけ。実測: 5 Hz で位相 89.1°・振幅 ±50.0 µm', w: 'MILL.HYD.BAND_HZ / ZETA' },
+      { t: '圧下の速度をアクチュエータごとの枠にした（噛んでいるあいだ 3 mm/s ／ 噛んでいないあいだ 21.2 mm/s）。実測: 位置決めの 2 秒で電動 19.4 mm に対し油圧 6.0 mm', w: 'MillState.stepScrew' },
+      { t: '応答が速くなったぶん、板厚の振れの内訳が変わった —— 厚板パスの振れが σ 26.5 → 13.8 µm に落ち、残る外乱に占める偏芯の割合が 21 → 31 % に上がった（3σ 平均は 57 → 59 µm でほぼ同じ）。«何が振れを作っているか» が見えやすくなった', w: 'tools/gaugetrace.mjs' },
+      // --- 荷重の 2 段リミット ---
+      { t: '荷重の限度を実機の 3 段にした —— 常用最大 3,920 t（圧下スクリューナット収納部）／ 1st リミット 3,900 t → 荷重一定制御 ／ 2nd リミット 4,200 t → 油圧シリンダ急速開・ミル急停止。以前は 2nd に相当する «非常最大で止まる» だけで、1st が無かった', w: 'MILL.LIMIT1_FORCE_T' },
+      { t: '1st リミットの荷重一定制御を入れた。圧下位置を δ 開くと実ギャップは δ·M/(M+Q) 開き荷重は δ·M·Q/(M+Q) 減るので、ΔF 落とすのに要るのは δ ＝ ΔF·(1/M ＋ 1/Q)。ミル定数だけで δ ＝ ΔF/M としたときは厚板パスで足りず荷重が 2 倍まで伸びた（実測: リミット 1,200 t に対し 2,585 t）', w: 'PhysicsEngine._agc' },
+      { t: '2nd リミットは «油圧シリンダ急速開・ミル急停止»。挟んだまま止めると材料が抜けなくなるので、圧下を全開にして解放する。テンション（巻取張力）は落とさない', w: 'PhysicsEngine._trip' },
+      { t: '判定を作った（17 件）—— 仕様の検算、5 Hz での位相と振幅、周波数を上げたときの落ち方、アクチュエータごとの速度の枠、1st で圧下が開いて荷重が下がること（リミット無しと比べて最大 −24 %・平均 −36 %）、2nd で全開になって止まること', w: 'tools/screwtrace.mjs' },
+    ] },
     { v: '2.1.2', base: 'b7c7434', date: '2026-09-12', title: '端材が計画の 4 倍出ていたのを直し、上がり温度を合わせ直す —— «切ったつもりで切れていなかった» 評価器 3 本も', items: [
       // --- クロップ（端材）の量 ---
       { t: '端材が計画の 4 倍出ていた。止まるのに要る距離を «主機の能力»（PROCESS.ACCEL 110 mpm/s）で見積もっていたが、板がバイトに居ないあいだのバックアップロールは圧延荷重で押しつけられていないので、滑らせない上限のほうが先に効く（実測 48 mpm/s）。距離にすると 1.1 m のつもりで 2.5 m 走り、先端が刃を 1 m 行き過ぎ、そこから戻せず «その場で切る» ため 300 mm の計画が 1,325 mm になっていた。«いま出せる制動»（mill.brakeCap）から出すようにした', w: 'FinishController.wantCrop / PhysicsEngine._dynamics' },
@@ -2230,12 +2244,52 @@ const CONFIG = {
     NECK:    { FILLET: 160, END_K: 0.72, END_L: 340, END_L_DRIVE: 320,
                KEY_W: 0.25, KEY_H: 0.11, KEY_L: 0.72,
                FORK_T: 0.62, FORK_H: 1.06, FORK_SLOT: 0.50, FORK_BACK: 260, FORK_PRONG: 460 },
-    CAPSULE: { D: 1300, BODY_L: 800 },     // 油圧圧下シリンダ
+    CAPSULE: { D: 1300, BODY_L: 800 },     // 油圧圧下シリンダ（見た目の外形。受圧径は HYD.CYL_D）
+    /* 電動圧下装置（2 速切換式・実機仕様 2026-09 提供）。
+     * パスとパスのあいだに «次のパスの圧下» を置くのはこちら。油圧（HYD）はその上に載る
+     * 細かい補正（AGC）を受け持つ。速さも遅れも桁が違うので、2 つを分けて持つ。
+     *   モータ    高速 1 台 110/220 kW D.C. ／ 低速 2 台 52 kW D.C.
+     *   回転数    高速 0/500/1000/1250 rpm ／ 低速 0/550 rpm
+     *   減速比    高速 27.5 : 1 ／ 低速 440 : 1
+     *   圧下速度  高速 0/8.5/17/21.2 mm/s ／ 低速 0/583 µm/s
+     *   手動レバー 同時圧下 1 ノッチ 0.1 mm/s ／ 2 ノッチ 1 mm/s
+     *   レベリング 0.1 mm/s・side（O.S. を閉じると D.S. が開くシーソーなので、
+     *             O.S. と D.S. の «差» では 0.2 mm/s） */
+    SCREW: { FAST_KW: [110, 220], FAST_N: 1, SLOW_KW: 52, SLOW_N: 2,
+             FAST_RPM: [0, 500, 1000, 1250], SLOW_RPM: [0, 550],
+             FAST_GEAR: 27.5, SLOW_GEAR: 440,
+             FAST_MMS: [0, 8.5, 17, 21.2], SLOW_MMS: [0, 0.583],
+             LEVER_MMS: [0.1, 1.0], LEVEL_MMS: 0.1,
+             get MAX_MMS() { return this.FAST_MMS[this.FAST_MMS.length - 1]; } },
+    /* 油圧圧下（実機仕様 2026-09 提供）。AGC が動かすのはこのシリンダ。
+     *   シリンダ径 Φ1,060 ／ 圧力 210 kgf/cm²（吐出 250・背圧 40）
+     *   ストローク max 60 mm（有効 52 mm）
+     *   速度 約 3 mm/s（荷重 1,500 t 時）
+     *   周波数応答 5 Hz（±50 µm・1,500 t・CPC モード・90° 位相遅れ）
+     * 検算: Φ1,060 の受圧面積 8,825 cm² × 210 kgf/cm² ＝ 1,853 t/本、2 本で 3,706 t。
+     *   常用最大 3,920 t と同じ桁で、圧下は油圧が受けきっている。
+     * «90° 位相遅れがちょうど 5 Hz» は一次遅れでは書けない —— 一次遅れの位相は 90° に
+     *   漸近するだけで届かない。固有振動数 ωn の 2 次系なら位相がちょうど −90° に
+     *   なるのが ω ＝ ωn なので、油圧はそちらで書く（BAND_HZ ＝ ωn/2π）。
+     *   減衰比 ZETA も仕様から出る。«5 Hz のとき ±50 µm»（＝ ωn で振幅が落ちていない）と
+     *   «そのとき 90° 遅れ» を同時に満たすには |H(jωn)| ＝ 1/(2ζ) ＝ 1、つまり ζ ＝ 0.5。
+     *   臨界減衰（1.0）だと ωn で振幅が半分（±25 µm）になり、仕様の ±50 µm が出ない。
+     * ±50 µm を 5 Hz で振るのに要る速度は 2π·5·0.05 ＝ 1.6 mm/s で、3 mm/s の枠に収まる。 */
+    HYD: { CYL_D: 1060, N_CYL: 2, P_WORK: 210, P_SUPPLY: 250, P_BACK: 40,
+           STROKE: 60, STROKE_EFF: 52, SPEED: 3.0, SPEED_AT_T: 1500,
+           BAND_HZ: 5, BAND_AMP: 0.05, ZETA: 0.5,
+           /** 受圧面積から出るシリンダ 2 本の推力 [tonf]（仕様の検算用） */
+           get CAP_T() { return Math.PI / 4 * Math.pow(this.CYL_D / 10, 2) * this.P_WORK * this.N_CYL / 1000; } },
     WEDGE:   { H: 300 },                   // パスライン調整ステップウェッジ
     // ロールベンディングシリンダ。FORCE は片側 1 対あたりの最大力 [tonf]
     BENDER:  { D: 300, L: 520, FORCE: 160 },
+    /* 荷重の限度は実機では 3 段（2026-09 提供）。
+     *   常用最大 3,920 t —— 圧延機 max 荷重（圧下スクリューナット収納部）
+     *   1st リミット 3,900 t —— 超えたら «荷重一定制御» に移る（板厚より設備を守る）
+     *   2nd リミット 4,200 t —— 油圧シリンダ急速開・ミル急停止。テンションと MUV は維持 */
     RATED_FORCE_T: 3920,                   // 常用最大圧延荷重 (tonf)
-    LIMIT_FORCE_T: 4200,                   // 非常最大圧延荷重 (tonf)
+    LIMIT1_FORCE_T: 3900,                  // 1st リミット → 荷重一定制御 (tonf)
+    LIMIT_FORCE_T: 4200,                   // 2nd リミット ＝ 非常最大圧延荷重 (tonf)
     RATED_POWER_KW: 4000,                  // 主電動機定格 (2000 kW × 2 台。更新後の実機値)
     /* ミル定数（スタンドのばね）。実ギャップは圧下位置 S そのものではなく h ＝ S ＋ δ(F)
      * —— 荷重を受けてハウジング・チョック・ロールが伸びたぶんだけ開く。狙いの板厚を出すには
@@ -6788,6 +6842,8 @@ class MillState {
      *   gap       —— 実ギャップ ＝ screw + stretch。描画も圧延計算もこれを見る */
     this.gap = CONFIG.MILL.GAP_MAX; this.targetGap = CONFIG.MILL.GAP_MAX;
     this.screw = CONFIG.MILL.GAP_MAX; this.screwCmd = CONFIG.MILL.GAP_MAX;
+    this.screwV = 0;                           // 圧下の速度 [mm/s]（油圧 2 次系の状態・シリンダ速度の枠）
+    this.forceHold = false;                    // 1st リミットの «荷重一定制御» に入っているか
     this.stretch = 0; this.stretchV = 0; this.trim = 0;   // 伸びとその速度（2 次系の状態）
     this.adapt = 1;                            // セットアップモデルの学習係数（実測荷重 ÷ 予測）
     /* ロードセルが読む荷重 [t] ＝ ハウジングの伸び × ミル定数。実機の計器・記録・AGC が見るのは
@@ -6845,6 +6901,32 @@ class MillState {
    * 実機の «パスライン調整» は、ロールの組をテーブルの高さに対して上下させる操作で、
    * 板反りの代表的な対策のひとつ（バイトを出た板が下ロールに巻くか上ロールに巻くかが
    * 変わり、付く曲率の向きが変わる）。可動量はステップウェッジの範囲に収まる。 */
+  /**
+   * 圧下アクチュエータを 1 ステップ進める。実機は 2 段で、速さも遅れも桁が違う。
+   *   噛んでいるあいだ（＝ AGC）…… 油圧圧下。周波数応答 5 Hz（±50 µm・90° 位相遅れ）・
+   *     シリンダ速度 3 mm/s。«90° 位相遅れがちょうど 5 Hz» は一次遅れでは書けない
+   *     （一次遅れの位相は 90° に漸近するだけ）ので、固有振動数 ωn ＝ 2π·5 の 2 次系で書く。
+   *     半陰的オイラー。ωn·dt ＝ 0.26 < 2 なので固定ステップ 1/120 s で安定。
+   *   噛んでいないあいだ ………… 電動圧下。次のパスの位置決め。高速段 21.2 mm/s・
+   *     遅れは AGC.TAU（一次遅れ）。
+   * 以前はどちらも «一次遅れ 0.55 s ＋ 70 mm/s»（どちらも推定値）で 1 本にしていた。
+   * 運転（_agc）も評価器（tools/screwtrace.mjs）もここを呼ぶ —— 応答の出どころは 1 か所。
+   */
+  stepScrew(cmd, dt, inBite, lo = CONFIG.MILL.GAP_MIN, hi = CONFIG.MILL.GAP_MAX) {
+    const C = CONFIG.MILL;
+    if (inBite) {
+      const H = C.HYD, w = 2 * Math.PI * H.BAND_HZ;
+      this.screwV += (w * w * (cmd - this.screw) - 2 * H.ZETA * w * this.screwV) * dt;
+      this.screwV = Num.clamp(this.screwV, -H.SPEED, H.SPEED);        // シリンダ速度の枠
+      this.screw = Num.clamp(this.screw + this.screwV * dt, lo, hi);
+    } else {
+      const want = Num.approach(this.screw, cmd, CONFIG.AGC.TAU, dt); // 電動圧下の応答（一次遅れ）
+      const s0 = this.screw;
+      this.screw = Num.clamp(Num.rateTo(this.screw, want, C.SCREW.MAX_MMS, dt), lo, hi);
+      this.screwV = dt > 0 ? (this.screw - s0) / dt : 0;
+    }
+    return this.screw;
+  }
   get passLine() { return CONFIG.MILL.PASS_LINE + this.plOffset; }
   /** 下ワークロール上面 = パスライン（下ロールはパスライン調整装置の上で固定） */
   /* 上下の «現物» の径。wrDia / brDia は組の平均で、上下の差は DIA_DIFF（＋で上が大きい）。
@@ -8819,8 +8901,26 @@ class PhysicsEngine {
      * （実測: 目標 9.1 mm に対し 7.8 mm）。実ギャップ側の下限は下で別に効かせる。 */
     const screwMin = C.GAP_MIN - Rolling.millStretch(C.RATED_FORCE_T);
     if (!lock) m.screwCmd = Num.clamp(m.targetGap - comp, screwMin, C.GAP_MAX);
-    const want = Num.approach(m.screw, m.screwCmd, G.TAU, dt);   // 圧下の応答（一次遅れ）
-    m.screw = Num.rateTo(m.screw, want, C.GAP_RATE, dt);         // ＋シリンダ速度の制限
+    /* 1st リミット（実機 3,900 t）。ここを超えたら板厚制御をやめて «荷重一定制御» に移る
+     * —— 圧下を緩めて荷重をリミットに張り付かせる。板厚は狙いから外れるが、圧下スクリュー
+     * ナット収納部（常用最大 3,920 t）を守るほうが先。
+     * 圧下位置を δ 開くと、実ギャップは δ·M/(M+Q) 開き、荷重は δ·M·Q/(M+Q) 減る
+     * （M: ミル定数、Q: 材料の塑性剛性）。したがって荷重を ΔF 落とすのに要る圧下は
+     *   δ ＝ ΔF·(1/M ＋ 1/Q)
+     * ミル定数だけで δ ＝ ΔF/M としていたときは、厚板パスで足りずに荷重が 2 倍まで
+     * 伸びた（実測: リミット 1,200 t に対し 2,585 t）。
+     * 毎ステップ «いまの位置» から引き直すので積分の役目も果たし、行き過ぎないよう
+     * 半分だけ動かす（残りは次のステップで詰める）。速さはシリンダ速度が抑える。 */
+    m.forceHold = auto && s.inBite && m.forceMeas > C.LIMIT1_FORCE_T;
+    if (m.forceHold) {
+      const Mm = Rolling.millModulus(m.forceMeas);
+      const Qh = Rolling.plasticCoef(s.hBite, m.gap, s.width, m.currentSpeed,
+                                     s.temperature, s.alloy, m.wrRa).Q;
+      const dOpen = (m.forceMeas - C.LIMIT1_FORCE_T) * (1 / Mm + 1 / Math.max(Qh, 1)) * 0.5;
+      m.screwCmd = Num.clamp(m.screw + dOpen, screwMin, C.GAP_MAX);
+    }
+    m.stepScrew(m.screwCmd, dt, s.inBite, screwMin, C.GAP_MAX);
+
     /* 2) スタンドの伸び。質量とばねを持つ 2 次系  x'' + 2ζω x' + ω² x = ω²·F/M  で荷重に追従する
      *    （半陰的オイラー。ω·dt = 0.79 < 2 なので固定ステップ 1/120 s で安定）。
      *    噛み込みの階段荷重で伸びが行き過ぎ、その間だけギャップが余計に開く。 */
@@ -9656,9 +9756,13 @@ class PhysicsEngine {
   }
 
   /** 過負荷停止。非常最大圧延荷重を超えたら実機と同じく主機を止め、運転を打ち切る。 */
-  _trip(text) {
-    const m = this.mill;
+  _trip(text, rapidOpen = false) {
+    const m = this.mill, C = CONFIG.MILL;
     m.mode = 'AUTO'; m.passIndex = -1; m.passPhase = 'IDLE'; m.targetSpeed = 0; m.currentSpeed = 0;
+    /* 2nd リミット（実機 4,200 t）は «油圧シリンダ急速開・ミル急停止»。挟んだまま止めると
+     * 材料が抜けなくなるので、圧下を開いて解放する。テンションと MUV は維持する
+     * （巻取の張力をここで落とさない ＝ finish.winding には触れない）。 */
+    if (rapidOpen) { m.screwCmd = C.GAP_MAX; m.screw = C.GAP_MAX; m.screwV = 0; m.gap = C.GAP_MAX; }
     this.finish.cropStage = 'DONE';
     this.tripped = text;
     this.bus.emit('SYS_MESSAGE', { text, kind: 'crit' });
@@ -9669,10 +9773,12 @@ class PhysicsEngine {
     const s = this.slab, m = this.mill, C = CONFIG.MILL, B2 = CONFIG.BRUSH;
     let w = null;
     if (!this.tripped && s.rollForceAvg > C.LIMIT_FORCE_T && m.passIndex >= 0) {
-      this._trip(`過負荷停止: 圧延荷重 ${s.rollForceAvg.toFixed(0)} t が非常最大 ${C.LIMIT_FORCE_T.toLocaleString()} t を超えました（材質・板厚・炉出し温度を見直してください）`);
+      this._trip(`過負荷停止: 圧延荷重 ${s.rollForceAvg.toFixed(0)} t が 2nd リミット ${C.LIMIT_FORCE_T.toLocaleString()} t を超えました`
+               + `—— 油圧シリンダを急速開にしてミルを止めました（材質・板厚・炉出し温度を見直してください）`, true);
       return;
     }
-    if (m.forceMeas > C.RATED_FORCE_T)            w = { kind: 'crit', text: `圧延荷重が定格 ${C.RATED_FORCE_T} t を超過しています` };
+    if (m.forceHold)                             w = { kind: 'crit', text: `1st リミット ${C.LIMIT1_FORCE_T.toLocaleString()} t に達したため荷重一定制御に入りました（圧下を緩めています。板厚は狙いから外れます）` };
+    else if (m.forceMeas > C.RATED_FORCE_T)      w = { kind: 'crit', text: `圧延荷重が常用最大 ${C.RATED_FORCE_T.toLocaleString()} t を超過しています` };
     else if (m.steadyPowerKW > C.RATED_POWER_KW)  w = { kind: 'crit', text: `主電動機動力が定格 ${(C.RATED_POWER_KW / 1000).toFixed(1)} MW を超過しています` };
     else if (s.onLine && this.stillRolling && !this.finish.winding && s.temperature < this.tempFloor)
                                                   w = { kind: 'warn', text: `材料温度が圧延下限 ${this.tempFloor} ℃ を下回りました` };
