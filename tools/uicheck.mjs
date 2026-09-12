@@ -305,14 +305,25 @@ for (const w of widths) {
       const det0 = $('soak-detail').textContent.length;
       const find = (q) => { const e = $('soak-q'); e.value = q; e.dispatchEvent(new Event('input'));
         return $('soak-list').querySelectorAll('.pat').length; };
-      const byMat = find('52S');                      // 代表材で引ける
+      const byMat = find('52S');                      // 代表材（社内記号）で引ける
+      /* 材質マスタの橋渡しが効いていれば JIS 記号でも引ける。«A5052 のソーキングは？»
+       * と探す人は 52S を知らない —— 探させないための橋渡しがこれ。 */
+      const byJis = find('A5052');
+      const jisIds = [...$('soak-list').querySelectorAll('.pat')].map(b => b.dataset.id);
       const none = find('該当しないはずの語zzz');
+      find('52S');
+      $('soak-list').querySelector('.pat').click();
+      // 対象材の表の «JIS» 欄（最終列）に記号が出ている行の数
+      const jisCol = [...$('soak-detail').querySelectorAll('table')]
+        .filter(t => [...t.querySelectorAll('th')].some(h => h.textContent.trim() === 'JIS'))
+        .flatMap(t => [...t.querySelectorAll('tbody tr')])
+        .filter(r => { const c = r.lastElementChild; return c && !['–', ''].includes(c.textContent.trim()); }).length;
       find('');
       const second = $('soak-list').querySelectorAll('.pat')[1];
       const id2 = second.dataset.id; second.click();
       const head = $('soak-detail').querySelector('.dv')?.textContent || '';
       A.ui.toggleSoak(false);
-      return { n0, det0, byMat, none, id2, head,
+      return { n0, det0, byMat, byJis, jisIds, jisCol, none, id2, head,
                inView: box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1 && box.left >= -1 && box.top >= -1,
                w: Math.round(box.width), h: Math.round(box.height),
                nPat: window.__SOAK ? window.__SOAK.ids.length : 0 };
@@ -322,6 +333,10 @@ for (const w of widths) {
        `${sk.w} × ${sk.h} px ／ ${sk.n0} パターン ／ 中身 ${sk.det0} 文字`);
     ok('ソーキングマスタが «代表材» でも探せる', sk.byMat > 0 && sk.byMat < sk.n0 && sk.none === 0,
        `«52S» で ${sk.byMat} 件 ／ 当たらない語で ${sk.none} 件`);
+    ok('ソーキングマスタが «JIS 記号» でも探せる（材質マスタの橋渡しが効いている）',
+       sk.byJis > 0 && sk.byJis < sk.n0 && sk.jisIds.includes('A'),
+       `«A5052» で ${sk.byJis} 件（${sk.jisIds.join('・') || 'なし'}）`);
+    ok('代表材の «JIS» 欄が表に出ている', sk.jisCol > 0, `JIS 欄に記号が出ている行 ${sk.jisCol} 件`);
     ok('操業パターンを押すと右がその中身になる', sk.head.trim() === sk.id2,
        `押した ${sk.id2} ／ 右の見出し ${sk.head.trim()}`);
     ok('開くとすぐ探せる（検索欄に焦点があり、先頭の版の中身が出ている）',

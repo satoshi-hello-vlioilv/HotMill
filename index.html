@@ -1540,11 +1540,11 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   <header>
     <div>
       <div class="ttl">ソーキングマスタ</div>
-      <div class="sub">実機の操業基準（均質化熱処理）。左で操業パターンを選び、右でその中身を読みます。</div>
+      <div class="sub">実機の操業基準（均質化熱処理）。左で操業パターンを選び、右でその中身を読みます。代表材は社内記号なので、材質マスタで引いた JIS 記号を並べて出しています。</div>
     </div>
     <div class="find">
       <i class="fa-solid fa-magnifying-glass"></i>
-      <input id="soak-q" type="search" placeholder="記号・目的・材料で探す" autocomplete="off" spellcheck="false"
+      <input id="soak-q" type="search" placeholder="記号・目的・材料（52S でも A5052 でも）で探す" autocomplete="off" spellcheck="false"
              aria-label="操業パターンを探す">
     </div>
     <button id="btn-soak-close" type="button" title="閉じる（Esc）" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
@@ -1626,6 +1626,18 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.6.0', base: '5d2056f', date: '2026-09-12', title: '材質マスタ（社内材質記号 ↔ JIS 記号 169 件）と、較正の基準ロットの操業パターン', items: [
+      { t: '社内材質記号と JIS 記号の対応表（169 件・40 JIS 記号）をいただいたので材質マスタとして入れた。実機の書きもの（操業基準・帳票）は社内記号、本アプリの材質は JIS 記号で、この橋渡しが無いと «A5052 のソーキングはどれか» が引けない', w: 'CONFIG.MATCODE' },
+      { t: '引くところを 1 か所にまとめた —— 社内記号 → JIS／JIS → 社内記号（複数）／材質 → 操業基準に代表材として載っている記号。対応表に無い記号では記号を «作らない»（null と空を返す）', w: 'MatCode' },
+      { t: '材質表に手で書いていた社内記号（ALLOYS[].soak）を外し、材質マスタから引くようにした。同じ対応が 2 か所にあると片方だけ古くなる。これで A1050・A5083 も引けるようになり（A5083 → NP56 → F 操業 ＝ Al-Mg 系高力合金）、8 材質すべてに社内記号が付いた', w: 'ALLOYS / Soak.autoFor' },
+      { t: '代表材で操業を引けない材質は «一般材»（E 操業）へ落とすようにした。代表材に載っているのは特定の用途・客先の操業ばかりで、ふつうの材はどれにも載らない。M7 で «一般材» に当たっているのは E 操業だけなので、そこへ落とす —— 推測で別の操業へ振らない', w: 'Soak.GENERAL' },
+      { t: '較正の基準ロット（A5052・持ちかかり 433 ℃）の操業パターンは «E 操業» とご回答をいただいたので、既定に入れた。代表材 52S は A 操業（A-c）にも載っているが、その条件は «5000系かつプレート用途» で、基準ロットはコイル材なので当たらない —— 残るのは一般材の E 操業', w: 'MATERIAL.SOAK_PATTERN' },
+      { t: '操業から出る «持ちかかり温度の見込み» を解けるようにした。最後の均熱の設定温度から、抽出から持ちかかりまでの待ち時間だけ放射と自然対流で冷やす（冷やし方は板厚方向を解く SlabState.relax そのもの）', w: 'Soak.pickupC' },
+      { t: '見込みと実測が 91 K 合わないことが数で出た —— E 操業の炉出 530 ℃、待ち 10 分で落ちるのは 6 K、見込み 524 ℃ に対して実機は 433 ℃。逆に解くと 433 ℃ まで落ちるには 206 分 ＝ 3.4 時間かかる。アルミは熱伝導が高く、表層だけが冷える逃げ道も無い（10 分後の表面 520 ℃、平均との差 4 K）。理由が分からないので素材の温度は入力値のままにし、差を画面と評価器に毎回出している', w: 'Soak.coolMinutesTo / README 0-3' },
+      { t: 'ソーキングマスタを JIS 記号でも探せるようにし、対象材の表に «JIS» の列を足した。«A5052 のソーキングは？» と探す人は 52S を知らない —— 探させないための橋渡し', w: 'UIManager._soakRows / _soakDetail' },
+      { t: '素材の材質欄に «社内材質記号» を出した。実機の基準表と突き合わせるとき、この材質が現場で何と呼ばれているかが要る。操業を引けた記号は太字にして辿れる筋を示す', w: 'UIManager._matCodeLine' },
+      { t: '判定を作った —— tools/soaktrace.mjs に 9 件（対応表の重複・往復・作らないこと・8 材質すべてで引けること・辿れること・一般材への落ち・基準ロットの操業と、見込みとの差と要る時間の参考 2 件）、tools/uicheck.mjs に 2 件（JIS でも探せる・JIS 欄が出ている）', w: 'tools/soaktrace.mjs / uicheck.mjs' },
+    ] },
     { v: '2.5.0', base: '61befc3', date: '2026-09-12', title: '形状モニタの主役を «反り» にする —— 定規を当てたときの隙間をそのまま描く', items: [
       { t: '形状モニタで «反り» を見られるようにし、こちらを既定にした。幅方向・丈方向とも、実機の測り方どおり «まっすぐな定規を当てて板とのあいだの隙間を測る» をそのまま描く —— 反った板（実線）と、その両端に載った定規（破線）と、あいだの隙間（塗り）', w: 'UIManager._shapeMon / drawWarp' },
       { t: '描くのは «隙間の関数» ではなく «板そのもの» にした。隙間だけを描くと、上反り（端が上がる）の板が下向きに膨らんで見えて上下が逆になる。板を y = κx²/2 で描き、定規を板の端の高さ（κ·span²/8）へ置く形にしてある', w: 'drawWarp' },
@@ -3087,6 +3099,61 @@ const CONFIG = {
    * 表は «いただいた形» のまま 1 行 1 レコードの配列で置き、列の意味は KEYS が持つ。
    * 加工した値（シミュレータが使う境界条件）は Soak が導出する —— 元の表は書き換えない。
    * ========================================================================= */
+  /* ===== 材質マスタ —— 社内材質記号 ↔ JIS 記号 ==============================
+   * 実機の帳票も操業基準（SOAK）も «社内材質記号» で書かれていて、本アプリの材質は
+   * JIS 記号で持っている。橋渡しの一覧（169 件）をいただいたのでそのまま入れる。
+   *
+   * 対応は «多 対 1»（1 つの JIS 記号に社内記号がいくつも載る）なので、右辺で束ねた
+   * 形にしてある —— いただいた 1 行 1 対応と同じ中身で、並びもそのまま。
+   * 引くところは MatCode の 1 か所だけ（CLAUDE.md「数値の出どころを 1 か所にする」）。
+   *
+   * ここに «無い» JIS 記号は、対応表に載っていないというだけで、材質が無いのではない。
+   * 引けなかったときに勝手な記号を作らないよう、MatCode は空を返す。 */
+  MATCODE: {
+    KEYS: ['jis', 'codes'],
+    ROWS: [
+      ['1050', ['A95Y', 'A995', 'B995', 'C995', 'F95A', 'F951', 'F952', 'F995', 'G95L', 'G995', 'L95A', 'S995', '995']],
+      ['1070', ['1070', '997B']],
+      ['1085', ['TNB1', 'TNB7', 'TNEX', '1085']],
+      ['1100', ['ANK1', 'A2ST', 'C2ST', 'G2ST', 'H2ST', 'K2ST', 'NK01', 'T2ST', 'U2ST', 'V2ST', 'X2ST', '2ST']],
+      ['1200', ['AF65', 'AF80', 'AF85', '2SA', '2SB']],
+      ['2014', ['14S', '14SC', '14SN', '14SR', '14ST', '14SV', '214A']],
+      ['2017', ['N17S', '17S']],
+      ['2024', ['24S']],
+      ['2219', ['219S', '2219']],
+      ['3003', ['K3S', 'L3S', 'M3S', 'M3SC', 'P3S', 'T3S', '3S', '3SC', '3SCA', '3SR']],
+      ['3004', ['CA34', 'CM34', 'G4S', 'NR34', 'RA35', 'UB34', '3004']],
+      ['3005', ['LB3', 'PS35', '3005', '305M', '305R']],
+      ['3104', ['3104']],
+      ['3105', ['3105']],
+      ['3203', ['3SA', '3SZ']],
+      ['4004', ['4M02']],
+      ['4043', ['4043']],
+      ['4045', ['4L45', '4S45', '4045']],
+      ['4343', ['4S43', '434L', '4343']],
+      ['5005', ['A505', 'B505', 'E505', 'F505', 'G505', '5005']],
+      ['5052', ['A52N', 'A52S', 'C52S', 'FC52', 'F52S', 'F552', 'G52S', 'K52S', 'M52S', 'N52S', 'PLD5', 'P52S', 'P521', 'SL52', 'WH52', 'W52S', '5FPC', '52S', '52SC', '52SR', '521X']],
+      ['5083', ['NP56', 'SL83', '5083']],
+      ['5086', ['5086']],
+      ['5154', ['N51S', '511W', '5154']],
+      ['5182', ['5182']],
+      ['5454', ['Y54S', '5454']],
+      ['6061', ['AX61', 'C61S', 'FC61', 'NB62', 'R61S', 'SL61', 'TR61', '61HS', '61S', '61SN']],
+      ['6101', ['E601', 'E602']],
+      ['6951', ['6951']],
+      ['7072', ['7S72']],
+      ['7075', ['75DA', '75S', '75SH', '75SL', '75XL']],
+      ['7204', ['U74S']],
+      ['7475', ['7475']],
+      ['8079', ['EST7', 'FST9', 'STN7', 'UF95']],
+      ['1230A', ['ESTN', 'MSTN', 'PF43', 'PF45', 'STNF', 'STNS', 'STN6', 'WSTN']],
+      ['1N30', ['EST5', 'EST6', 'FSTN', 'STNC', 'STND', 'STN5']],
+      ['4N43', ['N4143', '4Z43', '414L', '4143', '4243']],
+      ['4N45', ['4445', '4545']],
+      ['5110A', ['A1MC', '3MA']],
+      ['5N01', ['AZ01', '3MB']],
+    ],
+  },
   SOAK: {
     /* 列の名前。表を «そのままの形» で持つので、意味づけはここ 1 か所。 */
     KEYS: {
@@ -4357,12 +4424,11 @@ const CONFIG = {
   /* 材質。pit は «その材質を焼くピット炉の番号»（1 起点、FURNACE.N 以内）。
    * 同じ炉に違う合金を入れると材質ごとの均熱条件を作れないので、実機と同じく炉を分ける。
    * 8・9 番炉は予備（この 7 材質では使わない）。 */
-  /* soak —— ソーキングマスタ（CONFIG.SOAK）の «代表材» と突き合わせる社内材質記号。
-   * 実機の操業基準は JIS 記号ではなく社内記号（52S・3S・75S・61S …）で書かれているので、
-   * ここが «JIS ↔ 社内» の橋渡しになる。null は «いただいた表に代表材が無い» という意味で、
-   * 推測で埋めていない（社内材質の一覧は材質マスタの残件。README 0-3）。 */
+  /* 実機の操業基準（CONFIG.SOAK）は JIS 記号ではなく社内材質記号（52S・3S・75S・61S …）で
+   * 書かれている。橋渡しはここには持たず、材質マスタ（CONFIG.MATCODE / MatCode）1 か所 ——
+   * 同じ対応が 2 か所にあると片方だけ古くなる。 */
   ALLOYS: {
-    A1050: { name: 'A1050  純アルミ',        soak: null, pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 26.202, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
+    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 26.202, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
     /* A1100 は実機ロット（2026-09 提供、607T）の材質。1050 との違いは Cu 0.12 % ぶんの
      * 固溶強化で、変形抵抗はわずかに高い。3 つの係数は «別々の役割» で決めてある:
      *   m —— ひずみ速度依存。最終パス（22 → 7.9 mm・94 mpm で平均 1,064 t）で較正。
@@ -4373,13 +4439,13 @@ const CONFIG = {
      *         b をそのままにすると Q_fit が 99（公表の −37 %）まで落ち、«最終パスの荷重を
      *         温度依存を弱めて買う» ことになる（実測して見つけた）。
      *   C —— 絶対値。上の 2 つを決めたあと、厚板段の荷重帯（287〜520 t、板幅 1,070）で合わせる。 */
-    A1100: { name: 'A1100  純アルミ（Cu 添加）', soak: null, pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 27.517, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
-    A3003: { name: 'A3003  Al-Mn（既定）',    soak: '3S', pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 30.106, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
-    A4045: { name: 'A4045  Al-Si（ろう材）',  soak: '4045', pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 27.959, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
-    A5052: { name: 'A5052  Al-2.5Mg',       soak: '52S', pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 27.092, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
-    A5083: { name: 'A5083  Al-4.5Mg',       soak: null, pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 26.694, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
-    A6061: { name: 'A6061  Al-Mg-Si',       soak: '61S', pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 22.588, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
-    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    soak: '75S', pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 34.306, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
+    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 27.517, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
+    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 30.106, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
+    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 27.959, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
+    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 27.092, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
+    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 26.694, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
+    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 22.588, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
+    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 34.306, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
   },
 
   /* 幅方向の形状（クラウン・平坦度・幅広がり・据わり）の諸元。
@@ -4400,8 +4466,12 @@ const CONFIG = {
 
   MATERIAL: {
     /* 選んでいるソーキングの操業パターン（CONFIG.SOAK.PATTERNS の記号）。
-     * 空なら «材質から自動»（ALLOYS[].soak → 代表材 → 操業パターン）。 */
-    SOAK_PATTERN: '',
+     * '' なら «材質から自動»（材質 → 社内材質記号 → 代表材 → 操業パターン。Soak.autoFor）。
+     * 既定の 'E' は «較正の基準ロット（A5052・持ちかかり 433 ℃）がどの操業か» への
+     * ご回答（2026-09-12）。代表材 52S は A 操業（A-c）にも載っているが、その条件は
+     * «5000系かつプレート用途» で、基準ロットはコイル材なので当たらない —— 残るのは
+     * 一般材の E 操業。 */
+    SOAK_PATTERN: 'E',
     ALLOY: 'A5052',                                    // 選択中の材質（ALLOYS のキー）
     TREF: 450,                                         // 変形抵抗モデルの基準温度
     // 可逆圧延で材料温度を決める主因はロール抜熱。H_ROLL は «界面の» 接触熱伝達率で、
@@ -5539,6 +5609,40 @@ const Sect = {
  * 書いてあったか» を照らせるようにするため —— 加工した値で上書きすると戻せない。
  * ここは «表を引く» ことだけをする。熱サイクルの組み立てと温度の計算はこの下。
  * ========================================================================== */
+/* =============================================================================
+ * 材質マスタ —— 社内材質記号 ↔ JIS 記号の橋渡し 1 か所。
+ *
+ * 実機の書きもの（操業基準・帳票）は社内記号、本アプリの材質は JIS 記号。
+ * 対応表そのものは CONFIG.MATCODE にあり、ここは «引く» ことだけをする。
+ * 引けなかったときに記号を作らない（空を返す）—— 推測で埋めない。
+ * ========================================================================== */
+const MatCode = {
+  /** 対応表を {jis, codes[]} の形で返す。 */
+  all() { return CONFIG.MATCODE.ROWS.map(([jis, codes]) => ({ jis, codes })); },
+  /** JIS 記号（'5052' でも 'A5052' でも可）→ 社内材質記号の一覧。載っていなければ []。 */
+  codesFor(jis) {
+    const k = String(jis || '').toUpperCase().replace(/^A(?=\d)/, '');
+    return CONFIG.MATCODE.ROWS.find(r => r[0].toUpperCase() === k)?.[1] ?? [];
+  },
+  /** 社内材質記号 → JIS 記号。載っていなければ null。 */
+  jisOf(code) {
+    const k = String(code || '').toUpperCase();
+    for (const [jis, codes] of CONFIG.MATCODE.ROWS) if (codes.some(c => c.toUpperCase() === k)) return jis;
+    return null;
+  },
+  /** 材質（ALLOYS のキー）→ 社内材質記号の一覧。 */
+  codesForAlloy(alloyKey = CONFIG.MATERIAL.ALLOY) { return MatCode.codesFor(alloyKey); },
+  /**
+   * 材質（ALLOYS のキー）→ ソーキングの操業基準に «代表材として載っている» 社内記号。
+   *
+   * 対応表には 1 つの JIS 記号に社内記号がいくつも載る（A5052 は 21 件）が、操業基準の
+   * 代表材欄に出てくるのはそのうちの一部。«操業を引ける記号» だけを返す。
+   */
+  soakSamples(alloyKey = CONFIG.MATERIAL.ALLOY) {
+    return MatCode.codesForAlloy(alloyKey).filter(c => Soak.patternsForSample(c).length > 0);
+  },
+};
+
 const Soak = {
   /** 表の行（配列）を名前つきにする。列の意味は CONFIG.SOAK.KEYS の 1 か所だけが持つ。 */
   rec(table, row) {
@@ -5612,19 +5716,83 @@ const Soak = {
       .map(r => r.pattern);
   },
   /**
-   * 材質（JIS 記号）から操業パターンを自動で引く。橋渡しは ALLOYS[].soak（社内材質記号）。
-   * 実機の操業基準は社内記号で書かれていて、1 つの社内記号が複数の操業に載ることがある
-   * （3S は H 操業と S5 操業）ので、候補を «全部» 返す。どれを使うかは運転が決める。
+   * 材質（JIS 記号）から操業パターンを自動で引く。橋渡しは材質マスタ（MatCode）。
+   *
+   * 実機の操業基準は社内記号で書かれていて、1 つの JIS 記号に社内記号がいくつも載り
+   * （A5052 は 21 件）、1 つの社内記号が複数の操業に載ることもある（3S は H 操業と
+   * S5 操業）。どれを使うかは用途で決まる —— 代表材の «条件» 欄は «5000系かつプレート
+   * 用途» のように用途で切っていて、アプリは用途を持っていない。そこで候補を «全部»
+   * 返すだけにして、選ぶのは運転（#sel-soak）に任せる。
    */
   autoFor(alloyKey = CONFIG.MATERIAL.ALLOY) {
-    const code = CONFIG.ALLOYS[alloyKey]?.soak;
-    return code ? Soak.patternsForSample(code) : [];
+    const seen = new Set();
+    for (const code of MatCode.soakSamples(alloyKey)) for (const p of Soak.patternsForSample(code)) seen.add(p);
+    return [...seen];
   },
-  /** いま効いている操業パターン（明示の選択が無ければ材質から自動で引いた先頭）。 */
+  /**
+   * 候補が引けないときの行き先 —— «一般材» の操業。
+   * 代表材で引けるのは «特定の用途・特定の客先» の操業ばかりで、ふつうの材はどれにも
+   * 載らない。M7 で «一般材» に当たっているのは E 操業だけなので、そこへ落とす。
+   */
+  GENERAL: 'E',
+  /** いま効いている操業パターン（明示の選択が無ければ材質から自動で引いた先頭、無ければ一般材）。 */
   current(alloyKey = CONFIG.MATERIAL.ALLOY) {
     const sel = CONFIG.MATERIAL.SOAK_PATTERN;
     if (sel && Soak.pattern(sel)) return sel;
-    return Soak.autoFor(alloyKey)[0] || null;
+    return Soak.autoFor(alloyKey)[0] || Soak.GENERAL;
+  },
+  /**
+   * その操業から出る «持ちかかり温度» の見込み [℃]。
+   *
+   * 最後の均熱の設定温度（＝ 炉出の見込み）から始めて、抽出から持ちかかりまでの
+   * 待ち時間（SUPPLY.HOLD_MIN）だけ放射と自然対流で冷やす。冷やし方は板厚方向を解く
+   * SlabState.relax そのものを使う（冷却の式を 2 か所に書かない）。
+   *
+   * 【この値は «参考» で、素材の温度には使っていない】
+   * 基準ロットは E 操業（ご回答 2026-09-12）で最後の均熱 530 ℃、待ち 10 分。ところが
+   * 実機の持ちかかりは 433 ℃ で、この計算では 100 K 近く合わない —— アルミは熱伝導が
+   * 高く（k ≒ 140 W/mK）、530 mm 厚のスラブはほぼ一様温度のまま放熱するので、10 分で
+   * 落ちるのは数 K にしかならない。何がこの差を作っているのかが分かっていないため、
+   * 素材の持ちかかり温度は «入力値をそのまま使う» ままにしてある（README 0-3 の 23）。
+   *
+   * 返り値: { fromC 炉出の見込み, toC 持ちかかりの見込み, dropC 落ちる量, minutes 待ち時間 }
+   */
+  pickupC(pattern = Soak.current(), alloyKey = CONFIG.MATERIAL.ALLOY,
+          thickness = CONFIG.SLAB.CAST_DEFAULT - 2 * CONFIG.SLAB.SCALP_DEFAULT, group = null) {
+    const alloy = CONFIG.ALLOYS[alloyKey];
+    const grp = group || Soak.groupOf(Layout.pitOf(alloyKey) + 1);
+    const from = Soak.finalHoldC(pattern, grp);
+    if (from === null || from === undefined || !alloy) return null;
+    const n = CONFIG.MATERIAL.LAYERS, T = new Float64Array(n).fill(from);
+    const min = CONFIG.SUPPLY.HOLD_MIN || 0;
+    if (min > 0) SlabState.relax(T, thickness, alloy, min * 60);
+    let sum = 0; for (let j = 0; j < n; j++) sum += (j === 0 || j === n - 1) ? T[j] / 2 : T[j];
+    const to = sum / (n - 1);
+    return { fromC: from, toC: to, dropC: from - to, minutes: min };
+  },
+  /**
+   * 炉出（最後の均熱の設定温度）から «その温度まで落ちる» のに要る時間 [min]。
+   * pickupC と同じ冷やし方（SlabState.relax）を二分法で逆に解くだけ。
+   * «10 分では説明できない差が、どれだけの時間なら説明できるか» を数で言うためのもの。
+   */
+  coolMinutesTo(targetC, pattern = Soak.current(), alloyKey = CONFIG.MATERIAL.ALLOY,
+                thickness = CONFIG.SLAB.CAST_DEFAULT - 2 * CONFIG.SLAB.SCALP_DEFAULT, group = null) {
+    const alloy = CONFIG.ALLOYS[alloyKey];
+    const grp = group || Soak.groupOf(Layout.pitOf(alloyKey) + 1);
+    const from = Soak.finalHoldC(pattern, grp);
+    if (from === null || from === undefined || !alloy || !(targetC < from)) return null;
+    const n = CONFIG.MATERIAL.LAYERS;
+    const meanAfter = (min) => {
+      const T = new Float64Array(n).fill(from);
+      if (min > 0) SlabState.relax(T, thickness, alloy, min * 60);
+      let sum = 0; for (let j = 0; j < n; j++) sum += (j === 0 || j === n - 1) ? T[j] / 2 : T[j];
+      return sum / (n - 1);
+    };
+    let lo = 0, hi = 60;
+    while (hi < 6000 && meanAfter(hi) > targetC) hi *= 2;
+    if (meanAfter(hi) > targetC) return null;
+    for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (meanAfter(m) > targetC) lo = m; else hi = m; }
+    return (lo + hi) / 2;
   },
   /** そのパターンに掛かる上限の規制（M8 温度 / M9 時間 / M10 運用）。 */
   limits(pattern) {
@@ -16086,7 +16254,12 @@ class UIManager {
     const q = this.soakQ.trim().toLowerCase();
     return Soak.all('PATTERNS').map(p => ({ p })).filter(({ p }) => {
       if (!q) return true;
-      const mats = Soak.of('MATERIALS', p.id).map(m => `${m.className} ${m.cond} ${m.sample}`).join(' ');
+      /* 代表材（社内記号）だけでなく、材質マスタで引いた JIS 記号でも当たるようにする
+       * —— «A5052 のソーキングは？» と探す人は 52S を知らない。 */
+      const mats = Soak.of('MATERIALS', p.id).map(m => {
+        const js = String(m.sample || '').split(/[,、]\s*/).map(t => MatCode.jisOf(t.trim())).filter(Boolean);
+        return `${m.className} ${m.cond} ${m.sample} ${js.join(' ')} ${js.map(j => 'A' + j).join(' ')}`;
+      }).join(' ');
       return `${p.id} ${p.name} ${p.aim} ${mats}`.toLowerCase().includes(q);
     });
   }
@@ -16135,8 +16308,15 @@ class UIManager {
       + `<td class="n">${nz(q.tempC)} ℃</td><td>${nz(q.note)}</td></tr>`).join('');
     const trig = Soak.of('TRIGGERS', id).map(q => `<tr><td><b>${nz(q.event)}</b></td><td>${nz(q.point)}</td>`
       + `<td class="n">${nz(q.tempC)}</td><td>${nz(q.action)}</td></tr>`).join('');
+    /* 代表材は社内記号で書かれているので、材質マスタで引いた JIS 記号を並べて出す
+     * —— 基準表とアプリの材質を突き合わせられるようにするため。引けない記号は «–»。 */
+    const jisOf = (sample) => {
+      const cs = String(sample || '').split(/[,、]\s*/).map(t => t.trim()).filter(Boolean);
+      const js = [...new Set(cs.map(c => MatCode.jisOf(c)).filter(Boolean))];
+      return js.length ? js.join('・') : '–';
+    };
     const mats = Soak.of('MATERIALS', id).map(q => `<tr><td class="n">${nz(q.class)}</td><td><b>${mk(q.className)}</b></td>`
-      + `<td>${mk(q.cond)}</td><td class="n">${mk(q.sample)}</td></tr>`).join('');
+      + `<td>${mk(q.cond)}</td><td class="n">${mk(q.sample)}</td><td class="n">${e(jisOf(q.sample))}</td></tr>`).join('');
     const probes = Soak.of('PROBES', id).map(q => `<tr><td class="n">${nz(q.group)}</td><td>${nz(q.type)}</td>`
       + `<td>${nz(q.place)}</td><td class="n">${nz(q.mount)}</td><td>${nz(q.cond)}</td></tr>`).join('');
     const lim = Soak.limits(id);
@@ -16165,7 +16345,7 @@ class UIManager {
       <h4>判定ロジック（トリガ）</h4>
       ${tbl(['イベント', '判定点', '℃', 'アクション'], trig)}
       <h4>対象材</h4>
-      ${tbl(['区分', '区分名', '判定条件', '代表材'], mats)}
+      ${tbl(['区分', '区分名', '判定条件', '代表材', 'JIS'], mats)}
       ${limT ? `<h4>温度の上限（守らないと溶ける・焼ける）</h4>${tbl(['対象', '制約温度', '現象', '備考'], limT)}` : ''}
       ${limH ? `<h4>時間の上限</h4>${tbl(['対象材', '起点 → 終点', '制限', '超過時の処置'], limH)}` : ''}
       ${rules ? `<h4>運用の規制</h4>${tbl(['種別', '内容'], rules)}` : ''}
@@ -16187,28 +16367,53 @@ class UIManager {
     this._soakPickInfo();
   }
   /** いま効いているソーキング条件を 1 行で。«探させず・思い出させず» のための既定の説明。 */
+  /**
+   * 材質マスタの行 —— その JIS 記号に対応する «社内材質記号»。
+   * 実機の書きもの（操業基準・帳票）は社内記号で書かれているので、画面のどこかに
+   * «この材質は現場では何と呼ばれているか» が無いと、基準表と突き合わせられない。
+   * 操業を引けた記号（代表材に載っているもの）は太字にして、辿れる筋を示す。
+   */
+  _matCodeLine(alloyKey) {
+    const codes = MatCode.codesForAlloy(alloyKey);
+    if (!codes.length) return `<br>社内材質記号は材質マスタにありません（対応表に ${escHtml(alloyKey)} の行が無い）`;
+    const hit = new Set(MatCode.soakSamples(alloyKey));
+    const list = codes.map(c => hit.has(c) ? `<b>${escHtml(c)}</b>` : escHtml(c)).join('・');
+    return `<br>社内材質記号 ${list}`
+      + (hit.size ? `（太字は実機の操業基準に代表材として載っているもの）` : `（代表材として載っているものはありません）`);
+  }
   _soakPickInfo() {
     const el = $('der-soak'); if (!el) return;
-    const key = CONFIG.MATERIAL.ALLOY, code = CONFIG.ALLOYS[key]?.soak;
+    const key = CONFIG.MATERIAL.ALLOY;
     const id = Soak.current(key), p = id && Soak.pattern(id);
     const auto = !CONFIG.MATERIAL.SOAK_PATTERN;
-    if (!p) {
-      el.innerHTML = auto
-        ? `${escHtml(key)} に対応する社内材質記号が実機の操業基準の表にありません`
-          + `（社内材質の一覧は材質マスタの残件）。操業パターンを直接選んでください。`
-        : '操業パターンが選ばれていません。';
-      return;
-    }
+    if (!p) { el.innerHTML = '操業パターンが選ばれていません。'; return; }
     const grp = Soak.groupOf(Layout.pitOf(key) + 1);
     const hold = Soak.finalHoldC(id, grp), hrs = Soak.holdHours(id);
     const lim = Soak.limits(id);
-    const cand = Soak.autoFor(key);
+    const cand = Soak.autoFor(key), samples = MatCode.soakSamples(key);
+    /* «自動» のときは、どう辿ってそこへ来たかを出す —— 代表材で引けたのか、引けずに
+     * 一般材へ落としたのか。辿り方が見えないと «なぜこの操業なのか» が分からない。 */
+    const how = !auto ? ''
+      : samples.length ? ` ／ 自動: ${escHtml(samples.join('・'))} → ${escHtml(cand.join('・'))}`
+      : ` ／ 自動: 代表材に ${escHtml(key)}（${escHtml(MatCode.codesForAlloy(key).join('・') || '対応なし')}）`
+        + `が無いので <b>一般材</b>へ`;
+    /* この操業から出る持ちかかり温度の «見込み»。入力値と食い違っていることを隠さない
+     * （食い違いの理由は未解明 —— README 0-3 の 23）。 */
+    const pk = Soak.pickupC(id, key);
+    const inC = CONFIG.SLAB.TEMP_DEFAULT;
+    const need = pk ? Soak.coolMinutesTo(inC, id, key) : null;
     el.innerHTML = `<b>${escHtml(id)}</b> ${escHtml(p.name)}（${escHtml(p.stages ?? '')}）`
       + ` ／ 最後の均熱 <b>${hold === null ? '–' : hold + ' ℃'}</b>`
       + ` ／ 保持の下限 合計 ${hrs} h`
-      + (auto && code ? ` ／ 自動: ${escHtml(code)} → ${cand.join('・')}` : '')
+      + how
       + (lim.time.length ? ` ／ <span style="color:var(--serious)">時間規制あり</span>` : '')
-      + (lim.temp.length ? ` ／ <span style="color:var(--serious)">温度上限あり</span>` : '');
+      + (lim.temp.length ? ` ／ <span style="color:var(--serious)">温度上限あり</span>` : '')
+      + (pk ? `<br><span style="color:var(--ink-3)">この操業から出る持ちかかり温度の見込みは`
+        + ` <b>${pk.toC.toFixed(0)} ℃</b>（炉出 ${pk.fromC} ℃ から ${pk.minutes} 分で −${pk.dropC.toFixed(0)} K）。`
+        + `実機の持ちかかりは ${inC} ℃ で <b>${(pk.toC - inC).toFixed(0)} K</b> 合いません`
+        + (need ? `—— 自然放熱だけで ${inC} ℃ まで落ちるには <b>${(need / 60).toFixed(1)} 時間</b>かかります。` : '。')
+        + `理由が分かっていないので、素材の温度は入力値をそのまま使っています`
+        + `（残件«抽出から持ちかかりまでに落ちる理由»）。</span>` : '');
   }
 
   /** ソーキングマスタを開閉する。 */
@@ -16483,7 +16688,8 @@ class UIManager {
         + ` ／ 応力指数 n=${a.N_EXP} ／ α=${a.ALPHA} MPa⁻¹<br>`
         + `実効ひずみ速度感受性 m_eff = ${m450.toFixed(3)}（450 ℃・1/s）→ ${m400.toFixed(3)}（400 ℃・10/s）`
         + ` ※ m は定数ではなく tanh(ασ)/(n·ασ) で条件から決まる<br>`
-        + `密度 ${a.RHO} kg/m³ ／ 熱伝導率 ${a.K} W/mK ／ 端部欠陥係数 ${a.end.toFixed(1)}`;
+        + `密度 ${a.RHO} kg/m³ ／ 熱伝導率 ${a.K} W/mK ／ 端部欠陥係数 ${a.end.toFixed(1)}`
+        + this._matCodeLine(sel.value);
       // 材質を変えると «自動で引くソーキング» も変わるので、同じところで書き直す
       this._soakPickInfo?.();
     };

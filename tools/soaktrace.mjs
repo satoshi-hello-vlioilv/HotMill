@@ -16,7 +16,7 @@ const ok = (n, p, d = '', ref = false) => {
 
 const { browser, page } = await openApp({ viewport: { width: 1280, height: 720 }, quiet: true });
 const R = await page.evaluate(() => {
-  const S = window.__SOAK, K = window.__CFG.SOAK;
+  const S = window.__SOAK, K = window.__CFG.SOAK, M = window.__MATCODE, C = window.__CFG;
   const ids = S.ids;
   const dup = ids.filter((v, i) => ids.indexOf(v) !== i);
   /* 他の表が «M1 に無いパターン» を指していないか。参照が切れていると、画面では
@@ -56,7 +56,25 @@ const R = await page.evaluate(() => {
   const parse = { e5g1: S.parseSetC('540→530(G2:550→540)', 'G1'), e5g2: S.parseSetC('540→530(G2:550→540)', 'G2'),
                   eg1: S.parseSetC('550→530(G2:540)', 'G1'), eg2: S.parseSetC('550→530(G2:540)', 'G2'),
                   plain: S.parseSetC('590(G2:600)', 'G2'), none: S.parseSetC('カバー開', 'G1') };
-  return { n: ids.length, ids, dup, orphan: [...new Set(orphan)], noSteps, badNo, stageBad,
+  /* --- 材質マスタ（社内材質記号 ↔ JIS 記号）--- */
+  const rows = C.MATCODE.ROWS;
+  const allCodes = rows.flatMap(r => r[1]);
+  const mcDup = allCodes.filter((v, i) => allCodes.indexOf(v) !== i);
+  const jisList = rows.map(r => r[0]);
+  const mcDupJis = jisList.filter((v, i) => jisList.indexOf(v) !== i);
+  const roundTrip = allCodes.filter(c => M.codesFor(M.jisOf(c)).includes(c)).length;
+  const keys = Object.keys(C.ALLOYS);
+  const perAlloy = keys.map(k => ({ k: k, key: k, codes: M.codesForAlloy(k).length,
+                                    samples: M.soakSamples(k), auto: S.autoFor(k) }));
+  const noSample = perAlloy.filter(a => a.samples.length === 0).map(a => a.key);
+  const currentOf = {}; for (const k of noSample) currentOf[k] = S.autoFor(k)[0] || S.GENERAL;
+  const mc = { jis: rows.length, codes: allCodes.length, dup: [...new Set(mcDup)], dupJis: [...new Set(mcDupJis)],
+               roundTrip, unknownJis: M.jisOf('zzz'), unknownCodes: M.codesFor('9999').length,
+               perAlloy, noSample, currentOf, general: S.GENERAL,
+               lotPattern: C.MATERIAL.SOAK_PATTERN, lotTempC: C.SLAB.TEMP_DEFAULT, holdMin: C.SUPPLY.HOLD_MIN,
+               pick: S.pickupC('E', 'A5052'),
+               needMin: S.coolMinutesTo(C.SLAB.TEMP_DEFAULT, 'E', 'A5052') };
+  return { n: ids.length, ids, dup, orphan: [...new Set(orphan)], noSteps, badNo, stageBad, mc,
            codes, judge, noFinal, finals, g12, grpOf, byS, parse,
            counts: Object.fromEntries(Object.keys(K).filter(k => Array.isArray(K[k])).map(k => [k, K[k].length])) };
 });
@@ -91,6 +109,45 @@ ok('（参考）炉の群で最後の均熱温度が変わるパターン', true
    R.g12.length ? R.g12.map(f => `${f.id} G1 ${f.g1} / G2 ${f.g2} ℃`).join(' ／ ') : 'なし', true);
 ok('（参考）最後の均熱温度の分布（持ちかかり温度の素）', true,
    [...new Set(R.finals.map(f => f.g1))].sort((a, b) => a - b).join(' / ') + ' ℃', true);
+
+/* --- 材質マスタ（社内材質記号 ↔ JIS 記号）--------------------------------
+ * 実機の操業基準は社内記号で書かれているので、この橋渡しが崩れると «A5052 の
+ * ソーキングはどれか» が引けなくなる。表そのものの整合と、橋渡しが実際に
+ * 効いていること（本アプリの 8 材質すべてで社内記号が引けること）を見る。 */
+console.log('\n--- 材質マスタ（社内材質記号 ↔ JIS 記号）---');
+ok('対応表に重複した社内材質記号が無い', R.mc.dup.length === 0,
+   R.mc.dup.length ? R.mc.dup.join(' / ') : `${R.mc.jis} JIS 記号 / ${R.mc.codes} 社内記号`);
+ok('JIS 記号にも重複が無い', R.mc.dupJis.length === 0,
+   R.mc.dupJis.length ? R.mc.dupJis.join(' / ') : `${R.mc.jis} 件`);
+ok('社内記号 → JIS → 社内記号 と往復できる', R.mc.roundTrip === R.mc.codes,
+   `${R.mc.roundTrip} / ${R.mc.codes} 件で往復`);
+ok('対応表に無い記号では «作らない»（null と空を返す）',
+   R.mc.unknownJis === null && R.mc.unknownCodes === 0, `jisOf('zzz') → ${R.mc.unknownJis} ／ codesFor('9999') → ${R.mc.unknownCodes} 件`);
+ok('本アプリの材質すべてに社内材質記号が引ける（«引けない» が無くなった）',
+   R.mc.perAlloy.every(a => a.codes > 0),
+   R.mc.perAlloy.map(a => `${a.key} ${a.codes}`).join(' / '));
+ok('材質 → 社内記号 → 代表材 → 操業パターン と辿れる（A5083 は F 操業へ）',
+   R.mc.perAlloy.find(a => a.key === 'A5083')?.auto.includes('F') === true
+   && R.mc.perAlloy.find(a => a.key === 'A5052')?.auto.length > 0,
+   R.mc.perAlloy.map(a => `${a.key} → ${a.samples.join(',') || '代表材なし'} → ${a.auto.join(',') || '一般材'}`).join(' ／ '));
+ok('代表材で引けない材質は «一般材»（E 操業）へ落ちる（推測で別の操業へ振らない）',
+   R.mc.noSample.every(k => R.mc.currentOf[k] === 'E') && R.mc.general === 'E',
+   `代表材なし: ${R.mc.noSample.join(' / ') || 'なし'} ／ 行き先 ${R.mc.general}`);
+/* 較正の基準ロットの操業パターンはご指定（2026-09-12）。そこから出る持ちかかり温度の
+ * 見込みと実機の実測が合わないことは分かっている（README 0-3 の 23）ので、
+ * «合う» ことではなく «差が出ていることを隠していない» ことを毎回数値で出す。 */
+ok('較正の基準ロットの操業パターンがご指定どおり（E 操業）', R.mc.lotPattern === 'E',
+   `既定の SOAK_PATTERN = ${R.mc.lotPattern}`);
+ok('（参考）操業から出る持ちかかり温度の見込みと、実機の持ちかかりの差', true,
+   R.mc.pick
+     ? `E 操業 炉出 ${R.mc.pick.fromC} ℃ → ${R.mc.pick.minutes} 分で ${R.mc.pick.toC.toFixed(0)} ℃`
+       + `（−${R.mc.pick.dropC.toFixed(0)} K）／ 実機の持ちかかり ${R.mc.lotTempC} ℃ ／ 差 `
+       + `${(R.mc.pick.toC - R.mc.lotTempC).toFixed(0)} K —— 説明できていない（素材の温度は入力値のまま）`
+     : '引けません', true);
+ok('（参考）自然放熱だけで実機の持ちかかり温度まで落ちるのに要る時間', true,
+   R.mc.needMin === null ? '落ちません'
+     : `${R.mc.needMin.toFixed(0)} 分 ＝ ${(R.mc.needMin / 60).toFixed(1)} 時間`
+       + `（いま置いている待ち時間は ${R.mc.holdMin} 分）`, true);
 
 console.log(`\nRESULT: ${failed ? 'FAIL' : 'PASS'}`);
 process.exit(failed ? 1 : 0);
