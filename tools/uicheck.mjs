@@ -162,9 +162,17 @@ for (const w of widths) {
        `左 ${pn.e.l} / 上 ${pn.e.t} / 右 ${pn.e.r} / 下 ${pn.e.b} px`);
 
     /* 板の形状モニタ。出せること・画面の中に収まること・計器バーと重ならないこと・
-     * 圧延中に «形» が描けていること（空の SVG になっていないこと）を見る。 */
+     * 圧延中に «形» が描けていることを見る。
+     *
+     * 見るものは 2 つ（反り／板厚）で、既定は «反り»。反りの図は «板そのもの» を描いて
+     * 定規を板の両端へ載せる向きにしてある —— 隙間だけを描くと上反りが下向きに
+     * 膨らんで見えるため（それを直したのがこの検査の主目的）。向きが逆に戻っていないか、
+     * 縦の拡大に下限が効いているか（反り 0 に近い板が «大反り» に見えないか）まで測る。 */
     const sm = await page.evaluate(() => new Promise(res => setTimeout(() => {
       const A = window.__app, P = A.physics;
+      const defMode = A.ui.shapeMonMode;                       // 何も触っていないときのモード
+      const defBtn = [...document.querySelectorAll('#sm-mode button')]
+        .filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.dataset.m).join(',');
       A.ui.setShapeMon(false);
       const off = document.getElementById('shape-mon').hidden;
       A.ui.setShapeMon(true);
@@ -174,21 +182,71 @@ for (const w of widths) {
       const box = document.getElementById('shape-mon'), r = box.getBoundingClientRect();
       const met = document.getElementById('metrics').getBoundingClientRect();
       const d = (id, cls) => (document.querySelector(`#${id} .${cls}`)?.getAttribute('d') || '').length;
-      res({ off, on: !box.hidden,
+      /* 反りの図から «板の形» を読む。path の各点の画面 y（下ほど大きい）と、定規の y。
+       *   ends … 板の端（＝ 定規に触れる側）／ mid … 板の中央 */
+      const geom = (id) => {
+        const pa = document.querySelector(`#${id} .f-warp`), ru = document.querySelector(`#${id} .f-rule`);
+        if (!pa || !ru) return null;
+        const ys = [...(pa.getAttribute('d') || '').matchAll(/[ML][\d.]+ ([\d.]+)/g)].map(m => +m[1]);
+        return { cls: pa.getAttribute('class'), n: ys.length, end: ys[0], mid: ys[ys.length >> 1],
+                 rule: +ru.getAttribute('y1'), gap: document.querySelector(`#${id} .f-gap`)?.getAttribute('class') };
+      };
+      /* 曲率を指定した «作り板» で、向きと拡大の下限を測る。実機の反りは向きも大きさも
+       * 選べないので、ここだけは値を置いて確かめる。 */
+      const fake = (k, kw) => ({ thickness: 16, width: 1330, length: 30000, alloy: P.slab.alloy,
+        warp: { kappa: k, kappaW: kw, len: k * 1e6 / 8, wid: kw * 1330 * 1330 / 8, prof: 1,
+                R: Math.abs(k) > 1e-9 ? 1 / Math.abs(k) / 1000 : Infinity } });
+      const shot = (k, kw) => { A.ui._shapeMon(fake(k, kw)); return { w: geom('sm-wid'), l: geom('sm-len') }; };
+      A.ui.setShapeMonMode('warp');
+      const live = { w: geom('sm-wid'), l: geom('sm-len'),
+                     wnum: document.getElementById('sm-wnum').textContent,
+                     lnum: document.getElementById('sm-lnum').textContent };
+      const up = shot(+1.6e-6, +2.3e-7);       // 丈 +0.20 mm（上反り）／幅 +0.20 mm
+      const dn = shot(-1.6e-6, -2.3e-7);       // 同じ大きさで逆向き
+      const tiny = shot(8e-9, 1.1e-9);         // 丈 0.001 mm —— ほぼ真っ直ぐ
+      // 切替ボタンを実際に押す（クリックで状態が移るか）
+      document.querySelector('#sm-mode button[data-m="gauge"]').click();
+      const gMode = A.ui.shapeMonMode;
+      A.ui._shapeMon(P.slab);
+      const g = { widTop: d('sm-wid', 'f-top'), widBot: d('sm-wid', 'f-bot'),
+                  lenTop: d('sm-len', 'f-top'), lenBot: d('sm-len', 'f-bot'),
+                  warp: document.querySelectorAll('#shape-mon .f-warp').length,
+                  wnum: document.getElementById('sm-wnum').textContent,
+                  lnum: document.getElementById('sm-lnum').textContent };
+      document.querySelector('#sm-mode button[data-m="warp"]').click();
+      const back = A.ui.shapeMonMode;
+      res({ off, on: !box.hidden, defMode, defBtn, gMode, back, live, up, dn, tiny, g,
             inView: r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && r.left >= -1 && r.top >= -1,
-            overMet: r.bottom > met.top + 1 && r.top < met.bottom - 1,
-            widTop: d('sm-wid', 'f-top'), widBot: d('sm-wid', 'f-bot'),
-            lenTop: d('sm-len', 'f-top'), lenBot: d('sm-len', 'f-bot'),
-            wnum: document.getElementById('sm-wnum').textContent,
-            lnum: document.getElementById('sm-lnum').textContent });
+            overMet: r.bottom > met.top + 1 && r.top < met.bottom - 1 });
     }, 400)));
+    const bow = (x) => Math.abs(x.mid - x.end);                // 板の «たわみ» の画面上の大きさ [px]
     ok('板の形状モニタが出し入れできる', sm.off && sm.on, `OFF → ${sm.off ? '隠れる' : '隠れない'} ／ ON → ${sm.on ? '出る' : '出ない'}`);
     ok('形状モニタが画面の中に収まり、計器バーと重ならない', sm.inView && !sm.overMet,
        `画面内 ${sm.inView} ／ 計器バーと重なり ${sm.overMet ? 'あり' : 'なし'}`);
-    ok('幅方向の断面（上面・下面）が描けている', sm.widTop > 40 && sm.widBot > 40,
-       `上面 ${sm.widTop} / 下面 ${sm.widBot} 文字（${sm.wnum}）`);
-    ok('丈方向の側面（上面・下面）が描けている', sm.lenTop > 40 && sm.lenBot > 40,
-       `上面 ${sm.lenTop} / 下面 ${sm.lenBot} 文字（${sm.lnum}）`);
+    ok('既定で «反り» が出る（主に見たいのは反りなので）', sm.defMode === 'warp' && sm.defBtn === 'warp',
+       `既定 ${sm.defMode} ／ 押されているボタン ${sm.defBtn || 'なし'}`);
+    ok('反りモードで幅・丈とも «板» と «定規» が描けている',
+       sm.live.w && sm.live.l && sm.live.w.n > 8 && sm.live.l.n > 8 && isFinite(sm.live.w.rule) && isFinite(sm.live.l.rule),
+       `幅 ${sm.live.w?.n ?? 0} 点（${sm.live.wnum}）／ 丈 ${sm.live.l?.n ?? 0} 点（${sm.live.lnum}）`);
+    /* 上反り ＝ 端が上がる。画面 y は下ほど大きいので «中央の y ＞ 端の y»。
+     * 定規は板の両端に載るので、定規の y は端の y と一致する。 */
+    ok('上反りは «端が上がった» 形に描かれ、定規はその端に載る',
+       sm.up.l.mid > sm.up.l.end + 5 && Math.abs(sm.up.l.rule - sm.up.l.end) < 1.5 && /\bup\b/.test(sm.up.l.cls),
+       `中央 y ${sm.up.l.mid} ／ 端 y ${sm.up.l.end} ／ 定規 y ${sm.up.l.rule}（${sm.up.l.cls}）`);
+    ok('下反りは上反りの «上下逆» に描かれる',
+       sm.dn.l.mid < sm.dn.l.end - 5 && Math.abs(sm.dn.l.rule - sm.dn.l.end) < 1.5 && /\bdn\b/.test(sm.dn.l.cls)
+       && Math.abs(bow(sm.dn.l) - bow(sm.up.l)) < 2,
+       `中央 y ${sm.dn.l.mid} ／ 端 y ${sm.dn.l.end}（${sm.dn.l.cls}）／ たわみ 上反り ${bow(sm.up.l).toFixed(1)} ＝ 下反り ${bow(sm.dn.l).toFixed(1)} px`);
+    ok('幅方向も同じ向きの決まりで描かれる（＋は樋状 ＝ 両耳が上がる）',
+       sm.up.w.mid > sm.up.w.end + 5 && sm.dn.w.mid < sm.dn.w.end - 5,
+       `＋ 中央 y ${sm.up.w.mid} ＞ 端 y ${sm.up.w.end} ／ − 中央 y ${sm.dn.w.mid} ＜ 端 y ${sm.dn.w.end}`);
+    ok('反りが極小の板は «まっすぐ» に描かれる（縦の拡大に下限がある）',
+       bow(sm.tiny.l) < 2 && bow(sm.up.l) > 25,
+       `0.001 mm → ${bow(sm.tiny.l).toFixed(1)} px ／ 0.20 mm → ${bow(sm.up.l).toFixed(1)} px（箱の内寸 50 px）`);
+    ok('«板厚» に切り替えると断面（上面・下面）になり、反りの線は消える',
+       sm.gMode === 'gauge' && sm.g.widTop > 40 && sm.g.widBot > 40 && sm.g.lenTop > 40 && sm.g.lenBot > 40 && sm.g.warp === 0,
+       `幅 上面 ${sm.g.widTop} / 下面 ${sm.g.widBot} 文字（${sm.g.wnum}）／ 丈 上面 ${sm.g.lenTop} / 下面 ${sm.g.lenBot} 文字（${sm.g.lnum}）／ 反りの線 ${sm.g.warp} 本`);
+    ok('切替ボタンで «反り» へ戻れる', sm.back === 'warp', `戻り先 ${sm.back}`);
 
     /* 変更履歴ビュワー。36 版・466 項目を «探せる» ことが作り直しの目的なので、
      * 探す道具（検索・分類・版の選択）が実際に効くか、画面に収まるかを測る。 */

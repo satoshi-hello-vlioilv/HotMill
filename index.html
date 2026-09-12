@@ -191,6 +191,26 @@ canvas { display:block; }
 #shape-mon .f-bot { fill:none; stroke:#3a7bd5; stroke-width:1.4; stroke-linejoin:round; }
 #shape-mon .f-mid { stroke:var(--line); stroke-width:1; stroke-dasharray:2 3; }
 #shape-mon .f-fill { fill:rgba(120,140,170,.16); stroke:none; }
+/* 反りの表示。«定規を当てて隙間を測る» のが実機の測り方なので、そのまま描く ——
+   まっすぐな定規（f-rule）と、反った板の中立面（f-warp）と、そのあいだの隙間（f-gap）。
+   色は向きと 1 対 1: 上反り＝暖色（f-warp.up）／下反り＝寒色（f-warp.dn）。 */
+#shape-mon .f-rule { stroke:var(--ink-3); stroke-width:1; stroke-dasharray:3 3; }
+#shape-mon .f-warp { fill:none; stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+#shape-mon .f-warp.up { stroke:#e2684a; }
+#shape-mon .f-warp.dn { stroke:#3a7bd5; }
+#shape-mon .f-warp.flat { stroke:var(--ink-3); }
+#shape-mon .f-gap.up { fill:rgba(226,104,74,.16); stroke:none; }
+#shape-mon .f-gap.dn { fill:rgba(58,123,213,.16); stroke:none; }
+#shape-mon .f-gap.flat { fill:none; stroke:none; }
+/* 表示の切替（反り／板厚）。既定は «反り» —— 見たいのはまず形の向きと大きさ。 */
+/* 見た目はアプリ共通の .seg（灰の溝に白い錠剤が乗る）に合わせる。同じ働きの操作は
+   同じ見た目にしておかないと、«これは何をするボタンか» を毎回読み直すことになる。
+   選択色に青ベタを使わないのは、図の «下反り＝青» と取り違えないようにするため。 */
+#shape-mon .sm-seg { display:inline-flex; background:var(--s-3); border-radius:99px; padding:2px; gap:2px; }
+#shape-mon .sm-seg button { border:none; background:transparent; color:var(--ink-2); cursor:pointer;
+  font:inherit; font-size:9.5px; font-weight:700; padding:1px 8px; line-height:1.6; border-radius:99px; transition:.14s; }
+#shape-mon .sm-seg button[aria-pressed="true"] { background:var(--s-1); color:var(--accent); box-shadow:var(--shadow-1); }
+#shape-mon .sm-seg button:focus-visible { outline:2px solid var(--accent-2); outline-offset:1px; }
 /* 板面冷却の 4 系統。1 行 ＝ 1 系統（ボタン・水量スライダ・数値）を 3 列でそろえる。
    押せば ON/OFF、スライダで水量。«どれが効いているか» が一目で分かることを優先する。 */
 .coolgrid { display:grid; grid-template-columns:auto 1fr auto; gap:5px 8px; align-items:center; margin:4px 0 2px; }
@@ -1203,14 +1223,21 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
        品質   …… 狙いに乗っているか
      各札の中身は «主値 1 つ ＋ 副値の固定枠» で、値が増えても減っても枠は動かない
      （枠を固定しておかないと、値が出たり消えたりするたびに札の幅が動いて読みにくい）。 -->
-<!-- 板の形状モニタ。板の «断面» と «側面» をそのまま折れ線で描く小窓。
-     数値（クラウン µm・I-unit・反り mm）は計器バーにあるが、数値だけでは «どんな形か»
-     が分からない —— 中高なのか耳伸びなのか、頭が厚いのか尻が厚いのかは形で見るのが速い。
-     板厚の変動は板厚そのものに対して極小（16 mm に対し数十 µm）なので、板厚方向だけ
-     倍率を掛けて描く。倍率は画面に明記する（誇張していることを隠さない）。 -->
+<!-- 板の形状モニタ。板の形を «幅方向» と «丈方向» の 2 段で描く小窓。見るものは 2 つ。
+       反り（既定）…… まっすぐな定規を当てたときの «隙間» を、定規（破線）と板（実線）で描く。
+                        実機で反りを測るときの見方そのもの。丈は定尺 1 m、幅は板幅いっぱい。
+       板厚        …… 断面（クラウン・エッジドロップ）と側面（長手の板厚の振れ）。
+     数値（反り mm・クラウン µm・I-unit）は計器バーにもあるが、数値だけでは «どんな形か» が
+     分からない —— 上反りか下反りか、中高か耳伸びかは形で見るのが速い。
+     どちらの図も縦は極小（板幅 1,330 mm に対し反り 0.2 mm など）なので、縦だけ倍率を
+     掛けて描く。拡大していることは画面に明記する（誇張を隠さない）。 -->
 <div id="shape-mon" hidden aria-label="板の形状モニタ">
   <div class="sm-hd">
     <span class="sm-t">板の形状</span>
+    <span class="sm-seg" id="sm-mode" role="group" aria-label="表示するもの">
+      <button type="button" data-m="warp" aria-pressed="true" title="反り（定規を当てたときの隙間）">反り</button>
+      <button type="button" data-m="gauge" aria-pressed="false" title="板厚（クラウン・エッジドロップ・長手の振れ）">板厚</button>
+    </span>
     <span class="sm-sub" id="sm-sub">–</span>
     <button class="sm-x" id="sm-close" type="button" title="閉じる（S）" aria-label="閉じる">&times;</button>
   </div>
@@ -1599,6 +1626,14 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.5.0', base: '61befc3', date: '2026-09-12', title: '形状モニタの主役を «反り» にする —— 定規を当てたときの隙間をそのまま描く', items: [
+      { t: '形状モニタで «反り» を見られるようにし、こちらを既定にした。幅方向・丈方向とも、実機の測り方どおり «まっすぐな定規を当てて板とのあいだの隙間を測る» をそのまま描く —— 反った板（実線）と、その両端に載った定規（破線）と、あいだの隙間（塗り）', w: 'UIManager._shapeMon / drawWarp' },
+      { t: '描くのは «隙間の関数» ではなく «板そのもの» にした。隙間だけを描くと、上反り（端が上がる）の板が下向きに膨らんで見えて上下が逆になる。板を y = κx²/2 で描き、定規を板の端の高さ（κ·span²/8）へ置く形にしてある', w: 'drawWarp' },
+      { t: '縦の拡大に下限を置いた。反りは板の大きさに対して極小（板幅 1,330 mm に 0.2 mm）なので隙間が箱の 7 割になるまで拡大するが、下限が無いと反り 0 に近い板ほど倍率が上がって «数値は 0.00 mm なのに絵は大反り» になる。下限 0.05 mm は実測した反りの幅（丈 0.19〜0.93 mm・幅 0.11〜0.52 mm）から置いた', w: 'drawWarp FLOOR' },
+      { t: '幅反りの向きの言い方が逆になっていた。＋は «端が上がる»（樋状）であって中高ではない。表の見出し（＋は端が上がる）と食い違っていたのを «樋状（両耳が上がる）／山状（中央が上がる）» に直した', w: 'UIManager._shapeMon' },
+      { t: '板厚（クラウン・エッジドロップ・長手の振れ）は切り替えで見る形にした。切替はアプリ共通の segmented control の見た目に合わせ、選択色に青ベタを使っていない —— 図の «下反り＝青» と取り違えないため', w: '#sm-mode' },
+      { t: '判定を作った —— tools/uicheck.mjs に 8 件（既定が反り・板と定規が描ける・上反りは端が上がる・下反りはその上下逆で同じたわみ・幅方向も同じ決まり・極小の反りはまっすぐに描かれる・板厚へ切り替わる・反りへ戻れる）', w: 'tools/uicheck.mjs' },
+    ] },
     { v: '2.4.0', base: '591fe07', date: '2026-09-12', title: 'ソーキングマスタ —— 実機の操業基準 39 パターンを表のまま入れ、ビュワーを作る', items: [
       { t: 'ソーキング（均質化熱処理）の実機の操業基準をいただいたので、10 の表（操業パターン／炉温設定／熱サイクル／炉／測温点／判定ロジック／対象材／合金温度制約／時間規制／運用規制）を «いただいた形のまま» 入れた。加工した値で上書きすると «元は何と書いてあったか» を照らせなくなるので、表は 1 行 1 レコードの配列、列の意味は KEYS の 1 か所だけが持つ', w: 'CONFIG.SOAK' },
       { t: '表を引くところを 1 か所にまとめた —— 行を名前つきにする／パターンで絞る／炉番から炉の群（#1〜6 G1・#7・8 G2・#9 G3）／炉温設定を記号で引く／最後の均熱段の設定温度（持ちかかり温度の出どころ）／保持時間の合計／代表材から操業パターンを引く', w: 'Soak' },
@@ -15460,6 +15495,7 @@ class UIManager {
     this.logSeries = new Set(RollingLog.SERIES.map(q => q.key));
     this._logBox = null; this.logShow = 'both'; this._logPop = null; this.logZoom = 1;
     this.shapeMonOn = false;          // 板の形状モニタ（S で出し入れ）
+    this.shapeMonMode = 'warp';       // 形状モニタで見るもの: 'warp' 反り（既定）／'gauge' 板厚
     this._buildTabs(); this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
     this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildStripCool(); this._buildCutScope();
     this._buildVersion();
@@ -16711,6 +16747,9 @@ class UIManager {
     }
     on('sm-toggle', 'click', () => this.setShapeMon(!this.shapeMonOn));
     on('sm-close', 'click', () => this.setShapeMon(false));
+    for (const b of document.querySelectorAll('#sm-mode button')) {
+      b.addEventListener('click', () => this.setShapeMonMode(b.dataset.m));
+    }
     this._coolSide = coolSide; this._coolFace = coolFace;
 
     /* クーラントの状態（濃度・劣化）。沸騰曲線そのものが動くので、全面の抜熱が変わる。
@@ -16955,79 +16994,156 @@ class UIManager {
     if (this.shapeMonOn && window.__phys?.slab) this._shapeMon(window.__phys.slab);
   }
 
+  /** 形状モニタで見るものの切り替え（反り／板厚）。状態は 1 つ（shapeMonMode）。 */
+  setShapeMonMode(mode) {
+    this.shapeMonMode = mode === 'gauge' ? 'gauge' : 'warp';
+    for (const b of document.querySelectorAll('#sm-mode button')) {
+      b.setAttribute('aria-pressed', String(b.dataset.m === this.shapeMonMode));
+    }
+    if (this.shapeMonOn && window.__phys?.slab) this._shapeMon(window.__phys.slab);
+  }
+
   _shapeMon(s) {
     const box = $('shape-mon');
     if (!box || box.hidden) return;
     const W = 240, H = 56, PAD = 3;
-    /* 上面・下面の 2 本と、その間の塗り。y は «板の上が上» になるよう反転する。 */
-    const draw = (el, xs, top, bot) => {
+    const px = (u) => (PAD + (W - 2 * PAD) * u).toFixed(1);
+    /* 縦は «値の帯» を箱いっぱいに割り当てる。lo/hi は呼ぶ側が決める（反りと板厚で
+     * 見せたいものが違うため）。 */
+    const scaleY = (lo, hi) => {
+      if (!(hi > lo)) { const c = (hi + lo) / 2; lo = c - 1e-6; hi = c + 1e-6; }
+      const m = (hi - lo) * 0.12; lo -= m; hi += m;
+      return (v) => (PAD + (H - 2 * PAD) * (1 - (v - lo) / (hi - lo))).toFixed(1);
+    };
+    /* 上面・下面の 2 本と、その間の塗り（板厚モード）。 */
+    const drawGauge = (el, xs, top, bot) => {
       if (!el || !xs.length) { if (el) el.innerHTML = ''; return; }
       const ys = top.concat(bot);
-      let lo = Math.min(...ys), hi = Math.max(...ys);
-      if (!(hi > lo)) { hi = lo + 1e-6; }
-      const m = (hi - lo) * 0.12;                     // 上下に少し余白
-      lo -= m; hi += m;
-      const px = (i) => (PAD + (W - 2 * PAD) * xs[i]).toFixed(1);
-      const py = (v) => (PAD + (H - 2 * PAD) * (1 - (v - lo) / (hi - lo))).toFixed(1);
-      const path = (a) => a.map((v, i) => `${i ? 'L' : 'M'}${px(i)} ${py(v)}`).join('');
-      const fill = path(top) + bot.map((v, i) => `L${px(bot.length - 1 - i)} ${py(bot[bot.length - 1 - i])}`).join('') + 'Z';
-      const midY = py((lo + hi) / 2);
+      const py = scaleY(Math.min(...ys), Math.max(...ys));
+      const path = (a2) => a2.map((v, i) => `${i ? 'L' : 'M'}${px(xs[i])} ${py(v)}`).join('');
+      const fill = path(top) + bot.map((v, i) => `L${px(xs[bot.length - 1 - i])} ${py(bot[bot.length - 1 - i])}`).join('') + 'Z';
+      const midY = py((Math.min(...ys) + Math.max(...ys)) / 2);
       el.innerHTML = `<path class="f-fill" d="${fill}"/>`
         + `<line class="f-mid" x1="${PAD}" y1="${midY}" x2="${W - PAD}" y2="${midY}"/>`
         + `<path class="f-top" d="${path(top)}"/><path class="f-bot" d="${path(bot)}"/>`;
     };
-    const h = s.thickness, w = s.width;
+    /**
+     * 反り（反りモード）。実機の測り方どおり «まっすぐな定規を当てて、板とのあいだの
+     * 隙間を測る» をそのまま描く —— 反った板（実線）と、その «両端に載った» 定規（破線）と、
+     * あいだの隙間（塗り）。
+     *
+     * 描くのは «隙間の関数» ではなく «板そのもの» にしてある。板の中心を y = 0 に置くと
+     *     板   y(x) = κ·x²/2          （x は中心からの距離、両端 ±span/2）
+     *     定規 y = rise = κ·span²/8   （板の両端に触れる高さ）
+     *     隙間 rise − κ·x²/2          （端で 0、中央で rise）
+     * となり、κ > 0（上反り）なら板は «端が上がった» 形に、κ < 0（下反り）なら
+     * «端が下がった» 形に描かれる。隙間だけを描くとこれが上下逆に見えてしまう
+     * —— 上反りなのに絵が下向きに膨らむ —— ので、板を描いて定規を動かす。
+     *
+     * 反りは板の大きさに対して極小（板幅 1,330 mm に 0.2 mm など）なので、縦だけ拡大する。
+     */
+    const drawWarp = (el, kappa, span) => {
+      if (!el) return;
+      const rise = kappa * span * span / 8;               // 定規と板のあいだの最大隙間（中央）
+      const amp = Math.abs(rise);
+      /* 縦は «図が箱の 7 割» になるよう自動で拡大する。ただし下限を置く ——
+       * 置かないと、反りが 0 に近いほど倍率が上がって «ほぼ真っ直ぐな板» が
+       * 目いっぱい反って見えてしまう（数値は 0.00 mm なのに絵は大反り、という嘘になる）。
+       * 下限 FLOOR より小さい反りは、その帯の中で小さいまま描かれて平らに見える。
+       * FLOOR と «平坦» の境は実測した反りの大きさから置いた —— 実機ロットの通しで
+       * 丈反り 0.19〜0.93 mm・幅反り 0.11〜0.52 mm。 */
+      const FLOOR = 0.05, FLAT = 0.005;                   // mm
+      const flat = amp < FLAT;
+      const half = Math.max(amp, FLOOR) / 0.7 / 2, c = rise / 2;
+      const py = scaleY(c - half, c + half);
+      const cls = flat ? 'flat' : (rise > 0 ? 'up' : 'dn');
+      const N = 41, xs = [], plate = [];
+      for (let i = 0; i < N; i++) {
+        const u = i / (N - 1), x = (u - 0.5) * span;
+        xs.push(u); plate.push(kappa * x * x / 2);        // 中央 0・両端 rise
+      }
+      const line = plate.map((v, i) => `${i ? 'L' : 'M'}${px(xs[i])} ${py(v)}`).join('');
+      const fill = line + `L${px(1)} ${py(rise)}L${px(0)} ${py(rise)}Z`;
+      el.innerHTML = `<path class="f-gap ${cls}" d="${fill}"/>`
+        + `<line class="f-rule" x1="${PAD}" y1="${py(rise)}" x2="${W - PAD}" y2="${py(rise)}"/>`
+        + `<path class="f-warp ${cls}" d="${line}"/>`;
+      return { rise, flat };
+    };
+
+    const h = s.thickness, w = s.width, wp = s.warp;
+    const mode = this.shapeMonMode === 'gauge' ? 'gauge' : 'warp';
+    const G = CONFIG.SHAPE.WARP_GAUGE;
+    const f2 = (v) => (Math.abs(v) >= 10 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(1) : v.toFixed(2));
+
+    if (mode === 'warp') {
+      /* --- 幅方向の反り。板を幅いっぱいの定規で測ったときの隙間（wp.wid）。
+       * 圧延では幅方向の反りは丈方向の «裏返し»（アンチクラスティック）で出るので、
+       * 向きは丈と逆になるのがふつう。 */
+      const rW = drawWarp($('sm-wid'), wp.kappaW, w) || {};
+      const dirW = rW.flat ? '平坦' : (wp.wid > 0 ? '樋状（両耳が上がる）' : '山状（中央が上がる）');
+      $('sm-wnum').textContent = `${f2(wp.wid)} mm`;
+      $('sm-wnum').title = `幅反り ${wp.wid.toFixed(2)} mm —— 板幅 ${w.toFixed(0)} mm の定規を当てたときの`
+        + `中央の隙間（${dirW}）／ 曲率半径 ${Math.abs(wp.kappaW) > 1e-9 ? (1 / Math.abs(wp.kappaW) / 1000).toFixed(1) + ' m' : '∞'}`
+        + ` ／ 長手の反りに «逆向きに» 従属します（アンチクラスティック）`;
+      /* --- 丈方向の反り。定尺（WARP_GAUGE）の定規で測った隙間（wp.len）。
+       * 実機の «反り» はこの測り方なので、板の全長ではなく定尺で描く。 */
+      const rL = drawWarp($('sm-len'), wp.kappa, Math.min(Math.max(s.length, 1), G));
+      const sp = Rolling.curlSpan(wp.kappa, h, w, s.alloy);
+      const dirL = rL.flat ? '平坦' : (wp.len > 0 ? '上反り' : '下反り');
+      $('sm-lnum').textContent = `${f2(wp.len)} mm`;
+      $('sm-lnum').title = `丈反り ${wp.len.toFixed(2)} mm —— 定尺 ${(G / 1000).toFixed(0)} m の定規を当てたときの`
+        + `中央の隙間（${dirL}）／ 曲率半径 ${wp.R === Infinity ? '∞' : wp.R.toFixed(1) + ' m'}`
+        + ` ／ 先端の浮き ${sp.tip.toFixed(0)} mm`;
+      $('sm-sub').textContent = `${h.toFixed(h < 30 ? 1 : 0)} × ${w.toFixed(0)} mm`;
+      $('sm-ft').innerHTML = `板（実線）に<b>定規</b>（破線）を当てたときの<b>隙間</b>が反りです`
+        + ` ・ <b style="color:#e2684a">上反り／樋状</b>（端が上がる）と`
+        + ` <b style="color:#3a7bd5">下反り／山状</b>（端が下がる）`
+        + ` ・ 縦は見えるように拡大しています`;
+      return;
+    }
+
     /* 板厚方向の倍率。板厚の «変動» が見える大きさになるよう、変動幅から自動で決める
      * （固定倍率だと厚板では潰れ、薄板では振り切れる）。 */
     const K = (dev) => Num.clamp(dev > 1e-6 ? (h * 0.35) / dev : 1, 1, 5000);
-
-    // --- 幅方向: 断面（クラウン ＋ 幅反り） ---
+    // --- 幅方向: 断面（クラウン・エッジドロップ） ---
     {
-      const sh = s.wShape, wp = s.warp;
+      const sh = s.wShape;
       if (sh && sh.z && sh.z.length > 1) {
         const n = sh.z.length, xs = [], top = [], bot = [];
         let dev = 0;
         for (let i = 0; i < n; i++) dev = Math.max(dev, Math.abs(sh.x[i]));
         const k = K(dev * 2);
         for (let i = 0; i < n; i++) {
-          const z = sh.z[i];                                   // 幅位置 [mm]（−w/2〜+w/2）
           const hz = h + sh.x[i] * k;                          // その位置の板厚（倍率つき）
-          const bow = Rolling.chordRise(wp.kappaW, Math.abs(z) * 2) * (wp.kappaW ? 1 : 0);
-          xs.push((z + w / 2) / w);
-          top.push(bow + hz / 2); bot.push(bow - hz / 2);
+          xs.push((sh.z[i] + w / 2) / w);
+          top.push(hz / 2); bot.push(-hz / 2);
         }
-        draw($('sm-wid'), xs, top, bot);
+        drawGauge($('sm-wid'), xs, top, bot);
         $('sm-wnum').textContent = `${sh.crownAbs.toFixed(0)}µm / ${sh.iUnit.toFixed(0)}I`;
         $('sm-wnum').title = `クラウン（中央 − 端）${sh.crownAbs.toFixed(0)} µm ／ 平坦度 ${sh.iUnit.toFixed(0)} I-unit`
           + ` ／ エッジドロップ ${sh.edgeDrop.toFixed(0)} µm ／ 形 ${sh.modeName}`;
-      } else { draw($('sm-wid'), [], [], []); $('sm-wnum').textContent = '–'; }
+      } else { drawGauge($('sm-wid'), [], [], []); $('sm-wnum').textContent = '–'; }
     }
-    // --- 丈方向: 側面（長手の板厚 ＋ 丈反り） ---
+    // --- 丈方向: 側面（長手の板厚の振れ） ---
     {
       const N = 48, hp = s.hProf, M = hp.length;
       const xs = [], top = [], bot = [];
       let lo = Infinity, hi = -Infinity;
       for (let i = 0; i < N; i++) { const v = hp[Math.round(i / (N - 1) * (M - 1))]; lo = Math.min(lo, v); hi = Math.max(hi, v); }
       const k = K(hi - lo);
-      const L = Math.max(s.length, 1), kap = s.kNew || 0;
       for (let i = 0; i < N; i++) {
-        const u = i / (N - 1);
-        const hx = hp[Math.round(u * (M - 1))] + (hp[Math.round(u * (M - 1))] - (lo + hi) / 2) * (k - 1);
-        /* 反りは円弧。定尺（WARP_GAUGE）ではなく板の全長で描くと、長い板では
-         * 振り切れて形が読めないので、丈反りの «見せ方» は定尺に合わせる。 */
-        const xm = (u - 0.5) * Math.min(L, CONFIG.SHAPE.WARP_GAUGE * 4);
-        const bow = kap ? kap * xm * xm / 2 : 0;
-        xs.push(u); top.push(bow + hx / 2); bot.push(bow - hx / 2);
+        const u = i / (N - 1), hx0 = hp[Math.round(u * (M - 1))];
+        const hx = hx0 + (hx0 - (lo + hi) / 2) * (k - 1);
+        xs.push(u); top.push(hx / 2); bot.push(-hx / 2);
       }
-      draw($('sm-len'), xs, top, bot);
-      const wp = s.warp;
-      $('sm-lnum').textContent = `${((hi - lo) * 1000).toFixed(0)}µm / ${wp.len.toFixed(1)}mm`;
+      drawGauge($('sm-len'), xs, top, bot);
+      $('sm-lnum').textContent = `${((hi - lo) * 1000).toFixed(0)}µm`;
       $('sm-lnum').title = `長手の板厚の振れ（頭〜尻）${((hi - lo) * 1000).toFixed(0)} µm`
-        + ` ／ 丈反り ${wp.len.toFixed(2)} mm（定尺 ${(CONFIG.SHAPE.WARP_GAUGE / 1000).toFixed(0)} m の定規）`;
-      $('sm-sub').textContent = `${h.toFixed(h < 30 ? 1 : 0)} × ${w.toFixed(0)} mm`;
-      $('sm-ft').innerHTML = `<b style="color:#e2684a">上面</b> / <b style="color:#3a7bd5">下面</b>`
-        + ` ・ 板厚方向は見えるように拡大しています（形の «向き» を見るための図です）`;
+        + `（頭 ${(hp[0] * 1).toFixed(2)} → 尻 ${(hp[M - 1] * 1).toFixed(2)} mm）`;
     }
+    $('sm-sub').textContent = `${h.toFixed(h < 30 ? 1 : 0)} × ${w.toFixed(0)} mm`;
+    $('sm-ft').innerHTML = `<b style="color:#e2684a">上面</b> / <b style="color:#3a7bd5">下面</b>`
+      + ` ・ 板厚方向は見えるように拡大しています（形の «向き» を見るための図です）`;
   }
 
   _slabChanged() {
