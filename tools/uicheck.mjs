@@ -160,6 +160,35 @@ for (const w of widths) {
     ok('右の辺を掴むと «右» だけが動く（上下は動かない）',
        pn.e.r < 0 && pn.e.t === 0 && pn.e.b === 0 && pn.e.l === 0,
        `左 ${pn.e.l} / 上 ${pn.e.t} / 右 ${pn.e.r} / 下 ${pn.e.b} px`);
+
+    /* 板の形状モニタ。出せること・画面の中に収まること・計器バーと重ならないこと・
+     * 圧延中に «形» が描けていること（空の SVG になっていないこと）を見る。 */
+    const sm = await page.evaluate(() => new Promise(res => setTimeout(() => {
+      const A = window.__app, P = A.physics;
+      A.ui.setShapeMon(false);
+      const off = document.getElementById('shape-mon').hidden;
+      A.ui.setShapeMon(true);
+      window.__startAuto(false);
+      window.__ff((p) => p.slab.rollingActive && p.mill.passIndex >= 3, 120 * 900, 8);
+      A.ui._shapeMon(P.slab);
+      const box = document.getElementById('shape-mon'), r = box.getBoundingClientRect();
+      const met = document.getElementById('metrics').getBoundingClientRect();
+      const d = (id, cls) => (document.querySelector(`#${id} .${cls}`)?.getAttribute('d') || '').length;
+      res({ off, on: !box.hidden,
+            inView: r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && r.left >= -1 && r.top >= -1,
+            overMet: r.bottom > met.top + 1 && r.top < met.bottom - 1,
+            widTop: d('sm-wid', 'f-top'), widBot: d('sm-wid', 'f-bot'),
+            lenTop: d('sm-len', 'f-top'), lenBot: d('sm-len', 'f-bot'),
+            wnum: document.getElementById('sm-wnum').textContent,
+            lnum: document.getElementById('sm-lnum').textContent });
+    }, 400)));
+    ok('板の形状モニタが出し入れできる', sm.off && sm.on, `OFF → ${sm.off ? '隠れる' : '隠れない'} ／ ON → ${sm.on ? '出る' : '出ない'}`);
+    ok('形状モニタが画面の中に収まり、計器バーと重ならない', sm.inView && !sm.overMet,
+       `画面内 ${sm.inView} ／ 計器バーと重なり ${sm.overMet ? 'あり' : 'なし'}`);
+    ok('幅方向の断面（上面・下面）が描けている', sm.widTop > 40 && sm.widBot > 40,
+       `上面 ${sm.widTop} / 下面 ${sm.widBot} 文字（${sm.wnum}）`);
+    ok('丈方向の側面（上面・下面）が描けている', sm.lenTop > 40 && sm.lenBot > 40,
+       `上面 ${sm.lenTop} / 下面 ${sm.lenBot} 文字（${sm.lnum}）`);
   }
   await browser.close();
 }

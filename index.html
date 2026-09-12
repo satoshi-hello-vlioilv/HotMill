@@ -169,6 +169,28 @@ canvas { display:block; }
   border-radius:var(--r-m); background:var(--s-2); overflow:auto hidden; cursor:crosshair; }
 .pnl .chart[data-zoom="1"] { overflow:hidden; }
 /* 横軸スケールのつまみ。1 倍（全体が収まる）から 20 倍まで。数字はその場に出す。 */
+/* 板の形状モニタ。計器バーの上、右寄せの小窓。3D の邪魔をしないよう幅は 260 px に抑え、
+   «幅方向» と «丈方向» を縦に 2 段（見比べるとき目を横に振らなくて済む）。 */
+#shape-mon { position:fixed; right:16px; bottom:calc(var(--metrics-h) + 28px); z-index:11; width:260px;
+  background:rgba(255,255,255,.93); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.9);
+  border-radius:var(--r-l); box-shadow:var(--shadow-2); padding:8px 10px 7px; }
+#shape-mon .sm-hd { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+#shape-mon .sm-t { font-size:9.5px; font-weight:800; color:var(--ink-3); letter-spacing:.05em; }
+#shape-mon .sm-sub { font-size:9.5px; color:var(--ink-3); margin-left:auto; font-variant-numeric:tabular-nums; }
+#shape-mon .sm-x { border:none; background:transparent; color:var(--ink-3); font-size:15px; line-height:1;
+  cursor:pointer; padding:0 2px; }
+#shape-mon .sm-x:hover { color:var(--ink-1); }
+#shape-mon .sm-row { display:flex; align-items:center; gap:6px; margin:2px 0; }
+#shape-mon .sm-lbl { width:44px; flex:none; font-size:9.5px; color:var(--ink-3); line-height:1.25; }
+#shape-mon .sm-lbl i { display:block; font-style:normal; font-size:9px; color:var(--ink-2);
+  font-variant-numeric:tabular-nums; }
+#shape-mon .sm-c { flex:1; height:56px; min-width:0; background:var(--s-3); border-radius:6px; }
+#shape-mon .sm-ft { font-size:9px; color:var(--ink-3); margin-top:3px; line-height:1.35; }
+/* 上面・下面・中立線。上下で色を分けると «どちらへ反っているか» が一目で分かる */
+#shape-mon .f-top { fill:none; stroke:#e2684a; stroke-width:1.4; stroke-linejoin:round; }
+#shape-mon .f-bot { fill:none; stroke:#3a7bd5; stroke-width:1.4; stroke-linejoin:round; }
+#shape-mon .f-mid { stroke:var(--line); stroke-width:1; stroke-dasharray:2 3; }
+#shape-mon .f-fill { fill:rgba(120,140,170,.16); stroke:none; }
 /* 板面冷却の 4 系統。1 行 ＝ 1 系統（ボタン・水量スライダ・数値）を 3 列でそろえる。
    押せば ON/OFF、スライダで水量。«どれが効いているか» が一目で分かることを優先する。 */
 .coolgrid { display:grid; grid-template-columns:auto 1fr auto; gap:5px 8px; align-items:center; margin:4px 0 2px; }
@@ -927,6 +949,16 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <div class="derived" id="der-quality">自動：30 fps を下回ったら軽くし、余裕が出たら戻します</div>
         </div>
         <div class="fld">
+          <div class="top"><span class="k">板の形状モニタ</span><span class="v" id="lbl-shape-mon">OFF</span></div>
+          <div class="seg" role="group" aria-label="板の形状モニタ">
+            <button id="sm-toggle" aria-pressed="false">形状モニタ <kbd>S</kbd></button>
+          </div>
+          <div class="derived">板の <b>断面（幅方向）</b> と <b>側面（丈方向）</b> を折れ線で出します。
+            数値（クラウン・平坦度・反り）は計器バーにありますが、<b>«どんな形か»</b> —— 中高か耳伸びか、
+            頭が厚いか尻が厚いか —— は形で見るほうが速いためです。板厚の変動は板厚に対して極小なので、
+            板厚方向だけ拡大して描きます。</div>
+        </div>
+        <div class="fld">
           <div class="top"><span class="k">凡例（色の意味）</span></div>
           <div id="legend"><span id="legend-items"></span></div>
         </div>
@@ -947,10 +979,10 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
     </details>
 
     <details class="sec" id="sec-keys">
-      <summary><i class="fa-solid fa-keyboard"></i> ショートカット<span class="sum">Space / P / R / L / C / 1–9・0</span><i class="fa-solid fa-chevron-right chev"></i></summary>
+      <summary><i class="fa-solid fa-keyboard"></i> ショートカット<span class="sum">Space / P / R / L / S / C / 1–9・0</span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body"><div class="shortcuts">
         <span><kbd>Space</kbd>開始 / 中止</span><span><kbd>P</kbd>一時停止</span><span><kbd>R</kbd>リセット</span>
-        <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>9</kbd><kbd>0</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>G</kbd>圧延実績</span><span><kbd>V</kbd>版数と履歴</span>
+        <span><kbd>L</kbd>ラベル</span><span><kbd>Z</kbd>テーブル記号</span><span><kbd>S</kbd>形状モニタ</span><span><kbd>C</kbd>断面</span><span><kbd>1</kbd>–<kbd>9</kbd><kbd>0</kbd>視点</span><span><kbd>M</kbd>メニュー</span><span><kbd>G</kbd>圧延実績</span><span><kbd>V</kbd>版数と履歴</span>
       </div></div>
     </details>
     </section>
@@ -1019,6 +1051,28 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
        品質   …… 狙いに乗っているか
      各札の中身は «主値 1 つ ＋ 副値の固定枠» で、値が増えても減っても枠は動かない
      （枠を固定しておかないと、値が出たり消えたりするたびに札の幅が動いて読みにくい）。 -->
+<!-- 板の形状モニタ。板の «断面» と «側面» をそのまま折れ線で描く小窓。
+     数値（クラウン µm・I-unit・反り mm）は計器バーにあるが、数値だけでは «どんな形か»
+     が分からない —— 中高なのか耳伸びなのか、頭が厚いのか尻が厚いのかは形で見るのが速い。
+     板厚の変動は板厚そのものに対して極小（16 mm に対し数十 µm）なので、板厚方向だけ
+     倍率を掛けて描く。倍率は画面に明記する（誇張していることを隠さない）。 -->
+<div id="shape-mon" hidden aria-label="板の形状モニタ">
+  <div class="sm-hd">
+    <span class="sm-t">板の形状</span>
+    <span class="sm-sub" id="sm-sub">–</span>
+    <button class="sm-x" id="sm-close" type="button" title="閉じる（S）" aria-label="閉じる">&times;</button>
+  </div>
+  <div class="sm-row">
+    <div class="sm-lbl">幅方向<i id="sm-wnum">–</i></div>
+    <svg class="sm-c" id="sm-wid" viewBox="0 0 240 56" preserveAspectRatio="none" aria-hidden="true"></svg>
+  </div>
+  <div class="sm-row">
+    <div class="sm-lbl">丈方向<i id="sm-lnum">–</i></div>
+    <svg class="sm-c" id="sm-len" viewBox="0 0 240 56" preserveAspectRatio="none" aria-hidden="true"></svg>
+  </div>
+  <div class="sm-ft" id="sm-ft">–</div>
+</div>
+
 <div id="metrics">
   <div class="mc"><div class="k">進捗</div>
     <div class="val"><span id="m-pass-v">0</span><u id="m-pass-s">/ 7</u></div>
@@ -14006,6 +14060,7 @@ class UIManager {
     this.logLot = null; this.logPass = new Set();
     this.logSeries = new Set(RollingLog.SERIES.map(q => q.key));
     this._logBox = null; this.logShow = 'both'; this._logPop = null; this.logZoom = 1;
+    this.shapeMonOn = false;          // 板の形状モニタ（S で出し入れ）
     this._buildTabs(); this._buildViews(); this._buildSpec(); this._buildTables(); this._buildLegend();
     this._buildRanges(); this._buildCast(); this._buildAlloys(); this._buildStripCool(); this._buildCutScope();
     this._buildVersion();
@@ -14959,6 +15014,8 @@ class UIManager {
         coolSide();
       });
     }
+    on('sm-toggle', 'click', () => this.setShapeMon(!this.shapeMonOn));
+    on('sm-close', 'click', () => this.setShapeMon(false));
     this._coolSide = coolSide; this._coolFace = coolFace;
 
     /* クーラントの状態（濃度・劣化）。沸騰曲線そのものが動くので、全面の抜熱が変わる。
@@ -15159,6 +15216,7 @@ class UIManager {
       else if (k === 'r') this.bus.emit('CMD_RESET');
       else if (k === 'l') this.setLabels(!this.labelsOn);
       else if (k === 'z') this.setZoneBadges(!this.zonesOn);
+      else if (k === 's') this.setShapeMon(!this.shapeMonOn);
       else if (k === 'v') this.toggleVersion();
       else if (k === 'm') this.setSidebar(document.body.classList.contains('sb-collapsed'));
       else if (k === 'c') this.setCutaway(this.cutaway === 'half' ? 'xray' : this.cutaway === 'xray' ? 'solid' : 'half');
@@ -15173,6 +15231,101 @@ class UIManager {
    * 素材パネルの変更。待機中なら即時反映（適用ボタンは出さない）、運転中は表示だけ更新して
    * «変更を適用（運転を中止してやり直す）» に委ねる。
    */
+  /**
+   * 板の形状モニタ。板の «断面»（幅方向）と «側面»（丈方向）を折れ線で描く。
+   *
+   * 数値（クラウン µm・I-unit・反り mm）は計器バーに出ているが、数値だけでは
+   * «どんな形か» が分からない —— 中高なのか耳伸びなのか、頭が厚いのか尻が厚いのかは
+   * 形で見るほうが速い。そこで上面と下面の 2 本をそのまま描く。
+   *
+   * 板厚の変動は板厚そのものに対して極小（16 mm に対し数十 µm）なので、板厚方向だけ
+   * 倍率を掛ける。倍率は画面に出す —— 誇張していることを隠さない。
+   */
+  /** 板の形状モニタの出し入れ。数値の出どころは 1 つ（shapeMonOn）で、ボタン・札・キーが同じ状態を見る。 */
+  setShapeMon(on) {
+    this.shapeMonOn = !!on;
+    const box = $('shape-mon'); if (box) box.hidden = !this.shapeMonOn;
+    const b = $('sm-toggle');
+    if (b) { b.setAttribute('aria-pressed', String(this.shapeMonOn)); }
+    const l = $('lbl-shape-mon'); if (l) l.textContent = this.shapeMonOn ? 'ON' : 'OFF';
+    if (this.shapeMonOn && window.__phys?.slab) this._shapeMon(window.__phys.slab);
+  }
+
+  _shapeMon(s) {
+    const box = $('shape-mon');
+    if (!box || box.hidden) return;
+    const W = 240, H = 56, PAD = 3;
+    /* 上面・下面の 2 本と、その間の塗り。y は «板の上が上» になるよう反転する。 */
+    const draw = (el, xs, top, bot) => {
+      if (!el || !xs.length) { if (el) el.innerHTML = ''; return; }
+      const ys = top.concat(bot);
+      let lo = Math.min(...ys), hi = Math.max(...ys);
+      if (!(hi > lo)) { hi = lo + 1e-6; }
+      const m = (hi - lo) * 0.12;                     // 上下に少し余白
+      lo -= m; hi += m;
+      const px = (i) => (PAD + (W - 2 * PAD) * xs[i]).toFixed(1);
+      const py = (v) => (PAD + (H - 2 * PAD) * (1 - (v - lo) / (hi - lo))).toFixed(1);
+      const path = (a) => a.map((v, i) => `${i ? 'L' : 'M'}${px(i)} ${py(v)}`).join('');
+      const fill = path(top) + bot.map((v, i) => `L${px(bot.length - 1 - i)} ${py(bot[bot.length - 1 - i])}`).join('') + 'Z';
+      const midY = py((lo + hi) / 2);
+      el.innerHTML = `<path class="f-fill" d="${fill}"/>`
+        + `<line class="f-mid" x1="${PAD}" y1="${midY}" x2="${W - PAD}" y2="${midY}"/>`
+        + `<path class="f-top" d="${path(top)}"/><path class="f-bot" d="${path(bot)}"/>`;
+    };
+    const h = s.thickness, w = s.width;
+    /* 板厚方向の倍率。板厚の «変動» が見える大きさになるよう、変動幅から自動で決める
+     * （固定倍率だと厚板では潰れ、薄板では振り切れる）。 */
+    const K = (dev) => Num.clamp(dev > 1e-6 ? (h * 0.35) / dev : 1, 1, 5000);
+
+    // --- 幅方向: 断面（クラウン ＋ 幅反り） ---
+    {
+      const sh = s.wShape, wp = s.warp;
+      if (sh && sh.z && sh.z.length > 1) {
+        const n = sh.z.length, xs = [], top = [], bot = [];
+        let dev = 0;
+        for (let i = 0; i < n; i++) dev = Math.max(dev, Math.abs(sh.x[i]));
+        const k = K(dev * 2);
+        for (let i = 0; i < n; i++) {
+          const z = sh.z[i];                                   // 幅位置 [mm]（−w/2〜+w/2）
+          const hz = h + sh.x[i] * k;                          // その位置の板厚（倍率つき）
+          const bow = Rolling.chordRise(wp.kappaW, Math.abs(z) * 2) * (wp.kappaW ? 1 : 0);
+          xs.push((z + w / 2) / w);
+          top.push(bow + hz / 2); bot.push(bow - hz / 2);
+        }
+        draw($('sm-wid'), xs, top, bot);
+        $('sm-wnum').textContent = `${sh.crownAbs.toFixed(0)}µm / ${sh.iUnit.toFixed(0)}I`;
+        $('sm-wnum').title = `クラウン（中央 − 端）${sh.crownAbs.toFixed(0)} µm ／ 平坦度 ${sh.iUnit.toFixed(0)} I-unit`
+          + ` ／ エッジドロップ ${sh.edgeDrop.toFixed(0)} µm ／ 形 ${sh.modeName}`;
+      } else { draw($('sm-wid'), [], [], []); $('sm-wnum').textContent = '–'; }
+    }
+    // --- 丈方向: 側面（長手の板厚 ＋ 丈反り） ---
+    {
+      const N = 48, hp = s.hProf, M = hp.length;
+      const xs = [], top = [], bot = [];
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < N; i++) { const v = hp[Math.round(i / (N - 1) * (M - 1))]; lo = Math.min(lo, v); hi = Math.max(hi, v); }
+      const k = K(hi - lo);
+      const L = Math.max(s.length, 1), kap = s.kNew || 0;
+      for (let i = 0; i < N; i++) {
+        const u = i / (N - 1);
+        const hx = hp[Math.round(u * (M - 1))] + (hp[Math.round(u * (M - 1))] - (lo + hi) / 2) * (k - 1);
+        /* 反りは円弧。定尺（WARP_GAUGE）ではなく板の全長で描くと、長い板では
+         * 振り切れて形が読めないので、丈反りの «見せ方» は定尺に合わせる。 */
+        const xm = (u - 0.5) * Math.min(L, CONFIG.SHAPE.WARP_GAUGE * 4);
+        const bow = kap ? kap * xm * xm / 2 : 0;
+        xs.push(u); top.push(bow + hx / 2); bot.push(bow - hx / 2);
+      }
+      draw($('sm-len'), xs, top, bot);
+      const wp = s.warp;
+      $('sm-lnum').textContent = `${((hi - lo) * 1000).toFixed(0)}µm / ${wp.len.toFixed(1)}mm`;
+      $('sm-lnum').title = `長手の板厚の振れ（頭〜尻）${((hi - lo) * 1000).toFixed(0)} µm`
+        + ` ／ 丈反り ${wp.len.toFixed(2)} mm（定尺 ${(CONFIG.SHAPE.WARP_GAUGE / 1000).toFixed(0)} m の定規）`;
+      $('sm-sub').textContent = `${h.toFixed(h < 30 ? 1 : 0)} × ${w.toFixed(0)} mm`;
+      $('sm-ft').innerHTML = `<b style="color:#e2684a">上面</b> / <b style="color:#3a7bd5">下面</b>`
+        + ` ・ 板厚方向は見えるように拡大しています（形の «向き» を見るための図です）`;
+    }
+  }
+
   _slabChanged() {
     const d = this.dims();
     clearTimeout(this._applyT);
@@ -15774,6 +15927,7 @@ class UIManager {
           + ` ／ 上下 ΔT ${(s.tBot - s.tTop).toFixed(1)} ℃ ／ バイト内 ${Rm(kb)}（うちパスライン ${Rm(kpl)}）`
         : (Math.abs(kb) > 1e-9 ? `バイト内 ${Rm(kb)} は除荷で戻った` : '平坦');
     }
+    this._shapeMon(s);
     /* 幅方向の形状。板クラウン（中央 − 端）と平坦度（I-unit）。
      * 平坦度は «クラウン率の変化» で決まるので、クラウンが大きくても比例していれば平坦。 */
     {
