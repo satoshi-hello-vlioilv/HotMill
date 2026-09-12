@@ -169,6 +169,16 @@ canvas { display:block; }
   border-radius:var(--r-m); background:var(--s-2); overflow:auto hidden; cursor:crosshair; }
 .pnl .chart[data-zoom="1"] { overflow:hidden; }
 /* 横軸スケールのつまみ。1 倍（全体が収まる）から 20 倍まで。数字はその場に出す。 */
+/* 板面冷却の 4 系統。1 行 ＝ 1 系統（ボタン・水量スライダ・数値）を 3 列でそろえる。
+   押せば ON/OFF、スライダで水量。«どれが効いているか» が一目で分かることを優先する。 */
+.coolgrid { display:grid; grid-template-columns:auto 1fr auto; gap:5px 8px; align-items:center; margin:4px 0 2px; }
+.coolgrid .zbtn { height:24px; padding:0 9px; border-radius:7px; border:1px solid var(--line);
+  background:var(--s-1); color:var(--ink-3); font:inherit; font-size:10.5px; font-weight:700;
+  white-space:nowrap; cursor:pointer; transition:background .12s, color .12s, border-color .12s; }
+.coolgrid .zbtn[aria-pressed="true"] { background:var(--accent, #3a7bd5); border-color:var(--accent, #3a7bd5); color:#fff; }
+.coolgrid .zbtn:hover { border-color:var(--accent, #3a7bd5); }
+.coolgrid .zflow { width:100%; min-width:60px; accent-color:var(--accent, #3a7bd5); }
+.coolgrid .zval { font-size:10px; font-variant-numeric:tabular-nums; color:var(--ink-3); min-width:38px; text-align:right; }
 .pnl .zoom { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; color:var(--ink-3);
   flex:0 1 auto; min-width:0; }
 .pnl .zoom input[type=range] { width:110px; min-width:64px; flex:0 1 auto; accent-color:var(--accent, #3a7bd5); }
@@ -872,16 +882,14 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <input type="range" id="rng-pl" min="-60" max="60" value="0" step="1">
           <div class="derived" id="der-pl"></div>
         </div>
+        <!-- 冷却は 4 系統（入側／出側 × 上面／下面）。実機では弁が別なので、ON/OFF と
+             水量をそれぞれに持つ。上面は溜まる（プール）、下面は落ちる（直撃スプレー）で
+             抜熱の効き方が違い、反りを作るのは «上下の差» —— ここが反り対策の主役になる -->
         <div class="fld">
-          <div class="top"><span class="k">板面冷却 入側 / 出側</span><span class="v" id="lbl-cool-side"></span></div>
-          <div class="seg" role="group" aria-label="板面冷却の入側・出側">
-            <button id="cool-entry" aria-pressed="true">入側 ON</button>
-            <button id="cool-exit"  aria-pressed="true">出側 ON</button>
-          </div>
+          <div class="top"><span class="k">板面冷却（4 系統）</span><span class="v" id="lbl-cool"></span></div>
+          <div class="coolgrid" id="cool-zones"></div>
           <div class="derived" id="der-cool-side"></div>
         </div>
-        <!-- 上面と下面は別の設備。上面は溜まる（プール）、下面は落ちる（直撃スプレー）ので
-             抜熱の効き方が違う。反りを作るのは «上下の差» なので、ここが反り対策の主役になる -->
         <!-- クーラントの状態。沸騰曲線そのものが動くので、抜熱の «効き» が全面で変わる -->
         <div class="fld">
           <div class="top"><span class="k">クーラント濃度</span><span class="v" id="lbl-conc">4.8<em>%</em></span></div>
@@ -892,14 +900,6 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <div class="top"><span class="k">クーラント劣化度</span><span class="v" id="lbl-age">35<em>%</em></span></div>
           <input type="range" id="rng-age" min="0" max="100" value="35" step="5">
           <div class="derived" id="der-age"></div>
-        </div>
-        <div class="fld">
-          <div class="top"><span class="k">板面冷却 上面 / 下面</span><span class="v" id="lbl-cool-face"></span></div>
-          <div class="seg" role="group" aria-label="板面冷却の上面・下面">
-            <button id="cool-top" aria-pressed="true">上面 ON</button>
-            <button id="cool-bot" aria-pressed="true">下面 ON</button>
-          </div>
-          <div class="derived" id="der-cool-face"></div>
         </div>
       </div>
     </details>
@@ -3186,7 +3186,17 @@ const CONFIG = {
      * 頂いたクロップ屑の写真は真横からではないため «比» までは読み取れない —— 開きが
      * 目に見える大きさであることは確かめられたが、板厚に対する比は決められなかった。
      * 真横から（スケールになる物を添えて）撮った 1 枚があれば較正できる（README の残件「ワニ口のあごの開きが板厚の何割か」）。 */
-    OVERHANG: { TH_K: 3.0, WID_K: 0.30, JAW_K: 0.15, JAW_MAX: 0.25 },
+    /* 端部の張り出し（舌・ワニ口）。
+     *   TH_K / WID_K —— 張り出しの長さを板厚と板幅から決める係数。
+     *   CORE —— ワニ口の «芯がどこまで付いて行くか»。実機の端材は中が詰まっていて、
+     *           表裏の 2 枚が芯より少し先まで出て先端を作る。口が開いて見えるのは
+     *           その差 gator·(1−CORE) だけで、実機では 50〜100 mm（ご提供の観察）。
+     *   JAW_K / JAW_MAX —— 口の中で上下のあごが内へ折れ込む量と、その頭打ち（板厚の半分）。 */
+    /* TH_K / WID_K は «実機の端材が 300〜500 mm»（ご提供の観察）に合わせた値。
+     * 以前の 3.0 / 0.30 では最大 915 mm（舌 457 ＋ ワニ口 457）で 2 倍以上長かった。
+     * CORE 0.65 なら口の長さ gator·(1−CORE) が最大 75 mm で、«開いて見えるのは
+     * 50〜100 mm» という観察に入る。 */
+    OVERHANG: { TH_K: 1.4, WID_K: 0.14, CORE: 0.65, JAW_K: 0.15, JAW_MAX: 0.25 },
     /* 鋳造まま（DC 鋳造）のスラブは長辺のコーナーが丸い。上下面は圧延前に片面 SCALP だけ
      * 面削するので、丸みの «上の部分» は削り取られ、鏡面の平らな面と鋳肌の丸みが角度を
      * もって出会う（＝写真に見える稜線）。側面は面削しないので鋳肌のまま残る。
@@ -3379,12 +3389,32 @@ const CONFIG = {
        * 片側を切ると上下の温度差が変わり、反りの向きと大きさが変わる ——
        * 実機で «上面冷却を絞って反りを調整する» のと同じ操作になる。
        * 位置（正準 ∓3,400）と同じく、真実はここ 1 か所（Layout.coolHeaderXs が見る）。 */
-      // 既定は実機の較正ロットと同じ «入側なし・出側のみ»
-      ENTRY: false, EXIT: true,
+      /* 冷却は «入側／出側» × «上面／下面» の 4 系統。実機では弁が別なので、
+       * ON/OFF も水量もそれぞれに持つ。flow は定格流量に対する割合（1.0 が定格）。
+       *   ET 入側 上面 ／ XT 出側 上面 ／ EB 入側 下面 ／ XB 出側 下面
+       * 既定は実機の較正ロットと同じ «上面は出側のみ・下面は常時»（ご提供の運用）。 */
+      ZONES: {
+        ET: { on: false, flow: 1.0, name: '入側 上面', top: true,  entry: true  },
+        XT: { on: true,  flow: 1.0, name: '出側 上面', top: true,  entry: false },
+        EB: { on: true,  flow: 1.0, name: '入側 下面', top: false, entry: true  },
+        XB: { on: true,  flow: 1.0, name: '出側 下面', top: false, entry: false },
+      },
+      /** 面と側から系統を引く。物理・描画・UI がすべてこの 1 か所を通る。 */
+      zone(top, entry) {
+        const Z = CONFIG.MATERIAL.STRIP_COOL.ZONES;
+        return top ? (entry ? Z.ET : Z.XT) : (entry ? Z.EB : Z.XB);
+      },
+      /** その面が «どこかで» 効いているか（面単位で判断したいところ用） */
+      faceOn(top) { const Z = CONFIG.MATERIAL.STRIP_COOL.ZONES;
+        return top ? (Z.ET.on || Z.XT.on) : (Z.EB.on || Z.XB.on); },
+      // 互換のための読み取り専用（«どちらかの面が入っているか»）
+      get ENTRY() { const Z = CONFIG.MATERIAL.STRIP_COOL.ZONES; return Z.ET.on || Z.EB.on; },
+      get EXIT()  { const Z = CONFIG.MATERIAL.STRIP_COOL.ZONES; return Z.XT.on || Z.XB.on; },
+      get TOP()   { return CONFIG.MATERIAL.STRIP_COOL.faceOn(true); },
+      get BOT()   { return CONFIG.MATERIAL.STRIP_COOL.faceOn(false); },
       /* どの «面» へ掛けるか。上面（門型ヘッダ）と下面（テーブル下のスプレー）は
        * 別の設備で、水の居方も抜熱の効き方も違う（COOLANT.SPRAY のコメント）。
        * 上面だけを使えば上下差がついて反りが出る。下面も使えば平均だけ下がる。 */
-      TOP: true, BOT: true,
     },
     /* テーブルローラとの接触による下面の抜熱。
      * ローラは胴端 Φ281.6 → 中央 Φ219.6 の «鼓の逆» 形なので、平らな板は自分の板幅の位置で
@@ -3777,7 +3807,7 @@ const Layout = {
     return d;
   },
   /** 板面クーラントの門型を立てる世界 X。区分名ならその区分の中央、数値なら正準 X。 */
-  coolStations(onlyOn = false) {
+  coolStations(onlyOn = false, top = true) {
     const SC = CONFIG.MATERIAL.STRIP_COOL;
     const xs = CONFIG.TABLE.GUIDE.HEADER.STATIONS.map(st => {
       if (st.sec === undefined) return CONFIG.FLIP * st.x;
@@ -3785,7 +3815,8 @@ const Layout = {
       return (r[0] + r[1]) / 2;
     });
     // 世界 X が正の側が入側（A テーブル側）、負の側が出側（コイラー側）
-    return onlyOn ? xs.filter(x => (x > 0 ? SC.ENTRY : SC.EXIT)) : xs;
+    // 世界 X が正の側が入側（A テーブル側）、負の側が出側（コイラー側）
+    return onlyOn ? xs.filter(x => SC.zone(top, x > 0).on) : xs;
   },
   /**
    * 下面スプレーの狙い。ノズルは板幅のクォーター部（AIM_FRAC × 板幅）へ向けて内側に倒す。
@@ -3806,12 +3837,12 @@ const Layout = {
    * 長さ LEN なので、冷却域はステーション中心 ±LEN/2。運転の熱計算（guideCoolFrac /
    * _localCool）・噴射の描画・予測は、噴射が «どこからどこまで» かをここだけから取る。
    */
-  coolZones(onlyOn = true) {
+  coolZones(onlyOn = true, top = true) {
     const L = CONFIG.TABLE.GUIDE.HEADER.LEN;
-    return Layout.coolStations(onlyOn).map(x => [x - L / 2, x + L / 2]);
+    return Layout.coolStations(onlyOn, top).map(x => [x - L / 2, x + L / 2]);
   },
   /** 効いているヘッダの本数（1 ステーションに OS / DS の 2 本） */
-  coolHeaderCount(onlyOn = true) { return Layout.coolStations(onlyOn).length * 2; },
+  coolHeaderCount(onlyOn = true) { return Layout.coolStations(onlyOn, true).length * 2; },
   /**
    * ノズルの向き（ローカル。+Z 側のヘッダ）。«狙った着地点へ弾道で届く角度» を解いて返す。
    *
@@ -5920,16 +5951,34 @@ const Rolling = {
   endOffset(dEnd, tongue, gator, zone, ny, nz, gPow = 2) {
     if (!((tongue > 0 || gator > 0)) || dEnd >= zone) return 0;
     const e = 1 - dEnd / zone;
-    return e * e * (tongue * (1 - nz * nz) + gator * Math.pow(Math.abs(ny), gPow));
+    /* ワニ口は «中が抜けた口» ではない。実機の端材を見ると、端は板厚ぶん詰まったまま
+     * 伸びていて、表裏の 2 枚が芯より少し先まで出て先端を作っている。口が «開いて»
+     * 見えるのはその 2 枚の差のぶんだけで、実機では 50〜100 mm（ご提供の観察）。
+     *
+     * そこで芯（ny = 0）も CORE の割合だけ付いて行くようにする:
+     *   芯の伸び   = gator · CORE
+     *   表裏の伸び = gator
+     *   口の長さ   = gator · (1 − CORE)      ← ここだけが «開いている» 部分
+     * 以前は芯が付いて行かず（CORE ＝ 0 に相当）、ワニ口の全長がそのまま口の長さに
+     * なっていた —— 中が空洞に見える、実機と違う形だった。 */
+    const O = CONFIG.SLAB.OVERHANG;
+    const gShape = O.CORE + (1 - O.CORE) * Math.pow(Math.abs(ny), gPow);
+    return e * e * (tongue * (1 - nz * nz) + gator * gShape);
   },
+  /** ワニ口の «口が開いている長さ» [mm]（芯の先端から表裏の先端まで）。 */
+  gatorMouth(gator) { return Math.max(gator, 0) * (1 - CONFIG.SLAB.OVERHANG.CORE); },
   /**
    * 端部のあごの «上下の開き» [mm]。ワニ口は板厚中央の面で割れて上下のあごが開く
    * （割れの起点は芯、口が開くのは端面）ので、上あご（ny > 0）は上へ、下あご（ny < 0）は
    * 下へ動く。あごは割れの先端を支点に回るので、開きは端へ向かって e² で増える。
    */
   endJaw(dEnd, gator, zone, ny, h) {
-    if (!(gator > 0) || dEnd >= zone) return 0;
-    const O = CONFIG.SLAB.OVERHANG, e = 1 - dEnd / zone;
+    /* あごが開くのは «口» の中だけ —— 芯が付いて行っている部分（ワニ口の根元側）は
+     * 板厚ぶん詰まっているので開きようがない。zone（端部欠陥の帯）ではなく
+     * 口の長さ gator·(1−CORE) を物差しにする。zone は互換のため受け取るが使わない。 */
+    const mouth = Rolling.gatorMouth(gator);
+    if (!(gator > 0) || !(mouth > 0) || dEnd >= mouth) return 0;
+    const O = CONFIG.SLAB.OVERHANG, e = 1 - dEnd / mouth;
     /* 割れた端は «内側へ折れ込む»。割れは板厚中央の面で起きるが、割れたあごはそのまま
      * 外へ開いたままにはならない —— 次にロールへ当たったところで押し戻され、中心側へ
      * 折れる。だから合計の厚みは板厚を «超えない»（めくれ上がりが皆無ではないにせよ、
@@ -8955,9 +9004,11 @@ class PhysicsEngine {
    *   top=true  —— 溜まったプールの温度で沸騰を解く（新液の入れ替わりが効く）
    *   top=false —— 常に新液。噴流が真下から蒸気膜を叩くので JET が大きい
    */
-  static surfaceCool(Ts, top, jet = true) {
+  static surfaceCool(Ts, top, jet = true, flow = 1) {
     const S = CONFIG.MATERIAL.COOLANT.SPRAY, sp = top ? S.TOP : S.BOT;
-    const Tliq = top ? PhysicsEngine.poolTemp(Ts, sp.FLUX) : CONFIG.MATERIAL.COOLANT.T_BULK;
+    /* flow は弁の開き（定格 1.0）。液流束がそのまま増減するので FLUX に掛ける ——
+     * 上面は流束が減るとプールが温まってサブクール度が消え、抜熱が落ちる。 */
+    const Tliq = top ? PhysicsEngine.poolTemp(Ts, sp.FLUX * Math.max(flow, 1e-3)) : CONFIG.MATERIAL.COOLANT.T_BULK;
     const bo = PhysicsEngine.boiling(Ts, Tliq);
     /* JET は «噴流が蒸気膜を叩く» 効き。ロールから流れ落ちてくるクーラントは噴流ではなく
      * 単なる流下なので掛けない —— ここを一律に掛けていたため、ミル前後の下面の抜熱が
@@ -8970,12 +9021,12 @@ class PhysicsEngine {
    * 水冷は膜沸騰（boiling() が板面温度から決める）、空冷は周囲温度への強制対流、なしは 0。
    * 予測（Rolling.passTempChange）と運転（_thermal）と描画が同じ 1 式を見るための入口。
    */
-  static stripFilm(Ts, top = true) {
+  static stripFilm(Ts, top = true, flow = 1) {
     const M = CONFIG.MATERIAL, SC = M.STRIP_COOL, m = SC.mode;
     if (!m || m.H === 0) return { h: 0, T: M.T_AMBIENT, mode: m, pool: null };
-    if (!(top ? SC.TOP : SC.BOT)) return { h: 0, T: M.T_AMBIENT, mode: m, pool: null };
-    if (m.wet) { const c = PhysicsEngine.surfaceCool(Ts, top); return { h: c.h, T: c.T, mode: m, pool: c.pool }; }
-    return { h: m.H, T: M.T_AMBIENT, mode: m, pool: null };
+    if (!SC.faceOn(top) || !(flow > 0)) return { h: 0, T: M.T_AMBIENT, mode: m, pool: null };
+    if (m.wet) { const c = PhysicsEngine.surfaceCool(Ts, top, true, flow); return { h: c.h, T: c.T, mode: m, pool: c.pool }; }
+    return { h: m.H * Math.min(flow, 1), T: M.T_AMBIENT, mode: m, pool: null };
   }
 
   /**
@@ -9034,7 +9085,9 @@ class PhysicsEngine {
     /* 巻き取られた部分は隣の層に抱かれて放熱面を失う（断熱に近い）。放射・対流とテーブル接触は
      * 露出している長さの割合でだけ効く。予測側（Rolling.tempBudget の coil）と同じ前提。 */
     const exposed = Math.max(0, 1 - (this.finish.coiledLen || 0) / Math.max(s.length, 1));
-    const gFrac = this.guideCoolFrac, touchH = this.tableTouchH * exposed;
+    const gFrac = this.coolFrac(true), gFracB = this.coolFrac(false);
+    const flowT = this.coolFlow(true), flowB = this.coolFlow(false);
+    const touchH = this.tableTouchH * exposed;
     // 面ごとの有効熱伝達率と受け手温度（放射・対流は周囲温度へ、クーラントは沸騰の受け手温度へ、
     // ローラ接触はロール表面温度へ）。h と受け手温度の加重平均で 1 つの対流境界にまとめる。
     const surf = (j, top) => {
@@ -9046,16 +9099,19 @@ class PhysicsEngine {
       { const c = PhysicsEngine.surfaceCool(Ts, top, false);   // 流下（噴流ではない）
         add(c.h, c.T, dil * (top ? CO.WET_TOP : CO.WET_BOT)); }
       // 板面冷却（上面は門型ヘッダ、下面はテーブル下のスプレー）
-      { const sf = PhysicsEngine.stripFilm(Ts, top);
-        add(sf.h, sf.T, gFrac * (top ? CO.GUIDE_TOP : CO.SPRAY.BOT.WET)); }
+      { const fr = top ? gFrac : gFracB, fl = top ? flowT : flowB;
+        const sf = PhysicsEngine.stripFilm(Ts, top, fl);
+        /* 水量を絞ると «濡れ続けている面積» も減る（定格で飽和）。上面はプールの温度が
+         * 上がる効き（surfaceCool）と合わせて 2 経路で効く。 */
+        add(sf.h, sf.T, fr * (top ? CO.GUIDE_TOP : CO.SPRAY.BOT.WET) * Math.min(fl, 1)); }
       if (!top) {
         hs += touchH; ht += touchH * (this.tableT ?? M.TABLE_TOUCH.T);
         /* 濡れたテーブルローラが運んでくる液膜。接触線からの伝導（touchH）とは別で、
          * ローラが «液を塗って» いくぶん。ローラが濡れているのは下面スプレーの噴射域
          * とその周りなので、板面冷却と同じ窓（gFrac）で薄める —— ここを薄めずに
          * «常に全面» としていたため、上がり温度が 42 K 低く出ていた（実測）。 */
-        const rf = PhysicsEngine.stripFilm(Ts, false);
-        if (rf.h > 0) add(rf.h, rf.T, CO.SPRAY.ROLL_FILM * gFrac * exposed);
+        const rf = PhysicsEngine.stripFilm(Ts, false, flowB);
+        if (rf.h > 0) add(rf.h, rf.T, CO.SPRAY.ROLL_FILM * gFracB * Math.min(flowB, 1) * exposed);
       }
       return { hEff: hs, Tenv: hs > 0 ? ht / hs : Ta };     // 全部巻かれて放熱面が無いときは 0/0 にしない
     };
@@ -9193,12 +9249,28 @@ class PhysicsEngine {
   }
 
   /** 板面クーラントの有効割合: 板がヘッダの冷却域（Layout.coolZones）の下を通過している長さ ÷ 板長 */
-  get guideCoolFrac() {
+  /** 板面冷却が «板の何割» に掛かっているか。入側／出側の ON は面ごとに違うので面で分ける。 */
+  coolFrac(top = true) {
     const s = this.slab, M = CONFIG.MATERIAL;
     if (!(M.STRIP_COOL.MODE !== 'NONE' && s.onLine && Math.abs(this.mill.currentSpeed) > 3)) return 0;
     let cover = 0;
-    for (const [x0, x1] of Layout.coolZones()) cover += Math.max(0, Math.min(x1, s.xMax) - Math.max(x0, s.xMin));
+    for (const [x0, x1] of Layout.coolZones(true, top))
+      cover += Math.max(0, Math.min(x1, s.xMax) - Math.max(x0, s.xMin));
     return Math.min(cover / Math.max(s.length, 1), 1);
+  }
+  get guideCoolFrac() { return this.coolFrac(true); }
+
+  /** その面でいま効いている系統の «水量»（複数の窓に掛かるときは覆っている長さで重みづけ）。 */
+  coolFlow(top = true) {
+    const s = this.slab, SC = CONFIG.MATERIAL.STRIP_COOL;
+    let w = 0, wf = 0;
+    for (const x of Layout.coolStations(true, top)) {
+      const L = CONFIG.TABLE.GUIDE.HEADER.LEN;
+      const c = Math.max(0, Math.min(x + L / 2, s.xMax) - Math.max(x - L / 2, s.xMin));
+      if (c <= 0) continue;
+      w += c; wf += c * SC.zone(top, x > 0).flow;
+    }
+    return w > 0 ? wf / w : 1;
   }
 
   /**
@@ -14831,48 +14903,62 @@ class UIManager {
     on('rng-pl', 'input', plState);
     this._plState = plState;
 
+    /* 板面冷却 —— 4 系統（入側／出側 × 上面／下面）。実機では弁が別なので、
+     * ON/OFF と水量をそれぞれに持つ。反りを作るのは «上下の差» なので、
+     * ここが反り対策のいちばん効くつまみになる（下面を絞ると上下差が開く）。
+     * 行は 1 系統。押せば ON/OFF、スライダで水量（定格に対する %）。 */
+    const coolGrid = $('cool-zones');
+    if (coolGrid && !coolGrid.dataset.built) {
+      coolGrid.dataset.built = '1';
+      const Z = CONFIG.MATERIAL.STRIP_COOL.ZONES;
+      coolGrid.innerHTML = Object.keys(Z).map(k => `
+        <button class="zbtn" id="cz-${k}" type="button" aria-pressed="true" title="${Z[k].name}の弁を開け閉めします">${Z[k].name}</button>
+        <input class="zflow" type="range" id="cf-${k}" min="0" max="150" step="5" value="100"
+               title="${Z[k].name}の水量（定格に対する %）">
+        <b class="zval" id="cv-${k}">100 %</b>`).join('');
+    }
     const coolSide = () => {
-      const SC = CONFIG.MATERIAL.STRIP_COOL;
-      $('cool-entry').setAttribute('aria-pressed', String(SC.ENTRY));
-      $('cool-exit').setAttribute('aria-pressed', String(SC.EXIT));
-      $('cool-entry').textContent = `入側 ${SC.ENTRY ? 'ON' : 'OFF'}`;
-      $('cool-exit').textContent = `出側 ${SC.EXIT ? 'ON' : 'OFF'}`;
-      const n = (SC.ENTRY ? 1 : 0) + (SC.EXIT ? 1 : 0);
-      $('lbl-cool-side').textContent = n === 2 ? '両方' : n === 0 ? 'なし' : (SC.ENTRY ? '入側のみ' : '出側のみ');
-      $('der-cool-side').innerHTML =
-        `どのステーションを使うかの選択です。効いているヘッダ <b>${Layout.coolHeaderCount()} 本</b>`
-        + ` / 全 ${Layout.coolHeaderCount(false)} 本（OS / DS 各 1 本、クォーター狙い）。方式そのもの（水冷・空冷・なし）はパススケジュールで選びます。`
-        + `<br>クーラント: 液温 <b>${CONFIG.MATERIAL.COOLANT.T_BULK} ℃</b>`;
-      coolFace();
-      this._slabChanged(); this._summaries();
-    };
-    /* 上面 / 下面。反りを作るのは «上下の差» なので、ここが反り対策のいちばん効くつまみ。
-     * 上面と下面で抜熱の仕組みが違うことを、実際の数字（プール温度・熱伝達率）で見せる。 */
-    const coolFace = () => {
-      const SC = CONFIG.MATERIAL.STRIP_COOL, Ts = window.__phys?.slab?.T?.[0] ?? 430;
-      for (const [id, key, nm] of [['cool-top', 'TOP', '上面'], ['cool-bot', 'BOT', '下面']]) {
-        $(id).setAttribute('aria-pressed', String(SC[key]));
-        $(id).textContent = `${nm} ${SC[key] ? 'ON' : 'OFF'}`;
+      const SC = CONFIG.MATERIAL.STRIP_COOL, Z = SC.ZONES;
+      const Ts = window.__phys?.slab?.T?.[0] ?? 430;
+      for (const k of Object.keys(Z)) {
+        const z = Z[k];
+        $('cz-' + k)?.setAttribute('aria-pressed', String(z.on));
+        const b = $('cz-' + k); if (b) b.textContent = `${z.name} ${z.on ? 'ON' : 'OFF'}`;
+        const r = $('cf-' + k); if (r) r.value = String(Math.round(z.flow * 100));
+        const v = $('cv-' + k); if (v) v.textContent = `${Math.round(z.flow * 100)} %`;
       }
-      const n = (SC.TOP ? 1 : 0) + (SC.BOT ? 1 : 0);
-      $('lbl-cool-face').textContent = n === 2 ? '両面' : n === 0 ? 'なし' : (SC.TOP ? '上面のみ' : '下面のみ');
-      const ct = PhysicsEngine.surfaceCool(Ts, true), cb = PhysicsEngine.surfaceCool(Ts, false);
-      $('der-cool-face').innerHTML =
-        `<b>上面</b>は掛けた液が落ちずに <b>溜まります</b>（プール）。溜まった液は板から熱をもらって温まるので、`
-        + `抜熱を決めるのは液温そのものではなく <b>プールの温度</b> —— いまは板面 ${Ts.toFixed(0)} ℃ に対し`
-        + ` <b>${ct.pool == null ? '–' : ct.pool.toFixed(0) + ' ℃'}</b>（液温 ${CONFIG.MATERIAL.COOLANT.T_BULK} ℃）で、`
-        + `熱伝達率 <b>${ct.h.toFixed(0)} W/m²K</b>。新液の入れ替わりが足りないとプールが飽和温度に近づき、`
-        + `サブクール度が消えて抜熱が落ちます（＝溜まった湯が断熱材になる）。`
+      const on = Object.values(Z).filter(z => z.on);
+      $('lbl-cool').textContent = on.length ? on.map(z => z.name.replace(' ', '')).join('・') : 'なし';
+      /* 上面と下面で «水の居方» が違うことを、実際の数字（プール温度・熱伝達率）で見せる。 */
+      const ct = PhysicsEngine.surfaceCool(Ts, true, true, Z.XT.flow);
+      const cb = PhysicsEngine.surfaceCool(Ts, false, true, Z.XB.flow);
+      const dT = (Z.ET.on || Z.XT.on ? 1 : 0) - (Z.EB.on || Z.XB.on ? 1 : 0);
+      $('der-cool-side').innerHTML =
+        `効いているヘッダ <b>${Layout.coolHeaderCount()} 本</b> / 全 ${Layout.coolHeaderCount(false)} 本`
+        + `（OS / DS 各 1 本、クォーター狙い）。方式そのもの（水冷・空冷・なし）はパネル上の選択で変わります。`
+        + `<br><b>上面</b>は掛けた液が落ちずに <b>溜まります</b>（プール）。抜熱を決めるのは液温ではなく`
+        + ` <b>プールの温度</b> —— 板面 ${Ts.toFixed(0)} ℃ に対し <b>${ct.pool == null ? '–' : ct.pool.toFixed(0) + ' ℃'}</b>`
+        + `（液温 ${CONFIG.MATERIAL.COOLANT.T_BULK} ℃）、熱伝達率 <b>${ct.h.toFixed(0)} W/m²K</b>。`
+        + `<b>水量を絞るとプールが温まって</b>サブクール度が消え、抜熱が落ちます。`
         + `<br><b>下面</b>は液が落ちるので溜まりません。当たるのは常に新液で、噴流が真下から蒸気膜を叩くぶん`
-        + ` 同じ流束でも効きます —— 熱伝達率 <b>${cb.h.toFixed(0)} W/m²K</b>。加えて <b>濡れたテーブルローラ</b> が`
-        + ` 液膜を運んで下面に触れます（接触伝導とは別の項、濡れ面積 ${(CONFIG.MATERIAL.COOLANT.SPRAY.ROLL_FILM * 100).toFixed(0)} %）。`
-        + `<br><b>上面だけ</b>にすると上下差がついて反りの駆動力になり、<b>両面</b>にすると平均温度だけが下がります。`;
+        + ` 同じ流束でも効きます —— 熱伝達率 <b>${cb.h.toFixed(0)} W/m²K</b>。`
+        + `<br><b>反りを作るのは上下の «差»</b>です。上下とも入れると平均温度が下がるだけで差が付かず、`
+        + `反りは出ません（実測: 入側を足しても先端の浮きは 22 → 21 mm。下面を切ると 22 → 72 mm）。`
+        + (dT === 0 ? `<br>いまは <b>上下とも同じ</b>ので、冷却による反りの駆動力はほとんどありません。` : '');
       this._slabChanged(); this._summaries();
     };
-    on('cool-entry', 'click', () => { CONFIG.MATERIAL.STRIP_COOL.ENTRY = !CONFIG.MATERIAL.STRIP_COOL.ENTRY; coolSide(); });
-    on('cool-exit', 'click', () => { CONFIG.MATERIAL.STRIP_COOL.EXIT = !CONFIG.MATERIAL.STRIP_COOL.EXIT; coolSide(); });
-    on('cool-top', 'click', () => { CONFIG.MATERIAL.STRIP_COOL.TOP = !CONFIG.MATERIAL.STRIP_COOL.TOP; coolFace(); });
-    on('cool-bot', 'click', () => { CONFIG.MATERIAL.STRIP_COOL.BOT = !CONFIG.MATERIAL.STRIP_COOL.BOT; coolFace(); });
+    const coolFace = coolSide;   // 互換（面だけを更新する呼び出しも同じ 1 か所を通す）
+    for (const k of Object.keys(CONFIG.MATERIAL.STRIP_COOL.ZONES)) {
+      on('cz-' + k, 'click', () => {
+        const z = CONFIG.MATERIAL.STRIP_COOL.ZONES[k]; z.on = !z.on; coolSide();
+      });
+      on('cf-' + k, 'input', (e) => {
+        const z = CONFIG.MATERIAL.STRIP_COOL.ZONES[k];
+        z.flow = Math.max(0, Number(e.target.value) / 100);
+        if (z.flow === 0) z.on = false; else if (!z.on) z.on = true;
+        coolSide();
+      });
+    }
     this._coolSide = coolSide; this._coolFace = coolFace;
 
     /* クーラントの状態（濃度・劣化）。沸騰曲線そのものが動くので、全面の抜熱が変わる。

@@ -317,7 +317,11 @@ const out = await page.evaluate(async () => {
         const p8 = R.gatorPow(8), half = Math.pow(0.5, p8), old2 = Math.pow(0.5, 2);
         ok('厚板では板厚の «内側半分» でも大きく開く（表層だけではない）', half > 0.5 && half > old2 * 2,
            `芯から半分の位置で ${(half * 100).toFixed(0)} %（べき 2 なら ${(old2 * 100).toFixed(0)} %）`);
-        ok('芯（ny = 0）では開かない（割れの起点）', R.endOffset(0, 0, 100, 1000, 0, 0, p8) === 0, '0 mm');
+        /* 芯は «口が開かない» が、X には付いて行く（中は詰まっている）。開かないことは
+         * 下の «あごは芯で動かない» が見ているので、ここでは «表面より奥で止まる» を見る。 */
+        ok('芯は表面より奥で止まる（その差が口になる）',
+           R.endOffset(0, 0, 100, 1000, 0, 0, p8) < R.endOffset(0, 0, 100, 1000, 1, 0, p8),
+           `芯 ${R.endOffset(0, 0, 100, 1000, 0, 0, p8).toFixed(0)} mm / 表面 ${R.endOffset(0, 0, 100, 1000, 1, 0, p8).toFixed(0)} mm`);
         /* あごの上下の開き。割れは板厚中央の面で起き、上あごは上・下あごは下へ動く。
          * 割れの先端（zone）を支点に回るので、端へ向かって e² で増える。 */
         /* あごは «内側へ» 折れ込む。割れは板厚中央の面で起きるが、割れたあごは外へ開いた
@@ -328,9 +332,26 @@ const out = await page.evaluate(async () => {
         ok('あごが内側へ折れ込む（上は下へ・下は上へ・芯は動かない）',
            top < 0 && Math.abs(top + bot) < 1e-9 && mid === 0,
            `端面で 上 ${top.toFixed(0)} / 下 ${(-bot).toFixed(0)} / 芯 ${mid} mm（板厚 ${hh} mm）`);
-        ok('折れ込みは割れの先端で 0、端面で最大（e² で増える）',
-           R.endJaw(z, g, z, 1, hh) === 0 && Math.abs(R.endJaw(z / 2, g, z, 1, hh) - top / 4) < 1e-9,
-           `先端 0 ／ 中間 ${R.endJaw(z / 2, g, z, 1, hh).toFixed(1)} ／ 端面 ${top.toFixed(1)} mm`);
+        /* あごが開くのは «口» の中だけ。口の長さは gator·(1−CORE) で、その外（芯が
+         * 付いて行っている側）は板厚ぶん詰まっているので開かない。 */
+        const mouth = R.gatorMouth(g);
+        ok('折れ込みは口の奥で 0、端面で最大（e² で増える）',
+           R.endJaw(mouth, g, z, 1, hh) === 0 && Math.abs(R.endJaw(mouth / 2, g, z, 1, hh) - top / 4) < 1e-9,
+           `口の奥 0 ／ 中間 ${R.endJaw(mouth / 2, g, z, 1, hh).toFixed(1)} ／ 端面 ${top.toFixed(1)} mm（口の長さ ${mouth.toFixed(0)} mm）`);
+        ok('口の外（芯が付いて行っている側）では開かない', R.endJaw(mouth * 1.01, g, z, 1, hh) === 0,
+           `口の長さ ${mouth.toFixed(0)} mm の外で 0`);
+        /* 実機の端材は «中が詰まっていて、表裏の 2 枚が芯より少し先まで出て先端を作る»。
+         * 芯が CORE の割合だけ付いて行くこと、口の長さがその差ぶんであることを縛る。 */
+        {
+          const gg = 300, zz = 900;
+          const tip = R.endOffset(0, 0, gg, zz, 1, 0, 1);     // 表面の先端
+          const core = R.endOffset(0, 0, gg, zz, 0, 0, 1);    // 芯の先端
+          ok('ワニ口の中は詰まっている（芯も付いて行く）', core > gg * 0.5,
+             `芯 ${core.toFixed(0)} mm / 表面 ${tip.toFixed(0)} mm（芯の追従 ${(core / tip * 100).toFixed(0)} %）`);
+          ok('口の長さが «表面の先端 − 芯の先端» に一致する',
+             Math.abs((tip - core) - R.gatorMouth(gg)) < 1e-9,
+             `${(tip - core).toFixed(1)} mm`);
+        }
         ok('ワニ口が出ないパスではあごも折れない', R.endJaw(0, 0, z, 1, hh) === 0, '0 mm');
         {
           /* いちばん大事な判定 —— 端面の «合計の厚み» が板厚を超えないこと。
