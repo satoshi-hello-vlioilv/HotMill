@@ -273,6 +273,23 @@ const out = await page.evaluate(async () => {
      `偏芯あり σ平均 ${avg(sds).toFixed(1)} → なし ${avg(sd2).toFixed(1)} µm`
      + `（${((1 - avg(sd2) / avg(sds)) * 100).toFixed(0)} % 減）`);
 
+  /* 偏芯補償（実機の «偏芯除去»）。同じ測り方で «入れたとき / 切ったとき» を比べる。
+   * 既定は入っているので、上の sds が «入れたとき»。 */
+  const keepEcc = K.AGC.ECC.ON;
+  K.AGC.ECC.ON = !keepEcc;
+  const trE = runOnce();
+  K.AGC.ECC.ON = keepEcc;
+  const byE = {}; for (const r of trE) (byE[r.pass] ??= []).push(r);
+  const sdE = [];
+  for (const k of finishing) { const a = byE[k]; if (!a || a.length < 200) continue;
+    const mE = a.slice(a.length * 0.15 | 0, a.length * 0.85 | 0);
+    sdE.push(+(st(mE.map(r => r.hd)).sd * 1000).toFixed(1)); }
+  R.noEccComp = sdE;
+  /* いまは «切» が既定なので、上の sds が «なし»、sdE が «あり» になる向きに読む。
+   * どちらにせよ数値を毎回出す —— 整定が済むまで合否には数えない（README 0-4）。 */
+  ok('（参考）偏芯補償の効き —— いまは打ち消せる偏芯より推定の雑音のほうが大きい', true,
+     `既定（${keepEcc ? '入' : '切'}）σ平均 ${avg(sds).toFixed(1)} ／ 反対 ${avg(sdE).toFixed(1)} µm`, true);
+
   /* 摩擦・潤滑の揺らぎ（MU_SD）を切ると何が残るか。残るのは «前のパスの凹凸の持ち回り»
    * と «長手の温度分布» —— 外乱を足さなくても出る、材料そのものの振れ。
    * 実機のミル定数（226〜296 t/mm）は従来置いていた 550 t/mm の半分以下なので、

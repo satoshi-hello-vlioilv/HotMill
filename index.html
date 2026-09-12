@@ -946,6 +946,9 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
         </div>
 
         <div id="auto-controls">
+          <div class="row"><span class="lbl">偏芯補償<small>荷重の «ロール回転に同期した成分» を取り出し、逆位相の圧下で打ち消します（実機の偏芯除去）。いまの整定では推定の雑音のほうが大きく、入れると板厚の振れが増えます（README 0-4）</small></span>
+            <label class="switch"><input type="checkbox" id="chk-ecc"><span class="sl"></span></label></div>
+          <div class="derived" id="der-ecc">運転を開始すると偏芯の状態が出ます</div>
           <div class="derived">シミュレーション速度は画面上部の運転バー（速度）で変えられます。物理計算は速度に依らず同一結果です。</div>
         </div>
 
@@ -1491,6 +1494,22 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.3.0', base: '4d9a92d', date: '2026-09-12', title: '偏芯を «停止時間の抜熱ムラ» から出す —— 熱履歴モデルと、荷重の回転同期成分からの補償', items: [
+      // --- 熱偏芯（ご指摘の «停止時間の抜熱ムラ»）---
+      { t: '偏芯の出どころが «研削で決まる現品の振れ» しか無かった。ご指摘のとおり実機で効くのは «圧延の停止時間の抜熱ムラ» なので、熱履歴として入れた。ロールの周方向を 36 分割して «角度ごとの温まり具合» を持ち、バイトに居る角度だけが熱い板と向かい合って温まる。動いていれば全周が順番にバイトを通るので差が付かず、止めるとそこだけ育つ', w: 'PhysicsEngine._eccThermal / GAUGE_MODEL.ECC_TH' },
+      { t: '実測 —— 回しっぱなし 0.0 µm ／ 止めて 60 s で 16.5 ／ 300 s で 20.0 µm（上限）／ そこから 300 s 回すと 2.2 µm。育ち方も式どおり（60 s で 82 %、τ_eff ＝ 1/(1/45＋1/150) ＝ 35 s）。運転の中でも、75 mm シャーの端部切断でラインが止まるあいだに育つ', w: 'tools/ecctrace.mjs' },
+      { t: '半振幅 20 µm は «線膨張 12×10⁻⁶/K × 実効の温度差 70 K × 熱が染み込む深さ 25 mm» の見当で、時定数も推定値。実機で «何分止めたら偏芯がいくつ» が 1 点でも取れれば較正できる（README 0-2 の 25）', w: 'GAUGE_MODEL.ECC_TH' },
+      // --- 偏芯補償（FFT ＝ 1 本の周波数だけを見る DFT）---
+      { t: '偏芯補償を入れた。«荷重データの FFT» の中身は «1 本の周波数だけを見る DFT» ＝ 回転に同期した正弦・余弦との相関（同期検波）で、窓を指数重みにすれば 1 ステップ 2 回の掛け算で済み、回転数が変わってもそのまま追従する。WR と BUR の 2 系統', w: 'PhysicsEngine._eccComp / AGC.ECC' },
+      { t: '荷重の振幅を «同じ振れを作るギャップの外乱» に直す。ギャップが δ 開くと荷重は δ·M·Q/(M+Q) 減るので、荷重 A の振れに相当するギャップは A·(1/M ＋ 1/Q)。打ち消すにはその逆符号の圧下を足す', w: 'PhysicsEngine._eccComp' },
+      { t: '圧下は瞬時には動かない。油圧圧下（5 Hz の 2 次系）と、同期検波の前に通す低域通過の両方の位相遅れを、ロールの回転数でその場で計算して先回りする', w: 'AGC.ECC.LEAD' },
+      { t: 'ゲージメータ AGC は «荷重が増えた ＝ 板が厚い» と読むので、偏芯で荷重が増えると締める向きに動き、偏芯を増やす側に回る。偏芯の成分を «ゲージメータが見る荷重» からも抜く切替を入れた（NOTCH）', w: 'AGC.ECC.NOTCH' },
+      { t: '窓を «秒» ではなく «ロール何回転» で持つ。秒で持つと、巻取パス（50 mpm・1 回転 3.5 s）では 4 s の窓に 1 回転しか入らず、平均にならずに瞬時値を追いかけて暴れた（実測: 荷重の同期成分が 668 t と出て、補償が上限 50 µm に張り付いた）', w: 'AGC.ECC.WIN_REV' },
+      // --- 効かなかったこと（未解決として残す）---
+      { t: '«効くか» はまだ言えない。同じ測り方（長手の板厚 σ 平均）で 補償なし 19.5 µm ／ あり 23.6 µm ／ あり＋NOTCH 138.8 µm —— 打ち消せる偏芯より推定の雑音のほうが大きい。偏芯そのものが σ に効いているのは 15 % 程度（23.6 → 19.9）で、偏芯を 4 倍にしても推定は 20.9 → 22.8 t しか増えない（＝ 大半が雑音）。原因は «噛んでいるあいだの荷重にスタンドの鳴き（15 Hz）と AGC 自身の動きが乗っていて、ロール回転（0.3〜1 Hz）の成分の SN 比が足りない» ところまで。既定は «切» にし、README 0-4 の 24 に残した', w: 'AGC.ECC.ON' },
+      { t: '画面の «運転モード» から入切でき、いまの熱偏芯・荷重の同期成分・補償量が 1 行で出る', w: '#chk-ecc / #der-ecc' },
+      { t: '判定を作った —— 熱偏芯は 7 件（育つ・止めるほど大きい・回すと均される・式どおり・運転の中でも育つ）が合否、補償は «仕組みが繋がっているか» の 2 件が合否で、効きは参考（整定が進んだかどうかが数値で分かるように）', w: 'tools/ecctrace.mjs / gaugetrace.mjs' },
+    ] },
     { v: '2.2.0', base: '8363a77', date: '2026-09-12', title: '圧下装置を実機の仕様にする —— 電動圧下 2 速・油圧圧下 5 Hz・荷重の 2 段リミット', items: [
       // --- 電動圧下と油圧圧下を分ける ---
       { t: '圧下を «電動» と «油圧» の 2 段に分けた。実機はパスとパスのあいだの位置決めが電動圧下（2 速切換式）、パスの中の細かい補正（AGC）が油圧圧下で、速さも遅れも桁が違う。以前はどちらも «一次遅れ 0.55 s ＋ 70 mm/s»（どちらも推定値）の 1 本だった', w: 'MillState.stepScrew' },
@@ -2348,6 +2367,22 @@ const CONFIG = {
        * 1 本あたり 1/√2 に割って足す（2 本は独立な位相なので、合成の実効値がこの値になる）。
        * H2 は BUR の 2 次高調波（楕円成分）の比。 */
       ECC_BR: 0.012, ECC_WR: 0.003, ECC_H2: 0.35,
+      /* 熱偏芯 —— «圧延の停止時間の抜熱ムラ» から出る偏芯（ご指摘のとおり実機ではこちらが主）。
+       * 上の ECC_* は研削で決まる «現品の振れ»（幾何偏芯）で、止めても動いても変わらない。
+       * こちらは «止めているあいだに» 育つ:
+       *   動いていれば、ロール 1 周のどの角度も順番にバイトを通るので、熱のやり取りは
+       *   どこも同じ —— 周方向に差が付かない。
+       *   止めると、バイトに居る角度だけが熱い板と向かい合ったままになり、そこだけ
+       *   温度が上がる。温まった角度は熱膨張のぶんだけ径が大きいので、回し始めると
+       *   ロール 1 回転に 1 周の振れになって出てくる。
+       * 状態は «角度ごとの温まり具合» u ∈ [0,1] の N 分割で持ち、径の差は RISE·(u − 平均)。
+       *   N        周方向の分割数（1 分割 ＝ 360/N 度）
+       *   TAU_IN   バイトに居る角度が温まる時定数 [s]
+       *   TAU_OUT  クーラントで周方向の差が均される時定数 [s]
+       *   RISE     十分に長く止めたときの径の差 [mm]（＝ 熱偏芯の半振幅）
+       * RISE 0.020 mm は «線膨張 12×10⁻⁶/K × 実効の温度差 70 K × 熱が染み込む深さ 25 mm»
+       * の見当。«停止何分で偏芯がいくつ» の実測が無いので推定値（README 0-2）。 */
+      ECC_TH: { N: 36, TAU_IN: 45, TAU_OUT: 150, RISE: 0.020 },
       MU_SD: 0.005, MU_TAU: 0.30,          // 摩擦・潤滑の揺らぎ（等価ギャップ外乱の 1σ [mm] と時定数 [s]）
       /* X 線板厚計の測定ノイズ（1σ [mm]）と応答時定数 [s]。X 線の計数統計から来る
        * ランダム誤差なので、板が厚いほど（透過線量が減るぶん）大きくなる。 */
@@ -2482,6 +2517,48 @@ const CONFIG = {
      * する: パスが終わるたびに «実測の平均荷重 ÷ 予測» を取り、GAIN で平滑して次パスの
      * 事前設定に掛ける。ロットをまたいでも覚えている（実機の学習テーブルと同じ）。 */
     ADAPT: { GAIN: 0.6, MIN: 0.6, MAX: 1.4 },
+    /* 偏芯補償（実機の «偏芯除去»）。荷重にはロール 1 回転に 1 周の成分が乗るので、
+     * それをロールの回転に同期して取り出し、逆位相の圧下で打ち消す。
+     *
+     * «荷重データの FFT» と言うときの中身は、実際には «1 本の周波数だけを見る DFT» で、
+     * それは回転に同期した正弦・余弦との相関（同期検波）と同じもの。窓を指数重みにすれば
+     * 1 ステップ 2 回の掛け算で済み、回転数が変わっても追従する（実機の偏芯除去も
+     * «ロールの回転で同期平均する» のでやっていることは同じ）。
+     *
+     * 打ち消すだけでは足りない。ゲージメータ AGC は «荷重が増えた ＝ 板が厚い» と読むので、
+     * 偏芯で荷重が増えたときに «締める» 向きへ動いてしまい、偏芯を増やす側に回る。
+     * だから偏芯の成分は «ゲージメータが見る荷重» からも抜く（NOTCH）。
+     * この 2 つを別々に切れるようにしてあるので、干渉そのものを測れる（tools/ecctrace.mjs）。
+     *
+     * 圧下は瞬時には動かない。油圧圧下は 2 次系（MILL.HYD）なので、ロールの回転数での
+     * 位相遅れだけ «先回り» して指令する（LEAD）。遅れは回転数で変わるので、その場で計算する。
+     *   ON     補償を使うか
+     *   WIN_REV 同期検波の窓（ロール何回転ぶんを平均するか）。«秒» で持つと、速度が変われば
+     *           窓に入る回転数が変わってしまう —— 巻取パス（50 mpm・1 回転 3.5 s）では
+     *           4 s の窓に 1 回転しか入らず、平均にならずに瞬時値を追いかけて暴れた
+     *           （実測: 荷重の同期成分が 668 t と出て、補償が上限 50 µm に張り付いた）。
+     *           回転数で持てばどの速度でも同じだけ平均できる。
+     *   TAU_MIN / TAU_MAX 窓の秒での下限・上限（止まりかけで無限に長くならないように）
+     *   LP_HZ  同期検波にかける前に荷重を通す低域通過 [Hz]。スタンドの固有振動（15 Hz）が
+     *          そのまま乗っていると、同期検波の «雑音床» がロール回転の成分より大きくなる
+     *          （実測: 推定 10 t/ch に対し、雑音だけで 9 t）。ロールの回転は 0.3〜1 Hz なので、
+     *          3 Hz で切れば信号は残して鳴きだけ落ちる。この遅れも先回りに入れる。
+     *   KP     補償率（1.0 で全量）
+     *   MAX    補償の上限 [mm]（暴走しても圧下がこれ以上振れない）
+     *   LEAD   アクチュエータの位相遅れを先回りするか
+     *   NOTCH  ゲージメータ AGC が見る荷重から偏芯の成分を抜くか
+     *   MIN_RPS 同期検波を効かせる最低の回転数 [rev/s]（止まりかけでは位相が回らない） */
+    /* 既定は «切» —— いまの整定では、打ち消せる偏芯より推定の雑音のほうが大きい。
+     * 実測（tools/gaugetrace.mjs、同じ測り方で長手の板厚の σ 平均）:
+     *     補償なし                19.5 µm
+     *     補償あり（KP 0.3）      23.6 µm  ← 雑音のぶん悪くなる
+     *     補償あり ＋ NOTCH       138.8 µm ← ゲージメータへ雑音を流し込んで発散する
+     * 偏芯そのものが σ に効いているのは 15 % 程度（23.6 → 19.9）で、推定の雑音がそれを
+     * 上回っている。原因は «噛んでいるあいだの荷重にスタンドの鳴き（15 Hz）と AGC 自身の
+     * 動きが乗っていて、ロール回転（0.3〜1 Hz）の成分の SN 比が足りない» こと。
+     * 仕組みは入れて切り替えられるようにし、整定は未解決として残す（README 0-4）。 */
+    ECC: { ON: false, WIN_REV: 8, TAU_MIN: 2, TAU_MAX: 30, LP_HZ: 3, KP: 0.3, MAX: 0.015,
+           LEAD: true, NOTCH: false, MIN_RPS: 0.05 },
     /* 頭尾ロック [mm]。噛み込み直後と尻抜け直前は荷重が過渡（衝撃・弧の充満・尻の抜け）で、
      * ゲージメータがそれを «板厚偏差» と誤読して圧下を振るので、実機ではその区間だけ
      * 荷重 FB を止める（頭尾 AGC ロック）。ロック中はミルばねだけが効くので、冷えて硬い頭は
@@ -6876,6 +6953,20 @@ class MillState {
      * 揺らぎを «等価なギャップ外乱» に直したもの。どちらも m.gap に足されるので、
      * 圧下量が変わり → 荷重が変わり → ロードセルにも AGC にも見える（実機と同じ経路）。 */
     this.ecc = 0; this.muNoise = 0; this.eccPhase = [0, 0, 0, 0, 0];
+    /* 熱偏芯（«停止時間の抜熱ムラ»）。ワークロール上下それぞれの «角度ごとの温まり具合»
+     * u ∈ [0,1] を N 分割で持つ。動いていれば全周が順番にバイトを通るので差が付かず、
+     * 止めるとバイトに居る角度だけが育つ。CONFIG.MILL.GAUGE_MODEL.ECC_TH。 */
+    this.eccTh = { bot: new Float64Array(CONFIG.MILL.GAUGE_MODEL.ECC_TH.N),
+                   top: new Float64Array(CONFIG.MILL.GAUGE_MODEL.ECC_TH.N) };
+    this.eccThAmp = 0;                         // いまの熱偏芯の半振幅 [mm]（画面と評価器が読む）
+    /* 偏芯補償。ch ごとに «荷重の同期成分» を同期検波で持つ（I/Q）。 */
+    this.eccCh = [{ nm: 'WR', I: 0, Q: 0, amp: 0, phi: 0 },
+                  { nm: 'BUR', I: 0, Q: 0, amp: 0, phi: 0 }];
+    this.eccCmd = 0;                           // 偏芯補償が足す圧下 [mm]
+    this.eccFbar = 0;                          // 同期検波にかける前に抜く «ゆっくりした荷重» [t]
+    this.eccFlp = 0;                           // 同期検波にかける前に通す低域通過の出力 [t]
+    this.eccPrimed = false;                    // パスの入り口で平均を «いまの荷重» から始めたか
+    this.eccFit = 0;                           // 同期検波が再現した荷重の偏芯成分 [t]
     /* X 線板厚計の読み [mm]（材料が入るまで null）。gauge.ENTRY / EXIT / SCAN。
      * scanZ は走査型のヘッドのいまの横位置 [mm]、scanDir はその向き。 */
     this.gauge = { ENTRY: null, EXIT: null, SCAN: null };
@@ -8661,6 +8752,9 @@ class PhysicsEngine {
     this._drive(dt);
     this._coating(dt);
     this._rollCool(dt);
+    /* 熱偏芯は «噛んだまま止まっている» あいだこそ育つ。AGC はその状態で早期に返るので、
+     * AGC の経路（_disturb）ではなくここから回す。 */
+    this._eccThermal(dt);
     this._rollKinematics(dt);
     this._diagnose();
     this.log.sample(this, dt);            // 記録は «計算し終えた状態» に対して取る
@@ -8799,6 +8893,54 @@ class PhysicsEngine {
    *  摩擦・潤滑 —— 白色雑音を 1 次遅れに通した «色つき» の揺らぎ。生の白色雑音だと
    *    刻み幅（1/120 s）が変わるだけで振幅が変わってしまうので、時定数で正規化する。
    */
+  /**
+   * 熱偏芯 —— «圧延の停止時間の抜熱ムラ» から出る偏芯。
+   *
+   * ロールの周方向を N 分割し、分割ごとに «温まり具合» u ∈ [0,1] を持つ。
+   *   ・バイトに居る角度だけが熱い板と向かい合っている → そこだけ u が上がる
+   *   ・どの角度もクーラントで均される → u は全体として下がる
+   * 動いていれば、1 周のどの角度も順番にバイトを通るので u はどこも同じになり、
+   * 周方向に差が付かない。止めると、バイトに居る角度だけが育つ —— それが
+   * 回し始めたときロール 1 回転に 1 周の振れになる。
+   *
+   * 径の差は RISE·(u − 周平均)。平均を引くのは «全体が温まった» ぶんはサーマル
+   * クラウン（Rolling.rollCrown）が受け持っていて、偏芯は «周方向の差» だけだから。
+   */
+  _eccThermal(dt) {
+    const m = this.mill, s = this.slab, T = CONFIG.MILL.GAUGE_MODEL.ECC_TH;
+    const N = T.N, two = Math.PI * 2;
+    const kOut = dt / Math.max(T.TAU_OUT, 1e-6), kIn = dt / Math.max(T.TAU_IN, 1e-6);
+    const at = (ang) => { const i = Math.floor(((ang / two) % 1 + 1) % 1 * N); return i < N ? i : 0; };
+    for (const [key, ang] of [['bot', m.rollAngle], ['top', m.rollAngle]]) {
+      const u = m.eccTh[key];
+      for (let i = 0; i < N; i++) u[i] -= u[i] * kOut;       // クーラントで均される
+      if (s.inBite) { const i = at(ang); u[i] += (1 - u[i]) * kIn; }
+    }
+    // いまの半振幅（周方向の «平均からのずれ» の最大）。画面と評価器はこれを見る
+    let mx = 0;
+    for (const key of ['bot', 'top']) {
+      const u = m.eccTh[key];
+      let sum = 0; for (let i = 0; i < N; i++) sum += u[i];
+      const avg = sum / N;
+      for (let i = 0; i < N; i++) mx = Math.max(mx, Math.abs(u[i] - avg));
+    }
+    m.eccThAmp = T.RISE / PhysicsEngine._eccThU8() * mx;
+  }
+  /** 温まり具合 u の «到達点»。温める側（TAU_IN）と均す側（TAU_OUT）の釣り合いで
+   *  1 には届かない —— u∞ ＝ TAU_OUT/(TAU_IN+TAU_OUT)。RISE を «十分に止めたときの
+   *  半振幅» という意味のままにするため、ここで割って正規化する。 */
+  static _eccThU8() {
+    const T = CONFIG.MILL.GAUGE_MODEL.ECC_TH;
+    return T.TAU_OUT / (T.TAU_IN + T.TAU_OUT) * (1 - 1 / T.N);
+  }
+  /** 角度 ang における熱偏芯のギャップ寄与 [mm]（径が大きい角度ほどギャップは «狭い»）。 */
+  _eccThermalAt(key, ang) {
+    const T = CONFIG.MILL.GAUGE_MODEL.ECC_TH, N = T.N, u = this.mill.eccTh[key];
+    let sum = 0; for (let i = 0; i < N; i++) sum += u[i];
+    const i = Math.floor(((ang / (Math.PI * 2)) % 1 + 1) % 1 * N);
+    return -T.RISE / PhysicsEngine._eccThU8() * (u[i < N ? i : 0] - sum / N);
+  }
+
   _disturb(dt) {
     const m = this.mill, E = CONFIG.MILL.GAUGE_MODEL;
     if (!this.slab.inBite) { m.ecc = 0; m.muNoise = 0; return; }
@@ -8830,12 +8972,99 @@ class PhysicsEngine {
      * 位相差のぶんだけ打ち消し合って合成が設定値より小さくなる（実測: 長手の振れが
      * 3σ 45 → 30 µm に落ち、偏芯を切っても振れがほとんど変わらなくなっていた）。 */
     const kE = Math.SQRT1_2;
+    /* 幾何偏芯（研削で決まる現品の振れ）＋ 熱偏芯（停止時間の抜熱ムラ）。
+     * 前者は止めても動いても変わらず、後者は止めているあいだに育つ。 */
     m.ecc = E.ECC_WR * kE * (Math.sin(aWb) + Math.sin(aWt))
-          + E.ECC_BR * kE * (h2(aBb) + h2(aBt));
+          + E.ECC_BR * kE * (h2(aBb) + h2(aBt))
+          + this._eccThermalAt('bot', m.rollAngle) + this._eccThermalAt('top', m.rollAngle);
     /* 1 次遅れフィルタ。定常の標準偏差が MU_SD になるよう √(2·dt/τ) で駆動する
      * （Ornstein–Uhlenbeck。刻み幅に依らない）。 */
     const a = Math.min(dt / E.MU_TAU, 1);
     m.muNoise += (-m.muNoise + E.MU_SD * Num.gauss() * Math.sqrt(2 / a)) * a;
+  }
+
+  /**
+   * 偏芯補償（実機の «偏芯除去»）。
+   *
+   * 荷重にはロール 1 回転に 1 周の成分が乗る。それを «ロールの回転に同期した正弦・余弦との
+   * 相関» で取り出す —— 1 本の周波数だけを見る DFT で、«荷重データの FFT» と言うときの
+   * 中身はこれ。窓を指数重み（時定数 TAU）にすれば 1 ステップ 2 回の掛け算で済み、
+   * 回転数が変わってもそのまま追従する。
+   *
+   *   F(a) ＝ A·sin(a ＋ θ) とすると
+   *     I ＝ ⟨F·sin a⟩ ＝ A/2·cos θ,  Q ＝ ⟨F·cos a⟩ ＝ A/2·sin θ
+   *     A ＝ 2·√(I² ＋ Q²),  θ ＝ atan2(Q, I)
+   *
+   * 荷重の振幅 A を «同じ振れを作るギャップの外乱» に直す。ギャップが δ 開くと荷重は
+   * δ·M·Q/(M+Q) 減るので、A の荷重振れに相当するギャップの振れは A·(1/M ＋ 1/Q)。
+   * 打ち消すにはその逆符号だけ圧下を動かせばよい。
+   *
+   * 圧下は瞬時には動かない。油圧圧下は 2 次系（MILL.HYD）なので、ロールの回転数での
+   * 位相遅れ atan2(2ζωnω, ωn²−ω²) だけ «先回り» して指令する。回転数が変われば遅れも
+   * 変わるので、その場で計算する。
+   *
+   * そして «打ち消すだけでは足りない»。ゲージメータ AGC は «荷重が増えた ＝ 板が厚い» と
+   * 読むので、偏芯で荷重が増えたときに締める向きへ動き、偏芯を増やす側に回る。
+   * だから偏芯の成分は «ゲージメータが見る荷重» からも抜く（NOTCH）。
+   */
+  _eccComp(dt) {
+    const m = this.mill, s = this.slab, E = CONFIG.AGC.ECC, C = CONFIG.MILL;
+    /* 推定（同期検波）と、その «当て方»（圧下へ足す・荷重から抜く）は別。
+     * 推定は噛んでいるあいだ常に回す —— 補償を切っていても «いま偏芯がどれだけ出ているか»
+     * は見えるべきだし、切ったときと入れたときの推定値を比べられないと効きが測れない。 */
+    m.eccFit = 0; m.eccCmd = 0;
+    if (!s.inBite) { for (const c of m.eccCh) { c.I = 0; c.Q = 0; c.amp = 0; } m.eccPrimed = false; return; }
+    /* パスの入り口で «いまの荷重» から始める。0 から始めると、平均が荷重（1,500 t 級）に
+     * 追いつくまでの 20〜30 s が丸ごと «偏芯» に見えてしまい、その山が窓の時定数で
+     * ずるずる尾を引く（実測: 補償の指令が偏芯の 2 倍・相関が −0.67 → −0.29 に落ちた）。 */
+    if (!m.eccPrimed) { m.eccFlp = m.forceMeas; m.eccFbar = m.forceMeas; m.eccPrimed = true;
+                        for (const c of m.eccCh) { c.I = 0; c.Q = 0; c.amp = 0; } }
+    const v = Math.abs(m.currentSpeed) / 60 * 1000;                 // mm/s
+    const rpsW = v / (Math.PI * Math.max(m.wrDia, 1));              // WR の回転数 [rev/s]
+    const rpsB = v / (Math.PI * Math.max(m.brDia, 1));              // BUR の回転数
+    if (rpsW < E.MIN_RPS) { for (const c of m.eccCh) { c.I = 0; c.Q = 0; c.amp = 0; } return; }
+    // 窓は «ロール何回転ぶん»。速度が変わっても平均に入る回転数が変わらない
+    const tau = Num.clamp(E.WIN_REV / Math.max(rpsW, 1e-6), E.TAU_MIN, E.TAU_MAX);
+    const k = Math.min(dt / tau, 1);
+    const Mm = Rolling.millModulus(m.forceMeas);
+    const Qp = Rolling.plasticCoef(s.hBite, m.gap, s.width, m.currentSpeed,
+                                   s.temperature, s.alloy, m.wrRa).Q;
+    const perT = 1 / Mm + 1 / Math.max(Qp, 1);                      // 荷重 1 t あたりのギャップ換算 [mm]
+    const wn = 2 * Math.PI * C.HYD.BAND_HZ, z = C.HYD.ZETA;
+    let cmd = 0, fit = 0;
+    const chans = [{ c: m.eccCh[0], a: m.rollAngle, rps: rpsW },
+                   { c: m.eccCh[1], a: m.br.bot.angle, rps: rpsB }];
+    /* 同期検波にかける前に «ゆっくりした変化» を抜く（高域通過）。巻取パスのように
+     * 荷重が 1 パスで 2,400 → 3,400 t と動く区間では、その傾きが同期検波へ漏れ込んで
+     * «偏芯» に見える（実測: 漏れだけで 98 t、補償が上限 50 µm に張り付いた）。
+     * 窓より十分に長い時定数の平均を引けば、回転より遅い成分は消える。 */
+    /* 低域通過でスタンドの鳴き（15 Hz）を落としてから、ゆっくりした変化を引く。
+     * 残るのはロールの回転（0.3〜1 Hz）の帯だけ。 */
+    const tauLp = 1 / (2 * Math.PI * E.LP_HZ);
+    m.eccFlp += (m.forceMeas - m.eccFlp) * Math.min(dt / tauLp, 1);
+    m.eccFbar += (m.eccFlp - m.eccFbar) * Math.min(dt / tau, 1);
+    /* 自分が打ち消したぶんを «戻して» から推定する。
+     * 補償を当てると荷重の同期成分はその ぶん減るので、そのまま推定すると
+     * «外乱» ではなく «打ち消し残り» を見ることになり、推定が自分の出力に依存する
+     * 閉ループになる。打ち消した量は自分で分かっている（前ステップの eccFit × KP）ので、
+     * それを足し戻せば、見ているのは常に «元の外乱» になる（外乱オブザーバと同じ考え）。
+     * これを入れないと、推定が振れを追いかけて発散した（実測: 長手の振れ σ が
+     * 補償なし 19.8 µm に対し、補償を入れると 138.9 µm ＝ 7 倍に悪化した）。 */
+    const fAC = m.eccFlp - m.eccFbar + (E.ON ? E.KP * m.eccFit : 0);
+    for (const { c, a, rps } of chans) {
+      c.I += (fAC * Math.sin(a) - c.I) * k;
+      c.Q += (fAC * Math.cos(a) - c.Q) * k;
+      c.amp = 2 * Math.hypot(c.I, c.Q);
+      c.phi = Math.atan2(c.Q, c.I);
+      fit += c.amp * Math.sin(a + c.phi);                           // 荷重の «偏芯ぶん» [t]
+      const w = 2 * Math.PI * rps;                                  // ロールの角速度 [rad/s]
+      /* 先回りする角度 ＝ 圧下（2 次系）の遅れ ＋ 低域通過（1 次遅れ）の遅れ。
+       * どちらも回転数で変わるので、その場で足す。 */
+      const lead = E.LEAD ? Math.atan2(2 * z * wn * w, wn * wn - w * w) + Math.atan(w * tauLp) : 0;
+      cmd += c.amp * perT * Math.sin(a + c.phi + lead);
+    }
+    m.eccFit = fit;
+    m.eccCmd = E.ON ? Num.clamp(E.KP * cmd, -E.MAX, E.MAX) : 0;
   }
 
   /**
@@ -8853,7 +9082,11 @@ class PhysicsEngine {
     const auto = m.mode === 'AUTO';
     // 1) 圧下位置の指令。噛み込み前は «予定荷重» を、噛み込み後は «実荷重» を見込む。
     const plan = CONFIG.SCHEDULE[m.passIndex];
-    const fRef = s.inBite ? m.forceMeas
+    this._eccComp(dt);
+    /* ゲージメータが見る荷重から偏芯の成分を抜く（実機の偏芯除去フィルタ）。抜かないと
+     * «荷重が増えた ＝ 板が厚い» と読んで締めに行き、偏芯を増やす向きに効く。 */
+    const fEcc = (G.ECC.ON && G.ECC.NOTCH) ? m.eccFit : 0;
+    const fRef = s.inBite ? m.forceMeas - fEcc
                          : (auto && G.PRESET && plan ? (plan.steady ?? plan.force ?? 0) * m.adapt : 0);
     // 制御が «自分で思っている» ミル定数（真値とは M_EST_ERR だけずれている）
     /* 制御が «自分で思っている» 伸び（真値とは M_EST_ERR だけずれている）。
@@ -8900,7 +9133,9 @@ class PhysicsEngine {
      * ここを GAP_MIN で止めていたため、薄板パスで圧下が飽和して板厚が目標から外れた
      * （実測: 目標 9.1 mm に対し 7.8 mm）。実ギャップ側の下限は下で別に効かせる。 */
     const screwMin = C.GAP_MIN - Rolling.millStretch(C.RATED_FORCE_T);
-    if (!lock) m.screwCmd = Num.clamp(m.targetGap - comp, screwMin, C.GAP_MAX);
+    /* 偏芯補償は «板厚の狙い» とは別の足し算。頭尾ロック中は圧下をその場に留めるので、
+     * 偏芯補償もそこでは足さない（ロック中は荷重 FB ごと止めるのが実機の頭尾 AGC ロック）。 */
+    if (!lock) m.screwCmd = Num.clamp(m.targetGap - comp + (auto ? m.eccCmd : 0), screwMin, C.GAP_MAX);
     /* 1st リミット（実機 3,900 t）。ここを超えたら板厚制御をやめて «荷重一定制御» に移る
      * —— 圧下を緩めて荷重をリミットに張り付かせる。板厚は狙いから外れるが、圧下スクリュー
      * ナット収納部（常用最大 3,920 t）を守るほうが先。
@@ -15641,6 +15876,12 @@ class UIManager {
     $('log-lot-sel').addEventListener('change', e => {
       this.logLot = +e.target.value || null; this.logPass.clear(); this.renderLog();
     });
+    /* 偏芯補償の入切。状態の出どころは CONFIG.AGC.ECC.ON の 1 つで、
+     * 物理（PhysicsEngine._eccComp）も画面もそこだけを見る。 */
+    on('chk-ecc', 'change', (e) => {
+      CONFIG.AGC.ECC.ON = e.target.checked;
+      this.toast(e.target.checked ? '偏芯補償を入れました' : '偏芯補償を切りました', 'info');
+    });
     on('btn-ver', 'click', () => this.toggleVersion(true));
     on('btn-ver-close', 'click', () => this.toggleVersion(false));
     // 背景（バックドロップ）を押したら閉じる。dialog 自身が Esc を受ける
@@ -16375,6 +16616,17 @@ class UIManager {
         : (Math.abs(kb) > 1e-9 ? `バイト内 ${Rm(kb)} は除荷で戻った` : '平坦');
     }
     this._shapeMon(s);
+    /* 偏芯の状態。«いくつ出ていて、いくつ打ち消しているか» を 1 行で。
+     *   熱偏芯 —— 停止時間の抜熱ムラで育つぶん（止めるほど大きい）
+     *   荷重の同期成分 —— 同期検波が見ている «ロール 1 回転に 1 周» の荷重の振れ
+     *   補償 —— いま圧下へ足している量 */
+    {
+      const E = CONFIG.AGC.ECC, fSync = m.eccCh.reduce((a, c) => a + c.amp, 0);
+      $('der-ecc').textContent = !s.inBite
+        ? `熱偏芯 ${(m.eccThAmp * 1000).toFixed(1)} µm（噛んでいないあいだは補償は動きません）`
+        : `熱偏芯 ${(m.eccThAmp * 1000).toFixed(1)} µm ／ 荷重の同期成分 ${fSync.toFixed(1)} t`
+          + ` ／ 補償 ${E.ON ? (Math.abs(m.eccCmd) * 1000).toFixed(1) + ' µm' : '切'}`;
+    }
     /* 幅方向の形状。板クラウン（中央 − 端）と平坦度（I-unit）。
      * 平坦度は «クラウン率の変化» で決まるので、クラウンが大きくても比例していれば平坦。 */
     {
