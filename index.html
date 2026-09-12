@@ -401,11 +401,24 @@ canvas { display:block; }
   color:#fff; background:linear-gradient(135deg,#1b262c 0%,#2c3d47 100%);
 }
 #dlg-soak header .ttl { font-weight:800; font-size:14px; letter-spacing:.06em; white-space:nowrap; }
-#dlg-soak header .sub { font-size:10.5px; opacity:.62; margin-top:3px; line-height:1.55; }
+#dlg-soak header .sub { font-size:10.5px; opacity:.62; margin-top:3px; line-height:1.5;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+/* 見出しは «マスタ» の 1 語と説明。説明はマスタごとに長さが違うので幅を決めておく
+   —— 決めないと、長い説明のときだけタブ列が 2 行に折れて見出しの高さが変わる。 */
+#dlg-soak header .hd-t { flex:none; width:270px; }
+/* マスタの切替。5 つのマスタを «同じ器» で読むための背骨なので、見出しの隣に置く
+   —— どこにいるかが常に見えていないと «探しに行く» ことになる。 */
+#dlg-soak .mst-tabs { display:flex; gap:3px; margin-left:14px; background:rgba(255,255,255,.10);
+  border-radius:99px; padding:3px; flex-wrap:nowrap; }
+#dlg-soak .mst-tabs button { border:none; background:transparent; color:rgba(255,255,255,.72); cursor:pointer;
+  font:inherit; font-size:11px; font-weight:700; padding:4px 12px; border-radius:99px; white-space:nowrap; transition:.14s; }
+#dlg-soak .mst-tabs button:hover { color:#fff; }
+#dlg-soak .mst-tabs button[aria-selected="true"] { background:#fff; color:#1b262c; }
+#dlg-soak .mst-tabs button:focus-visible { outline:2px solid rgba(255,255,255,.7); outline-offset:1px; }
 #dlg-soak .find { margin-left:auto; flex:none; position:relative; display:flex; align-items:center; }
 #dlg-soak .find > i { position:absolute; left:10px; font-size:11px; opacity:.55; pointer-events:none; }
 #soak-q {
-  width:268px; height:30px; padding:0 28px; border-radius:8px; font-family:var(--font); font-size:11.5px;
+  width:232px; height:30px; padding:0 28px; border-radius:8px; font-family:var(--font); font-size:11.5px;
   border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.10); color:#fff; outline:none;
 }
 #soak-q::placeholder { color:rgba(255,255,255,.5); }
@@ -988,13 +1001,14 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
       <summary><span class="step">1</span> 素材と目標<span class="sum" id="sum-material"></span><i class="fa-solid fa-chevron-right chev"></i></summary>
       <div class="body">
         <div class="fld">
-          <div class="top"><span class="k">材質（JIS 合金）</span></div>
+          <div class="top"><span class="k">材質（JIS 合金）</span>
+            <button class="mini" id="btn-mat-mst" type="button" title="マスタ（材質：社内材質記号 ↔ JIS 記号）を開く">マスタ</button></div>
           <select id="sel-alloy" class="sel" aria-label="材質"></select>
           <div class="derived" id="der-alloy"></div>
         </div>
         <div class="fld">
           <div class="top"><span class="k">ソーキング（均質化熱処理）</span>
-            <button class="mini" id="btn-soak" type="button" title="ソーキングマスタ（実機の操業基準 39 パターン）を開く">マスタ</button></div>
+            <button class="mini" id="btn-soak" type="button" title="マスタ（ソーキング：実機の操業基準 39 パターン）を開く">マスタ</button></div>
           <select id="sel-soak" class="sel" aria-label="操業パターン"></select>
           <div class="derived" id="der-soak"></div>
         </div>
@@ -1027,7 +1041,8 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <div class="derived" id="der-target"></div>
         </div>
         <div class="fld">
-          <div class="top"><span class="k">パス（圧下の配分）</span></div>
+          <div class="top"><span class="k">パス（圧下の配分）</span>
+            <button class="mini" id="btn-pass-mst" type="button" title="マスタ（パス）を開く">マスタ</button></div>
           <select id="sel-pass" class="sel" aria-label="パス記号"></select>
           <div class="derived" id="der-pass"></div>
         </div>
@@ -1216,6 +1231,8 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <button class="mini" id="btn-brush" type="button" style="margin-top:6px;"
                   title="F-5〜F の各パスに掛けるブラシの種類・長さ・ノッチを材質ごとに決めます">
             <i class="fa-solid fa-brush"></i> ブラシ条件を決める</button>
+          <button class="mini" id="btn-brush-mst" type="button" style="margin-top:6px;"
+                  title="マスタ（ブラシ・ブラシノッチ）を開く">マスタ</button>
         </div>
         <table class="sched"><tbody id="spec-body"></tbody></table>
         <div class="top" style="margin-top:12px;"><span class="k">ロール現品（組管理）</span><span class="v" id="lbl-shop"></span></div>
@@ -1576,27 +1593,25 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
 
 <dialog id="dlg-soak">
   <header>
-    <div>
-      <div class="ttl">ソーキングマスタ</div>
-      <div class="sub">実機の操業基準（均質化熱処理）。左で操業パターンを選び、右でその中身を読みます。代表材は社内記号なので、材質マスタで引いた JIS 記号を並べて出しています。</div>
+    <div class="hd-t">
+      <div class="ttl">マスタ</div>
+      <div class="sub" id="mst-sub"></div>
     </div>
+    <div class="mst-tabs" id="mst-tabs" role="tablist" aria-label="マスタの種類"></div>
     <div class="find">
       <i class="fa-solid fa-magnifying-glass"></i>
-      <input id="soak-q" type="search" placeholder="記号・目的・材料（52S でも A5052 でも）で探す" autocomplete="off" spellcheck="false"
-             aria-label="操業パターンを探す">
+      <input id="soak-q" type="search" placeholder="探す" autocomplete="off" spellcheck="false"
+             aria-label="マスタの中を探す">
     </div>
     <button id="btn-soak-close" type="button" title="閉じる（Esc）" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
   </header>
   <div class="body">
-    <div id="soak-list" role="listbox" aria-label="操業パターンの一覧"></div>
+    <div id="soak-list" role="listbox" aria-label="一覧"></div>
     <div id="soak-detail"></div>
   </div>
   <footer>
     <span id="soak-count"></span>
-    <span><b>1 段</b> 昇温 → 均熱</span>
-    <span><b>2 段</b> 昇温 → 第1均熱 → 冷却／第2昇温 → 第2均熱</span>
-    <span><b>成行</b> 昇温速度の規定なし</span>
-    <span><b>H→L</b> 炉温を落とす判定温度（設定温度ではない）</span>
+    <span id="mst-ft"></span>
   </footer>
 </dialog>
 
@@ -1699,6 +1714,17 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.10.0', base: '7a2bd4d', date: '2026-09-12', title: '5 つのマスタを 1 つのビュワーにまとめる', items: [
+      { t: '材質・ソーキング・パス・ブラシ・ブラシノッチを «同じ器» で読めるようにした。マスタごとに別の窓を開けると «この記号はどこで見るのか» を毎回思い出すことになる。切替は見出しの隣に常に出し、いまどこに居るかを隠さない', w: '#dlg-soak / UIManager.MASTERS' },
+      { t: '1 マスタ ＝ 定義の 1 行（一覧の行を作る rows と、右の中身を作る detail）にした。一覧の描き方・検索・キー操作・件数の出し方はマスタをまたいで 1 つで済む —— 器を 5 つ書くと、直すときも 5 か所になる', w: 'UIManager.MASTERS / _soakRows / _soakRender' },
+      { t: '材質マスタのビュワーを作った。JIS 記号 40 件を並べ、右で社内記号と «代表材として載っている操業» を読む。本アプリの材質ならシミュレーションの入力値（Q・n・α・ln A・物性値）も出し、ln A だけが «荷重実績で較正するつまみ» であることを出どころ欄で示す', w: 'UIManager._mstMat' },
+      { t: 'パスマスタのビュワーを作った。厚板段・仕上げ段の配分に加えて «いまの素材でこの記号を通したとき» のパス表（出側板厚・速度・予測荷重）を出す —— 記号だけでは何パスになるか分からない', w: 'UIManager._mstPass' },
+      { t: 'ブラシマスタとブラシノッチマスタのビュワーを作った。ブラシは パスごとの条件・種類の仕様・材質ごとの上書き、ノッチは 周波数と基準との比・回転数、それに押し付け具合の倍率と出どころ（どれが推定か）', w: 'UIManager._mstBrush / _mstNotch' },
+      { t: '検索は «そのマスタの中» を探すものにし、マスタを移ると空に戻すようにした。前のマスタの語で絞られたままだと «何も出てこない» の原因が分からない', w: 'UIManager.setMasterTab' },
+      { t: '見出しの説明はマスタごとに長さが違うので幅を決めた。決めないと、長い説明のときだけタブ列が 2 行に折れて器の高さが変わる（実測: 5 マスタとも 79 px で一定）', w: '#dlg-soak header .hd-t' },
+      { t: '素材の設定の 材質・パス・ブラシ にも «マスタ» ボタンを置いた。どの欄からでも、その欄のマスタが開いた状態で入れる', w: '#btn-mat-mst / #btn-pass-mst / #btn-brush-mst' },
+      { t: '判定を作った —— tools/uicheck.mjs に 5 件（5 つのマスタが同じ器で出る・押された状態で分かる・説明と件数と案内と脚注が入れ替わる・移ると検索が空に戻る・見出しの高さが変わらない）', w: 'tools/uicheck.mjs' },
+    ] },
     { v: '2.9.0', base: '9b9c4f7', date: '2026-09-12', title: '実績データの記入表 —— «何が分かれば何が決まるか» を一覧にし、CSV で往復させる', items: [
       { t: '«いま推定で置いている量» と «それが実測で置き換わると何が決まるか» を 16 件の表にした。画面・記入表・評価器がこの 1 か所だけを見る —— README に手で書いた一覧は必ず古くなる', w: 'CONFIG.DATAREQ' },
       { t: '記入用のテンプレートを CSV にした。Excel でそのまま開けて、値の欄を埋めて上書き保存すれば同じ画面で読み戻せる。xlsx で出すと記入したものを読み戻せない（本アプリは xlsx を書けるが読めない）', w: 'DataReq.template / read' },
@@ -16653,43 +16679,136 @@ class UIManager {
   }
 
   /**
-   * ソーキングマスタのビュワー。変更履歴ビュワーと同じ «絞る → 選ぶ → 読む» の作り。
-   * 39 の操業パターンは一覧では読めないので、左で選び、右でその中身だけを読む。
-   * 表示するのは CONFIG.SOAK（いただいた表そのもの）で、加工した値は出さない
+   * マスタビュワー。5 つのマスタ（材質・ソーキング・パス・ブラシ・ブラシノッチ）を
+   * «同じ器» で読む —— 変更履歴ビュワーと同じ «絞る → 選ぶ → 読む» の作り。
+   *
+   * 器を 1 つにしてあるのは «探させない» ため。マスタごとに別の窓を開けると、
+   * «この記号はどこで見るのか» を毎回思い出すことになる。切替は見出しの隣に常に出る。
+   *
+   * 出すのは CONFIG の表（いただいた表そのもの）で、加工した値は出さない
    * —— «実機の基準に何と書いてあるか» を確かめる場所だから。
+   *
+   * 1 マスタ ＝ ここの 1 行。rows() が «一覧の行»、detail() が «右の中身» を作る。
    */
+  static get MASTERS() {
+    const e = escHtml;
+    return [
+      { key: 'mat', tab: '材質', unit: 'JIS 記号',
+        sub: '社内材質記号 ↔ JIS 記号。実機の書きもの（操業基準・帳票）は社内記号なので、その橋渡しです。',
+        find: 'JIS 記号でも社内記号でも（5052 / 52S / A5052）',
+        foot: '<b>太字</b> 実機の操業基準に代表材として載っている記号 ・ <b>本アプリの材質</b> はシミュレーションの入力値も出ます',
+        rows() {
+          return MatCode.all().map(r => {
+            const app = Object.keys(CONFIG.ALLOYS).find(k => k.replace(/^A/, '') === r.jis);
+            return { id: r.jis, name: app ? CONFIG.ALLOYS[app].name.split(/\s+/)[1] || app : '—',
+                     tag: `${r.codes.length} 記号`, sub: r.codes.join('・'),
+                     hay: `${r.jis} A${r.jis} ${r.codes.join(' ')} ${app || ''}` };
+          });
+        },
+        detail(jis) { this._mstMat(jis); } },
+      { key: 'soak', tab: 'ソーキング', unit: 'パターン',
+        sub: '実機の操業基準（均質化熱処理）。代表材は社内記号なので、材質マスタで引いた JIS 記号を並べて出しています。',
+        find: '記号・目的・材料（52S でも A5052 でも）で探す',
+        foot: '<b>1 段</b> 昇温 → 均熱 ・ <b>2 段</b> 昇温 → 第1均熱 → 冷却／第2昇温 → 第2均熱'
+            + ' ・ <b>成行</b> 昇温速度の規定なし ・ <b>H→L</b> 炉温を落とす判定温度（設定温度ではない）',
+        rows() {
+          return Soak.all('PATTERNS').map(p => {
+            /* 代表材（社内記号）だけでなく、材質マスタで引いた JIS 記号でも当たるようにする
+             * —— «A5052 のソーキングは？» と探す人は 52S を知らない。 */
+            const mats = Soak.of('MATERIALS', p.id).map(m => {
+              const js = String(m.sample || '').split(/[,、]\s*/).map(t => MatCode.jisOf(t.trim())).filter(Boolean);
+              return `${m.className} ${m.cond} ${m.sample} ${js.join(' ')} ${js.map(j => 'A' + j).join(' ')}`;
+            }).join(' ');
+            return { id: p.id, name: p.name, tag: p.stages ?? '', sub: p.aim ?? '',
+                     hay: `${p.id} ${p.name} ${p.aim} ${mats}` };
+          });
+        },
+        detail(id) { this._soakDetail(id); } },
+      { key: 'pass', tab: 'パス', unit: '記号',
+        sub: '圧下の配分。クロップまで何パスで何 mm 落とすか、クロップから最終まで何パスで上げるか。',
+        find: '記号・ねらいで探す',
+        foot: '実機の «パス記号ごとの表» はまだいただいていません。'
+            + '記号が増えたら行を足すだけで効きます（残件«パス記号ごとの表»）',
+        rows() {
+          return Pass.all().map(p => ({ id: p.id, name: p.name, tag: `クロップ ${p.hCrop} mm`,
+            sub: p.aim ?? '', hay: `${p.id} ${p.name} ${p.aim} ${p.src}` }));
+        },
+        detail(id) { this._mstPass(id); } },
+      { key: 'brush', tab: 'ブラシ', unit: '記号',
+        sub: 'ロールコーティングの作り込み。最終パスから数えたパスごとに、種類・掛ける長さ・ノッチ・押し付けを決めます。',
+        find: '記号・ねらいで探す',
+        foot: '<b>F</b> 最終パス ・ <b>F-2</b> 2 つ手前 ・ 除去は <b>掛ける長さ × 砥粒 × 周波数 × 押し付け</b> で効きます',
+        rows() {
+          return Brush.all().map(m => ({ id: m.id, name: m.name,
+            tag: `${m.rows.filter(r => r.brush).length} パス`, sub: m.aim ?? '',
+            hay: `${m.id} ${m.name} ${m.aim} ${m.src}` }));
+        },
+        detail(id) { this._mstBrush(id); } },
+      { key: 'notch', tab: 'ブラシノッチ', unit: '段',
+        sub: 'ブラシのノッチ（段）ごとのインバータ周波数。除去力は周波数に比例します。',
+        find: '段・周波数で探す',
+        foot: `除去力の基準は <b>${CONFIG.BRUSH.HZ_REF} Hz</b>（3 ノッチ）`
+            + ' ・ ブラシの回転数は 周波数 × ' + CONFIG.BRUSH.RPM_PER_HZ + ' rpm/Hz',
+        rows() {
+          return Brush.notches().map(q => ({ id: String(q.no), name: `${q.hz} Hz`,
+            tag: `${(q.hz / CONFIG.BRUSH.HZ_REF).toFixed(2)} 倍`, sub: q.note ?? '',
+            hay: `${q.no} ${q.hz} ${q.note ?? ''}` }));
+        },
+        detail(no) { this._mstNotch(no); } },
+    ];
+  }
   _buildSoak() {
     this.soakQ = '';
-    this.soakSel = Soak.ids[0];
+    this.mstTab = 'soak';
+    this.mstSel = {};                       // マスタごとに «最後に選んだもの» を覚える
+    $('mst-tabs').innerHTML = UIManager.MASTERS.map(m =>
+      `<button type="button" role="tab" data-k="${m.key}" aria-selected="${m.key === this.mstTab}">${escHtml(m.tab)}</button>`).join('');
+    $('mst-tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-k]'); if (!b) return;
+      this.setMasterTab(b.dataset.k);
+    });
     $('soak-q').addEventListener('input', (e) => { this.soakQ = e.target.value; this._soakRender(); });
     $('soak-list').addEventListener('click', (e) => {
       const b = e.target.closest('.pat'); if (!b) return;
-      this.soakSel = b.dataset.id; this._soakRender();
+      this.mstSel[this.mstTab] = b.dataset.id; this._soakRender();
     });
     $('dlg-soak').addEventListener('keydown', (e) => {
+      /* ← → でマスタを移り、↑ ↓ でその中を移る。手を離さずに «どのマスタの何» まで行ける。 */
+      const keys = UIManager.MASTERS.map(m => m.key);
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        if (document.activeElement === $('soak-q')) return;      // 検索欄では文字送りを邪魔しない
+        e.preventDefault();
+        const i = keys.indexOf(this.mstTab) + (e.key === 'ArrowRight' ? 1 : -1);
+        this.setMasterTab(keys[Num.clamp(i, 0, keys.length - 1)]);
+        return;
+      }
       const d = { ArrowDown: 1, ArrowUp: -1, PageDown: 5, PageUp: -5 }[e.key];
       if (d === undefined) return;
-      const ids = this._soakRows().map(r => r.p.id); if (!ids.length) return;
+      const ids = this._soakRows().map(r => r.id); if (!ids.length) return;
       e.preventDefault();
-      const i = Math.max(0, ids.indexOf(this.soakSel));
-      this.soakSel = ids[Math.min(ids.length - 1, Math.max(0, i + d))];
+      const i = Math.max(0, ids.indexOf(this.mstSel[this.mstTab]));
+      this.mstSel[this.mstTab] = ids[Math.min(ids.length - 1, Math.max(0, i + d))];
       this._soakRender(true);
     });
     this._soakRender();
   }
-  /** 検索を当てたパターンの行。左の一覧と右の中身が同じものを見るよう 1 か所に置く。 */
+  /** マスタを切り替える。検索は «そのマスタの中» を探すものなので、切り替えたら空にする。 */
+  setMasterTab(key) {
+    if (!UIManager.MASTERS.some(m => m.key === key)) return;
+    this.mstTab = key; this.soakQ = ''; $('soak-q').value = '';
+    for (const b of $('mst-tabs').querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.k === key));
+    this._soakRender();
+  }
+  /** いま開いているマスタの定義。 */
+  get _mst() { return UIManager.MASTERS.find(m => m.key === this.mstTab) || UIManager.MASTERS[0]; }
+  /**
+   * 検索を当てた行。左の一覧と右の中身が同じものを見るよう 1 か所に置く。
+   * 行は «どのマスタでも同じ形»（id・名前・右肩の札・説明・探す文字列）にして、
+   * 一覧の描き方を 1 つで済ませる。
+   */
   _soakRows() {
     const q = this.soakQ.trim().toLowerCase();
-    return Soak.all('PATTERNS').map(p => ({ p })).filter(({ p }) => {
-      if (!q) return true;
-      /* 代表材（社内記号）だけでなく、材質マスタで引いた JIS 記号でも当たるようにする
-       * —— «A5052 のソーキングは？» と探す人は 52S を知らない。 */
-      const mats = Soak.of('MATERIALS', p.id).map(m => {
-        const js = String(m.sample || '').split(/[,、]\s*/).map(t => MatCode.jisOf(t.trim())).filter(Boolean);
-        return `${m.className} ${m.cond} ${m.sample} ${js.join(' ')} ${js.map(j => 'A' + j).join(' ')}`;
-      }).join(' ');
-      return `${p.id} ${p.name} ${p.aim} ${mats}`.toLowerCase().includes(q);
-    });
+    return this._mst.rows().filter(r => !q || String(r.hay ?? '').toLowerCase().includes(q));
   }
   _soakMark(v) {
     const raw = String(v ?? ''), q = this.soakQ.trim().toLowerCase();
@@ -16703,21 +16822,160 @@ class UIManager {
     return out + escHtml(raw.slice(i));
   }
   _soakRender(scroll = false) {
-    const rows = this._soakRows();
-    if (!rows.some(r => r.p.id === this.soakSel)) this.soakSel = rows.length ? rows[0].p.id : null;
-    $('soak-list').innerHTML = rows.map(({ p }) => `
-      <button class="pat${p.id === this.soakSel ? ' is-sel' : ''}" type="button" role="option"
-        aria-selected="${p.id === this.soakSel}" data-id="${escHtml(p.id)}">
-        <span class="hd"><span class="id">${this._soakMark(p.id)}</span>
-          <span class="nm">${this._soakMark(p.name)}</span>
-          <span class="st">${escHtml(p.stages ?? '')}</span></span>
-        <span class="aim">${this._soakMark(p.aim ?? '')}</span>
+    const M = this._mst, rows = this._soakRows(), all = M.rows().length;
+    let sel = this.mstSel[this.mstTab];
+    if (!rows.some(r => r.id === sel)) sel = rows.length ? rows[0].id : null;
+    this.mstSel[this.mstTab] = sel;
+    $('soak-list').innerHTML = rows.map(r => `
+      <button class="pat${r.id === sel ? ' is-sel' : ''}" type="button" role="option"
+        aria-selected="${r.id === sel}" data-id="${escHtml(r.id)}">
+        <span class="hd"><span class="id">${this._soakMark(r.id)}</span>
+          <span class="nm">${this._soakMark(r.name)}</span>
+          <span class="st">${escHtml(r.tag ?? '')}</span></span>
+        <span class="aim">${this._soakMark(r.sub ?? '')}</span>
       </button>`).join('');
     if (scroll) $('soak-list').querySelector('.is-sel')?.scrollIntoView({ block: 'nearest' });
-    $('soak-count').textContent = this.soakQ.trim()
-      ? `${rows.length} / ${Soak.ids.length} パターン`
-      : `${Soak.ids.length} パターン`;
-    this._soakDetail(this.soakSel);
+    $('soak-count').textContent = this.soakQ.trim() ? `${rows.length} / ${all} ${M.unit}` : `${all} ${M.unit}`;
+    $('mst-sub').textContent = M.sub;
+    $('soak-q').placeholder = M.find;
+    $('mst-ft').innerHTML = M.foot;
+    M.detail.call(this, sel);
+  }
+  /** 右の中身に共通の «見出し» と «表»。マスタごとに書き方を変えない（読む側の負担を増やさない）。 */
+  _mstHead(id, title, meta) {
+    return `<div class="dh"><div class="dv">${escHtml(id)}</div>`
+      + `<div class="dttl">${this._soakMark(title)}</div>`
+      + `<div class="dmeta">${meta.filter(Boolean).map(v => `<span>${v}</span>`).join('')}</div></div>`;
+  }
+  _mstTbl(head, body) {
+    return body.length
+      ? `<table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`
+      : '<div class="none">なし</div>';
+  }
+  /** 材質マスタ。JIS 記号 1 つぶん —— 社内記号・引ける操業・（本アプリの材質なら）入力値。 */
+  _mstMat(jis) {
+    const el = $('soak-detail'), e = escHtml;
+    const row = MatCode.all().find(r => r.jis === jis);
+    if (!row) { el.innerHTML = '<div class="none">該当する記号がありません。</div>'; return; }
+    const app = Object.keys(CONFIG.ALLOYS).find(k => k.replace(/^A/, '') === jis);
+    const a = app ? CONFIG.ALLOYS[app] : null;
+    const hit = new Set(app ? MatCode.soakSamples(app) : row.codes.filter(c => Soak.patternsForSample(c).length));
+    const codes = row.codes.map(c => {
+      const pat = Soak.patternsForSample(c);
+      return `<tr><td${hit.has(c) ? ' ><b>' : '>'}${this._soakMark(c)}${hit.has(c) ? '</b>' : ''}</td>`
+        + `<td class="n">${pat.length ? e(pat.join('・')) : '–'}</td></tr>`;
+    }).join('');
+    el.innerHTML = this._mstHead('A' + jis, a ? a.name : `JIS ${jis}`, [
+      `社内記号 ${row.codes.length} 件`,
+      app ? `<b>本アプリの材質</b>` : '本アプリには入っていません',
+      app ? `ピット炉 #${Layout.pitOf(app) + 1}` : '',
+    ])
+    + `<h4>社内材質記号（${row.codes.length} 件）</h4>`
+    + this._mstTbl(['社内記号', '代表材として載っている操業'], codes)
+    + (a ? `<h4>シミュレーションの入力値</h4>` + this._mstTbl(['項目', '値', '出どころ'], [
+        ['活性化エネルギー Q', `${a.Q_ACT} kJ/mol`, '公表値'],
+        ['応力指数 n', a.N_EXP, '公表値の帯（4.0〜6.5）の中'],
+        ['α', `${a.ALPHA} MPa⁻¹`, '公表値の帯（0.012〜0.050）の中'],
+        ['ln A（絶対値）', a.LN_A, '荷重実績で較正する唯一のつまみ（残件 LNA）'],
+        ['熱間圧延域', `${a.T_ROLL[0]}〜${a.T_ROLL[1]} ℃`, '—'],
+        ['巻取温度の目安', `${a.T_COIL} ℃`, '—'],
+        ['密度 ／ 比熱 ／ 熱伝導率', `${a.RHO} kg/m³ ／ ${a.CP} J/kgK ／ ${a.K} W/mK`, '—'],
+        ['ヤング率 ／ 端部欠陥係数', `${a.E} GPa ／ ${a.end.toFixed(1)}`, '—'],
+      ].map(r => `<tr><td><b>${e(r[0])}</b></td><td class="n">${e(r[1])}</td><td>${e(r[2])}</td></tr>`).join(''))
+      : `<div class="none">この JIS 記号は対応表にはありますが、本アプリの材質には入っていません`
+        + `（入力値は材質を足すときに決めます）。</div>`);
+    el.scrollTop = 0;
+  }
+  /** パスマスタ。いまの素材で «実際に通して» 数えた配分も一緒に出す。 */
+  _mstPass(id) {
+    const el = $('soak-detail'), e = escHtml, p = Pass.of(id);
+    if (!p) { el.innerHTML = '<div class="none">該当する記号がありません。</div>'; return; }
+    const S = CONFIG.SLAB, d = this._dims;
+    const h0 = d ? d.cast - 2 * d.scalp : S.CAST_DEFAULT - 2 * S.SCALP_DEFAULT;
+    const hT = d ? d.target : S.FINISH.DEFAULT;
+    const coil = Rolling.finishMode(hT) === 'COIL';
+    const sch = Rolling.buildSchedule(h0, hT, d ? d.width : S.WID_DEFAULT, d ? d.temp : S.TEMP_DEFAULT,
+      { coil, length: d ? d.length : S.LEN_DEFAULT, alloy: d ? d.alloy : CONFIG.MATERIAL.ALLOY, pass: id });
+    const hCrop = Math.max(Math.min(p.hCrop, h0 - 1), hT);
+    const nPlate = sch.filter(q => q.gap >= hCrop - 0.5).length;
+    const seq = (v) => (v && v.length ? v.join(' → ') + ' mm' : '表は無し（則で組む）');
+    el.innerHTML = this._mstHead(p.id, p.name, [
+      this._soakMark(p.aim ?? ''), `クロップ厚 ${p.hCrop} mm`,
+      `<code>${e(p.src ?? '—')}</code>`,
+      p.id === Pass.current() ? '<b>いま効いています</b>' : '',
+    ])
+    + `<h4>厚板段（クロップ厚まで）</h4>` + this._mstTbl(['項目', '値'], [
+        ['初パスの圧下', `${p.first} mm`],
+        ['以後の定圧下', `${p.draftPlate} mm`],
+        ['板厚 × これが定圧下を下回ったら圧下率で', `${(p.redPlate * 100).toFixed(0)} %`],
+        ['通る板厚の表', seq(p.plateSeq)],
+        ['速度', `${p.vPlate} mpm`],
+      ].map(r => `<tr><td><b>${e(r[0])}</b></td><td class="n">${e(r[1])}</td></tr>`).join(''))
+    + `<h4>仕上げ段（クロップ厚から最終まで）</h4>` + this._mstTbl(['項目', '値'], [
+        ['定圧下', `${p.draftFinish} mm`],
+        ['最終パスの圧下率（張力あり）', `${(p.redLast * 100).toFixed(0)} %`],
+        ['その前のパス', `${(p.redLast2 * 100).toFixed(0)} %`],
+        ['通る板厚の表', seq(p.finishSeq)],
+        ['速度', `出側 ${p.hFinish} mm 以下は ${p.vFinish} mpm ／ 巻取 ${p.vCoil} mpm`],
+      ].map(r => `<tr><td><b>${e(r[0])}</b></td><td class="n">${e(r[1])}</td></tr>`).join(''))
+    + `<h4>いまの素材でこの記号を通したとき</h4>`
+    + `<div class="none">素材 ${h0.toFixed(0)} mm → 目標 ${hT.toFixed(hT < 10 ? 1 : 0)} mm`
+      + `（${coil ? 'コイル' : '板材'}）／ クロップまで <b>${nPlate}</b> パス・以後 <b>${sch.length - nPlate}</b> パス`
+      + `・合計 <b>${sch.length}</b> パス</div>`
+    + this._mstTbl(['パス', '出側 mm', '速度 mpm', '予測荷重 t'],
+        sch.map((q, i) => `<tr><td class="n">${i + 1}${q.coil ? '（巻取）' : ''}</td>`
+          + `<td class="n"><b>${q.gap.toFixed(q.gap < 10 ? 1 : 0)}</b></td>`
+          + `<td class="n">${q.speed.toFixed(0)}</td><td class="n">${q.force.toFixed(0)}</td></tr>`).join(''));
+    el.scrollTop = 0;
+  }
+  /** ブラシマスタ。記号 1 つぶんの 6 行と、材質ごとの上書き。 */
+  _mstBrush(id) {
+    const el = $('soak-detail'), e = escHtml, B = CONFIG.BRUSH, m = Brush.of(id);
+    if (!m) { el.innerHTML = '<div class="none">該当する記号がありません。</div>'; return; }
+    const rowTx = (r) => `<tr${r.brush ? '' : ' class="warn"'}><td class="n"><b>${r.at === 0 ? 'F' : 'F-' + r.at}</b></td>`
+      + `<td>${r.brush ? `<b>${e(B.SPEC[r.brush].key)}</b> ${e(B.SPEC[r.brush].code)}` : '掛けない'}</td>`
+      + `<td class="n">${r.brush ? (r.cov * 100).toFixed(0) + ' %' : '–'}</td>`
+      + `<td class="n">${r.brush ? `${r.notch} ノッチ（${Brush.hz(r.notch)} Hz）` : '–'}</td>`
+      + `<td class="n">${r.brush ? e(Brush.press(r.press).label) : '–'}</td></tr>`;
+    const over = Object.entries(B.BY_ALLOY);
+    el.innerHTML = this._mstHead(m.id, m.name, [
+      this._soakMark(m.aim ?? ''), `<code>${e(m.src ?? '—')}</code>`,
+      `除去の強さ ${(UIManager.brushPower(m.rows) * 100 / Math.max(UIManager.brushPower(Brush.rows(B.DEFAULT_ID)), 1e-9)).toFixed(0)} %`,
+      m.id === Brush.current() ? '<b>いま効いています</b>' : '',
+    ])
+    + `<h4>パスごとの条件</h4>`
+    + this._mstTbl(['パス', 'ブラシ', '掛ける長さ', 'ノッチ（回転数）', '押し付け'], m.rows.map(rowTx).join(''))
+    + `<h4>ブラシの種類</h4>` + this._mstTbl(['記号', '品番', '砥粒', '形', '植毛密度', '除去力', '均一化'],
+        Object.values(B.SPEC).map(sp => `<tr><td><b>${e(sp.key)}</b></td><td class="n">${e(sp.code)}</td>`
+          + `<td class="n">${e(sp.grit)}</td><td class="n">${e(sp.type)}</td><td class="n">${e(sp.dens)}</td>`
+          + `<td class="n">${sp.REM.toFixed(2)}</td><td class="n">${sp.EVEN.toFixed(2)}</td></tr>`).join(''))
+    + `<h4>材質ごとの上書き</h4>`
+    + (over.length ? this._mstTbl(['材質', '掛けるパス'], over.map(([k, rows]) =>
+        `<tr><td><b>${e(CONFIG.ALLOYS[k]?.name ?? k)}</b></td><td>`
+        + e(rows.filter(r => r.brush).map(r => `${r.at === 0 ? 'F' : 'F-' + r.at} ${r.brush}`).join('・') || '掛けない')
+        + `</td></tr>`).join(''))
+      : '<div class="none">ありません（全材質がこの記号のまま）。条件は素材の «ブラシ条件を決める» から作れます。</div>');
+    el.scrollTop = 0;
+  }
+  /** ブラシノッチマスタ。段 1 つぶん —— と、全段の表（1 段だけ見ても比べられない）。 */
+  _mstNotch(no) {
+    const el = $('soak-detail'), e = escHtml, B = CONFIG.BRUSH;
+    const q = Brush.notches().find(r => String(r.no) === String(no));
+    if (!q) { el.innerHTML = '<div class="none">該当する段がありません。</div>'; return; }
+    el.innerHTML = this._mstHead(`${q.no} ノッチ`, `${q.hz} Hz`, [
+      `除去力 基準（${B.HZ_REF} Hz）の ${(q.hz / B.HZ_REF).toFixed(2)} 倍`,
+      `ブラシの回転数 ${(q.hz * B.RPM_PER_HZ).toFixed(0)} rpm`,
+      q.note ? this._soakMark(q.note) : '',
+    ])
+    + `<h4>全段</h4>` + this._mstTbl(['段', '周波数', '基準との比', '回転数', '備考'],
+        Brush.notches().map(r => `<tr${String(r.no) === String(no) ? ' class="warn"' : ''}>`
+          + `<td class="n"><b>${r.no}</b></td><td class="n">${r.hz} Hz</td>`
+          + `<td class="n">${(r.hz / B.HZ_REF).toFixed(2)}</td><td class="n">${(r.hz * B.RPM_PER_HZ).toFixed(0)} rpm</td>`
+          + `<td>${e(r.note ?? '')}</td></tr>`).join(''))
+    + `<h4>押し付け具合</h4>` + this._mstTbl(['段', '除去への倍率', '出どころ'],
+        Brush.presses().map(r => `<tr><td><b>${e(r.label)}</b></td><td class="n">${r.k.toFixed(2)}</td>`
+          + `<td>${r.key === B.PRESS_DEF ? '基準（1.0）' : '推定 —— 実測が無い（残件 BPRESS）'}</td></tr>`).join(''));
+    el.scrollTop = 0;
   }
   _soakDetail(id) {
     const el = $('soak-detail');
@@ -16889,9 +17147,13 @@ class UIManager {
   }
 
   /** ソーキングマスタを開閉する。 */
-  toggleSoak(open = !$('dlg-soak').open) {
+  /** マスタを開閉する。tab を渡せばそのマスタを開く（«マスタ» ボタンごとに行き先が違う）。 */
+  toggleSoak(open = !$('dlg-soak').open, tab = null) {
     const d = $('dlg-soak');
-    if (open) { if (!d.open) d.showModal(); $('soak-q').focus(); } else d.close();
+    if (!open) { d.close(); return; }
+    if (tab) this.setMasterTab(tab);
+    if (!d.open) d.showModal();
+    $('soak-q').focus();
   }
 
   /** 変更履歴を開閉する。開いている間はキー操作を奪わない（dialog が受ける） */
@@ -17620,7 +17882,10 @@ class UIManager {
       CONFIG.AGC.ECC.ON = e.target.checked;
       this.toast(e.target.checked ? '偏芯補償を入れました' : '偏芯補償を切りました', 'info');
     });
-    on('btn-soak', 'click', () => this.toggleSoak(true));
+    on('btn-soak', 'click', () => this.toggleSoak(true, 'soak'));
+    on('btn-pass-mst', 'click', () => this.toggleSoak(true, 'pass'));
+    on('btn-mat-mst', 'click', () => this.toggleSoak(true, 'mat'));
+    on('btn-brush-mst', 'click', () => this.toggleSoak(true, 'brush'));
     on('btn-soak-close', 'click', () => this.toggleSoak(false));
     $('dlg-soak').addEventListener('click', e => { if (e.target === $('dlg-soak')) this.toggleSoak(false); });
     on('btn-ver', 'click', () => this.toggleVersion(true));

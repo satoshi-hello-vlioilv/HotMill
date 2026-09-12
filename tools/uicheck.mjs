@@ -346,7 +346,7 @@ for (const w of widths) {
     /* ソーキングマスタ。39 の操業パターンが «絞って選んで読める» こと。 */
     const sk = await page.evaluate(() => {
       const A = window.__app, $ = (id) => document.getElementById(id);
-      A.ui.toggleSoak(true);
+      A.ui.toggleSoak(true, 'soak');
       const box = $('dlg-soak').getBoundingClientRect();
       const n0 = $('soak-list').querySelectorAll('.pat').length;
       const det0 = $('soak-detail').textContent.length;
@@ -375,6 +375,52 @@ for (const w of widths) {
                w: Math.round(box.width), h: Math.round(box.height),
                nPat: window.__SOAK ? window.__SOAK.ids.length : 0 };
     });
+    /* 5 つのマスタを «同じ器» で読む。器が 1 つでも、切り替えたときに中身・件数・
+     * 説明・脚注がその都度入れ替わらなければ «探させない» にはならない。全部を巡って測る。 */
+    const mst = await page.evaluate(() => {
+      const A = window.__app, $ = (id) => document.getElementById(id);
+      const keys = A.ui.constructor.MASTERS.map(m => m.key);
+      const out = [];
+      for (const k of keys) {
+        A.ui.toggleSoak(true, k);
+        out.push({ k, tab: A.ui.mstTab, unit: A.ui.constructor.MASTERS.find(m => m.key === k).unit,
+                   n: $('soak-list').querySelectorAll('.pat').length,
+                   det: $('soak-detail').textContent.trim().length,
+                   sub: $('mst-sub').textContent.trim().length,
+                   foot: $('mst-ft').textContent.trim().length,
+                   count: $('soak-count').textContent.trim(),
+                   q: $('soak-q').value, ph: $('soak-q').placeholder.length,
+                   sel: [...$('mst-tabs').querySelectorAll('button')].filter(b => b.getAttribute('aria-selected') === 'true').map(b => b.dataset.k) });
+      }
+      // 検索を入れたまま別のマスタへ移ったら、検索は空に戻る（前のマスタの語で絞られたままにしない）
+      A.ui.toggleSoak(true, 'soak');
+      $('soak-q').value = '52S'; $('soak-q').dispatchEvent(new Event('input'));
+      const nFiltered = $('soak-list').querySelectorAll('.pat').length;
+      A.ui.setMasterTab('pass');
+      const afterQ = $('soak-q').value, afterN = $('soak-list').querySelectorAll('.pat').length;
+      // 見出しの高さが «説明の長さ» で変わらないこと（タブ列が折れると器が動く）
+      const hs = [];
+      for (const k of keys) { A.ui.setMasterTab(k); hs.push(Math.round($('dlg-soak').querySelector('header').getBoundingClientRect().height)); }
+      A.ui.toggleSoak(false);
+      return { keys, out, nFiltered, afterQ, afterN, hs };
+    });
+    ok('マスタが 5 つ（材質・ソーキング・パス・ブラシ・ブラシノッチ）を同じ器で出す',
+       mst.keys.length === 5 && mst.out.every(o => o.n > 0 && o.det > 80),
+       mst.out.map(o => `${o.k} ${o.n} 件／中身 ${o.det} 字`).join(' ／ '));
+    ok('切り替えると «いまどのマスタか» が押された状態で分かる',
+       mst.out.every(o => o.sel.length === 1 && o.sel[0] === o.k),
+       mst.out.map(o => `${o.k} → ${o.sel.join(',') || 'なし'}`).join(' ／ '));
+    /* 件数そのものは «たまたま同じ» ことがある（パスもブラシもいまは 1 記号）ので、
+     * 数ではなく «そのマスタの数え方になっているか»（40 JIS 記号／6 段 …）で見る。 */
+    ok('マスタごとに 説明・件数・検索の案内・脚注 が入れ替わる',
+       mst.out.every(o => o.sub > 10 && o.foot > 10 && o.ph > 4 && o.count.endsWith(o.unit))
+       && new Set(mst.out.map(o => o.sub + '|' + o.foot + '|' + o.ph)).size === mst.keys.length,
+       mst.out.map(o => `${o.k}「${o.count}」`).join(' ／ '));
+    ok('マスタを移ると検索は空に戻る（前のマスタの語で絞られたままにしない）',
+       mst.nFiltered > 0 && mst.afterQ === '' && mst.afterN > 0,
+       `ソーキングで «52S» → ${mst.nFiltered} 件 ／ パスへ移って 検索欄「${mst.afterQ}」・${mst.afterN} 件`);
+    ok('どのマスタでも見出しの高さが変わらない（タブ列が折れない）',
+       new Set(mst.hs).size === 1, `${mst.hs.join(' / ')} px`);
     ok('ソーキングマスタが画面に収まり、全パターンが出る',
        sk.inView && sk.n0 > 30 && sk.det0 > 400,
        `${sk.w} × ${sk.h} px ／ ${sk.n0} パターン ／ 中身 ${sk.det0} 文字`);
