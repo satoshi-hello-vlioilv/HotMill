@@ -1491,6 +1491,19 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.1.2', base: 'b7c7434', date: '2026-09-12', title: '端材が計画の 4 倍出ていたのを直し、上がり温度を合わせ直す —— «切ったつもりで切れていなかった» 評価器 3 本も', items: [
+      // --- クロップ（端材）の量 ---
+      { t: '端材が計画の 4 倍出ていた。止まるのに要る距離を «主機の能力»（PROCESS.ACCEL 110 mpm/s）で見積もっていたが、板がバイトに居ないあいだのバックアップロールは圧延荷重で押しつけられていないので、滑らせない上限のほうが先に効く（実測 48 mpm/s）。距離にすると 1.1 m のつもりで 2.5 m 走り、先端が刃を 1 m 行き過ぎ、そこから戻せず «その場で切る» ため 300 mm の計画が 1,325 mm になっていた。«いま出せる制動»（mill.brakeCap）から出すようにした', w: 'FinishController.wantCrop / PhysicsEngine._dynamics' },
+      { t: '直した結果、8 mm 完了時の板長が 212.7 → 223.8 m（実機 219.4 m ±3 % の中）。切り落とし 4 回の合計も 1,800 → 442 mm になり、体積の収支のずれも 1.0 → 0.3 % に縮んだ', w: 'tools/calib.mjs / voltrace.mjs' },
+      // --- 上がり温度の合わせ直し ---
+      { t: '上がり温度が実機 360 ℃ に対し 344 ℃ と 16 K 低かった。下面を常時 ON にした（VER.2.1.0）ぶん冷え過ぎている。感度を測り直すと、上がり温度を動かすのはロール抜熱が圧倒的で（H_ROLL 25,000 → 12,000 で 344 → 360 ℃、H_AIR 6 → 10 で 333 ℃、上面液流束 1.2 → 0.6 で 347 ℃、下面液流束 1.4 → 0.7 で 345 ℃）、実機の値ちょうどに戻るのが 12,000。界面の接触熱伝達率としてアルミ熱間の文献帯（10,000〜50,000 W/m²K）の中なので、そこへ合わせ直した', w: 'MATERIAL.H_ROLL' },
+      { t: '合わせ込みの測り方を評価器として残した —— 冷却の組み合わせと液流束を振って、上がり温度・板長・上下差・先端の浮きを並べて出す', w: 'tools/coolfit.mjs' },
+      { t: 'ロール抜熱を半分にしたぶん、1 パスでロールへ入る熱も減る。«圧延を重ねるとロール温度が上がる» の判定が 4 パスでは 0.3 K しか動かず向きを読めなくなったので、10 パスまで回す形にした（実測 60.0 → 60.6 ℃）', w: 'tools/modeltrace.mjs' },
+      // --- 評価器が «切ったつもりで切れていなかった» ---
+      { t: '冷却を 4 系統にしたとき、TOP / BOT / ENTRY / EXIT は «4 系統から導いた読み取り専用» になった。評価器 2 本がそこへ代入し続けていて、何も切り替わらないまま同じ数字を比べていた（cooltrace は «下面を切ると止まる» が両面の値どうしの比較に、curlbal は 4 通りが全部同じ結果に）。ZONES を直接切る形に直した', w: 'tools/cooltrace.mjs / curlbal.mjs' },
+      { t: '«入側冷却を入れても反らない» の説明が変わった。旧モデルの «入側 ON» は入側の上面ヘッダと下面スプレーを同時に入れる作りで、上下差が付かないので反らなかっただけだった。4 系統に分けたいま、同じ基準から «上面だけ» 足すと先端の浮きは 22 → 45 mm と増え、«上下とも» 足すと 22 → 21 mm で打ち消される。判定もその 2 つを並べて見る形に書き直した', w: 'tools/curlbal.mjs' },
+      { t: 'ワニ口を実機の長さに直した（VER.2.1.0）あと、端部が 1 カットで済むようになり «1 つの端を複数カットで切る» 機構が動かないまま合格していた。評価器の中だけ 1 カットを短くして 3 カットに割らせる（切る総量は変えない）', w: 'tools/scraptrace.mjs' },
+    ] },
     { v: '2.1.1', base: '6a34b99', date: '2026-09-12', title: '整合検査が黙って落ちていた 4 件を直す（うち 1 件は実装の不具合）', items: [
       { t: 'スケジュール生成が、テーブルに載る限界を «丸めのぶんだけ» 超えていた。表に出す板厚は 0.1 mm 刻みに丸めるのに、制約は丸める前の値で当てていたので、ぎりぎりで決めた 18.029 mm が表では 18.0 mm になり、そのぶん板が伸びて載らなくなる。制約を 0.1 mm 刻みの厚い側へ切り上げた（実測: 406 mm 鋳造のロットで第 17 パスが入側テーブルを 117 mm 超えていた → 0 mm）', w: 'Rolling.buildSchedule' },
       { t: 'テーブルの «板を置ける長さ» が 2 か所にあり、生成側（SAFE_CLEAR 3,000 ＋ 端の余裕 4,000）と検査側（8,000 直書き）で 1,000 mm 食い違っていた。Rolling.tableUsable() の 1 か所にして、生成も検査も同じ長さを見るようにした', w: 'Rolling.tableUsable / TABLE.END_CLEAR' },
@@ -3488,7 +3501,16 @@ const CONFIG = {
     // 表面放熱: 放射（酸化した Al 面 ε≈0.18）＋ 自然対流（水平板の上下面平均 ≈ 8 W/m²K）
     /* H_AIR は上下面の平均。熱い水平板の上面（浮力で流れが立つ）で 8〜10、下面で 3〜4 W/m²K
      * なので、両面に同じ値を当てるここでは中間の 6 を採る（旧 8 は上面の値を両面に当てていた）。 */
-    EMISSIVITY: 0.18, H_AIR: 6, H_ROLL: 25000,
+    /* H_ROLL は «上がり温度の合わせ込みノブ» でもある（calib.mjs の --set=MATERIAL.H_ROLL=…）。
+     * 25,000 は «下面の入側スプレーが OFF» という前提で合わせた値で、下面は実機では常時 ON
+     * というご回答を反映した（VER.2.1.0）あと、上がり温度が実機 360 ℃ に対し 344 ℃ と
+     * 16 K 低くなった。感度を測り直すと、上がり温度を動かすのはロール抜熱が圧倒的で
+     * （実測: H_ROLL 25,000 → 12,000 で 344 → 360 ℃、H_AIR 6 → 10 で 344 → 333 ℃、
+     * 上面液流束 1.2 → 0.6 で 344 → 347 ℃、下面液流束 1.4 → 0.7 で 344 → 345 ℃）、
+     * 実機の値ちょうどに戻るのが 12,000。界面の接触熱伝達率としてアルミ熱間の文献帯
+     * （10,000〜50,000 W/m²K）の中にあるので、この値へ合わせ直した。
+     * ※ これは «実測値» ではなく «合わせ込み» —— 測り方は tools/coolfit.mjs に残してある。 */
+    EMISSIVITY: 0.18, H_AIR: 6, H_ROLL: 12000,
     T_ROLL: 80, T_AMBIENT: 30,
     // 板厚方向の温度分布。板を LAYERS 層に分けて 1 次元の熱伝導を陰解法で解く。
     LAYERS: 9,
@@ -6781,7 +6803,7 @@ class MillState {
     this.guideGap = 2600;
     this.wrDia = CONFIG.MILL.WR_D; this.brDia = CONFIG.MILL.BR_D;  // 研削による現在径（RollShop が入れる。上下の平均）
     // 主駆動系（PhysicsEngine._drive）。圧延トルクのほかに掛かるぶんと、その合計 [N·m]
-    this.bearingTorque = 0; this.inertiaTorque = 0; this.driveTorque = 0; this.drivePowerKW = 0; this.steadyPowerKW = 0; this.accelCap = CONFIG.PROCESS.ACCEL; this.burCap = CONFIG.PROCESS.ACCEL;
+    this.bearingTorque = 0; this.inertiaTorque = 0; this.driveTorque = 0; this.drivePowerKW = 0; this.steadyPowerKW = 0; this.accelCap = CONFIG.PROCESS.ACCEL; this.burCap = CONFIG.PROCESS.ACCEL; this.brakeCap = CONFIG.PROCESS.ACCEL;
     /* バックアップロールは駆動されておらず、ワークロールとの摩擦で連れ回される。
      * 押しつけが弱いときは滑って付いてこないので、«BUR の表面速度» を別の状態として持つ。
      * brSurf は BUR 胴表面の周速 [mpm]（滑っていなければ currentSpeed と同じ）。 */
@@ -7772,7 +7794,14 @@ class FinishController {
     const feed = this._feedMpm();
     if (F * Num.sign0(feed) <= 0) return false;                       // 出側へ進んでいること
     const v = Math.abs(feed) / 60 * 1000;                             // mm/s
-    const brake = v * v / (2 * CONFIG.PROCESS.ACCEL / 60 * 1000);     // 減速に要る距離
+    /* 止まるのに要る距離は «いま出せる制動» から出す。主機の能力（PROCESS.ACCEL 110 mpm/s）を
+     * そのまま使っていたが、板がバイトに居ないあいだのバックアップロールは圧延荷重で
+     * 押しつけられていないので、滑らせない上限のほうが先に効く（実測 48 mpm/s）。
+     * 距離にすると 1.1 m のつもりで 2.5 m 走るので、先端が刃を 1 m 行き過ぎ、
+     * そこから戻せず «その場で切る» ため端材が計画の 300 mm に対し 1,325 mm になっていた
+     * （実測: 8 mm 完了時の板長が実機 219.4 m に対し 212.7 m）。 */
+    const aBrake = Math.max(m.brakeCap ?? CONFIG.PROCESS.ACCEL, 1);   // mpm/s
+    const brake = v * v / (2 * aBrake / 60 * 1000);                   // 減速に要る距離
     return F * (this.slab.tipX(end) - this._cropStopX(end)) > -brake;
   }
   /**
@@ -8618,6 +8647,7 @@ class PhysicsEngine {
     const brakeCap = Math.min(CONFIG.PROCESS.ACCEL,
       (Drive.availTorque(m.currentSpeed, m.wrDia) + m.bearingTorque + burT) / J * r * 60,
       m.burCap) * rise;
+    m.brakeCap = brakeCap;        // «いま出せる制動» [mpm/s]。止まるのに要る距離を測る側が読む
     const v0 = m.currentSpeed;
     const speeding = Math.abs(m.targetSpeed) > Math.abs(v0) && Math.sign(m.targetSpeed || v0) === Math.sign(v0 || m.targetSpeed);
     let v1 = Num.rateTo(v0, m.targetSpeed, speeding ? m.accelCap : brakeCap, dt);

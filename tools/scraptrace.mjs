@@ -125,6 +125,12 @@ const out = await page.evaluate((EPS) => {
     const sel = document.getElementById('sel-alloy'), len = document.getElementById('rng-init-len');
     if (sel) sel.value = 'A3003';
     if (len) len.value = len.min;
+    /* «1 つの端を複数カットで切る» 機構を必ず働かせる。カット数は端部欠陥の長さ ÷ CUT_MAX で
+     * 決まるので、ワニ口を実機の長さ（VER.2.1.0 で 915 → 427 mm）に直したあとは
+     * 1 端 1 カットで済んでしまい、機構が動かないまま «合格» になっていた。
+     * 設備値そのものを変えるのではなく、この評価器の中だけ 1 カットを短くして
+     * 3 カットに割らせる（切る総量は欠陥長 ＋ 余裕のままで変わらない）。 */
+    K.CROP_SHEAR.CUT_MAX = 200; K.CROP_SHEAR.CUT_MIN = 150;
     // UI の変更は 180 ms 遅らせて反映されるので、待たずにその場で効かせる
     A.bus.emit('CMD_SET_SLAB', A.ui.dims());
   };

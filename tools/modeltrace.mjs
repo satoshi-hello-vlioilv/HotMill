@@ -167,11 +167,13 @@ const out = await page.evaluate(async () => {
     if (has) {
       const t0 = P.mill.rollTemp;
       window.__startAuto(false);
-      window.__ff(p => p.mill.passIndex >= 4, 120 * 1500);
+      window.__ff(p => p.mill.passIndex >= 9, 120 * 1500);
       const t1 = P.mill.rollTemp;
       /* 上がり幅は小さい: 界面と内部の抵抗を直列にした実効熱伝達率（Rolling.rollHTC）と軽い初パス
-       * （10 mm 圧下）では、1 パスのロール抜熱が 0.3〜0.6 K・ロール 2 本の熱容量が板の 1.7 倍なので
-       * 4 パスで +1 K 弱。«上がる向き» を問う（閾値 0.5 K）。 */
+       * （10 mm 圧下）では、1 パスのロール抜熱が 0.1〜0.3 K・ロール 2 本の熱容量が板の 1.7 倍。
+       * «上がる向き» を問う（閾値 0.5 K）ので、それが見える本数まで回す —— 界面の熱伝達率を
+       * 上がり温度で合わせ直した（H_ROLL 25,000 → 12,000）ぶん 1 パスの取り込みが減り、
+       * 4 パスでは 0.3 K しか上がらず «向き» が読めなくなったので 10 パスまで回す。 */
       ok('圧延を重ねるとロール温度が上がる', t1 > t0 + 0.5, `${t0.toFixed(1)} → ${t1.toFixed(1)} ℃`);
       ok('ロール温度が現実的な範囲に収まる（〜200 ℃）', t1 < 200, `${t1.toFixed(1)} ℃`);
       A.bus.emit('CMD_RESET');
