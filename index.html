@@ -1734,7 +1734,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
-    { v: '2.15.0', base: '14352d8', date: '2026-09-15', title: '荷重の核を Orowan（不均一変形・すべり／固着）にし、バイト内の温度場・ひずみの過渡・先進率からの μ 同定を入れる', items: [
+    { v: '2.15.0', base: '1688433', date: '2026-09-15', title: '荷重の核を Orowan（不均一変形・すべり／固着）にし、バイト内の温度場・ひずみの過渡・先進率からの μ 同定を入れる', items: [
       { t: '圧力分布の核を Bland–Ford（均一変形・Coulomb）から Orowan の理論へ（柳本「圧延理論（中級）」§2〜3 の式 (27)〜(41) とプログラムを写した）。傾斜 2 平面の係数 ϖ(a)、a ≥ 1 で固着（τ ＝ k\'/2）、前方・後方張力は境界条件、出口側・入口側から 4 次 RK で積んだ 2 本の水平合力の交点が中立点。前進率とトルクは同じ解から。k\'(x)・μ(x) を弧に沿って受ける', w: 'Rolling.orowan / Rolling.arcGrid / Rolling.solve' },
       { t: '同じ入力で核だけを替えると実機ロット 23 パスで厚板段 −8〜9 %・仕上げ −13.5 %・巻取 −15 %（厚板段は ϖ(a)、薄板段は弧の 28〜55 % が固着することから）。旧核は PROCESS.KERNEL ＝ BF で比較用に残す。アプリ内の solve は独立実装と 4 パスとも 0.05 % 以内で一致', w: 'CONFIG.PROCESS.KERNEL / tools/orowan.mjs' },
       { t: 'バイト内の温度場: 接触弧の各点で入口の層温度から経過時間の抜熱（運転側の帳簿 _biteThermal と同じ 1 式）と圧下ぶんの発熱を解き、その層温度で変形抵抗を出す。荷重には −0.3〜−0.8 % しか効かない —— 巻取パスの出口で表面は 38 K 冷えるが加工発熱 26 K が相殺する（見積もり +5〜10 % は外れ）', w: 'Rolling.biteLayerTemps / CONFIG.PROCESS.BITE_THERMAL' },
