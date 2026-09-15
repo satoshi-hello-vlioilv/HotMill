@@ -6,7 +6,8 @@
 //   ④ 下ブラシが受取テーブルのローラと場所を取り合わない（ローラの間に納まる）
 //   ⑤ 冷却量: 板厚方向の層モデルで解いた «平均・上面・下面» の温度落ちと、クーラント 40 L で
 //      抜ける熱の上限（液の温まり ＋ 蒸発）に対する比。ここは «参考» で毎回出す
-//   ⑥ COOLS_INPUT が false（既定）なら圧延に掛かる板の温度は洗浄で変わらない。true なら
+//   ⑥ 持ちかかりの読みが «洗浄後の上面»（PICKUP_READ 'TOP'、既定）なら洗浄の冷えは板に実際に入り
+//      平均がちょうど dMean だけ下がる。'MEAN'（板厚平均 ＝ 読み）なら圧延に掛かる板の温度は変わらない。
 //      平均がちょうど dMean だけ下がる
 //
 //   node tools/washtrace.mjs
@@ -55,7 +56,7 @@ const out = await page.evaluate(() => new Promise(res => setTimeout(async () => 
   res({ seq, iF, iW, iF2, secWash, wSec: W.SEC, washStart, washEnd, L: s.length, xw,
         openBefore, minTopYWash, yClosed: D + s.thickness + B.D / 2, yOpen: D + s.thickness + B.D / 2 + B.OPEN,
         rotOutside, chill: { dMean: chill.dMean, dTop: chill.dTop, dBot: chill.dBot, Q: chill.Q, Qcap: chill.Qcap, capped: chill.capped, secs: chill.secs, liters: chill.liters },
-        mean0, meanAfter, coolsInput: W.COOLS_INPUT, rollClear: clear, rollNeed: need, brushD: B.D });
+        mean0, meanAfter, coolsInput: S.PICKUP_READ === 'TOP', rollClear: clear, rollNeed: need, brushD: B.D });
 }, 300)));
 await browser.close();
 
@@ -81,7 +82,7 @@ ok('ブラシが回るのは洗っている間だけ', out.washEnd && out.washSt
    `洗浄中に ${((out.washEnd?.angle - out.washStart?.angle) / (2 * Math.PI)).toFixed(1)} 回転 ／ 洗浄外の回転 ${out.rotOutside} コマ`);
 ok('下ブラシが受取テーブルのローラと場所を取り合わない', out.rollClear > out.rollNeed,
    `ローラ軸との距離 ${out.rollClear.toFixed(0)} mm ＞ 要る距離 ${out.rollNeed.toFixed(0)} mm（ブラシ Φ${out.brushD}）`);
-ok(out.coolsInput ? '持ちかかり温度から洗浄の冷えを引く（COOLS_INPUT）' : '圧延に掛かる板の温度は洗浄で変わらない（持ちかかりは洗浄後の測定とみなす）',
+ok(out.coolsInput ? '洗浄の冷えが板に実際に入る（PICKUP_READ TOP: 読みは洗浄後の上面）' : '圧延に掛かる板の温度は洗浄で変わらない（持ちかかりは洗浄後の測定とみなす）',
    out.coolsInput ? Math.abs((out.mean0 - out.meanAfter) - out.chill.dMean) < 0.5 : Math.abs(out.meanAfter - out.mean0) < 0.05,
    `装入前 ${out.mean0.toFixed(3)} ℃ → 装入後 ${out.meanAfter.toFixed(3)} ℃（差 ${(out.mean0 - out.meanAfter).toExponential(2)} K）`);
 ok('（参考）洗浄でスラブが冷える量', true,

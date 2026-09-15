@@ -1734,6 +1734,14 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.16.0', base: '5f7c51d', date: '2026-09-15', title: '持ちかかり温度を «洗浄後・吊る瞬間の上面の読み» にし、μ を固定値にしてよいかを測る', items: [
+      { t: 'ご回答（2026-09-15）: 持ちかかり温度は洗浄してからトランスファークレーンで掴むときにスラブセンターの «表面» を測る。入力の温度を «吊る瞬間の上面の読み» と解釈し（SUPPLY.PICKUP_READ TOP）、ピット炉の下加熱・放射・洗浄の冷えを層モデルで解いて上面がその値になるように素材を置く。板厚平均は読みより 17.7 K 高い（待ち 1.6 s。0 s 18.0 / 15 s 15.4 / 60 s 11.9 K）。旧解釈（板厚平均 ＝ 読み）は MEAN で残す', w: 'SlabState.pitProfile / pickupTop / pickupMeanC / CONFIG.SUPPLY.PICKUP_READ / PICKUP_LAG_S' },
+      { t: '洗浄の冷え（平均 1.0 K・上面 9 K）は圧延に掛かる板に実際に入れ、洗浄のあとは工程（送り・掴む・運ぶ・降ろす）ごとに空中で層モデルを進める。GRAB に入る瞬間の上面・平均を supply.pickup に残す', w: 'SupplyController._enter / update' },
+      { t: '予測（パススケジュール・荷重・温度収支）も同じ起点に立つよう、buildSchedule の入口で読みを板厚平均に直す。直さないと予測が運転より 18 K 低い起点から出て荷重が 9 % 高い（calib の «予測 vs 運転» が 26 % で落ちた）', w: 'Rolling.buildSchedule / SlabState.pickupMeanC' },
+      { t: 'μ を «場所（中立点の前後）と温度で変わる値» にする必要があるかを測った。すべり速度と表面温度（m(T, ε̇) を通す）で τ(x) を解くせん断層摩擦を Orowan の核に返し（不動点反復・適応緩和）、固定 μ ＋ 固着と同じ入力で比べると荷重 厚板段 +1 %・巻取 −4 %、先進率 −0.2 ポイント、温度依存 0.2 % —— μ 自体の不確かさより小さいので固定値のままとする。違いは速度依存の向きだけで、先進率 2 速度で決まる', w: 'tools/mushear.mjs / docs/圧延荷重に効く要因.md §6 ④′' },
+      { t: '較正の仮置き: 起点が 17.7 K 上がると最初の圧下パスの荷重は −8.8 %。4 つの荷重帯は内側のまま（LN_A −1.75 は据え置き）だが、上がり温度が 371 → 376 ℃ と帯（360 ±15）を 1 K 越えるので、合わせ込みノブ H_ROLL を 12,000 → 24,000 W/m²K にして 362 ℃ に戻した（18,000 で 368 ℃。文献域 10〜50 kW/m²K の中）', w: 'CONFIG.MATERIAL.H_ROLL / tools/calib.mjs' },
+      { t: '記入表に PICKLAG（洗浄から測るまでの秒）と FWDSLIP2（先進率を 2 速度で）を足し、WASHT の文を «表面» のご回答に合わせた（23 件）', w: 'CONFIG.DATAREQ' },
+    ] },
     { v: '2.15.0', base: '1688433', date: '2026-09-15', title: '荷重の核を Orowan（不均一変形・すべり／固着）にし、バイト内の温度場・ひずみの過渡・先進率からの μ 同定を入れる', items: [
       { t: '圧力分布の核を Bland–Ford（均一変形・Coulomb）から Orowan の理論へ（柳本「圧延理論（中級）」§2〜3 の式 (27)〜(41) とプログラムを写した）。傾斜 2 平面の係数 ϖ(a)、a ≥ 1 で固着（τ ＝ k\'/2）、前方・後方張力は境界条件、出口側・入口側から 4 次 RK で積んだ 2 本の水平合力の交点が中立点。前進率とトルクは同じ解から。k\'(x)・μ(x) を弧に沿って受ける', w: 'Rolling.orowan / Rolling.arcGrid / Rolling.solve' },
       { t: '同じ入力で核だけを替えると実機ロット 23 パスで厚板段 −8〜9 %・仕上げ −13.5 %・巻取 −15 %（厚板段は ϖ(a)、薄板段は弧の 28〜55 % が固着することから）。旧核は PROCESS.KERNEL ＝ BF で比較用に残す。アプリ内の solve は独立実装と 4 パスとも 0.05 % 以内で一致', w: 'CONFIG.PROCESS.KERNEL / tools/orowan.mjs' },
@@ -3205,6 +3213,20 @@ const CONFIG = {
      * 出ておよそ 10 分が経ってから測って圧延に掛かる。この間に板厚方向の温度差は
      * 熱伝導で均されていく（どれだけ残るかは実測が無いので、層モデルに解かせる）。 */
     HOLD_MIN: 10,
+    /* «持ちかかり温度» の読みの定義（ご回答 2026-09-15）: 洗浄してから、トランスファークレーンで掴む
+     * ときにスラブセンターの **表面** を測る。洗浄（ブラシ＋クーラント）→ 位置移動 → クレーンが掴みに
+     * 来る、のタイムラグが入る。
+     *   PICKUP_READ  'TOP'  入力の温度は «洗浄後・吊る瞬間の上面» の読み。板厚方向の分布（ピット炉の
+     *                       下加熱・放射・洗浄の冷え）を層モデルで解き、吊る瞬間の上面がこの値になる
+     *                       ように素材の温度を置く（SlabState.pitProfile）。洗浄の冷えは圧延に掛かる
+     *                       板に «実際に» 入り、洗浄のあとは工程ごとに空中で層モデルを進める。
+     *                       板厚平均は読みより高い —— 実測 17.7 K（1.6 s 待ち。tools/pickuptrace.mjs）
+     *                'MEAN' 旧解釈（板厚平均 ＝ 入力。洗浄の冷えは読みに含まれているとして引かない）
+     *   PICKUP_LAG_S 洗浄が終わってから測る（掴む）までの秒。null なら本アプリの工程（FEED2 の秒 1.6）。
+     *                実機の値は無い（DATAREQ の PICKLAG）。上面は洗浄の冷えから戻る途中なので、この秒
+     *                で平均との差が動く（0 s 18.0 K → 15 s 15.4 K → 60 s 11.9 K）。
+     *   上面を測っている（下面ではない）のは仮置き —— README 0-3 の «持ちかかりの読み» */
+    PICKUP_READ: 'TOP', PICKUP_LAG_S: null,
     SIDE_Z: 3800,                            // ラインから転倒機ベッド中心までの側方距離
     /* 転倒軸。倒したスラブはここからミル側へ横たわる。
      * 入側サイドガイドを図面どおり 5,400 mm にしたことで、拡縮シリンダー（区分の切れ目）の
@@ -3236,12 +3258,8 @@ const CONFIG = {
      *           できない（超えたら液が尽きたとして頭打ち）
      *   WET_TOP / WET_BOT  上下面の濡れの割合。上面は掛けた液が溜まり、下面はブラシが液を塗る
      *           （下面スプレーの WET 0.35 とロール液膜の中間。仮置き）
-     *   COOLS_INPUT  洗浄の冷えを圧延に掛かる板から引くか。**持ちかかり温度は洗浄の «後»**
-     *           —— 洗浄してからトランスファークレーンで吊るときにスラブセンターを測る（ご回答
-     *           2026-09-15、訂正後）—— なので false（引かない。引くと二重に冷やすことになる。
-     *           冷える量そのものは washChill で毎回解いて参考として出す）。«スラブセンター» が
-     *           表面か板厚中心かは README 0-3 の 23 に問い合わせを残してある */
-    WASHER: { SEC: 5.0, LITERS: 40, WET_TOP: 1.0, WET_BOT: 0.6, COOLS_INPUT: false,
+     *   冷えを圧延に掛かる板から引くかは SUPPLY.PICKUP_READ で決まる（下）。 */
+    WASHER: { SEC: 5.0, LITERS: 40, WET_TOP: 1.0, WET_BOT: 0.6,
               BRUSH: { D: 300, L: 2600, RPM: 120, OPEN: 220, MAT: '麻' },
               FRAME: { W: 700, POST: 220, Z: 1780, H_OVER: 900 } },
     /* 転倒後、テーブルローラでスラブを出側へ送る。送り量は固定値ではなく
@@ -3475,10 +3493,18 @@ const CONFIG = {
        '合計 4,000 L/min（上振れ 4,800）はご回答済み。ゾーンは 7 区分を 4 本共通と置いている',
        '弁がヘッダ別ならゾーンをヘッダごとに分けます（区分数もその数にします）',
        'CONFIG.MILL.ROLL_COOL', null, '—', '区分数と、区分の幅（等分か中央が広いか）'],
-      ['WASHT', '効く', 'スラブ洗浄の前後の板温（持ちかかりは洗浄 «後» に吊るときに測るスラブセンターの値とご回答済み）', null, null, false, '温度差', 'K', 1,
-       '層モデルの見込み: 平均 1.0 K・表面 5〜9 K（5 s）。持ちかかりに含まれているので引いていない',
+      ['WASHT', '効く', 'スラブ洗浄の前後の板温（持ちかかりは洗浄 «後» に吊るときに測るスラブセンターの «表面» とご回答済み）', null, null, false, '温度差', 'K', 1,
+       '層モデルの見込み: 平均 1.0 K・上面 9 K（5 s）。読みは洗浄後の上面なので、冷えは板に実際に入れている（PICKUP_READ）',
        '洗浄の直前・直後の実測があれば、上下面の濡れ（WET_TOP / WET_BOT）を較正できます',
-       'CONFIG.SUPPLY.WASHER', null, '—', '洗浄機の直前・直後の表面温度でも可。スラブセンターが «表面» か «板厚中心» かも'],
+       'CONFIG.SUPPLY.WASHER', null, '—', '洗浄機の直前・直後の表面温度でも可'],
+      ['PICKLAG', '効く', '洗浄が終わってから持ちかかり温度を測る（クレーンが掴む）までの秒', null, null, false, '経過時間', 's', 1,
+       '本アプリの工程の秒（FEED2 ＝ 1.6 s）で仮置き。読みは洗浄で冷えた上面が戻る途中の値なので、この秒で板厚平均との差が動く（1.6 s 17.7 K → 15 s 15.4 K → 60 s 11.9 K）',
+       '素材の板厚平均（＝ 荷重と温度履歴の起点）が決まります。差 1 K は最初のパスの荷重 0.5 % に当たります',
+       'CONFIG.SUPPLY.PICKUP_LAG_S', null, '10', 'おおよそで可。上面を上から測っている（下面ではない）ことの確認も'],
+      ['FWDSLIP2', '効く', '同じ圧下で圧延速度を変えたときの先進率（2 速度）', '圧延速度', 'mpm', true, '先進率', '%', 2,
+       'μ の速度依存は μ ∝ v^−0.1 の仮置き（PROCESS.MU_KV）。すべり速度依存の摩擦則では向きが逆になる（tools/mushear.mjs）',
+       '摩擦の «法則の形»（液膜のせん断か、材料のせん断層か）を分けられます。1 点（FWDSLIP）は水準、2 点目は形',
+       'CONFIG.PROCESS.MU_KV', '50 / 80', '5.5 / 5.1', '16 → 8 mm の巻取パスなど、同じ圧下で速度だけ違う 2 本'],
       ['JAW', '未解決', 'ワニ口の «あごの開きが板厚の何割か»', null, null, false, '開き ÷ 板厚', '—', 1,
        '推定（板厚の半分で頭打ち）', 'あごの開き方が実機の見え方になります',
        'CONFIG.SLAB.OVERHANG', null, '—', '真横から・スケールになる物を添えた写真でも可'],
@@ -4962,6 +4988,11 @@ const CONFIG = {
     /* H_AIR は上下面の平均。熱い水平板の上面（浮力で流れが立つ）で 8〜10、下面で 3〜4 W/m²K
      * なので、両面に同じ値を当てるここでは中間の 6 を採る（旧 8 は上面の値を両面に当てていた）。 */
     /* H_ROLL は «上がり温度の合わせ込みノブ» でもある（calib.mjs の --set=MATERIAL.H_ROLL=…）。
+     * 2026-09-15: 持ちかかりの読みを «洗浄後の上面» にした（SUPPLY.PICKUP_READ）ことで圧延の起点が
+     * 板厚平均で 17.7 K 上がり、上がり温度が 371 → 376 ℃ と帯（360 ±15）を 1 K 越えた。12,000 → 24,000
+     * で 362 ℃（18,000 で 368 ℃）。文献域 10〜50 kW/m²K の中。待ちの秒（PICKLAG）と下加熱の上下差
+     * （SOAK_DT）が実測で置き換わればここも決め直す（README 0-2 の «持ちかかりの読み → 板厚平均の差»）。
+     * それ以前の経緯:
      * 25,000 は «下面の入側スプレーが OFF» という前提で合わせた値で、下面は実機では常時 ON
      * というご回答を反映した（VER.2.1.0）あと、上がり温度が実機 360 ℃ に対し 344 ℃ と
      * 16 K 低くなった。感度を測り直すと、上がり温度を動かすのはロール抜熱が圧倒的で
@@ -4970,7 +5001,7 @@ const CONFIG = {
      * 実機の値ちょうどに戻るのが 12,000。界面の接触熱伝達率としてアルミ熱間の文献帯
      * （10,000〜50,000 W/m²K）の中にあるので、この値へ合わせ直した。
      * ※ これは «実測値» ではなく «合わせ込み» —— 測り方は tools/coolfit.mjs に残してある。 */
-    EMISSIVITY: 0.18, H_AIR: 6, H_ROLL: 12000,
+    EMISSIVITY: 0.18, H_AIR: 6, H_ROLL: 24000,
     T_ROLL: 80, T_AMBIENT: 30,
     // 板厚方向の温度分布。板を LAYERS 層に分けて 1 次元の熱伝導を陰解法で解く。
     LAYERS: 9,
@@ -8150,6 +8181,10 @@ const Rolling = {
    */
   buildSchedule(h0, hTarget, width, temp, opts = {}) {
     const coil = opts.coil === true, L0 = opts.length ?? CONFIG.SLAB.LEN_DEFAULT, al = Rolling.alloy(opts.alloy);
+    /* temp は «持ちかかりの読み»。読みが洗浄後の上面（SUPPLY.PICKUP_READ 'TOP'）なら、予測が使う板厚平均は
+     * それより高い（運転の素材と同じ層モデルで解く —— SlabState.pickupMeanC）。ここで直さないと予測と運転が
+     * 起点から 18 K ずれ、予測の荷重が 9 % 高く出る（tools/calib.mjs の «予測 vs 運転»）。 */
+    temp = SlabState.pickupMeanC(temp, h0, al, width, L0);
     hTarget = Math.max(hTarget, CONFIG.MILL.GAP_MIN);        // 装置の圧下下限を下回らない
     const M = CONFIG.MILL, P = CONFIG.PROCESS, R = M.WR_D / 2;
     const dBite = 2 * R * (1 - Math.cos(P.BITE_ANGLE_MAX));
@@ -8542,7 +8577,7 @@ class SlabState {
     this.cut = { 1: null, '-1': null };
     /* 板厚方向の層温度（上面 → 下面）。炉出しは «均一» ではない —— ピット炉は下から
      * 加熱するので下ほど熱い。抽出から持ちかかりまでの待ちで均されたぶんを解いて入れる。 */
-    this.T = SlabState.pitProfile(temp, thickness, this.alloy);
+    this.T = SlabState.pitProfile(temp, thickness, this.alloy, width, length);
     this.inBite = false; this.rollingActive = false; this.onLine = false; this.biteOk = true;
     this.cropped = { 1: false, '-1': false };       // 端ごとに «クロップ済みか»（+1: xMax 側 / −1: xMin 側）
     /* 端部欠陥は «その端を最後に平らにしてからの圧下» で育つ。切った瞬間に 0 に戻り、
@@ -8908,10 +8943,14 @@ class SlabState {
    * その間に差は板厚方向の熱伝導で均されていく —— どれだけ残るかは実機で測っていない
    * ので、ここで解いて答えにする（層モデルと同じ陰解法）。
    *
-   * 入力の temp は «持ちかかり» の測定値（板厚方向の平均）と解釈するので、解いたあとで
-   * 平均をそこへ戻す。待ち時間で下がる «平均» のぶんは、測定値にもう含まれているため。
+   * 入力の temp は «持ちかかり» の読み。SUPPLY.PICKUP_READ が 'MEAN' なら板厚平均と解釈して
+   * 解いたあとで平均をそこへ戻す（待ち時間で下がる «平均» のぶんは測定値にもう含まれているため）。
+   * 'TOP'（既定。ご回答 2026-09-15）なら «洗浄後・吊る瞬間の上面» と解釈し、そこまでの操作
+   * （洗浄の冷え → 空中で PICKUP_LAG 秒）を同じ式で先に解いて、上面の見込みが temp に等しくなる
+   * まで全体をずらす（放射の境界が非線形なので 2〜3 回。0.01 K で止める）。返すのは «洗浄前» の
+   * 分布 —— 洗浄そのものは工程で実際に入る（SupplyController._enter）。
    */
-  static pitProfile(temp, thickness, alloy) {
+  static pitProfile(temp, thickness, alloy, width = CONFIG.SLAB.WID_DEFAULT, length = CONFIG.SLAB.LEN_DEFAULT) {
     const n = CONFIG.MATERIAL.LAYERS, T = new Float64Array(n);
     const dT = CONFIG.FURNACE.SOAK_DT || 0;
     // j = 0 が上面。下ほど熱いので下側（j = n−1）が ＋dT/2
@@ -8920,7 +8959,44 @@ class SlabState {
     let s = 0; for (let j = 0; j < n; j++) s += (j === 0 || j === n - 1) ? T[j] / 2 : T[j];
     const mean = s / (n - 1), fix = temp - mean;
     for (let j = 0; j < n; j++) T[j] += fix;
+    if (CONFIG.SUPPLY.PICKUP_READ === 'TOP') {
+      for (let k = 0; k < 4; k++) {
+        const d = temp - SlabState.pickupTop(T, thickness, alloy, width, length).top;
+        if (Math.abs(d) < 0.01) break;
+        for (let j = 0; j < n; j++) T[j] += d;
+      }
+    }
     return T;
+  }
+  /**
+   * «持ちかかりの読み» temp から、圧延の起点になる板厚平均 [℃]（吊る瞬間の平均）。'TOP' なら pitProfile と
+   * 同じ解で読み → 平均に直す。'MEAN' ならそのまま。予測（Rolling.buildSchedule）と画面がこれを使い、
+   * 運転の素材（pitProfile）と同じ起点に立つ。
+   */
+  static pickupMeanC(temp, thickness, alloy, width = CONFIG.SLAB.WID_DEFAULT, length = CONFIG.SLAB.LEN_DEFAULT) {
+    if (CONFIG.SUPPLY.PICKUP_READ !== 'TOP') return temp;
+    const T = SlabState.pitProfile(temp, thickness, alloy, width, length);
+    return SlabState.pickupTop(T, thickness, alloy, width, length).mean;
+  }
+  /** 洗浄が終わってから «持ちかかり» を測る（掴む）までの秒。SUPPLY.PICKUP_LAG_S が null なら工程の FEED2 の秒 */
+  static pickupLagSec() {
+    const L = CONFIG.SUPPLY.PICKUP_LAG_S;
+    if (L != null) return L;
+    const q = CONFIG.SEQUENCE.find(q => q[1] === 'feed2');
+    return q && typeof q[2] === 'number' ? q[2] : 0;
+  }
+  /**
+   * «吊る瞬間» の層温度の見込み: いまの層温度 T（洗浄前）から、洗浄の冷え（washChill）→ 空中で
+   * pickupLagSec 秒（relax）。運転（_enter）とまったく同じ操作なので、ここで合わせた上面は運転でも合う。
+   * 返り値 { top, mean, bot, T }
+   */
+  static pickupTop(T, thickness, alloy, width, length) {
+    const fake = { T: Float64Array.from(T), thickness, width, length, alloy };
+    const Tg = Float64Array.from(SlabState.washChill(fake, CONFIG.SUPPLY.WASHER.SEC).T);
+    const lag = SlabState.pickupLagSec();
+    if (lag > 0) SlabState.relax(Tg, thickness, alloy, lag, 1);
+    const n = Tg.length; let q = 0; for (let j = 0; j < n; j++) q += (j === 0 || j === n - 1) ? Tg[j] / 2 : Tg[j];
+    return { top: Tg[0], mean: q / (n - 1), bot: Tg[n - 1], T: Tg };
   }
   /**
    * 板厚方向の熱伝導を secs 秒だけ進める（両面は放射 ＋ 自然対流で室温へ）。陰解法なので
@@ -8962,7 +9038,7 @@ class SlabState {
    * （WET_TOP）、下面はブラシが液を塗る（WET_BOT）。
    * 抜ける熱は «液 LITERS が温まって蒸発する» 量を超えられない（超えたら液が尽きたとして
    * その比で頭打ち）。返り値は冷えたあとの層温度 T と内訳。板の T は書き換えない
-   * （書き換えるかは呼ぶ側 —— SUPPLY.WASHER.COOLS_INPUT）。
+   * （書き換えるかは呼ぶ側 —— SUPPLY.PICKUP_READ）。
    */
   static washChill(slab, secs = CONFIG.SUPPLY.WASHER.SEC) {
     const W = CONFIG.SUPPLY.WASHER, CO = CONFIG.MATERIAL.COOLANT, al = slab.alloy;
@@ -9435,13 +9511,24 @@ class SupplyController {
   }
   _enter(i) {
     const seq = CONFIG.SEQUENCE, s = this.s, key = seq[i][1];
-    /* 洗浄を抜けるとき: 冷えた量を確定する。持ちかかり温度が «洗浄のあと» の測定なら（既定）
-     * 圧延に掛かる板からは引かない —— 引くと二重に冷やすことになる。 */
+    /* 洗浄を抜けるとき: 冷えた量を確定する。持ちかかりの読みが «洗浄後の上面»（PICKUP_READ 'TOP'）なら
+     * 冷えは板に実際に入れる（素材の温度は吊る瞬間の上面がその読みになるように置いてある ——
+     * SlabState.pitProfile）。'MEAN'（板厚平均 ＝ 読み）なら引かない —— 引くと二重に冷やすことになる。 */
+    const top = CONFIG.SUPPLY.PICKUP_READ === 'TOP', iWash = seq.findIndex(q => q[1] === 'wash');
     if (i > 0 && seq[i - 1][1] === 'wash') {
       const r = SlabState.washChill(this.slab, CONFIG.SUPPLY.WASHER.SEC);
       s.wash = r;
-      if (CONFIG.SUPPLY.WASHER.COOLS_INPUT) this.slab.T.set(r.T);
+      if (top) this.slab.T.set(r.T);
     }
+    /* 洗浄のあとは、掴む・運ぶ・降ろすあいだも板は空中で冷え、上面は洗浄の冷えから戻っていく。
+     * 工程を 1 つ終えるたびに、その工程の秒だけ層モデルを進める（圧延中の _thermal と同じ放射＋自然対流）。
+     * FEED2 のぶんは «洗浄が終わってから測るまでの秒»（pickupLagSec）—— 実機の値が入ればそれ。
+     * GRAB に入る瞬間が読みの時点なので、そのときの上面・平均を s.pickup に残す（評価器と画面が見る）。 */
+    if (top && iWash >= 0 && i > iWash + 1) {
+      const prev = seq[i - 1][1], secs = prev === 'feed2' ? SlabState.pickupLagSec() : (s.dur[prev] || 0);
+      if (secs > 0) SlabState.relax(this.slab.T, this.slab.thickness, this.slab.alloy, secs, 1);
+    }
+    if (key === 'grab') { const T = this.slab.T; s.pickup = { top: T[0], mean: this.slab.temperature, bot: T[T.length - 1], t: this.slab.initialTemp }; }
     s.step = i; s.phase = seq[i][0]; s.dur[key] = this._sec(key);
     if (key === 'wash') s.wash = SlabState.washChill(this.slab, CONFIG.SUPPLY.WASHER.SEC);   // 見込み（表示用）
     this.bus.emit('SYS_MESSAGE', { text: `装入 ${i + 1}/${seq.length}: ${seq[i][3]}`
@@ -9453,7 +9540,12 @@ class SupplyController {
     s.p[key] = Math.min(1, s.p[key] + dt / T);
     if (s.p[key] < 1) return;
     if (s.step + 1 < seq.length) this._enter(s.step + 1);
-    else { s.active = false; s.phase = 'DONE'; this.bus.emit('SYS_SUPPLY_DONE'); }
+    else {
+      // 最後の工程（降ろす）のぶんも空中で進めてから圧延側（_thermal）へ渡す
+      if (CONFIG.SUPPLY.PICKUP_READ === 'TOP' && (s.dur[key] || 0) > 0 && seq.findIndex(q => q[1] === 'wash') < s.step)
+        SlabState.relax(this.slab.T, this.slab.thickness, this.slab.alloy, s.dur[key], 1);
+      s.active = false; s.phase = 'DONE'; this.bus.emit('SYS_SUPPLY_DONE');
+    }
   }
 }
 
@@ -18083,7 +18175,9 @@ class UIManager {
      * （食い違いの理由は未解明 —— README 0-3 の 23）。 */
     const pk = Soak.pickupC(id, key);
     const inC = CONFIG.SLAB.TEMP_DEFAULT;
-    const need = pk ? Soak.coolMinutesTo(inC, id, key) : null;
+    /* 読みは洗浄後の上面（SUPPLY.PICKUP_READ）なので、比べる相手は読みではなく «読みから解いた板厚平均» */
+    const inMean = SlabState.pickupMeanC(inC, CONFIG.SLAB.CAST_DEFAULT - 2 * CONFIG.SLAB.SCALP_DEFAULT, CONFIG.ALLOYS[key] || Rolling.alloy());
+    const need = pk ? Soak.coolMinutesTo(inMean, id, key) : null;
     el.innerHTML = `<b>${escHtml(id)}</b> ${escHtml(p.name)}（${escHtml(p.stages ?? '')}）`
       + ` ／ 最後の均熱 <b>${hold === null ? '–' : hold + ' ℃'}</b>`
       + ` ／ 保持の下限 合計 ${hrs} h`
@@ -18092,8 +18186,8 @@ class UIManager {
       + (lim.temp.length ? ` ／ <span style="color:var(--serious)">温度上限あり</span>` : '')
       + (pk ? `<br><span style="color:var(--ink-3)">この操業から出る持ちかかり温度の見込みは`
         + ` <b>${pk.toC.toFixed(0)} ℃</b>（炉出 ${pk.fromC} ℃ から ${pk.minutes} 分で −${pk.dropC.toFixed(0)} K）。`
-        + `実機の持ちかかりは ${inC} ℃ で <b>${(pk.toC - inC).toFixed(0)} K</b> 合いません`
-        + (need ? `—— 自然放熱だけで ${inC} ℃ まで落ちるには <b>${(need / 60).toFixed(1)} 時間</b>かかります。` : '。')
+        + `実機の持ちかかりは読み ${inC} ℃（洗浄後の上面。板厚平均では ${inMean.toFixed(0)} ℃）で <b>${(pk.toC - inMean).toFixed(0)} K</b> 合いません`
+        + (need ? `—— 自然放熱だけで平均 ${inMean.toFixed(0)} ℃ まで落ちるには <b>${(need / 60).toFixed(1)} 時間</b>かかります。` : '。')
         + `1 炉 ${CONFIG.FURNACE.CHARGE_N} 本程度の釜組から 1 ロット抜くたびに天面のふたが開いて炉内が冷えますが、`
         + `それだけでは届きません。理由が分かっていないので、素材の温度は入力値をそのまま使っています`
         + `（残件«抽出から持ちかかりまでに落ちる理由»）。</span>` : '');
