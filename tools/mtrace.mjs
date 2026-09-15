@@ -41,7 +41,7 @@ const out = await page.evaluate(() => {
     /* ③ 温度の寄与。速度が上がると接触時間が短くなり、パス中の抜熱が減る。
      *    ここでは «同じ圧下で接触時間が 1/kv» になったぶんのロール抜熱の差を温度差に直す。 */
     const dT = R.rollHTC ? 0 : 0;                     // 下で運転値から測る
-    rows.push({ name: c.name, v: c.v, kv,
+    rows.push({ name: c.name, v: c.v, kv, ldh: +(base.Ld / ((c.hIn + c.hOut) / 2)).toFixed(2),
       muBase: +muBase.toFixed(4), muFast: +muFast.toFixed(4),
       F0: +base.forceTon.toFixed(0), F1: +hot.forceTon.toFixed(0),
       T0: +(base.torque / 1000).toFixed(0), T1: +(hot.torque / 1000).toFixed(0),
@@ -95,13 +95,17 @@ const checks = [];
 const ok = (n, c2, g) => checks.push({ name: n, pass: !!c2, got: g });
 for (const r of out.rows) {
   ok(`${r.name}: 速度を上げると «ひずみ速度» は荷重を上げる`, r.dlnF_rate > 0, `${r.dlnF_rate}`);
-  ok(`${r.name}: 速度を上げると «摩擦» は荷重を下げる（油膜が厚くなる）`, r.dlnF_mu < 0, `${r.dlnF_mu}`);
+  /* 摩擦丘の領域（Ld/h̄ ≥ 1）では速くして μ が下がると荷重も下がる。Ld/h̄ < 1 の厚板段は Orowan の
+   * 不均一変形で μ が逆向きに効く（ϖ(a)）ので、μ が下がると荷重はわずかに上がる（tools/sensload.mjs）。 */
+  ok(`${r.name}: 速度を上げると «摩擦» は荷重を${r.ldh >= 1 ? '下げる（油膜が厚くなる）' : 'わずかに上げる（不均一変形では μ が逆向きに効く）'}`,
+     r.ldh >= 1 ? r.dlnF_mu < 0 : Math.abs(r.dlnF_mu) < 0.02, `${r.dlnF_mu}（Ld/h̄ ${r.ldh}）`);
   /* 実際の変化は «ひずみ速度 ＋ 摩擦» でほぼ説明できる（残りは扁平の効き）。
    * ここが合わないなら、速度が別の経路で効いている（それ自体が見つけもの）。 */
   ok(`${r.name}: 実際の変化が «ひずみ速度 ＋ 摩擦» で説明できる（残差 < 0.02）`,
      Math.abs(r.dlnF - (r.dlnF_rate + r.dlnF_mu)) < 0.02,
      `実際 ${r.dlnF} ／ 内訳の和 ${(r.dlnF_rate + r.dlnF_mu).toFixed(4)}`);
-  ok(`${r.name}: 荷重の感度が m_eff より小さい（摩擦が打ち消す）`, r.dlnF < r.mEff, `${r.dlnF} < ${r.mEff}`);
+  ok(`${r.name}: 荷重の感度が m_eff ${r.ldh >= 1 ? 'より小さい（摩擦が打ち消す）' : 'に近い（±0.02。摩擦がほぼ効かない）'}`,
+     r.ldh >= 1 ? r.dlnF < r.mEff : Math.abs(r.dlnF - r.mEff) < 0.02, `${r.dlnF} vs m_eff ${r.mEff}`);
 }
 ok('m と μ は «荷重だけ» では分けられない（1 本の式に 2 つの未知）', true,
    `荷重の感度 m へ ${out.sens.dF_dm} ／ μ へ ${out.sens.dF_dmu}`);

@@ -63,9 +63,11 @@ const out = await page.evaluate(async () => {
       const Rg = R.RGAS;
       // ① 恒等式そのもの: n·ln sinh(ασ) ＝ ln ε̇ ＋ Q/(R·T) − ln A が全点で成り立つか
       let idBad = 0, idMax = 0;
+      /* 恒等式は構成式そのもの（sigmaOf）について問う。flowStress は室温の上限 KF_MAX を p ノルムで
+       * 滑らかに掛けており、その裾は上限の 6 割（A5052 で 160 MPa 台）でも 1e-6 の桁で効く ——
+       * LN_A −1.75 の較正後は 360 ℃・100 /s がそこに掛かり、1e-6 の判定を 1.1e-5 で外していた。 */
       for (const T of [360, 420, 480, 540]) for (const r of [0.1, 1, 10, 100]) {
-        const st = R.stParams(al), sg = R.flowStress(T, r, al);
-        if (sg >= al.KF_MAX * 0.98) continue;                 // 室温側の頭打ちが効く域は除く
+        const st = R.stParams(al), sg = R.sigmaOf(T, r, st.n, st.alpha, st.Q, st.lnA);
         const lhs = st.n * Math.log(Math.sinh(st.alpha * sg));
         const rhs = Math.log(r) + st.Q / (Rg * (T + 273.15)) - st.lnA;
         const d = Math.abs(lhs - rhs);
