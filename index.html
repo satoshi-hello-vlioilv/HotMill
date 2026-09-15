@@ -1714,6 +1714,17 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.13.0', base: '7ce3280', date: '2026-09-15', title: '75 mm シャーの下台で板がテーブルロールへめり込んでいたのを直し、持ち上げを «梁» にする', items: [
+      { t: '下台が上がっているあいだ、上流の板がテーブルロールへ 150.0 mm（＝持ち上げ量そのもの）めり込んでいた。原因は «据わり» と «頂点» で違う持ち上げ形を使っていたこと —— 据わりには全ロールへ持ち上げ量を全量渡し、頂点には 2 m で減衰させた量を与えていた。据わりはその差を «板全体が持ち上がった» と読んで同じだけ押し下げるので、減衰しきった上流でちょうど持ち上げ量ぶん沈む', w: 'SlabView._restPose / update' },
+      { t: '持ち上げの形を 1 式（Rolling.bedLiftAt）にまとめ、据わりも頂点も同じものを見るようにした。実測 150.0 → 0.0 mm（板材 40 mm の切り分けでも 0.2 mm）', w: 'Rolling.bedLiftAt / SlabView' },
+      { t: '上流の戻り方を «剛体が 2 m で戻る» から «自重でたわむ梁» にした。接地点では高さ・傾き・曲げモーメントの 3 つが連続し、下台の縁は線接触なのでモーメント 0 —— EI·y⁗ = −q を解くと 浮き上がり長 L ＝ (24·(EI/q)·δ)^(1/4)、形は y(s) ＝ δ·t³·(2−t)。実測で 65 mm 板 7.0 m・40 mm 板 5.5 m と、置いていた 2 m とは桁が違っていた', w: 'Rolling.bedLiftSpan / bedLiftAt' },
+      { t: '据わり（剛体の釣り合い）に下台の持ち上げを渡すのをやめた。据わりは «板の形»（＝反り）に対して意味を持つもので、下台のたわみは «接触を満たすように解いた変位» —— テーブルに着く所では必ず 0 になるので、そこへ剛体の据わりを重ねると二重に効いて板が傾く（実測: 板材の切り分けで下台の上が 150 → 61 mm に潰れていた）', w: 'SlabView._restPose' },
+      { t: '下台が持ち上げるのは «刃より上流» だけにした。以前は刃の向こう側まで一緒に上げていて、後端カットでは «下台に載っていない板» まで持ち上げていた（据わりが同じだけ押し下げて見かけ上つじつまが合っていた）。刃の面が剪断面そのもので、そこで段が付くのが正しい', w: 'Rolling.bedLiftAt' },
+      { t: '板が浮き上がり長より短いときは、板の端で 0 に戻るよう長さを詰める（切り分けの最後の残りがこれに当たる）', w: 'SlabView.update' },
+      { t: '下台の持ち上げ量の式を 1 か所（FinishState.liftOf）にした。物理（切れたかの判定）・板の姿勢・下台の描画がそれぞれ同じ式を書いていた', w: 'FinishState.liftOf / bedLift' },
+      { t: '持ち上げの曲げ応力は σ ＝ (3/4)·√(2δEρg) で «板厚にも板幅にも依らない» ことが式から出る（実測 14.9 MPa）。比べる相手はひずみ速度 3.3×10⁻⁴ /s の変形抵抗 14.8〜17.0 MPa で、比は 0.87〜1.01 —— 弾性と塑性の境目に乗っているので、永久の曲がりを入れるかは実機の確認待ちにした（README 0-4 の 30）', w: 'tools/shearbed.mjs / README 0-4' },
+      { t: '評価器を作った。板メッシュの頂点をそのまま読み、テーブルロールのある X ごとに «下面がロール上面よりどれだけ下か» を出す。端部切断（コイル材）と切り分け（板材 40 mm）の両方を通す', w: 'tools/shearbed.mjs' },
+    ] },
     { v: '2.12.1', base: '6a38515', date: '2026-09-14', title: '荷重の «精度» を測る —— いま縛っているのはモデルではなく測りものだと分かった', items: [
       { t: '荷重の精度を測る評価器を作った。①実機の荷重帯に対して本アプリがどこにいるか ②外れ方が Ld/h̄ と連動しているか（＝ «倍率のずれ» か «形のずれ» か）③実機データで縛れる幅（荷重を一様に何 % ずらすと帯の判定が落ちるか）の 3 つを分けて数にする', w: 'tools/loaderr.mjs' },
       { t: 'いちばん大きいのはモデルではなく測りものだった —— 実機データが区間ごとの «帯» でしかないので、荷重を一様に −14.5 %〜+26.7 % ずらしても帯の判定は通ってしまう。どれだけモデルを良くしても、その幅より細かい改善は «良くなったこと» を示せない', w: 'tools/loaderr.mjs / README 0-1' },
@@ -6877,6 +6888,51 @@ const Rolling = {
     return { EIq, liftOff, tip: Math.min(k * liftOff * liftOff / 4, 0.3 * liftOff),
              touch: Math.SQRT2 * liftOff };
   },
+  /**
+   * 75 mm シャーの下台が板の端を δ だけ持ち上げたときの «浮き上がり» —— 板は剛体ではなく、
+   * 自重でたわみながら上流のテーブルへ戻る。
+   *
+   * 下台（長さ BED_L）は刃の上流側にあり、板はその縁で線接触して持ち上がる。
+   * 接地点では «高さ・傾き・曲げモーメント» の 3 つが連続する（テーブルの上では板は
+   * 真っ直ぐなのでモーメントは 0）。下台の縁は線接触なのでモーメントは 0。
+   *
+   *     EI·y'''' = −q          （q ＝ 自重 [N/mm]）
+   *     接地点 s=0: y = 0, y' = 0, y'' = 0
+   *     下台の縁 s=L: y = δ, y'' = 0
+   *   ⇒ 浮き上がり長  L = (24·(EI/q)·δ)^(1/4)
+   *     形            y(s) = δ·(2L·s³ − s⁴)/L⁴ = δ·t³·(2−t),  t = s/L
+   *
+   * 最大曲げ応力は中央（s = L/2）で σ = 3qL²/(4·w·h²)。L を代入すると
+   *     σ = (3/4)·√(2·δ·E·ρg)
+   * となり、板厚にも板幅にも依らない。実測（δ = 150 mm・A5052）で 14.6 MPa ——
+   * 熱間の変形抵抗 60〜150 MPa の 1/4 以下なので、持ち上げても板は «弾性のまま» で
+   * 永久の曲がりは残らない（tools/shearbed.mjs が毎回この比を出す）。
+   */
+  bedLiftSpan(delta, h, w, alloy = Rolling.alloy()) {
+    if (!(delta > 0) || !(h > 0) || !(w > 0)) return { L: 0, sigma: 0 };
+    const EI = alloy.E * 1000 * w * h * h * h / 12;          // N·mm²
+    const q = alloy.RHO * 1e-9 * 9.81 * h * w;               // N/mm
+    const L = Math.pow(24 * (EI / q) * delta, 0.25);
+    return { L, sigma: 3 * q * L * L / (4 * w * h * h) };
+  },
+  /**
+   * 上の形。d ＝ 下台の «上流側の縁» から上流へ測った距離 [mm]。
+   *   d < −bedL   … 刃より «下流»。下台の上ではないので持ち上がらない ——
+   *                  ここが剪断面そのもので、下台が上流側を押し上げて刃で切り離す。
+   *                  （先端カットではこちら側が屑、後端カットではこちら側が板）
+   *   −bedL ≤ d ≤ 0 … 下台の上。全量 δ 持ち上がる
+   *   0 < d < L    … 自重でたわみながらテーブルへ戻る梁
+   *   d ≥ L        … もうテーブルに着いている
+   */
+  bedLiftAt(d, delta, L, bedL = CONFIG.CROP_SHEAR.BED_L) {
+    if (!(delta > 0)) return 0;
+    if (d < -bedL) return 0;                                 // 刃より下流（切り離される側）
+    if (d <= 0) return delta;                                // 下台の上
+    if (!(L > 0) || d >= L) return 0;                        // もうテーブルに着いている
+    const t = (L - d) / L;
+    return delta * t * t * t * (2 - t);
+  },
+
   /* =========================================================================
    * 幅方向の形状 —— クラウン（板厚分布）と平坦度（残留応力）
    *
@@ -8668,7 +8724,8 @@ class FinishState {
     this.scrapPileTh = 0;                           // 屑箱の山の高さ
     this.cropEnd = 0;                               // いま切っている端（+1: xMax 側 / −1: xMin 側）
     this.cropEndsDone = { 1: false, '-1': false };  // 端ごとの完了
-    this.cropBlade = 0;        // 下台の昇降 0:待機（上面＝パスライン） → 1:上死点
+    this.cropBlade = 0;        // 下台の昇降 0:待機（上面＝パスライン） → 1:上死点。
+                               // 実際の持ち上げ量 [mm] は this.bedLift（式は FinishState.liftOf）
     this.cropCuts = 0; this.cropIndex = 0; this.cropCutsAll = 0;   // cropCutsAll: 先端＋後端の総カット数
     this.cropEach = 0; this.cropTotal = 0; this.cropNeed = 0;      // 1 カット長 ／ 合計 ／ 欠陥長
     this.cropForceT = 0;       // その切断で要した剪断力 [tonf]
@@ -8707,6 +8764,11 @@ class FinishState {
     this.plateStage = 'IDLE'; this.plateZ = 0; this.plateY = 0; this.plateT = 0;
     this.phase = 'IDLE';
   }
+  /* 下台の持ち上げ量 [mm]。物理（切れたかの判定）も描画（板・下台・屑の高さ）も
+   * この 1 式だけを見る —— 2 か所に書くと片方だけ直して食い違う。 */
+  static liftOf(b) { const S = CONFIG.CROP_SHEAR; return b * (S.UPPER_CLR + S.OVERTRAVEL); }
+  get bedLift() { return FinishState.liftOf(this.cropBlade); }
+
   /** 板材をどこで切り分けるか。30 mm 以下は 30 mm シャー、75 mm 以下は 75 mm シャー、それ以上は切らない。 */
   static divider(th) {
     if (th <= CONFIG.SHEAR30.MAX_TH) return 'S30';
@@ -9553,7 +9615,7 @@ class FinishController {
     return 0;
   }
   /** 下台の持ち上げ量 [mm]（cropBlade 0〜1 に対する実位置）。描画と物理でこの 1 式を使う。 */
-  bedLift(b = this.s.cropBlade) { const S = CONFIG.CROP_SHEAR; return b * (S.UPPER_CLR + S.OVERTRAVEL); }
+  bedLift(b = this.s.cropBlade) { return FinishState.liftOf(b); }
 
   /**
    * クロップ開始条件。
@@ -14911,7 +14973,7 @@ class FinishView {
     // 75 mm シャー。下台の持ち上げ量は物理側と同じ式（FinishController.bedLift）を使う。
     const CS = CONFIG.CROP_SHEAR;
     // 下台は «切断で上へ» と «後端の屑を払い出すため下へ» の 2 方向に動く
-    this.cropBed.position.y = u(P + fin.cropBlade * (CS.UPPER_CLR + CS.OVERTRAVEL) - fin.bedDrop * CS.SCRAP.DROP);
+    this.cropBed.position.y = u(P + fin.bedLift - fin.bedDrop * CS.SCRAP.DROP);
     // 屑: 物理側の位置（x, パスライン基準の y, z, 傾き）をそのまま置く。形は切断時のまま
     this._pruneMeshes(this.scraps, fin.scraps);
     for (const sc of fin.scraps) {
@@ -15455,13 +15517,22 @@ class SlabView {
    * 効くのは «両端の浮き上がりが板長を食い尽くしたとき» だけで、これが実機で
    * 反った板が前後どちらかへ «カタン» と傾く現象そのものである。
    */
-  _restPose(curl, x0, x1, lift, dz) {
+  _restPose(curl, x0, x1, dz) {
     if (!curl.ends.length) return { tilt: 0, lift: 0 };
     const F = CONFIG.FLIP, T = CONFIG.TABLE;
     // 板の下にあるテーブルローラの X（接触しうる点）。ローラが無い区間では支えられない
     const xs = Layout.rolls().map(r => r.x).filter(v => v >= x0 - 1 && v <= x1 + 1);
     if (xs.length < 2) return { tilt: 0, lift: 0 };
-    const samples = xs.map(u => ({ u, b: this._curlLift(curl, u) + lift }));
+    /* 【要】ここで見るのは «反り» だけ —— 下台の持ち上げは入れない。
+     * 据わりは «剛体が平らな面に置かれたときの釣り合い» を解くもので、板の形そのもの
+     * （＝反り）に対して意味を持つ。下台の持ち上げは板の形ではなく «接触を満たすように
+     * 解いたたわみ»（Rolling.bedLiftAt）で、テーブルに着く所では必ず 0 になる ——
+     * そこへさらに剛体の据わりを重ねると «二重に» 効き、板が傾いてしまう
+     * （実測: 板材の切り分けで下台の上が 150 → 61 mm に潰れていた）。
+     * 以前は逆に、ここへ持ち上げ量を «全量・全ロール» 渡し、頂点には 2 m で減衰させた量を
+     * 与えていた。据わりはその差を «板全体が持ち上がった» と読んで同じだけ押し下げるので、
+     * 減衰しきった上流でちょうど持ち上げ量ぶん（実測 150.0 mm）ロールへめり込んでいた。 */
+    const samples = xs.map(u => ({ u, b: this._curlLift(curl, u) }));
     // 重心は板の中央（長手方向に一様な板厚として）
     const pose = Rolling.restPose(samples, (x0 + x1) / 2);
     return { tilt: pose.tilt, lift: pose.lift, seat: pose.seat, contacts: pose.contacts.length };
@@ -15479,7 +15550,20 @@ class SlabView {
     // 蛇行: 板中心の横ずれと平面内の曲がり（キャンバー）。バイトを基準に前後へ効く
     const zOff = slab.zOff || 0, camb = slab.camberVis || 0;
     // 75 mm シャーの下台が上がっているあいだ、下台に載っている先端側の板は一緒に持ち上がる
-    const CS = CONFIG.CROP_SHEAR, lift = fin ? fin.cropBlade * (CS.UPPER_CLR + CS.OVERTRAVEL) : 0;
+    /* 上流は «剛体が 2 m で戻る» のではなく «自重でたわむ梁» —— 下台の縁で線接触して
+     * 持ち上がり、浮き上がり長 L ＝ (24·(EI/q)·δ)^(1/4) でテーブルへ戻る
+     * （Rolling.bedLiftSpan / bedLiftAt）。65 mm・δ 150 mm で L は 6.9 m あり、
+     * 以前置いていた 2 m では «どこで着くか» が桁で違っていた。 */
+    const CS = CONFIG.CROP_SHEAR, lift = fin ? fin.bedLift : 0;
+    const bedEdge = CS.X - F * CS.BED_L;                  // 下台の上流側の縁
+    const bedSpan = lift > 0 ? Rolling.bedLiftSpan(lift, slab.thickness, slab.width, slab.alloy) : null;
+    /* 板が浮き上がり長より短ければ、テーブルへ戻りきる前に板が終わる。そのときは
+     * «板の端で 0 に戻る» ように長さを詰める（詰めた先は端が持ち上がった姿になる）。 */
+    const bedUp = bedSpan ? Math.max(F * (bedEdge - x0), F * (bedEdge - x1), 0) : 0;
+    const bedL = bedSpan ? Math.min(bedSpan.L, bedUp) : 0;
+    const bedAt = bedL > 0
+      ? (xm) => Rolling.bedLiftAt(F * (bedEdge - xm), lift, bedL)
+      : () => 0;
     this.mesh.visible = slab.onLine && x1 - x0 > 1;
     // 反り: 両端の浮き上がり（スキー）と、ロールから出たばかりの先端の片持ち形状
     const curl = this._curlParams(slab, mill, x0, x1, clipHead);
@@ -15487,7 +15571,7 @@ class SlabView {
     // 形状が変わっていなければ頂点更新も法線再計算も行わない（停止中のコストをゼロに）
     const sig = x0 + ':' + x1 + ':' + slab.thickness + ':' + slab.width + ':'
               + mill.gap + ':' + mill.passLine + ':' + (mill.plOffset || 0) + ':' + slab.inBite + ':' + slab.dir + ':'
-              + slab.hCut[1] + ':' + slab.hCut[-1] + ':' + slab.hHomo + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + curl.sig
+              + slab.hCut[1] + ':' + slab.hCut[-1] + ':' + slab.hHomo + ':' + slab.cut[1] + ':' + slab.cut[-1] + ':' + clipHead + ':' + dz + ':' + dy + ':' + lift + ':' + bedL.toFixed(0) + ':' + curl.sig
               + ':' + Math.round(slab.gatorDelta[1] * 4) + ':' + Math.round(slab.gatorDelta[-1] * 4)
               + ':' + (slab.wShape ? slab.wShape.crownAbs.toFixed(1) : '-')
               + ':' + (slab.zOff || 0).toFixed(1) + ':' + (slab.camberVis || 0).toExponential(3);
@@ -15526,7 +15610,7 @@ class SlabView {
     // 断面の角の丸み（鋳肌のラウンド）。板厚が薄くなるほど自己相似に縮む
     const sec = Sect.prep(hIn, w, slab.edge);
     // 据わり（剛体の釣り合い）と幅方向の板厚分布
-    const rest = this._restPose(curl, x0, x1, lift, dz);
+    const rest = this._restPose(curl, x0, x1, dz);
     const sh = slab.wShape;
     const wProf = sh ? (bz) => {                       // bz ∈ [−0.5, 0.5] → 板厚偏差 [mm]
       const t = Num.clamp(bz * 2, -1, 1), f = (t + 1) / 2 * (sh.n - 1);
@@ -15546,11 +15630,8 @@ class SlabView {
       const x = shape.map(xm, by * 2 - 1, bz * 2);
       // 断面座標。ロールバイト内では板厚が h に変わるので、丸みも同じ比率で潰す
       const q = Sect.at(sec, by * 2 - 1, bz * 2), sy = h / Math.max(hIn, 1e-6);
-      let yl = 0;
-      if (lift > 0) {                     // 下台（刃の上流 BED_L）に載る区間は全量、その上流 2 m で滑らかに 0 へ
-        const sBed = F * (xm - (CS.X - F * CS.BED_L));
-        yl = lift * Num.smoothstep(-2000, 0, sBed);
-      }
+      // 下台に載る区間は全量、その上流は梁のたわみでテーブルへ戻る（据わりと同じ 1 式）
+      let yl = bedAt(xm);
       yl += this._curlLift(curl, xm);
       // 剛体としての据わり（片側接触）。中央に平らな接地が残っていれば tilt = 0
       yl += rest.lift + rest.tilt * xm;
