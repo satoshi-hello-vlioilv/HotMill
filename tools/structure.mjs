@@ -20,11 +20,12 @@ const out = await page.evaluate((EPS) => {
                        if (o.mesh) return add(o.mesh); o.traverse ? o.traverse(x => moving.add(x)) : moving.add(o); };
   add(W.slabView.mesh); add(W.supplyView.slab);
   add(Object.values(W.millView.rolls));
-  for (const k of ['chockWR', 'chockBR', 'capRod', 'capBody', 'wedge', 'bender', 'headers'])
+  for (const k of ['chockWR', 'chockBR', 'capRod', 'capBody', 'wedge', 'bender', 'headers', 'nozzles'])
     { const v = W.millView[k]; if (v) { add(v.near); add(v.far); add(v); } }
   add(W.driveView.spindles); add(W.driveView.pinions); add(W.driveView.heads);
   for (const z of W.tableView.zones) add(z.rolls);
   add(W.tableView.eRolls);                                 // E-1 / E-2 のローラ（回る）
+  if (W.supplyView.washer) { add(W.supplyView.washer.top); add(W.supplyView.washer.bot); }   // 洗浄機のブラシ（回り、上は開閉する。枠に載る）
   for (const st of W.guideView.stations) for (const g of st.sides) add(g);
   const F = W.finishView;
   for (const k of ['knives', 'lowerRolls', 'upperRoll', 'mandrel', 'coil', 'bridge', 'cropRam', 'cropBed', 'cropPiece', 'cropKnife',

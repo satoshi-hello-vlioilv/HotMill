@@ -29,29 +29,41 @@ const out = await page.evaluate(() => {
   A.bus.emit('CMD_SET_PASSLINE', 0);
 
   /* ---------- 板面冷却の入側 / 出側 ---------- */
-  const SC = K.MATERIAL.STRIP_COOL;
+  const SC = K.MATERIAL.STRIP_COOL, Z = SC.ZONES;
+  /* 冷却は 4 系統（入側上面 ET / 出側上面 XT / 入側下面 EB / 出側下面 XB）。SC.ENTRY / EXIT は
+   * «その側のどれかが入っているか» の読み取り専用で、代入しても何も起きない（VER.2.1.0 から。
+   * ここで代入していたため、既定ロットが入側 OFF なのに «両方 ON» を検査したことになり、
+   * 4 通りとも既定のまま ＝ 5 件が NG のまま流れていた）。側の入切は 4 系統へ書く。 */
+  const setCool = (entry, exit) => { Z.ET.on = Z.EB.on = entry; Z.XT.on = Z.XB.on = exit; };
+  const keep = { ET: Z.ET.on, XT: Z.XT.on, EB: Z.EB.on, XB: Z.XB.on };
   // ヘッダは 1 ステーションに OS / DS の 2 本。ON/OFF はステーション単位（Layout.coolStations(true)）
   const nAll = L.coolStations().length, LEN = K.TABLE.GUIDE.HEADER.LEN;
-  SC.ENTRY = true; SC.EXIT = true;
+  setCool(true, true);
   ok('両方 ON なら全ヘッダが効く', L.coolHeaderCount() === nAll * 2, `${L.coolHeaderCount()} / ${nAll * 2} 本`);
-  SC.ENTRY = false;
+  setCool(false, true);
   ok('入側を切ると入側のヘッダだけ止まる',
      L.coolStations(true).length === nAll / 2 && L.coolStations(true).every(x => x < 0),
      `${L.coolHeaderCount()} 本（すべて出側）`);
-  SC.ENTRY = true; SC.EXIT = false;
+  setCool(true, false);
   ok('出側を切ると出側のヘッダだけ止まる',
      L.coolStations(true).length === nAll / 2 && L.coolStations(true).every(x => x > 0),
      `${L.coolHeaderCount()} 本（すべて入側）`);
-  SC.ENTRY = false; SC.EXIT = false;
+  setCool(false, false);
   ok('両方切るとヘッダは効かない', L.coolHeaderCount() === 0, '0 本');
   ok('設備そのものは消えない（ON/OFF は運転の話）', L.coolHeaderCount(false) === nAll * 2, `${nAll * 2} 本のまま`);
   ok('スケジュール予測も同じ冷却域を見る', R.activeCoolLength(1e9) === 0, `有効 ${R.activeCoolLength(1e9)} mm`);
-  SC.ENTRY = true; SC.EXIT = true;
+  setCool(true, true);
   ok('戻すと元どおり', R.activeCoolLength(1e9) === nAll * LEN, `${R.activeCoolLength(1e9)} mm`);
+  ok('SC.ENTRY / EXIT が 4 系統の読み取りになっている（代入は効かない）',
+     SC.ENTRY === true && SC.EXIT === true && (() => { try { SC.ENTRY = false; } catch (e) {} return SC.ENTRY === true; })(),
+     `ENTRY ${SC.ENTRY} / EXIT ${SC.EXIT}`);
+  Object.assign(Z.ET, { on: keep.ET }); Object.assign(Z.XT, { on: keep.XT }); Object.assign(Z.EB, { on: keep.EB }); Object.assign(Z.XB, { on: keep.XB });
 
   /* ---------- 通し運転で «効果» を測る ---------- */
+  /* 通し運転の入切は «既定ロットの 4 系統» を起点に、入側／出側をまとめて切る。
+   * 基準（両方 ON）は既定ロットそのもの（入側上面 OFF・他 ON）—— 他の評価器と同じ板にする。 */
   const run = (pl, entry, exit) => new Promise(r => {
-    SC.ENTRY = entry; SC.EXIT = exit;
+    Z.ET.on = keep.ET && entry; Z.EB.on = keep.EB && entry; Z.XT.on = keep.XT && exit; Z.XB.on = keep.XB && exit;
     A.bus.emit('CMD_RESET');
     setTimeout(() => {
       A.bus.emit('CMD_SET_PASSLINE', pl);
