@@ -115,6 +115,7 @@ const out = await page.evaluate(() => {
       hOut: +full[full.length - 1].gap.toFixed(2),
       dTend: +cur.dTend.toFixed(1), dTmid: +cur.dTmid.toFixed(1),
       coil: !!K.SCHEDULE[cur.pass - 1]?.coil, q1, q4,
+      fwd: avg(full.filter(q => q.dHead > ZONE && q.t - t0 > tTr).map(q => q.fwd)),   // 定常域の前進率
     });
     cur = null; rec = [];
   };
@@ -124,7 +125,7 @@ const out = await page.evaluate(() => {
     if (s.inBite && i >= 0) {
       if (!cur || cur.pass !== i + 1) { finish(); cur = { pass: i + 1, gap: K.SCHEDULE[i]?.gap ?? 0, len: s.length }; }
       const gap = m.gap, hIn = s.thickness;
-      rec.push({ t: +t.toFixed(3), f: m.forceMeas ?? s.rollForce, fill: s.biteFill, gap, v: Math.abs(m.currentSpeed),
+      rec.push({ t: +t.toFixed(3), f: m.forceMeas ?? s.rollForce, fill: s.biteFill, gap, v: Math.abs(m.currentSpeed), fwd: s.forwardSlip,
                  dHead: (s.dir > 0 ? s.xMax : -s.xMin) * gap / Math.max(hIn, 1e-6),
                  dTail: s.dir > 0 ? -s.xMin : s.xMax });
       const D = s.dTProf, N = D.length;
@@ -139,6 +140,12 @@ const out = await page.evaluate(() => {
   const ps = R.passes, thin = ps.filter(q => q.gap <= 60);
 
   ok('全パスを過負荷停止せずに通せる', !!R.done && !R.tripped, R.tripped || `${ps.length} パス完走`);
+  /* 前進率 —— 中立点（＝ 摩擦）の実測。FWD_SLIP_MEAS に実測が入れば合否、無ければ参考として毎回出す
+   * （DATAREQ FWDSLIP。講座（軽金属 1990）の熱間アルミの μ 0.05〜0.20 なら前進率は数 %）。 */
+  { const cp = ps.find(q => q.coil), meas = K.PROCESS.FWD_SLIP_MEAS;
+    if (cp) ok(meas ? '巻取パスの前進率が実測と合う（±2 ポイント）' : '（参考）巻取パスの前進率（実測が来たら合否にする）',
+               meas ? Math.abs(cp.fwd * 100 - meas.f) < 2 : true,
+               `予測 ${(cp.fwd * 100).toFixed(1)} %` + (meas ? ` ／ 実測 ${meas.f} %` : `（μ 基準 ${K.PROCESS.MU}。核 ${K.PROCESS.KERNEL}）`), !meas); }
   ok('薄いパス（出側 60 mm 以下）は必ず噛み込みのピークが立つ',
      thin.length > 0 && thin.every(q => q.spikeR >= 1.03),
      thin.map(q => `P${q.pass} ${q.spikeR}`).join(' '));

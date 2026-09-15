@@ -97,7 +97,7 @@ const out = await page.evaluate(() => {
     const flat = (base.forceTon / base.forceRigidTon - 1) * 100;
     /* --- ⑪ 接触弧の局所ひずみ速度（1 点評価との差） --- */
     const arcGain = (() => {
-      const n0 = R.ARC_N; R.ARC_N = 1; const one = F(c); R.ARC_N = n0;
+      const n0 = R.ARC_N; R.ARC_N = 1; R.KP_ARC_MEAN = true; const one = F(c); R.ARC_N = n0; R.KP_ARC_MEAN = false;   // 核が Orowan でも «1 点» にする
       return (one.forceTon / base.forceTon - 1) * 100;                 // 1 点評価だと何 % 高いか
     })();
 
@@ -212,11 +212,17 @@ for (const r of out.rows) {
   ok(`${r.name}: 変形抵抗にほぼ比例する（0.9〜1.1）`, r.eKf > 0.9 && r.eKf < 1.1, `${r.eKf}`);
   ok(`${r.name}: 圧下量を増やすと荷重が増える`, r.eDh > 0.3, `${r.eDh}`);
   ok(`${r.name}: ロールを太くすると荷重が増える（接触弧が伸びる）`, r.eR > 0, `${r.eR}`);
-  ok(`${r.name}: μ を上げると荷重が増える`, r.eMu > 0, `${r.eMu}`);
+  /* 摩擦丘の領域（Ld/h̄ ≥ 1）では μ を上げると荷重が増える。Ld/h̄ < 1 の厚板段は Orowan の不均一変形で
+   * μ が ϖ(a) ＝ 1 − (1 − π/4)a² を通して «境界の圧力を下げる» 向きにも効き、摩擦丘が無いぶん正味は
+   * わずかに負になる（実測 −0.07）。旧核（Coulomb）では常に正だった。 */
+  ok(`${r.name}: ${r.Ldh >= 1 ? 'μ を上げると荷重が増える' : 'μ の効きは小さい（|∂lnF/∂lnμ| < 0.15。不均一変形で逆向きにも効く）'}`,
+     r.Ldh >= 1 ? r.eMu > 0 : Math.abs(r.eMu) < 0.15, `${r.eMu}`);
   ok(`${r.name}: 温度を上げると荷重が下がる`, r.eT < 0, `${r.eT} %/10 K`);
   ok(`${r.name}: 扁平は荷重を増やす向きにしか効かない`, r.flat >= 0, `+${r.flat} %`);
   ok(`${r.name}: 接触弧を 1 点で評価すると荷重が高く出る`, r.arc > 0, `+${r.arc} %`);
-  ok(`${r.name}: 速度の感度は m_eff より小さい（摩擦が打ち消す）`, r.eV < r.mEff, `${r.eV} < ${r.mEff}`);
+  // 速度を上げると μ が下がる（(V_ref/v)^0.1）。μ が荷重を増やす領域では m_eff より小さく、逆に効く厚板段では大きく出る
+  ok(`${r.name}: 速度の感度は m_eff から μ の速度依存のぶんだけずれる（${r.eMu > 0 ? '摩擦が打ち消す' : '不均一変形では足す'}）`,
+     (r.eMu > 0) === (r.eV < r.mEff), `${r.eV} vs m_eff ${r.mEff}`);
 }
 /* 摩擦丘は Ld/h̄ で決まる。並べ替えて «単調» を確かめる（帯ではなく順序で縛る）。 */
 {
@@ -230,8 +236,10 @@ for (const r of out.rows) {
    *   ③ ひずみ速度  圧下率の小さいパスほど «Δh を増やすとひずみも増える» 度合いが強い
    * ③ は Ld/h̄ の小さい厚板段でこそ効くので、②と逆を向く。だから判定は «幾何の 0.5 を
    * 割らない» と «Ld/h̄ が最大のパスで最大になる» の 2 つに留め、値は参考として出す。 */
-  ok('圧下量の感度が幾何の下限 0.5 を大きく割らない（0.45 以上）',
-     out.rows.every(r => r.eDh > 0.45), out.rows.map(r => r.eDh).join(' / '));
+  /* Orowan では ④ 不均一変形（ϖ(a)）と ⑤ バイト内の発熱（圧下が大きいほど温まって軟らかい）が
+   * 引く側に足されるので、Δ ≈ 1 の中間パスで 0.42 まで下がる（実測）。0.35 で縛る。 */
+  ok('圧下量の感度が幾何の下限 0.5 を大きく割らない（0.35 以上）',
+     out.rows.every(r => r.eDh > 0.35), out.rows.map(r => r.eDh).join(' / '));
   ok('圧下量の感度は Ld/h̄ が最大のパスで最大になる',
      byLdh[byLdh.length - 1].eDh === Math.max(...out.rows.map(r => r.eDh)),
      byLdh.map(r => `${r.Ldh}→${r.eDh}`).join('  '));

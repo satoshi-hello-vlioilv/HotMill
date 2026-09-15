@@ -1734,6 +1734,15 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.15.0', base: '14352d8', date: '2026-09-15', title: '荷重の核を Orowan（不均一変形・すべり／固着）にし、バイト内の温度場・ひずみの過渡・先進率からの μ 同定を入れる', items: [
+      { t: '圧力分布の核を Bland–Ford（均一変形・Coulomb）から Orowan の理論へ（柳本「圧延理論（中級）」§2〜3 の式 (27)〜(41) とプログラムを写した）。傾斜 2 平面の係数 ϖ(a)、a ≥ 1 で固着（τ ＝ k\'/2）、前方・後方張力は境界条件、出口側・入口側から 4 次 RK で積んだ 2 本の水平合力の交点が中立点。前進率とトルクは同じ解から。k\'(x)・μ(x) を弧に沿って受ける', w: 'Rolling.orowan / Rolling.arcGrid / Rolling.solve' },
+      { t: '同じ入力で核だけを替えると実機ロット 23 パスで厚板段 −8〜9 %・仕上げ −13.5 %・巻取 −15 %（厚板段は ϖ(a)、薄板段は弧の 28〜55 % が固着することから）。旧核は PROCESS.KERNEL ＝ BF で比較用に残す。アプリ内の solve は独立実装と 4 パスとも 0.05 % 以内で一致', w: 'CONFIG.PROCESS.KERNEL / tools/orowan.mjs' },
+      { t: 'バイト内の温度場: 接触弧の各点で入口の層温度から経過時間の抜熱（運転側の帳簿 _biteThermal と同じ 1 式）と圧下ぶんの発熱を解き、その層温度で変形抵抗を出す。荷重には −0.3〜−0.8 % しか効かない —— 巻取パスの出口で表面は 38 K 冷えるが加工発熱 26 K が相殺する（見積もり +5〜10 % は外れ）', w: 'Rolling.biteLayerTemps / CONFIG.PROCESS.BITE_THERMAL' },
+      { t: '変形抵抗のひずみ依存: 飽和形の過渡 σ/σ_ss ＝ 1 − (1 − R0)·exp(−1.155(ε_ret ＋ ε)/ε_c) を k\'(x) に掛ける（初級 §3.3 の平均流動応力を弧の積分で）。起点は _micro の残留ひずみ（運転側はその場の値、予測側は EPS_RET_PRED 0.08）。R0 0.6・ε_c 0.15 は文献の桁の仮置き。厚板段 −9 %・巻取 −1〜−3 %', w: 'Rolling.transientK / CONFIG.MICRO.TRANSIENT' },
+      { t: '局所ひずみ速度に弧平均の 1/10 の下限（出口で ε̇ → 0 でも面圧は消えない）。k\'(x) のグリッドは扁平半径が 0.2 % 以上動いたときだけ作り直し、solve 1 回を 1.0〜1.5 ms に', w: 'Rolling.SR_FLOOR / Rolling.solve' },
+      { t: '先進率から μ を逆算する入口: PROCESS.FWD_SLIP_MEAS に実測（出側板速 ÷ ロール周速 − 1）を置けば MU がそこから決まる（二分法）。loadtrace に巻取パスの予測前進率（実測が来たら合否）を足した', w: 'Rolling.muFromForwardSlip / Rolling.muBase / tools/loadtrace.mjs' },
+      { t: '較正の仮置き: 新しい核で実機ロットの荷重が 9〜18 % 下がり 26→16 と 16→8 の帯を割るので、LN_A（絶対値のつまみ）を全材質一律に −1.75（A5052 27.092 → 25.342。Δ −1.5〜−2.0 が 4 帯の内側）。μ 0.32 は据え置き。パスごとの荷重と先進率が来たら μ・LN_A・α をまとめて決め直す', w: 'CONFIG.ALLOYS[].LN_A / tools/calib.mjs' },
+    ] },
     { v: '2.14.0', base: '3c1b2ad', date: '2026-09-15', title: '反りを長手・幅方向の «プロファイル» で持ち、ロール冷却のゾーンコントロール・スラブ洗浄機・トング 1 本化', items: [
       { t: '反りを板全体で 1 つの曲率（kNew）ではなく «材料座標の配列» で持つようにした（kProf / _kNext。板厚・温度と同じ入側／出側の 2 本立て、重みは板厚と共用）。バイトで付いた曲率を通過した区間へ書き、端を切れば同じ写像で張り直す。頭と尻の反りは同じパスでも違う —— 実測で頭尻の差が平均の最大 3 倍', w: 'SlabState.kProf / writeCurl / kAt / curlAt' },
       { t: '端の浮き上がり（描画）はその端の材料点の反り（curlAt ＝ 端から 5 % の平均）を見るようにした。板全体の平均では、頭だけ跳ねている板が全長で反って見える', w: 'SlabState.curlAt / CONFIG.SHAPE.CURL_END' },
@@ -4885,7 +4894,12 @@ const CONFIG = {
    * 書かれている。橋渡しはここには持たず、材質マスタ（CONFIG.MATCODE / MatCode）1 か所 ——
    * 同じ対応が 2 か所にあると片方だけ古くなる。 */
   ALLOYS: {
-    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 26.202, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
+    /* LN_A（構成式の絶対値）は 2026-09-15 に核を Orowan にしたとき、A5052 の較正ロットの 4 つの荷重帯
+     * （calib.mjs: 区間平均が帯の ±10 %）に入るよう **全材質一律に −1.75** 動かした（27.092 → 25.342 など）。
+     * 核を替えると同じ入力で厚板段 9 %・巻取 15 % 低くなり、それをこの 1 つのつまみで戻したもの
+     * （Δ −1.5〜−2.0 が帯の内側。tools/orowan.mjs / README 0-2）。材質間の比は保ったまま。
+     * パスごとの荷重実績と先進率（DATAREQ LOADTR / FWDSLIP）が来たら μ・LN_A・α をまとめて決め直す。 */
+    A1050: { name: 'A1050  純アルミ',        pit: 1, series: 1000, Q_ACT: 156, N_EXP: 4.5, ALPHA: 0.04, LN_A: 24.452, KF_MAX: 130, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 220, E: 48 },
     /* A1100 は実機ロット（2026-09 提供、607T）の材質。1050 との違いは Cu 0.12 % ぶんの
      * 固溶強化で、変形抵抗はわずかに高い。3 つの係数は «別々の役割» で決めてある:
      *   m —— ひずみ速度依存。最終パス（22 → 7.9 mm・94 mpm で平均 1,064 t）で較正。
@@ -4896,13 +4910,13 @@ const CONFIG = {
      *         b をそのままにすると Q_fit が 99（公表の −37 %）まで落ち、«最終パスの荷重を
      *         温度依存を弱めて買う» ことになる（実測して見つけた）。
      *   C —— 絶対値。上の 2 つを決めたあと、厚板段の荷重帯（287〜520 t、板幅 1,070）で合わせる。 */
-    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 27.517, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
-    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 30.106, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
-    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 27.959, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
-    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 27.092, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
-    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 26.694, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
-    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 22.588, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
-    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 34.306, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
+    A1100: { name: 'A1100  純アルミ（Cu 添加）', pit: 8, series: 1000, Q_ACT: 158, N_EXP: 4.5, ALPHA: 0.035, LN_A: 25.767, KF_MAX: 140, T_ROLL: [400, 550], T_COIL: 320, end: 0.9, RHO: 2710, CP: 1090, K: 222, E: 48 },
+    A3003: { name: 'A3003  Al-Mn（既定）',    pit: 2, series: 3000, Q_ACT: 180, N_EXP: 5.0, ALPHA: 0.025, LN_A: 28.356, KF_MAX: 180, T_ROLL: [400, 540], T_COIL: 320, end: 1.0, RHO: 2730, CP: 1060, K: 180, E: 49 },
+    A4045: { name: 'A4045  Al-Si（ろう材）',  pit: 3, series: 4000, Q_ACT: 160, N_EXP: 5.0, ALPHA: 0.022, LN_A: 26.209, KF_MAX: 180, T_ROLL: [380, 500], T_COIL: 300, end: 1.5, RHO: 2670, CP: 1000, K: 170, E: 50 },
+    A5052: { name: 'A5052  Al-2.5Mg',       pit: 4, series: 5000, Q_ACT: 175, N_EXP: 5.0, ALPHA: 0.02, LN_A: 25.342, KF_MAX: 280, T_ROLL: [380, 520], T_COIL: 300, end: 1.4, RHO: 2680, CP: 1040, K: 140, E: 50 },
+    A5083: { name: 'A5083  Al-4.5Mg',       pit: 5, series: 5000, Q_ACT: 185, N_EXP: 5.5, ALPHA: 0.016, LN_A: 24.944, KF_MAX: 380, T_ROLL: [380, 500], T_COIL: 300, end: 1.8, RHO: 2660, CP: 1030, K: 120, E: 50 },
+    A6061: { name: 'A6061  Al-Mg-Si',       pit: 6, series: 6000, Q_ACT: 145, N_EXP: 5.0, ALPHA: 0.022, LN_A: 20.838, KF_MAX: 330, T_ROLL: [400, 540], T_COIL: 320, end: 1.3, RHO: 2700, CP: 1050, K: 170, E: 49 },
+    A7075: { name: 'A7075  Al-Zn-Mg-Cu',    pit: 7, series: 7000, Q_ACT: 230, N_EXP: 5.0, ALPHA: 0.015, LN_A: 32.556, KF_MAX: 570, T_ROLL: [360, 450], T_COIL: 300, end: 2.6, RHO: 2810, CP: 1000, K: 130, E: 50 },
   },
 
   /* 幅方向の形状（クラウン・平坦度・幅広がり・据わり）の諸元。
@@ -5204,10 +5218,31 @@ const CONFIG = {
    *                    X ＝ 1 − exp(−0.693·(t/t₅₀)^N)。450 ℃・ひずみ 0.3 で t₅₀ ≒ 2 s。
    *   RET_K / RET_MAX —— 残留ひずみが変形抵抗に効く割合と、その上限。
    * ※ 係数はアルミ熱間加工の一般的な形と桁で置いた推定値（README 残件）。 */
+  /* TRANSIENT —— 変形抵抗のひずみ依存（過渡）。Sellars–Tegart は定常値 σ_ss だけを与えるので、
+   * 立ち上がりを飽和形で掛ける（柳本「圧延理論（初級）」§3.3: 荷重には出口ひずみまでの平均流動応力。
+   * アルミは動的回復形なので動的再結晶のピークは無い）:
+   *     σ(ε) ＝ σ_ss · [ 1 − (1 − R0) · exp( −1.155·(ε_ret ＋ ε) / EPS_C ) ]
+   *   R0     … 初期降伏比 σ₀/σ_ss。EPS_C … 過渡ひずみ（相当ひずみ）。どちらもアルミ熱間圧縮の文献の桁で
+   *            置いた仮置き（R0 0.5〜0.7、ε_c 0.1〜0.3 —— この材料の Gleeble 曲線は無い。README 0-2）
+   *   ε_ret  … 前パスから持ち越した残留ひずみ（_micro の retStrain）。運転側はその場の値、予測側
+   *            （スケジュール・クラウン）には EPS_RET_PRED を使う。運転の値は 2 パス目 0.02・厚板段の定常で
+   *            0.13 前後・最終パス 0.77 と動くので、予測と運転の荷重差が厚板段で ±10 % に収まる中間の 0.08
+   *            に置いた（0.15 だと 2 パス目の予測が運転より 24 % 高い —— tools/calib.mjs）
+   * 起点に ε_ret を置くことで «待ち時間が長い ＝ 再結晶が進む ＝ 次のパスが軟らかい» が荷重に返る。 */
   MICRO: { SUB_A: -1.00, SUB_B: 0.100, SUB_EPS: 0.20, SUB_MAX: 50,
            REX_A: 1.77e-14, REX_Q: 180, REX_N: 1.4, REX_GROW: 2.5,
-           RET_K: 0.05, RET_MAX: 0.80 },
-  PROCESS: { PASS_DEAD: 6, MU: 0.32, MU_KT: 0.0, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
+           RET_K: 0.05, RET_MAX: 0.80,
+           TRANSIENT: { ON: true, R0: 0.6, EPS_C: 0.15, EPS_RET_PRED: 0.08 } },
+  /* KERNEL: 圧力分布の核。'OROWAN' ＝ 不均一変形・すべり／固着（Rolling.orowan、柳本「圧延理論（中級）」
+   * §2〜3）。'BF' ＝ 従来の Bland–Ford（均一変形・Coulomb）を比較のために残す。
+   * 同じ入力で核だけを替えると Orowan は BF より厚板段 9 %・巻取 14 % 低い（tools/orowan.mjs）——
+   * 厚板段は不均一変形の係数 ϖ(a)、薄板段は弧の 3〜6 割が固着することから来る。
+   * BITE_THERMAL: 接触弧の中で層温度を時間に沿って解き、変形抵抗 k'(x) に使う（Rolling.biteLayerTemps。
+   * 抜熱の量そのものは _biteThermal と同じ 1 式 —— 帳簿は変えず、弧の中での配りだけ）。
+   * FWD_SLIP_MEAS: 先進率の実測（{ hIn, hOut, width, speed, T, tension, alloy, f[%] }）。置けば MU はそこから
+   * 逆算した値になる（Rolling.muBase / muFromForwardSlip）。実測が来るまでは null（README 0-1 の 5）。 */
+  PROCESS: { KERNEL: 'OROWAN', BITE_THERMAL: true, FWD_SLIP_MEAS: null,
+             PASS_DEAD: 6, MU: 0.32, MU_KT: 0.0, MU_KV: 0.10, MU_VREF: 60, MU_MIN: 0.14, MU_MAX: 0.42,
              TORQUE_ARM: 0.45, HEAT_EFF: 0.95, LOAD_MARGIN: 0.95, PEAK_K: 1.22,
              /* 巻取パスの尻: «パス時間いっぱい待って冷えた» 温度で解いた荷重に掛ける係数。最後の 1 m の
               * 端部の冷え（+5 %）と、頭尾ロック中にミルばねで尻が厚くなって圧下が減るぶん（−5 %）が
@@ -6743,9 +6778,40 @@ const Rolling = {
      * 使い込むと熱疲労でさらに荒れる。μ ∝ (Ra/Ra_ref)^k で、仕様の 0.60〜1.10 µmRa の
      * 範囲で ±7 % ほど動く。ra を渡さなければ基準粗度＝効果なし。 */
     const kr = ra ? Math.pow(Math.max(ra, 0.05) / M.MU_RA_REF, M.MU_RA_K) : 1;
-    const mu = P.MU * Math.exp(-P.MU_KT * (T - CONFIG.MATERIAL.TREF))
+    const mu = Rolling.muBase() * Math.exp(-P.MU_KT * (T - CONFIG.MATERIAL.TREF))
                     * Math.pow(P.MU_VREF / v, P.MU_KV) * kr;
     return Num.clamp(mu, P.MU_MIN, P.MU_MAX);
+  },
+  /**
+   * 基準点の摩擦係数。先進率の実測（PROCESS.FWD_SLIP_MEAS）があればそこから逆算した値、無ければ
+   * 荷重の帯に合わせた PROCESS.MU。逆算は 1 度だけ（solve → friction → muBase の再入を MU で受ける）。
+   */
+  muBase() {
+    const P = CONFIG.PROCESS, m = P.FWD_SLIP_MEAS;
+    if (!m) return P.MU;
+    if (P._muFromSlip == null) {
+      P._muFromSlip = P.MU;                                          // 逆算のあいだの再入は従来値で
+      const mu = Rolling.muFromForwardSlip(m.hIn, m.hOut, m.width, m.speed, m.T, m.tension || 0,
+                                           Rolling.alloy(m.alloy), m.f / 100);
+      // friction() の速度項を外して «基準点（V_REF）の値» に戻す（温度項は中立、粗度は基準）
+      P._muFromSlip = Num.clamp(mu / Math.pow(P.MU_VREF / Math.max(m.speed, 1), P.MU_KV), P.MU_MIN, P.MU_MAX);
+    }
+    return P._muFromSlip;
+  },
+  /**
+   * 先進率の実測 fMeas（比）から摩擦係数を逆算する。中立点（＝ 先進率）は摩擦で決まり μ に単調なので
+   * 二分法で足りる（軽金属 1995 講座 §2.1・1980 講座 §2.1.4: 出側板速 ÷ ロール周速、または
+   * ロール面の傷の転写間隔の比で測る）。荷重の側のずれ（変形抵抗・バイト内の冷え）と μ を分ける入口。
+   */
+  muFromForwardSlip(hIn, hOut, width, speedMpm, temp, tensionMPa, alloy, fMeas, opt = {}) {
+    let lo = 0.02, hi = 1.0, mid = 0.2;
+    for (let i = 0; i < 40; i++) {
+      mid = 0.5 * (lo + hi);
+      const f = Rolling.solve(hIn, hOut, width, speedMpm, temp, tensionMPa, alloy, null, 1, { ...opt, mu: mid }).forwardSlip;
+      if (f < fMeas) lo = mid; else hi = mid;
+      if (hi - lo < 1e-5) break;
+    }
+    return mid;
   },
   /**
    * 中立点と前進率。ロールバイトの中では、入側では材料がロールより遅く、出側では速い。
@@ -6821,6 +6887,126 @@ const Rolling = {
     return { force, torque, phiN, pMax, stickFrac, pm: Ld > 0 ? force / (width * Ld) : 0 };
   },
   /**
+   * Orowan の圧延理論 —— 不均一変形・すべり／固着（柳本「圧延理論（中級）」§2〜3、式 (27)〜(41) と
+   * プログラム。原典は Orowan 1943、数値解法は松野 1973・柳本 1989）。
+   *
+   * Karman 系（Bland–Ford）が «板厚方向に応力一様» と置くのに対し、ロール面のせん断が板厚方向に
+   * 減っていく分布を持つ。傾斜 2 平面の圧縮（Nadai）から、水平合力 f と鉛直圧力 p の関係が
+   *   すべり: f ＝ h·[ p·(1 ± μ(1/φ − 1/tanφ)) − k'·ϖ(a) ],  ϖ(a) ＝ 1 − (1 − π/4)·a²,  a ＝ 2μp/k'   (34)(39)
+   *   固着:   f ＝ h·[ p − k'·(π/4 ∓ ½(1/φ − 1/tanφ)) ]                                              (35)
+   * で結ばれ、圧延方向の釣り合い (27) df/dφ ＝ 2R·[p·sinφ ± τ·cosφ] を、出口側（前方張力から）と
+   * 入口側（後方張力から）の両方から Runge–Kutta で積む。a ≥ 1 で固着（τ ＝ k'/2）に切り替わる (40)(41)。
+   * 2 本の f が交わる点が中立点で、前進率とトルクはそこから出る。
+   *
+   * 熱延・厚板（Δ ＝ h̄/Ld ＞ 1）では Karman より正しく、剛塑性 FEM と遜色ない（中級 §3.5 図 11）。
+   * アルミ熱延の実務でも Orowan の回帰式か Sims（全面固着）が使われる（軽金属 1995 講座 §2.2）。
+   * 同じ入力で Bland–Ford と比べると厚板段で 9 %・巻取で 14 % 低い（tools/orowan.mjs）。
+   *
+   * @param mu  摩擦係数。数値・(x)→μ の関数・グリッドの配列（arcGrid の 2N+1 点）のどれでも
+   * @param kp  2 次元降伏応力 k' ＝ 1.155·kf [MPa]。同じく数値・関数・配列
+   * @param sigF/sigB  前方・後方張力 [MPa]（引張り正）。境界条件 f(0) ＝ −σf·h₂、f(φ₀) ＝ −σb·h₁
+   * @returns force [N]、torque [N·m]（ロール 1 本ぶん）、phiN [rad]、fwd（前進率）、stickFrac、pMax、pm、Ld
+   */
+  ORO_N: 64,                                  // 刻み。100 で 0.1 % 以内、64 で 0.03 %（tools/orowan.mjs）
+  SR_FLOOR: 0.1,                              // 局所ひずみ速度の下限（弧平均に対する比。仮置き）
+  KP_ARC_MEAN: false,                         // true: k'(x) を «弧平均のひずみ速度 1 点» で出す（評価器が凸性の効きを測るため）
+  /** 接触弧のグリッド（出口 ＝ 0 … 入口 ＝ 2N の 2N+1 点。RK の半刻みも同じ点に載る） */
+  arcGrid(hIn, hOut, R, N = Rolling.ORO_N) {
+    const dh = hIn - hOut, XL = Math.sqrt(Math.max(R * dh - 0.25 * dh * dh, 0));
+    const OM = Math.atan2(XL, R - 0.5 * dh), n = 2 * N + 1, dq = OM / (2 * N);
+    const phi = new Float64Array(n), x = new Float64Array(n), h = new Float64Array(n);
+    for (let i = 0; i < n; i++) { phi[i] = i * dq; x[i] = R * Math.sin(phi[i]); h[i] = hOut + 2 * R * (1 - Math.cos(phi[i])); }
+    return { n, N, OM, dq, XL, phi, x, h };
+  },
+  orowan(hIn, hOut, R, mu, kp, width, sigF = 0, sigB = 0, N = Rolling.ORO_N) {
+    const dh = hIn - hOut;
+    if (!(dh > 0) || !(R > 0)) return { force: 0, torque: 0, phiN: 0, pm: 0, pMax: 0, stickFrac: 0, fwd: 0, Ld: 0 };
+    const g = Rolling.arcGrid(hIn, hOut, R, N), n = g.n, DIA = 2 * R, PI4 = Math.PI / 4;
+    const muAt = typeof mu === 'function' ? (i) => mu(g.x[i]) : typeof mu === 'number' ? () => mu : (i) => mu[i];
+    const kpAt = typeof kp === 'function' ? (i) => kp(g.x[i]) : typeof kp === 'number' ? () => kp : (i) => kp[i];
+    const U = new Float64Array(n), K = new Float64Array(n);
+    for (let i = 0; i < n; i++) { U[i] = Math.max(muAt(i), 1e-4); K[i] = Math.max(kpAt(i), 1e-6); }
+    /* グリッド点 i での圧力 PM・df/dφ・固着か。side: +1 ＝ 出口側からの積分、−1 ＝ 入口側からの積分
+     * （原典は入口側を μ と Δφ の符号を反転して同じ式で積む —— そのとおりに書く） */
+    const point = (i, F, side) => {
+      const O = g.phi[i], H = g.h[i], u = U[i], RK = K[i];
+      const C1 = -0.5 / u, C2 = 1 - PI4, C3 = 1 + F / H / RK, C4 = Math.sqrt(Math.max(C1 * C1 + 4 * C2 * C3, 0));
+      const A = 0.5 * (C1 + C4) / C2;
+      const sinO = Math.sin(O), cosO = Math.cos(O), t = O > 0 ? sinO / cosO : 0;
+      if (A >= 1) {                                                  // 固着: τ ＝ k'/2
+        const c = O > 0 ? (side > 0 ? PI4 - 0.5 * (1 / O - 1 / t) : PI4 + 0.5 * (1 / O - 1 / t)) : PI4;
+        const V = side > 0 ? c * sinO + 0.5 * cosO : c * sinO - 0.5 * cosO;
+        return { PM: F / H + RK * c, dF: F * DIA * sinO / H + DIA * RK * V, stick: 1, tau: 0.5 * RK };
+      }
+      const W = 1 - C2 * A * A;                                       // ϖ(a)
+      const c = O > 0 ? 1 + u * (1 / O - 1 / t) : 1;
+      const PM = (F / H + RK * W) / c, us = side > 0 ? u : -u, c1 = sinO + us * cosO;
+      let dF = F * DIA * c1 / H + DIA * RK * W * c1;
+      if (O > 0) dF /= (1 + us * (1 / O - 1 / t));
+      return { PM, dF, stick: 0, tau: u * PM };
+    };
+    // 4 次 Runge–Kutta。グリッドの偶数点から偶数点へ（中点は奇数点）
+    const step = (i, F, dir, side) => {
+      const dO = dir * 2 * g.dq;
+      const k1 = point(i, F, side).dF, k2 = point(i + dir, F + dO / 2 * k1, side).dF;
+      const k3 = point(i + dir, F + dO / 2 * k2, side).dF, k4 = point(i + 2 * dir, F + dO * k3, side).dF;
+      return F + dO / 6 * (k1 + 2 * k2 + 2 * k3 + k4);
+    };
+    const Fx = new Float64Array(N + 1), Px = new Float64Array(N + 1), Tx = new Float64Array(N + 1), Sx = new Uint8Array(N + 1);
+    const Fe = new Float64Array(N + 1), Pe = new Float64Array(N + 1), Te = new Float64Array(N + 1), Se = new Uint8Array(N + 1);
+    { let F = -sigF * hOut;                                          // 出口側: 前方張力から入口へ
+      for (let k = 0; k <= N; k++) { const q = point(2 * k, F, +1); Fx[k] = F; Px[k] = q.PM; Tx[k] = q.tau; Sx[k] = q.stick; if (k < N) F = step(2 * k, F, +1, +1); } }
+    { let F = -sigB * hIn;                                           // 入口側: 後方張力から出口へ
+      for (let k = N; k >= 0; k--) { const q = point(2 * k, F, -1); Fe[k] = F; Pe[k] = q.PM; Te[k] = q.tau; Se[k] = q.stick; if (k > 0) F = step(2 * k, F, -1, -1); } }
+    /* 中立点: 2 本の水平合力が交わる最初の点（出口から見て）。交わらなければ端に置く。
+     * 交点は格子の間で線形補間し、その区画は両側を比で分けて積む —— 格子に丸めると h_out を
+     * 少し動かしたとき荷重が階段状に変わり、数値微分（塑性係数 Q）が 3 % 揺れる（tools/precisetrace.mjs）。 */
+    let kN = N, frac = 0;
+    for (let k = 0; k <= N; k++) if (Fe[k] - Fx[k] <= 0) { kN = k; break; }
+    if (kN > 0 && kN <= N) { const d0 = Fe[kN - 1] - Fx[kN - 1], d1 = Fe[kN] - Fx[kN]; frac = d0 - d1 > 1e-12 ? d0 / (d0 - d1) : 1; }
+    let sumP = 0, sumT = 0, stickLen = 0, pMax = 0;
+    for (let k = 0; k < N; k++) {
+      const dx = g.x[2 * k + 2] - g.x[2 * k];
+      if (k < kN - 1)      { sumP += 0.5 * (Px[k] + Px[k + 1]) * dx; sumT -= 0.5 * (Tx[k] + Tx[k + 1]) * dx; if (Sx[k]) stickLen += dx; }
+      else if (k === kN - 1) {                                        // 交点を含む区画: 出口側 frac、入口側 1 − frac
+        sumP += (0.5 * (Px[k] + Px[k + 1]) * frac + 0.5 * (Pe[k] + Pe[k + 1]) * (1 - frac)) * dx;
+        sumT += (-0.5 * (Tx[k] + Tx[k + 1]) * frac + 0.5 * (Te[k] + Te[k + 1]) * (1 - frac)) * dx;
+        if (Sx[k]) stickLen += dx * frac; if (Se[k]) stickLen += dx * (1 - frac);
+      }
+      else                  { sumP += 0.5 * (Pe[k] + Pe[k + 1]) * dx; sumT += 0.5 * (Te[k] + Te[k + 1]) * dx; if (Se[k]) stickLen += dx; }
+    }
+    for (let k = 0; k <= kN; k++) pMax = Math.max(pMax, Px[k]);
+    for (let k = kN; k <= N; k++) pMax = Math.max(pMax, Pe[k]);
+    const kF = Math.max(kN - 1 + frac, 0), phiN = kF * 2 * g.dq, hN = hOut + 2 * R * (1 - Math.cos(phiN));
+    return { force: width * sumP, torque: width * R * sumT / 1000, phiN, pMax,
+             stickFrac: g.XL > 0 ? stickLen / g.XL : 0, pm: g.XL > 0 ? sumP / g.XL : 0,
+             fwd: Math.max(hN * Math.cos(phiN) / hOut - 1, 0), Ld: g.XL, entryP: Pe[N], exitP: Px[0] };
+  },
+  /**
+   * 接触弧の中の層温度。入口の層温度 T0 から、経過時間 t [s] とここまでの加工発熱 dTheat [K] で。
+   * 抜熱は運転側の帳簿（PhysicsEngine._biteThermal）と同じ 1 式 —— 板厚平均で
+   * (T̄ − T_roll)·(1 − exp(−2·h_eff(t)·t/(ρc·gap)))、表層に深さ δ ＝ K·√(αt) で集中 —— なので、
+   * t ＝ 接触時間 で帳簿と同じ量に着く。ここは変形抵抗 k'(x) のための «配り» であって、板の T は書き換えない。
+   */
+  biteLayerTemps(out, T0, t, dTheat, hNow, gap, alloy, rollT) {
+    const M = CONFIG.MATERIAL, n = T0.length, rc = alloy.RHO * alloy.CP, alpha = alloy.K / rc;
+    let mean = 0; for (let j = 0; j < n; j++) mean += (j === 0 || j === n - 1) ? T0[j] / 2 : T0[j]; mean /= (n - 1);
+    if (!(t > 0)) { for (let j = 0; j < n; j++) out[j] = T0[j] + dTheat; return out; }
+    const x = 2 * Rolling.rollHTC(t, alloy) * t / (rc * (gap / 1000));
+    const chill = Math.max(mean - rollT, 0) * (1 - Math.exp(-x));
+    const delta = Math.max(M.CHILL_DEPTH_K * Math.sqrt(alpha * t) * 1000, 0.5), dz = hNow / (n - 1);
+    let wsum = 0;
+    for (let j = 0; j < n; j++) { const d = Math.min(j, n - 1 - j) * dz; out[j] = Math.exp(-d / delta); wsum += out[j] * ((j === 0 || j === n - 1) ? 0.5 : 1) * dz; }
+    for (let j = 0; j < n; j++) out[j] = Math.max(T0[j] + dTheat - chill * hNow * out[j] / wsum, rollT);
+    return out;
+  },
+  /** 変形抵抗のひずみの過渡 σ/σ_ss（CONFIG.MICRO.TRANSIENT）。eps は板厚ひずみ（ε_ret ＋ ここまでの圧下）。 */
+  transientK(eps) {
+    const TR = CONFIG.MICRO.TRANSIENT;
+    if (!TR || !TR.ON) return 1;
+    return 1 - (1 - TR.R0) * Math.exp(-1.155 * Math.max(eps, 0) / TR.EPS_C);
+  },
+  /**
    * ミルばね —— 実機の測定表（伸びの帯ごとの増分ばね定数）から «荷重 ⇄ 伸び» を引く。
    * ここが単一の出どころで、ゲージメータ・ロードセル・圧下の下限がすべてこれを見る。
    */
@@ -6873,60 +7059,105 @@ const Rolling = {
    * temp は板の平均温度（数値）か、板厚方向の層温度（配列: 上面 → 下面）。層温度を渡すと
    * 変形抵抗は層ごとの値の平均になり（冷えた表層は硬い）、上下面の差 kfTop/kfBot も返す。
    */
-  solve(hIn, hOut, width, speedMpm, temp, tensionMPa = 0, alloy = Rolling.alloy(), ra = null, muScale = 1) {
+  solve(hIn, hOut, width, speedMpm, temp, tensionMPa = 0, alloy = Rolling.alloy(), ra = null, muScale = 1, opt = {}) {
     const dh = hIn - hOut;
     if (dh <= 0 || width <= 0)
       return { force: 0, forceTon: 0, torque: 0, power: 0, powerKW: 0, Ld: 0, kf: 0, pm: 0,
-               strainRate: 0, heat: 0, biteAngle: 0, biteOk: true, kfTop: 0, kfBot: 0 };
-    const R = CONFIG.MILL.WR_D / 2;
-    const hMean = (hIn + hOut) / 2;
+               strainRate: 0, heat: 0, biteAngle: 0, biteOk: true, kfTop: 0, kfBot: 0, stickFrac: 0, kIn: 0, kOut: 0, forwardSlip: 0, neutral: 0 };
+    const P = CONFIG.PROCESS, R = CONFIG.MILL.WR_D / 2, oro = P.KERNEL !== 'BF';
     const v = Math.abs(speedMpm) / 60 * 1000;                       // mm/s
     const strain = Math.log(hIn / hOut);
-    const mu = Rolling.friction(typeof temp === 'number' ? temp : temp[(temp.length - 1) >> 1], speedMpm, ra) * muScale;
+    const nL = CONFIG.MATERIAL.LAYERS;
+    const T0 = typeof temp === 'number' ? new Float64Array(nL).fill(temp) : temp;   // 入口の層温度（上面 → 下面）
+    const Tm = T0[(T0.length - 1) >> 1];
+    const mu = (opt.mu != null ? opt.mu : Rolling.friction(Tm, speedMpm, ra)) * muScale;
+    const rollT = opt.rollT ?? CONFIG.MILL.ROLL_T0;
+    const epsRet = opt.epsRet != null ? opt.epsRet : (CONFIG.MICRO.TRANSIENT ? CONFIG.MICRO.TRANSIENT.EPS_RET_PRED : 0);
     /* ロールの弾性扁平は «荷重 → 扁平 → 接触弧 → 荷重» の陰的な関係なので、
      * 接触弧長を不動点反復で解く（緩和つき。3〜6 回で 1e-5 に落ちる）。
      * 1 回目（＝剛体ロール）の荷重も残しておき、扁平がどれだけ効いたかを見えるようにする。 */
-    let Ld = Rolling.contactLength(hIn, hOut), Rflat = R, resid = 0;
+    /* 運転ループ（120 Hz）は毎ステップほぼ同じ条件で呼ぶので、前回の扁平半径から始めると 1〜2 回で
+     * 収束し k'(x) のグリッドも 1 回で済む（opt.warm ＝ 呼ぶ側が持つ { R } を読み書きする）。 */
+    const warm = opt.warm && opt.warm.R > R ? opt.warm.R : R;
+    let Ld = Rolling.contactLength(hIn, hOut, warm), Rflat = warm, resid = 0;
     let kf0 = 0, kfTop = 0, kfBot = 0, kf = 0, pm = 0, force = 0, strainRate = 0, forceRigid = 0, bf = null;
+    let fwd = opt.warm && opt.warm.fwd ? opt.warm.fwd : 0, kIn = 0, kOut = 0, chillIn = 0, kp = null, kpR = 0, iters = 0, grids = 0;
+    const N = Rolling.ORO_N, Tl = new Float64Array(nL);
     for (let it = 0; it < 14; it++) {
+      iters++;
       /* strainRate は «代表値»（平均ひずみ速度）として表示・記録に使う。変形抵抗そのものは
        * 接触弧の中の局所ひずみ速度で評価して平均する（Rolling.flowStressArc）——
        * 1 点評価だと asinh の凸性のぶんだけ高く出る（実測で全パス 3.8〜4.5 %）。 */
       strainRate = Ld > 0 ? (v / Ld) * strain : 0;
+      /* 入口温度・弧平均の変形抵抗。上下面の差（kfTop/kfBot）は反りの駆動力で、反りの係数はこの
+       * «入口温度の差» で較正してあるので、バイト内の冷えはここには混ぜない。 */
       const kfAt = (T) => Rolling.flowStressArc(T, hIn, hOut, Rflat, v, alloy);
-      if (typeof temp === 'number') { kf0 = kfTop = kfBot = kfAt(temp); }
-      else {
-        let sum = 0;
-        for (let j = 0; j < temp.length; j++) sum += kfAt(temp[j]);
-        kf0 = sum / temp.length;
-        kfTop = kfAt(temp[0]);
-        kfBot = kfAt(temp[temp.length - 1]);
+      { let sum = 0; for (let j = 0; j < nL; j++) sum += kfAt(T0[j]); kf0 = sum / nL; }
+      kfTop = kfAt(T0[0]); kfBot = kfAt(T0[nL - 1]);
+      if (oro) {
+        /* 弧の各点の 2 次元降伏応力 k'(x) ＝ 1.155 × 層平均の変形抵抗 × ひずみの過渡。
+         *   ・ひずみ速度はその点の局所値（Rolling.arcStrainRate）
+         *   ・温度はその点までの経過時間で解いた層温度（バイト内の冷えと発熱。BITE_THERMAL）
+         *   ・ひずみは ε_ret ＋ その点までの圧下 ln(h_in/h(x))（MICRO.TRANSIENT）
+         * Orowan はこの k'(x) をそのまま受け、平均流動応力（初級 (10)）は弧の積分として自然に出る。 */
+        /* k'(x) のグリッドは扁平半径が動いたときだけ作り直す（収束すると動かないので、後半の反復では
+         * 作らない）。毎回作ると 120 Hz の運転ループで solve が 2〜3 ms になる（実測）。閾値は荷重が
+         * h_out に対して滑らかであること（塑性係数の数値微分）を優先して 1e-4。 */
+        if (!kp || Math.abs(Rflat / kpR - 1) > 1e-4) {
+          const g = Rolling.arcGrid(hIn, hOut, Rflat, N), M = g.n; kp = new Float64Array(M); kpR = Rflat; grids++;
+          const Qflow = v * hOut, Qmat = v * hOut * (1 + fwd);         // 体積流量（ひずみ速度用 / 経過時間用）
+          const tArr = new Float64Array(M);                            // 入口からの経過時間 [s]
+          for (let i = M - 2; i >= 0; i--) tArr[i] = tArr[i + 1] + (g.x[i + 1] - g.x[i]) * 0.5 * (g.h[i] + g.h[i + 1]) / Qmat;
+          const heatK = P.HEAT_EFF * 1.155 * (kf > 0 ? kf : kf0) * 1e6 * strain / (alloy.RHO * alloy.CP);   // このパスの発熱 [K]
+          /* 局所ひずみ速度は出口で 0 へ落ちる（dh/dx → 0）が、そこで面圧が消えるわけではない（出口の
+           * 弾性域で圧力は続く）。局所値には «弧平均の 1/10» の下限を置く（仮置き。8 分割の中点法だった
+           * ときは端の点が平均の 1/16 だった —— 荷重への差は 2 % 未満。README 0-2） */
+          const srFloor = Rolling.SR_FLOOR * strainRate;
+          let ksum = 0;
+          for (let i = 0; i < M; i++) {
+            const epsX = Math.log(hIn / g.h[i]);
+            const sr = Rolling.KP_ARC_MEAN ? strainRate : Math.max(Rolling.arcStrainRate(g.phi[i], hOut, Rflat, Qflow), srFloor);
+            const T = P.BITE_THERMAL ? Rolling.biteLayerTemps(Tl, T0, tArr[i], heatK * epsX / strain, g.h[i], hOut, alloy, rollT) : T0;
+            let sum = 0; for (let j = 0; j < nL; j++) sum += Rolling.flowStress(T[j], sr, alloy);
+            kp[i] = 1.155 * (sum / nL) * Rolling.transientK(epsRet + epsX);
+            ksum += kp[i];
+          }
+          kf = ksum / M / 1.155;                                      // 弧平均（表示・発熱・記録）
+          kIn = kp[M - 1] / 1.155; kOut = kp[0] / 1.155;
+          if (P.BITE_THERMAL) { const Tex = Rolling.biteLayerTemps(Tl, T0, tArr[0], heatK, hOut, hOut, alloy, rollT); chillIn = T0[0] - Tex[0]; }
+        }
+        bf = Rolling.orowan(hIn, hOut, Rflat, mu, kp, width, tensionMPa, 0, N);
+        fwd = bf.fwd;
+      } else {
+        kf = Math.max(kf0 - tensionMPa, kf0 * 0.35);                 // 張力による見かけの低下（旧核）
+        bf = Rolling.blandFord(hIn, hOut, Rflat, mu, 1.155 * kf, width);
+        kIn = kOut = kf;
       }
-      kf = Math.max(kf0 - tensionMPa, kf0 * 0.35);                  // 張力による見かけの低下
-      /* 圧力分布そのものを解いて荷重を出す（Bland–Ford）。平均面圧 × 面積では
-       * トルクが荷重の定数倍になってしまい、m と μ を分けられない。 */
-      bf = Rolling.blandFord(hIn, hOut, Rflat, mu, 1.155 * kf, width);
-      pm = bf.pm;                                                   // MPa
-      force = bf.force;                                             // N
+      pm = bf.pm;                                                     // MPa
+      force = bf.force;                                               // N
       if (it === 0) forceRigid = force;
       const Rn = Rolling.flattenedRadius(R, force / width, dh);
       const LdN = Rolling.contactLength(hIn, hOut, Rn);
       resid = Math.abs(LdN - Ld) / Math.max(Ld, 1e-9);
-      Ld += 0.7 * (LdN - Ld); Rflat = Rn;                           // 緩和つきで更新
+      /* 遠いうちは緩和 0.7 で安定に、近づいたら（1e-3 以内）全ステップで詰める —— 写像は縮小的なので
+       * 近くでは全ステップのほうが速く、ウォームスタートからの反復が 4 回 → 1〜2 回になる。 */
+      Ld += (resid < 1e-3 ? 1.0 : 0.7) * (LdN - Ld); Rflat = Rn;
       if (resid < 1e-5) break;
     }
+    if (opt.warm) { opt.warm.R = Rflat; opt.warm.fwd = fwd; }
     /* トルクは «ロール面の摩擦力のモーメント»（上下 2 本ぶん）。中立点より入側では
      * 摩擦が材料を引き込む向き、出側では押し戻す向きに働くので、その差が主機の負担になる。
      * 中立点の位置が μ で動くので、トルクは荷重とは «別の» 情報を持つ。 */
-    const torque = 2 * (bf ? bf.torque : 0);                        // N·m
-    const power = torque * ((v / 1000) / (R / 1000));               // W
+    const torque = 2 * (bf ? bf.torque : 0);                          // N·m
+    const power = torque * ((v / 1000) / (R / 1000));                 // W
     const heat = CONFIG.PROCESS.HEAT_EFF * 1.155 * kf * 1e6 * strain
-               / (alloy.RHO * alloy.CP);                            // K (このパスでの加工発熱)
+               / (alloy.RHO * alloy.CP);                              // K (このパスでの加工発熱)
     const biteAngle = Math.acos(Num.clamp(1 - dh / (2 * R), -1, 1));
-    const fs = Rolling.forwardSlip(hOut, Rflat, mu, dh);
+    const fs = oro ? { f: bf.fwd, phiN: bf.phiN } : Rolling.forwardSlip(hOut, Rflat, mu, dh);
     return { force, torque, power, Ld, kf, pm, strainRate, heat, kfTop, kfBot, mu,
              Rflat, flatResid: resid, forceRigidTon: forceRigid / 9806.65,
-             forwardSlip: fs.f, neutral: fs.phiN,
+             forwardSlip: fs.f, neutral: fs.phiN, stickFrac: bf ? (bf.stickFrac || 0) : 0, pMax: bf ? bf.pMax : 0,
+             kIn, kOut, chillIn, iters, grids,
              forceTon: force / 9806.65, powerKW: power / 1000,
              biteAngle, biteOk: biteAngle <= CONFIG.PROCESS.BITE_ANGLE_MAX };
   },
@@ -11366,7 +11597,8 @@ class PhysicsEngine {
       /* 頭の潤滑膜と «ロールコーティング» の両方が摩擦に掛かる。コーティングは厚いほど
        * 摩擦が上がり、噛み込みが良くなる（薄すぎるとスリップする）。 */
       const muScale = (1 + MH.K * Math.exp(-dHeadMm / MH.LEN)) * Rolling.coatMu(m.coat);
-      const res = Rolling.solve(hLoc, gap, s.width, m.currentSpeed, Tl, tension, s.alloy, m.wrRa, muScale);
+      const res = Rolling.solve(hLoc, gap, s.width, m.currentSpeed, Tl, tension, s.alloy, m.wrRa, muScale,
+                                { rollT: m.rollTemp, epsRet: s.retStrain, warm: (s._solveWarm ||= {}) });
       // 弧が埋まっている割合だけ荷重・トルク・動力が立つ（投影接触長に比例）
       const fill = s.biteFill;
       res.forceTon *= fill; res.torque *= fill; res.powerKW *= fill;
