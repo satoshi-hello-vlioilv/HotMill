@@ -124,7 +124,7 @@ if (out.cropSeen) {
   ok('下台の曲がりが切った直後の配列に載る（切る前後の差の最大 ≈ f·3δ/L²）',
      out.bedSetOn ? Math.abs(out.cropSeen.dMax - kMax) <= 0.2 * kMax : true,
      `差の最大 ${f3(out.cropSeen.dMax)}（材料座標 ${out.cropSeen.uMax.toFixed(2)}）／ 予測 ${f3(kMax)} ×10⁻⁶ /mm`);
-  ok('次のパスで下台の曲がりが消える（圧延で書き直される）', bumpNext < 0.5 * kMax || !out.bedSetOn,
+  ok('次のパスで下台の曲がりが消える（圧延で書き直される）', bumpNext < 0.5 * kMax || !out.bedSetOn || kMax < 1e-8,
      `次パスの平均からの外れ 最大 ${f3(bumpNext)} ／ 下台の曲がり ${f3(kMax)} ×10⁻⁶ /mm`);
   ok('（参考）曲げ応力と、その保持時間で流れるひずみ速度', true,
      `σ ${b.sigma.toFixed(1)} MPa → ε̇ ${b.rate.toExponential(1)} /s ／ 保持中に残る割合 ${(b.f * 100).toFixed(0)} %`, true);

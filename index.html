@@ -7356,12 +7356,22 @@ const Rolling = {
    */
   strainRateFor(sigma, T, alloy = Rolling.alloy()) {
     if (!(sigma > 0)) return 0;
+    /* flowStress はひずみ速度を 1e-4 /s で下から押さえている（圧延中の式なので、それより遅い流れは
+     * 出てこない）。ここは «遅い流れ» を知るための逆関数なので、押さえの無い式で解く。押さえたままだと
+     * 曲げ応力 14.9 MPa が 1e-4 /s の変形抵抗（LN_A −1.75 の較正後で 16.6 MPa）を下回った瞬間に
+     * 下限 1e-9 へ張り付き、下台の曲がりが «残らない» ことになっていた（tools/curlprof.mjs）。 */
+    const st = Rolling.stParams(alloy), cap = alloy.KF_MAX, pp = Rolling.KF_CAP_P, TK = T + 273.15;
+    const sig = (lg) => {
+      const lnZ = lg * Math.LN10 + st.Q / (Rolling.RGAS * TK);
+      const kf = Math.asinh(Math.exp((lnZ - st.lnA) / st.n)) / st.alpha;
+      return cap > 0 ? kf / Math.pow(1 + Math.pow(kf / cap, pp), 1 / pp) : kf;
+    };
     let lo = -9, hi = 3;                                    // log10(ε̇): 1e-9 〜 1e3 /s
-    if (Rolling.flowStress(T, Math.pow(10, lo), alloy) >= sigma) return Math.pow(10, lo);
-    if (Rolling.flowStress(T, Math.pow(10, hi), alloy) <= sigma) return Math.pow(10, hi);
+    if (sig(lo) >= sigma) return Math.pow(10, lo);
+    if (sig(hi) <= sigma) return Math.pow(10, hi);
     for (let i = 0; i < 40; i++) {
       const m = (lo + hi) / 2;
-      if (Rolling.flowStress(T, Math.pow(10, m), alloy) < sigma) lo = m; else hi = m;
+      if (sig(m) < sigma) lo = m; else hi = m;
     }
     return Math.pow(10, (lo + hi) / 2);
   },
@@ -7376,9 +7386,9 @@ const Rolling = {
    * これを holdSec だけ積分し、残った弾性ひずみの割合 ε_e(t)/ε_e(0) を «戻る割合»、
    * 1 − それ を «残る割合» f とする。下台が降りたあと板に残る曲率は f × 梁の曲率
    *     κ_perm(s) = f · 12·δ·t(1−t)/L²      （t = s/L、中央で最大 3δ/L²）
-   * 実測（既定ロット、65 mm・451 ℃・δ 150・保持 1.7 s）: σ 14.9 MPa に対し ε̇_p 3.5×10⁻⁴ /s、
-   * 応力が抜けるにつれ流れが急に遅くなるので、残るのは 22 %（曲率 2.0×10⁻⁶ /mm ＝
-   * 定尺 1 m で 0.25 mm）。ここは «変形抵抗の式» の精度がそのまま効くので、実機で
+   * 実測（既定ロット、65 mm・451 ℃・δ 150・保持 1.7 s。LN_A −1.75 の較正後）: σ 14.9 MPa に対し
+   * ε̇_p 7.9×10⁻⁵ /s、応力が抜けるにつれ流れが急に遅くなるので、残るのは 23 %（曲率 2.1×10⁻⁶ /mm ＝
+   * 定尺 1 m で 0.26 mm。較正前は 3.5×10⁻⁴ /s・22 % —— 初めの流れが 4 倍違っても残る割合はほぼ同じ）。ここは «変形抵抗の式» の精度がそのまま効くので、実機で
    * «切ったあと反りが増えるか» が分かれば較正する（README 0-4 の «下台の持ち上げが
    * 永久の曲がりを残すか»。切るなら CONFIG.CROP_SHEAR.BED_SET_ON）。
    */

@@ -25,6 +25,7 @@ const out = await page.evaluate((EPS) => {
   add(W.driveView.spindles); add(W.driveView.pinions); add(W.driveView.heads);
   for (const z of W.tableView.zones) add(z.rolls);
   add(W.tableView.eRolls);                                 // E-1 / E-2 のローラ（回る）
+  if (W.supplyView.washer) { add(W.supplyView.washer.top); add(W.supplyView.washer.bot); }   // 洗浄機のブラシ（回り、上は開閉する。枠に載る）
   for (const st of W.guideView.stations) for (const g of st.sides) add(g);
   const F = W.finishView;
   for (const k of ['knives', 'lowerRolls', 'upperRoll', 'mandrel', 'coil', 'bridge', 'cropRam', 'cropBed', 'cropPiece', 'cropKnife',

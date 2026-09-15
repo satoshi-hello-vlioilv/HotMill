@@ -47,9 +47,12 @@ const out = await page.evaluate(() => {
     const locX = () => F * (SV.slab.position.x / sc - S.TILTER_X);   // 転倒軸ローカルの板中心 X
     const rz = (rt) => inst(rt.inst.mesh, 0).rz;
     const wrap = (v) => ((v + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+    /* 送りは 送り（FEED）→ 洗浄（WASH。ブラシに挟んだまま送る）→ 送り（FEED2）の 3 工程に分かれている
+     * （洗浄機を受取テーブルに置いた VER.2.14.0 から）。届くべきはその合計。 */
+    const FEEDING = new Set(['FEED', 'WASH', 'FEED2']);
     window.__ff(Pp => Pp.supply.phase === 'FEED'); W.render(P, 1 / 60);
     const xF0 = locX(), aB0 = rz(SV.bedRolls);
-    window.__ff(Pp => Pp.supply.phase !== 'FEED'); W.render(P, 1 / 60);
+    window.__ff(Pp => !FEEDING.has(Pp.supply.phase)); W.render(P, 1 / 60);
     const fed = locX() - xF0;
     // 板が +X へ進むとき上面も +X へ動く向き＝ −Z 回り。角度は 1 回転を超えるので位相で比べる
     const slipMm = Math.abs(wrap(rz(SV.bedRolls) - aB0 + fed / rr)) * rr;
