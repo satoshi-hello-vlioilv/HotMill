@@ -11,7 +11,8 @@
 // 【なぜ要るか】荷重の核を Orowan に替える計画（docs/圧延荷重に効く要因.md §6）の «期待効果» を
 // 見積もりでなく数で置くため。ここで出る比が、いまの μ ＝ 0.32 が «何を肩代わりしているか» を示す。
 //
-//   node tools/orowan.mjs
+//   node tools/orowan.mjs          # 独立実装だけ（ブラウザ不要）
+//   node tools/orowan.mjs --app    # アプリ内の Rolling.solve とも突き合わせる
 const RG = 8.314;
 const AL = { Q: 175000, n: 5.0, alpha: 0.02, lnA: 27.092, KF_MAX: 280 };
 const R0 = 465, W = 1330, ROLL_E = 210, NU = 0.3, FLAT_MAX = 4;
@@ -26,7 +27,9 @@ function flowStressArc(T, hIn, hOut, R, v) {           // 接触弧の中の局�
   return s / N;
 }
 /** 局所の変形抵抗 kf(x)（x: 出口からの水平距離 mm）。ひずみ速度分布はアプリと同じ、温度は一定 */
-const kfLocal = (T, hOut, R, v) => (x) => { const phi = Math.asin(Math.min(1, x / R)); return flowStress(T, arcSR(phi, hOut, R, v * hOut)); };
+const SR_FLOOR = 0.1;                                    // 局所ひずみ速度の下限（弧平均に対する比。アプリの Rolling.SR_FLOOR と同じ）
+const kfLocal = (T, hIn, hOut, R, v) => { const Ld = contactLength(hIn, hOut, R), srMean = (v / Ld) * Math.log(hIn / hOut);
+  return (x) => { const phi = Math.asin(Math.min(1, x / R)); return flowStress(T, Math.max(arcSR(phi, hOut, R, v * hOut), SR_FLOOR * srMean)); }; };
 const contactLength = (hIn, hOut, R) => { const dh = hIn - hOut; return Math.sqrt(Math.max(R * dh - dh * dh / 4, 0)); };
 const flattened = (R, fpw, dh) => { const C = 16 * (1 - NU * NU) / (Math.PI * ROLL_E * 1000); return (dh > 0 && fpw > 0) ? R * Math.min(1 + C * fpw / dh, FLAT_MAX) : R; };
 const friction = (v) => Math.max(0.14, Math.min(0.42, MU0 * Math.pow(MU_VREF / Math.max(v, 1), MU_KV)));
@@ -120,7 +123,7 @@ function solvePass(P, kernel, muScale = 1, opt = {}) {
       const kfT = Math.max(kf - sigF, kf * 0.35);                   // アプリ: 張力は見かけの kf 低下
       res = blandFord(hIn, hOut, R, mu, 1.155 * kfT, W); res.kf = kf;
     } else {
-      const kp = opt.local ? ((x) => 1.155 * kfLocal(T, hOut, R, vmm)(x)) : (() => 1.155 * kf);
+      const kp = opt.local ? ((x) => 1.155 * kfLocal(T, hIn, hOut, R, vmm)(x)) : (() => 1.155 * kf);
       res = orowan(hIn, hOut, R, () => mu, kp, W, sigF, 0, { forceStick: kernel === 'stick', N: 400 }); res.kf = kf;
     }
     const Rn = flattened(R0, res.force / W, dh);
@@ -138,6 +141,23 @@ const PASSES = [
 ];
 const checks = [];
 const ok = (name, pass, got, ref = false) => checks.push({ name, pass: !!pass, got, ref });
+/* アプリ内の Rolling.solve（核 OROWAN・バイト内温度場 off・ひずみの過渡 off ＝ ここと同じ入力）が、
+ * この独立実装（局所 kf(x)）と一致するか。ブラウザを開くので --app を付けたときだけ。 */
+let inApp = null;
+if (process.argv.includes('--app')) {
+  const { openApp, installHelpers } = await import('./harness.mjs');
+  const { browser, page } = await openApp({ viewport: { width: 900, height: 520 }, quiet: true });
+  await installHelpers(page);
+  inApp = await page.evaluate((P) => {
+    const R = window.__ROLL, K = window.__CFG, al = K.ALLOYS.A5052;
+    const keep = { k: K.PROCESS.KERNEL, b: K.PROCESS.BITE_THERMAL, t: K.MICRO.TRANSIENT.ON };
+    K.PROCESS.KERNEL = 'OROWAN'; K.PROCESS.BITE_THERMAL = false; K.MICRO.TRANSIENT.ON = false;
+    const rows = P.map(p => { const r = R.solve(p.hIn, p.hOut, 1330, p.v, p.T, p.sigF, al); return { ton: r.forceTon, fwd: r.forwardSlip, stick: r.stickFrac }; });
+    K.PROCESS.KERNEL = keep.k; K.PROCESS.BITE_THERMAL = keep.b; K.MICRO.TRANSIENT.ON = keep.t;
+    return { rows, kernel: keep.k, srFloor: R.SR_FLOOR, N: R.ORO_N };
+  }, PASSES);
+  await browser.close();
+}
 
 console.log('■ 同じ入力（A5052・kf・μ・扁平）で核だけを替えた荷重 [t]');
 console.log('パス                     Ld/h̄    μ     kf MPa   BF(いま)   Orowan   固着(Sims)  Orowan/BF  固着率   前進率 BF/Oro/Sims  p_max/k\' Oro');
@@ -165,6 +185,14 @@ console.log('\n■ 刻み N の収束（P23）');
 const conv = [];
 for (const N of [50, 100, 200, 400, 800]) { const P = PASSES[3]; const vmm = P.v / 60 * 1000, kf = flowStressArc(P.T, P.hIn, P.hOut, 465, vmm); const o = orowan(P.hIn, P.hOut, 465, () => friction(P.v), () => 1.155 * kf, W, P.sigF, 0, { N }); conv.push({ N, t: o.force / 9806.65 }); console.log(`  N ${String(N).padStart(4)}  ${(o.force / 9806.65).toFixed(1)} t  中立角 ${(o.phiN * 1e3).toFixed(3)} mrad`); }
 
+if (inApp) {
+  const mine = PASSES.map(P => solvePass(P, 'oro', 1, { local: true }));
+  const diff = mine.map((m, i) => inApp.rows[i].ton / m.ton - 1);
+  console.log('\n■ アプリ内の Rolling.solve（核 OROWAN・温度場 off・過渡 off）との突き合わせ');
+  PASSES.forEach((P, i) => console.log(`  ${P.name}  独立実装 ${mine[i].ton.toFixed(0)} t ／ アプリ ${inApp.rows[i].ton.toFixed(0)} t（差 ${(diff[i] * 100).toFixed(2)} %）前進率 ${(mine[i].fwd * 100).toFixed(1)} / ${(inApp.rows[i].fwd * 100).toFixed(1)} %`));
+  ok('アプリ内の solve が独立実装と一致する（4 パスとも 0.5 % 以内。同じ刻み・同じ下限）', diff.every(d => Math.abs(d) < 5e-3),
+     diff.map(d => (d * 100).toFixed(2) + ' %').join(' / ') + `（アプリの既定の核: ${inApp.kernel}・N ${inApp.N}・下限 ${inApp.srFloor}）`);
+}
 const worstSims = Math.max(...rows.map(r => Math.abs(r.simsErr)));
 ok('固着を強制した Orowan の平均圧力が Sims の解析解と一致する（4 パスとも 3 % 以内）', worstSims < 0.03, `最大の差 ${(worstSims * 100).toFixed(1)} %`);
 ok('薄板・低摩擦の極限（すべりだけ）で Bland–Ford に戻る（1 % 以内）', Math.abs(thin.ratio - 1) < 0.01 && thin.stick === 0, `比 ${thin.ratio.toFixed(3)}・固着率 ${(thin.stick * 100).toFixed(0)} %`);

@@ -209,8 +209,11 @@ ok('荷重を一様にずらせば必ず帯から外れる（測定が効いて�
 ok('必要精度は感度の逆数として正の有限値になる',
    out.need.every(n => n.nMu > 0 && n.nKf > 0 && n.nT > 0 && Number.isFinite(n.nMu)),
    out.need.map(n => `P${n.no} μ±${n.nMu.toFixed(1)} %`).join(' / '));
-ok('薄いパスほど μ の必要精度が厳しい（摩擦丘が Ld/h̄ で効くことの裏返し）',
-   out.need.every((n, i, a) => i === 0 || n.nMu <= a[i - 1].nMu * 1.001),
+/* 摩擦丘の領域（Ld/h̄ ≥ 1）では薄いパスほど μ が効く。Ld/h̄ < 1 の厚板段は Orowan の不均一変形で
+ * μ が ϖ(a) を通して逆向きにも効く（∂lnF/∂lnμ ≈ −0.09、tools/sensload.mjs）ので、単調ではない。 */
+const hill = out.need.filter(n => n.ldh >= 1);
+ok('摩擦丘の領域（Ld/h̄ ≥ 1）では薄いパスほど μ の必要精度が厳しい',
+   hill.length >= 2 && hill.every((n, i, a) => i === 0 || n.nMu <= a[i - 1].nMu * 1.001),
    out.need.map(n => `Ld/h̄ ${n.ldh.toFixed(2)}→±${n.nMu.toFixed(1)} %`).join('  '));
 ok('（参考）A1100 ロットの巻取パスが帯の下限を割る', A1.base,
    A1.base ? '帯に入る' : A1.segs.flatMap(s => s.out.map(
