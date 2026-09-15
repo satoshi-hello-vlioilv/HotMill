@@ -44,7 +44,19 @@ export async function openApp(opts = {}) {
     `.fa-solid,.fa-regular,.fa-brands,.fas,.far,.fab{display:inline-block;width:1em;height:1em;}` }));
   await page.route('**/index.html', r => {
     let h = fs.readFileSync(target, 'utf8');
-    h = h.replace(/\bnew App\(\);/, 'window.__CFG = CONFIG; window.__VER = VERSION; window.__WRAP = Wrapper; window.__ROLL = Rolling; window.__DRIVE = Drive; window.__SCRAP = Scrap; window.__CRADLE = Cradle; window.__CHAIN = CableChain; window.__LAYOUT = Layout; window.__SOAK = Soak; window.__MATCODE = MatCode; window.__PASS = Pass; window.__BRUSH = Brush; window.__DATAREQ = DataReq; window.__SECT = Sect; window.__Store = Store; window.__Xlsx = Xlsx; window.__RollingLog = RollingLog; window.__app = new App();');
+    /* アプリの内部を評価器から触れるように窓へ出す。«有るものだけ» 出すのが要 ——
+     * 素の代入で並べると、その識別子がまだ無い «昔の版» では一行目で例外になり、
+     * アプリが起動せず（window.__app が立たず）評価器が時間切れで落ちる。
+     * 較正の回帰（いつから合わなくなったか）は昔の版と並べて測るのが筋なので、
+     * 1 つずつ包んで «無ければ飛ばす» 形にしておく。
+     *   node tools/calib.mjs --lot=A1100 昔の版.html    のように使える。 */
+    const EXPOSE = ['CONFIG:__CFG', 'VERSION:__VER', 'Wrapper:__WRAP', 'Rolling:__ROLL', 'Drive:__DRIVE',
+                    'Scrap:__SCRAP', 'Cradle:__CRADLE', 'CableChain:__CHAIN', 'Layout:__LAYOUT',
+                    'Soak:__SOAK', 'MatCode:__MATCODE', 'Pass:__PASS', 'Brush:__BRUSH', 'DataReq:__DATAREQ',
+                    'Sect:__SECT', 'Store:__Store', 'Xlsx:__Xlsx', 'RollingLog:__RollingLog'];
+    const expose = EXPOSE.map(p => { const [src, dst] = p.split(':');
+                                     return `try{window.${dst}=${src}}catch(e){}`; }).join('');
+    h = h.replace(/\bnew App\(\);/, `${expose} window.__app = new App();`);
     h = h.replace(/"three":\s*"[^"]+"/, '"three": "/__three__"');
     h = h.replace(/"three\/addons\/":\s*"[^"]+"/, '"three/addons/": "/x/examples/jsm/"');
     r.fulfill({ contentType: 'text/html', body: h });
