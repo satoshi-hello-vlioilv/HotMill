@@ -122,11 +122,19 @@ const out = await page.evaluate(() => {
   ok(`抽出直後の上下差が炉の値（${K.FURNACE.SOAK_DT} K）`, Math.abs(hold[0].dT - K.FURNACE.SOAK_DT) < 0.5, hold[0].dT);
   ok('待ち時間が長いほど上下差が均される（単調に減る）',
      hold.every((v, i) => i === 0 || v.dT < hold[i - 1].dT), hold.map(v => `${v.h}分→${v.dT}K`).join(' '));
-  ok('平均温度は «持ちかかりの測定値» に合わせ直される（待ちで下がるぶんは測定値に入っている）',
-     (() => { const t = P.slab.T; let s = 0;
-       for (let j = 0; j < t.length; j++) s += (j === 0 || j === t.length - 1) ? t[j] / 2 : t[j];
-       return Math.abs(s / (t.length - 1) - P.slab.initialTemp) < 0.5; })(),
-     `平均 ${P.slab.temperature.toFixed(1)} / 入力 ${P.slab.initialTemp} ℃`);
+  /* 持ちかかりの読みの定義（SUPPLY.PICKUP_READ）: 'TOP' なら «洗浄後・吊る瞬間の上面» が入力に合う
+   * （洗浄前の平均は読みより高い）。'MEAN' なら板厚平均が入力に合う（旧解釈）。 */
+  if (K.SUPPLY.PICKUP_READ === 'TOP') {
+    const SS = P.slab.constructor, g = SS.pickupTop(P.slab.T, P.slab.thickness, P.slab.alloy, P.slab.width, P.slab.length);
+    ok('吊る瞬間の上面の見込みが «持ちかかりの読み» に合わせ直される（読みは洗浄後の上面。tools/pickuptrace.mjs）',
+       Math.abs(g.top - P.slab.initialTemp) < 0.05, `上面 ${g.top.toFixed(2)} / 読み ${P.slab.initialTemp} ℃（洗浄前の平均 ${P.slab.temperature.toFixed(1)} ℃）`);
+  } else {
+    ok('平均温度は «持ちかかりの測定値» に合わせ直される（待ちで下がるぶんは測定値に入っている）',
+       (() => { const t = P.slab.T; let s = 0;
+         for (let j = 0; j < t.length; j++) s += (j === 0 || j === t.length - 1) ? t[j] / 2 : t[j];
+         return Math.abs(s / (t.length - 1) - P.slab.initialTemp) < 0.5; })(),
+       `平均 ${P.slab.temperature.toFixed(1)} / 入力 ${P.slab.initialTemp} ℃`);
+  }
   ok('炉出しは下が熱い（ピット炉は下から加熱する）', P.slab.T[P.slab.T.length - 1] > P.slab.T[0],
      `上 ${P.slab.T[0].toFixed(1)} / 下 ${P.slab.T[P.slab.T.length - 1].toFixed(1)} ℃`);
   return R;
