@@ -20,7 +20,7 @@ const out = await page.evaluate((EPS) => {
                        if (o.mesh) return add(o.mesh); o.traverse ? o.traverse(x => moving.add(x)) : moving.add(o); };
   add(W.slabView.mesh); add(W.supplyView.slab);
   add(Object.values(W.millView.rolls));
-  for (const k of ['chockWR', 'chockBR', 'capRod', 'capBody', 'wedge', 'bender', 'headers'])
+  for (const k of ['chockWR', 'chockBR', 'capRod', 'capBody', 'wedge', 'bender', 'headers', 'nozzles'])
     { const v = W.millView[k]; if (v) { add(v.near); add(v.far); add(v); } }
   add(W.driveView.spindles); add(W.driveView.pinions); add(W.driveView.heads);
   for (const z of W.tableView.zones) add(z.rolls);

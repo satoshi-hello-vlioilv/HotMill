@@ -185,6 +185,12 @@ canvas { display:block; }
 #shape-mon .sm-lbl i { display:block; font-style:normal; font-size:9px; color:var(--ink-2);
   font-variant-numeric:tabular-nums; }
 #shape-mon .sm-c { flex:1; height:56px; min-width:0; background:var(--s-3); border-radius:6px; }
+#shape-mon .sm-c.sm-thin { height:12px; border-radius:4px; }
+.coolgrid.rcool-zones { margin-top:6px; padding-top:6px; border-top:1px dashed var(--line); }
+.coolgrid .zbtn.zone { min-width:44px; }
+.coolgrid .ztemp { font-size:9.5px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+#shape-mon .f-kp.up { fill:#e2684a; } #shape-mon .f-kp.dn { fill:#3a7bd5; } #shape-mon .f-kp.flat { fill:var(--line); }
+#shape-mon .f-kp-end { stroke:var(--ink-3); stroke-width:.6; }
 #shape-mon .sm-ft { font-size:9px; color:var(--ink-3); margin-top:3px; line-height:1.35; }
 /* 上面・下面・中立線。上下で色を分けると «どちらへ反っているか» が一目で分かる */
 #shape-mon .f-top { fill:none; stroke:#e2684a; stroke-width:1.4; stroke-linejoin:round; }
@@ -1131,6 +1137,14 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <div class="coolgrid" id="cool-zones"></div>
           <div class="derived" id="der-cool-side"></div>
         </div>
+        <!-- ロール冷却。WR と BUR のあいだから WR へ噴く 4 本のヘッダ（入側／出側 × 上／下）と、
+             幅方向のゾーンコントロール。ゾーンを絞るとそこだけロールが熱くなり、熱クラウンが偏る -->
+        <div class="fld">
+          <div class="top"><span class="k">ロール冷却（ヘッダ 4 本 × 幅 7 ゾーン）</span><span class="v" id="lbl-rcool"></span></div>
+          <div class="coolgrid" id="rcool-headers"></div>
+          <div class="coolgrid rcool-zones" id="rcool-zones"></div>
+          <div class="derived" id="der-rcool"></div>
+        </div>
         <!-- クーラントの状態。沸騰曲線そのものが動くので、抜熱の «効き» が全面で変わる -->
         <div class="fld">
           <div class="top"><span class="k">クーラント濃度</span><span class="v" id="lbl-conc">4.8<em>%</em></span></div>
@@ -1297,6 +1311,12 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   <div class="sm-row">
     <div class="sm-lbl">丈方向<i id="sm-lnum">–</i></div>
     <svg class="sm-c" id="sm-len" viewBox="0 0 240 56" preserveAspectRatio="none" aria-hidden="true"></svg>
+  </div>
+  <!-- 反りの «長手の分布»。板の頭（左）から尻（右）まで、材料点ごとの曲率を色の帯で示す。
+       上の 2 段は «1 か所の値» なので、どこが反っているかはこの帯でしか分からない -->
+  <div class="sm-row sm-row-thin" id="sm-lprof-row">
+    <div class="sm-lbl">長手分布<i id="sm-lpnum">–</i></div>
+    <svg class="sm-c sm-thin" id="sm-lprof" viewBox="0 0 240 12" preserveAspectRatio="none" aria-hidden="true"></svg>
   </div>
   <div class="sm-ft" id="sm-ft">–</div>
 </div>
@@ -1714,6 +1734,20 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 const VERSION = {
   PREFIX: 'VER.',
   LOG: [
+    { v: '2.14.0', base: '3c1b2ad', date: '2026-09-15', title: '反りを長手・幅方向の «プロファイル» で持ち、ロール冷却のゾーンコントロール・スラブ洗浄機・トング 1 本化', items: [
+      { t: '反りを板全体で 1 つの曲率（kNew）ではなく «材料座標の配列» で持つようにした（kProf / _kNext。板厚・温度と同じ入側／出側の 2 本立て、重みは板厚と共用）。バイトで付いた曲率を通過した区間へ書き、端を切れば同じ写像で張り直す。頭と尻の反りは同じパスでも違う —— 実測で頭尻の差が平均の最大 3 倍', w: 'SlabState.kProf / writeCurl / kAt / curlAt' },
+      { t: '端の浮き上がり（描画）はその端の材料点の反り（curlAt ＝ 端から 5 % の平均）を見るようにした。板全体の平均では、頭だけ跳ねている板が全長で反って見える', w: 'SlabState.curlAt / CONFIG.SHAPE.CURL_END' },
+      { t: '75 mm シャーの下台が残す永久の曲がりを入れた。持ち上げの曲げ応力 14.9 MPa を保持 1.7 s のあいだにクリープで塑性へ置き換える（dε_e/dt = −ε̇_p(E·ε_e)）と、残るのは 22 %（曲率 2.0×10⁻⁶ /mm ＝ 定尺 1 m で 0.25 mm）。上死点で下台の縁から浮き上がり長 7 m の区間へ載せ、同じ端を何度も切るときは残りの弾性ぶんにだけ効く（飽和）。次のパスが書き直せば消える', w: 'Rolling.bedLiftSet / strainRateFor / FinishController._bedSet' },
+      { t: '幅方向の反りを «全幅で 1 つの値» から Searle–Ashwell の境界層解のプロファイルにした。縁から ℓ ＝ √(R·h)/(3(1−ν²))^{1/4} の帯だけが立ち、中央は平ら。以前の 1/(1+β²) は減り方が β⁻² だったが、実際は帯の幅 ℓ/b ∝ β^{−1/2}（実測: β 10 で等価曲率 0.067νκ、旧式は 0.01νκ）。定規の隙間はプロファイルを 2 回積分した «形» から読む', w: 'Rolling.anticlasticProfile / anticlastic' },
+      { t: '形状モニタ: 幅方向は «形» そのものを描く（縁だけ立つ形が出る）。丈方向の下に «長手の分布» の帯を足した —— 頭から尻まで材料点ごとの曲率を色で示す（暖色＝上反り・寒色＝下反り、濃さは最大に対する比）', w: 'UIManager._shapeMon' },
+      { t: 'ワークロールのクーラントヘッダ 4 本（入側／出側 × 上／下。WR と BUR のあいだから WR へ）と幅方向 7 ゾーンのゾーンコントロールを実装した。定格 1 本 4,000 L/min（«上下 4,000 L/min» を上 4,000 ＋ 下 4,000 と読んだ —— README 0-3）。ゾーンごとの時定数 τ_z ＝ ROLL_TAU / c_z^0.6 で、全開なら従来の較正値 45 s に一致する', w: 'CONFIG.MILL.ROLL_COOL / Rolling.rollCoolTau' },
+      { t: 'ロール温度を幅方向のゾーンごとに持つ（rollTempZ）。板からの熱は板の幅の下のゾーンにだけ入り（蛇行で寄れば片側が熱くなる）、閉じたゾーンはクーラントでは冷えない。ゾーンの温度の偏りは熱クラウンの偏りとして幅方向の形状へ効く（実測: DS を閉じて 60 s で DS だけ 132 ℃・他 79 ℃、熱クラウン DS − OS −33 µm）', w: 'MillState.rollTempZ / PhysicsEngine._rollHeat / _rollCool / Rolling.rollCrown' },
+      { t: 'ノズル列（1 ヘッダ 25 本、WR の軸心を向く）を描き、噴射は «入っているヘッダの入っているゾーン» からだけ出す。パネルにヘッダ 4 本とゾーン 7 つの入切・水量を足し、ゾーンの WR 温度を毎回出す。ロットの記録にも持つ', w: 'MillStandView / SprayView / UIManager' },
+      { t: 'スラブ洗浄機を受取テーブルに置いた（転倒機とトランスファークレーンのあいだ。1 本目と 2 本目のローラの真ん中で、下ブラシがローラと場所を取り合わない）。麻ブラシを上下に持ち、装入の工程に WASH（5 s）を足して、先端が着いてから尾端が抜けるまで挟んで回しながらクーラントを掛ける', w: 'CONFIG.SUPPLY.WASHER / Layout.washerX / SupplyView / CONFIG.SEQUENCE' },
+      { t: '洗浄でスラブが冷える量を板厚方向の層モデルに «クーラントの境界»（膜沸騰）を与えて解いた。実測（既定ロット 530 mm・433 ℃・5 s）: 板厚平均で 1.0 K、上面 8.6 K、下面 5.4 K。抜ける熱 6.5 MJ はクーラント 40 L が受けられる 97 MJ の 7 %。既定では圧延に掛かる板からは引かない（持ちかかり温度は洗浄後の測定とみなす —— README 0-3 の 23）', w: 'SlabState.washChill / relax(bc) / SUPPLY.WASHER.COOLS_INPUT' },
+      { t: 'トランスファークレーンのトング（腕）を 2 本から 1 本にした（ご指示）。並びの真実は Layout.transferTongXs 1 か所（吊りビームのハンガーとトング本体が同じものを見る）', w: 'CONFIG.TRANSFER.TONG_N / Layout.transferTongXs' },
+      { t: '評価器を 4 本足した: curlprof（長手の分布・下台の曲がり）、wcurl（幅方向の境界層）、rollcool（ゾーンの時定数・熱クラウンの偏り・ノズルの向き）、washtrace（洗浄の工程・ブラシの動き・冷却量）', w: 'tools/curlprof.mjs / wcurl.mjs / rollcool.mjs / washtrace.mjs' },
+    ] },
     { v: '2.13.0', base: '7ce3280', date: '2026-09-15', title: '75 mm シャーの下台で板がテーブルロールへめり込んでいたのを直し、持ち上げを «梁» にする', items: [
       { t: '下台が上がっているあいだ、上流の板がテーブルロールへ 150.0 mm（＝持ち上げ量そのもの）めり込んでいた。原因は «据わり» と «頂点» で違う持ち上げ形を使っていたこと —— 据わりには全ロールへ持ち上げ量を全量渡し、頂点には 2 m で減衰させた量を与えていた。据わりはその差を «板全体が持ち上がった» と読んで同じだけ押し下げるので、減衰しきった上流でちょうど持ち上げ量ぶん沈む', w: 'SlabView._restPose / update' },
       { t: '持ち上げの形を 1 式（Rolling.bedLiftAt）にまとめ、据わりも頂点も同じものを見るようにした。実測 150.0 → 0.0 mm（板材 40 mm の切り分けでも 0.2 mm）', w: 'Rolling.bedLiftAt / SlabView' },
@@ -2770,6 +2804,36 @@ const CONFIG = {
      *               クーラント（ROLL_TAU 45 s）より遅い。
      *   BR_TAU0 …… BUR 自身がクーラントで待機温度へ戻る時定数 [s]。質量が大きいので長い。 */
     BR_TAU: 120, BR_TAU0: 600,
+    /* --- ワークロールのクーラントヘッダとゾーンコントロール ---------------------
+     * WR と BUR のあいだ（入側・出側）から WR へ向けて噴く 4 本のヘッダ（ET / EB / XT / XB）。
+     * 各ヘッダの定格は 4,000 L/min（ご提示 2026-09-15: «全部のノズルから上下 4,000 L/min»）。
+     *   ※ «上下 4,000» を «上 4,000 ＋ 下 4,000» と読んだ。«上下合わせて 4,000» なら FLOW_LPM を
+     *     2,000 にする（README 0-3 の残件«ロール冷却の流量の読み»）。
+     * ゾーン: 幅方向を ZONES.N 区分（対称）に分け、区分ごとに入切と水量を持つ。実機のゾーン
+     *   コントロールは熱クラウンを幅方向で整えるためのもので、区分は 4 本のヘッダで共通に
+     *   持つ（ヘッダ別に持つと 28 個のつまみになる。実機の弁の構成が分かれば分ける）。
+     * 物理: ロールがクーラントで待機温度へ戻る時定数は «全ヘッダ定格・全ゾーン開» で ROLL_TAU
+     *   （実機ロットの上がり温度で較正した 45 s）。ゾーンごとの時定数は
+     *       τ_z = ROLL_TAU / c_z^FLOW_K,   c_z = (ヘッダの開きの平均) × (そのゾーンの開き)
+     *   噴流冷却の熱伝達率は流量の 0.5〜0.7 乗に乗るのが実測域なので FLOW_K = 0.6。
+     *   ゾーンを絞るとそのゾーンだけロールが熱くなり、そこだけ径が膨らむ
+     *   （Rolling.rollCrown の zone 項 —— 熱クラウンが幅方向で偏る）。
+     * 板からの熱は «板の幅の下にあるゾーン» にだけ入る（蛇行で寄れば片側が熱くなる）。 */
+    ROLL_COOL: {
+      HEADERS: {
+        ET: { name: '入側 上', entry: true,  top: true,  on: true, flow: 1.0 },
+        EB: { name: '入側 下', entry: true,  top: false, on: true, flow: 1.0 },
+        XT: { name: '出側 上', entry: false, top: true,  on: true, flow: 1.0 },
+        XB: { name: '出側 下', entry: false, top: false, on: true, flow: 1.0 },
+      },
+      FLOW_LPM: 4000, FLOW_K: 0.6, BAR: 3,
+      ZONES: { N: 7, NAMES: ['DS端', 'DS', 'DS中', '中央', 'OS中', 'OS', 'OS端'],
+               STATE: Array.from({ length: 7 }, () => ({ on: true, flow: 1.0 })) },
+      /* ヘッダの置き方: X は ±X（ロール軸心から）、ロール軸心から内側へ IN（ロール半径より
+       * 内側なので圧下量に依らずパスラインの外に留まる。下側は E テーブルの下をくぐる高さに
+       * 抑える —— MillStandView）。ノズルは胴長に沿って PITCH で並び、WR の軸心へ向く。 */
+      X: 1250, IN: 220, PIPE_D: 180, NOZZLE_PITCH: 100, NOZZLE_D: 22, NOZZLE_L: 90,
+    },
 
     /* --- 幅方向の形状（クラウン・平坦度）に要る諸元 -------------------------
      * 板の «幅方向の板厚分布» は、荷重でロール系がたわむことで決まる。
@@ -3150,6 +3214,22 @@ const CONFIG = {
      * 胴長は最大スラブ幅 2,200 を受けて余る 2,400。軸端（カラー＋ジャーナル）は本線の 450 では
      * アーム側枠（内面 ±1,390）に収まらないので 120 に詰める。 */
     ROLLER: { BARREL: 2400, END_L: 190, PITCH: 640 },
+    /* スラブ洗浄機 —— 転倒機とトランスファークレーンのあいだの受取テーブルに置く（ご指示 2026-09-15）。
+     * 麻のブラシロールを上下に持ち、使うときだけクーラントを掛けながら挟み込んで回し、通過する
+     * スラブの表裏を洗う（約 5 秒）。クーラントはスラブ 1 本あたり 40 L 程度。
+     *   X はローラの並びから決める（Layout.washerX: 受取テーブルの 1 本目と 2 本目のローラの
+     *   あいだ。下ブラシがローラと場所を取り合わない）。ブラシ径はそのすきまに入る 300。
+     *   SEC     洗浄に掛ける秒 ＝ スラブがブラシを通過する時間（工程 WASH の秒）
+     *   LITERS  1 本あたりのクーラント量 [L]。抜ける熱がこの液の «温まり ＋ 蒸発» を超えることは
+     *           できない（超えたら液が尽きたとして頭打ち）
+     *   WET_TOP / WET_BOT  上下面の濡れの割合。上面は掛けた液が溜まり、下面はブラシが液を塗る
+     *           （下面スプレーの WET 0.35 とロール液膜の中間。仮置き）
+     *   COOLS_INPUT  «持ちかかり温度» は洗浄の «あと» に測った値とみなす（既定 false ＝ 圧延に
+     *           掛かる板からは引かない。冷え方は参考として毎回出す）。持ちかかりが洗浄 «前» の
+     *           測定なら true にする —— どちらかは実機の測定位置しだい（README 0-3 の 23） */
+    WASHER: { SEC: 5.0, LITERS: 40, WET_TOP: 1.0, WET_BOT: 0.6, COOLS_INPUT: false,
+              BRUSH: { D: 300, L: 2600, RPM: 120, OPEN: 220, MAT: '麻' },
+              FRAME: { W: 700, POST: 220, Z: 1780, H_OVER: 900 } },
     /* 転倒後、テーブルローラでスラブを出側へ送る。送り量は固定値ではなく
      * «トランスファークレーンが待っている X まで» で決まる（Layout.feedDX）。
      * トランスファークレーンはラインと直角（Z）にしか動かないので、X 方向の位置合わせは
@@ -3191,7 +3271,12 @@ const CONFIG = {
      * （この干渉は tools/tongtrace.mjs が実測して見つけた） */
     PARK_DX: 6500,
     LIFT: 1700,                              // 横移動時のスラブ底面高さ（パスライン上）。転倒機の受け面 1,510 を越える
-    TONG_DX: 1100,                           // トング 2 基のビーム中心からの X（1 基では長尺スラブが首を振る）
+    /* トング（腕）の本数と、2 本のときのビーム中心からの X。実機は **1 本**（ご指示 2026-09-15）。
+     * 以前は «1 基では長尺スラブが首を振る» と見て 2 基にしていたが、実機がそうでない以上
+     * 首振りは実機側で別の手当て（爪パッドの長さ JAW_PAD 900 で板を面で掴む）が効いていると
+     * 解する。並びの真実は Layout.transferTongXs —— 吊りビームのハンガーとトング本体が同じ
+     * 1 か所を見る。 */
+    TONG_N: 1, TONG_DX: 1100,
     BEAM_L: 3200,
     // 巻上ワイヤ（吊りビームは X 方向なのでワイヤも X に並ぶ）
     ROPE: { D: 56, FALLS: 2, SPREAD: 240, SHEAVE_D: 460, AXIS: 'x', TOP_DY: -0.34, BOT_DY: 340 },
@@ -3368,6 +3453,14 @@ const CONFIG = {
        'パス平均と解釈している（tools/calib.mjs）',
        '1 パスしか無い区間でも帯が 1.21〜1.88 倍あるので、帯はパスの中の振れを含む読みに見えます。定義が決まれば判定を «平均» と «ピーク» に分けられます',
        'tools/reallot.mjs', null, '—', '帯の上限・下限がそれぞれ何を指すか'],
+      ['RCFLOW', '確認', 'ロール冷却ヘッダの流量の読み（«上下 4,000 L/min» は上下それぞれか・合計か）とゾーン弁の構成', null, null, false, '流量', 'L/min', 1,
+       '1 本 4,000 L/min（上 4,000 ＋ 下 4,000 と読んだ）・ゾーン 7 区分は 4 本共通',
+       '合計なら FLOW_LPM を 2,000 に、弁がヘッダ別ならゾーンをヘッダごとに分けます',
+       'CONFIG.MILL.ROLL_COOL', null, '—', 'ゾーンの区分数と、どのヘッダに弁があるか'],
+      ['WASHT', '効く', 'スラブ洗浄の前後の板温（または持ちかかり温度がどちらで測られるか）', null, null, false, '温度差', 'K', 1,
+       '層モデルの見込み: 平均 1.0 K・表面 5〜9 K（5 s）。持ちかかりは洗浄後の測定とみなす',
+       '持ちかかりが洗浄前の測定なら WASHER.COOLS_INPUT を入れ、抜熱の見込みを実測で較正します',
+       'CONFIG.SUPPLY.WASHER', null, '—', '洗浄機の直前・直後の表面温度でも可'],
       ['JAW', '未解決', 'ワニ口の «あごの開きが板厚の何割か»', null, null, false, '開き ÷ 板厚', '—', 1,
        '推定（板厚の半分で頭打ち）', 'あごの開き方が実機の見え方になります',
        'CONFIG.SLAB.OVERHANG', null, '—', '真横から・スケールになる物を添えた写真でも可'],
@@ -4254,7 +4347,11 @@ const CONFIG = {
     ['TRAVERSE', 'traverse', null, '転倒機まで横行しています'],
     ['SET',      'set',      null, '転倒機にスラブを立てかけています'],
     ['TILT',     'tilt',     3.6,  '転倒装置でスラブを倒しています'],
-    ['FEED',     'feed',     1.6,  '転倒機ベッドのテーブルローラでスラブを受取テーブルへ送っています'],
+    ['FEED',     'feed',     1.6,  '転倒機ベッドのテーブルローラでスラブを受取テーブルの洗浄機まで送っています'],
+    /* 秒が文字列なら CONFIG.SUPPLY のその値（SupplyController._sec）。洗浄の秒は洗浄機の仕様なので
+     * SUPPLY.WASHER.SEC に 1 つだけ置く。 */
+    ['WASH',     'wash',     'WASHER.SEC', 'スラブ洗浄機: 麻ブラシで上下から挟み、クーラントを掛けながら回してスラブを洗っています'],
+    ['FEED2',    'feed2',    1.6,  '洗浄機を抜けたスラブをトランスファークレーンの下まで送っています'],
     ['GRAB',     'grab',     null, 'トランスファークレーンが倒したスラブをトングで掴んで吊り上げています'],
     ['TRANSFER', 'transfer', null, 'トランスファークレーンでミルラインへ横移動しています'],
     ['LOWER',    'lower',    null, '入側テーブルへ降ろしています'],
@@ -4444,6 +4541,10 @@ const CONFIG = {
     TOTAL_MIN: 300, TOTAL_MAX: 2400,         // 総切断長の設計範囲（板厚 60 mm 換算）
     APPROACH: 45,                            // 端部をシャーへ寄せるときの速度 [mpm]
     T_CUT: 0.9, T_RETURN: 0.8,
+    /* 下台の持ち上げが残す永久の曲がり（Rolling.bedLiftSet）を板の長手プロファイルへ載せるか。
+     * 物理は入っているが «切ったあと反りが増えるか» の実機の裏づけが無い（README 0-4）。
+     * 既定は入 —— 式から出る量をそのまま見せ、違えばここを切る。 */
+    BED_SET_ON: true,
     // 架構: 柱は剪断面の上流側（COL_X）、Z は ±COL_Z。クロスヘッドは柱の上に架かり、
     // 上刃ホルダを吊る。柱の足元は屑の受け開口（Z ±1,300）の外に置く。
     FRAME: { COL_X: -250, COL_W: 600, COL_D: 760, COL_Z: 2400, CYL_Z: 1500 },
@@ -4809,7 +4910,10 @@ const CONFIG = {
    * 反りは «定規を当てて隙間を測る» のが実機の測り方なので、長さ（丈）は WARP_GAUGE の
    * 定尺、幅は板幅いっぱいを弦として測る（Rolling.chordRise）。 */
   SHAPE: { NW: 21, NOUT: 6, EDGE_MM: 25, PROF_MM: 50, FLAT_DEAD: 8, EDGE_H: 60, EDGE_DROP_MAX: 120, BEND_RATE: 260,
-           SPREAD_C: 0.95, SPREAD_K: 0.707, POISSON: 0.33, WARP_GAUGE: 1000 },
+           SPREAD_C: 0.95, SPREAD_K: 0.707, POISSON: 0.33, WARP_GAUGE: 1000,
+           /* 端の反りの代表値を取る区間（板長に対する割合）。描画の浮き上がりが見るのはこの
+            * «端の» 曲率で、板全体の平均ではない。 */
+           CURL_END: 0.05 },
 
   MATERIAL: {
     /* 選んでいるソーキングの操業パターン（CONFIG.SOAK.PATTERNS の記号）。
@@ -5126,6 +5230,7 @@ const CONFIG = {
     ROLL_FACE:   0xdfe3e6,
     ROLL_NECK:   0x9aa7b0,
     BRUSH_HAIR:  0x4c4038,                 // 砥粒入りナイロンの毛（黒褐色）
+    HEMP:        0xa88a55,                 // 麻の繊維（洗浄機のブラシ）
     CHOCK:       0x6f7f89,
     HOUSING:     0x5b6a73,
     BASE:        0x4c5a63,
@@ -5538,6 +5643,11 @@ const Layout = {
   get entryX() { return CONFIG.SUPPLY.TILTER_X + CONFIG.FLIP * CONFIG.TRANSFER.PARK_DX; },
   /** 転倒直後（中心が転倒軸から L/2）から受け渡し位置までの、ローラでの送り距離 [mm]。 */
   feedDX(length) { return Math.max(CONFIG.TRANSFER.PARK_DX - length / 2, 0); },
+  /** トランスファークレーンのトングの X（ビーム中心基準）。1 本なら中央、2 本なら ±TONG_DX。 */
+  transferTongXs() {
+    const T = CONFIG.TRANSFER;
+    return (T.TONG_N | 0) <= 1 ? [0] : [-T.TONG_DX, T.TONG_DX];
+  },
   /** ピット炉 i 番（0 起点）の内法の長さ [mm]。図面どおり最後の 1 基（PIT9）は極小。 */
   /**
    * ピット炉のスラブの置き方。実機の手順どおりに解く。
@@ -5732,6 +5842,12 @@ const Layout = {
   },
   /** 転倒機ベッド（アーム上）と受取テーブルのローラ配置範囲 [x0, x1]（転倒軸ローカル）。 */
   get bedSpan() { return [560, CONFIG.SUPPLY.ARM_L - 200]; },
+  /** 洗浄機の X（転倒軸ローカル）。受取テーブルの 1 本目と 2 本目のローラの真ん中 —— 下ブラシが
+   *  ローラと場所を取り合わず、転倒アームの回転半径の外で、クレーンの立ち位置より手前。 */
+  get washerX() {
+    const xs = Layout.tilterRollXs(...Layout.runoutSpan);
+    return (xs[0] + xs[1]) / 2;
+  },
   /** 受取テーブルは «転倒アームの回転半径 ARM_L の外» から始める（アームが当たらない）。 */
   get runoutSpan() {
     const S = CONFIG.SUPPLY;
@@ -6321,6 +6437,45 @@ const Rolling = {
     const M = CONFIG.MILL, r = M.WR_D / 2000, L = M.BARREL / 1000;
     return 2 * Math.PI * r * r * L * M.ROLL_RC;
   },
+  /** ロール冷却のゾーン z の «冷却の効き»（全ヘッダ定格・全ゾーン開で 1、閉で 0）。 */
+  rollCoolFactor(z) {
+    const RC = CONFIG.MILL.ROLL_COOL, H = Object.values(RC.HEADERS);
+    const head = H.reduce((a, h) => a + (h.on ? Math.max(h.flow, 0) : 0), 0) / H.length;
+    const q = RC.ZONES.STATE[z];
+    return head * (q && q.on ? Math.max(q.flow, 0) : 0);
+  },
+  /**
+   * ロールがクーラントで待機温度へ戻る時定数 [s]。z を渡せばそのゾーン、省けば «平均»
+   * （1/τ の平均の逆数 —— 予測側がパス単位で積むときの 1 本の値）。効き 0 は Infinity
+   * （クーラントでは冷えない。バックアップロールへの逃げだけが残る）。
+   */
+  rollCoolTau(z = null) {
+    const M = CONFIG.MILL, RC = M.ROLL_COOL;
+    if (z === null) {
+      let inv = 0;
+      for (let i = 0; i < RC.ZONES.N; i++) inv += 1 / Rolling.rollCoolTau(i);
+      return inv > 0 ? RC.ZONES.N / inv : Infinity;
+    }
+    const c = Rolling.rollCoolFactor(z);
+    return c > 1e-6 ? M.ROLL_TAU / Math.pow(c, RC.FLOW_K) : Infinity;
+  },
+  /** ゾーン z の幅方向の範囲 [z0, z1] [mm]（胴長を等分。−Z が DS）。 */
+  rollZoneSpan(z) {
+    const M = CONFIG.MILL, n = M.ROLL_COOL.ZONES.N, w = M.BARREL / n;
+    return [-M.BARREL / 2 + z * w, -M.BARREL / 2 + (z + 1) * w];
+  },
+  /** 幅位置 zmm がどのゾーンか（0 〜 N−1）。 */
+  rollZoneOf(zmm) {
+    const M = CONFIG.MILL, n = M.ROLL_COOL.ZONES.N;
+    return Num.clamp(Math.floor((zmm + M.BARREL / 2) / (M.BARREL / n)), 0, n - 1);
+  },
+  /** いま実際に出ている総流量 [L/min]（ヘッダの入切・開き × ゾーンの入切・開き）。 */
+  rollCoolFlowLpm() {
+    const RC = CONFIG.MILL.ROLL_COOL, n = RC.ZONES.N;
+    let zone = 0; for (let i = 0; i < n; i++) { const q = RC.ZONES.STATE[i]; zone += q.on ? Math.max(q.flow, 0) : 0; }
+    let head = 0; for (const h of Object.values(RC.HEADERS)) head += h.on ? Math.max(h.flow, 0) : 0;
+    return RC.FLOW_LPM * head * zone / n;
+  },
   /** バックアップロール 2 本ぶんの熱容量 [J/K]（ワークロールの熱の逃げ場） */
   backupCapacity() {
     const M = CONFIG.MILL, r = M.BR_D / 2000, L = M.BR_BARREL / 1000;
@@ -6870,10 +7025,49 @@ const Rolling = {
    * （下面はテーブルローラの 2 本の接触線でだけ冷える）。層モデルが幅方向を解いて
    * いないので、そちらはまだ入っていない（README 2-3）。
    */
+  /**
+   * 幅方向の曲率の «プロファイル» κ_w(z) [1/mm]（Searle–Ashwell の境界層解）。
+   *
+   * 長手に曲げた板の幅方向の反り（アンチクラスティック）は、板が細ければ全幅に −ν·κ で
+   * 出るが、板が広いと面内の膜剛性に阻まれて中央では消え、**縁に寄った帯だけが立つ**。
+   * その帯の幅は
+   *     ℓ = √(R·h) / (3(1−ν²))^{1/4}        （R = 1/|κ|）
+   * で、縁からの距離 d に対する形は «弾性床上の梁» と同じ減衰振動
+   *     κ_w(d) = −ν·κ · e^{−ξ}(cos ξ + sin ξ),   ξ = d/ℓ
+   * になる（Ashwell 1950）。ξ → 0 で 1（縁は完全に出る）、ξ ≫ 1 で 0（中央は平ら）。
+   * 以前は «全幅で 1 つの値» を 1/(1+β²) でつないでいた（β = b²|κ|/h の Searle 数）が、
+   * 実際の減り方は β⁻² ではなく、縁の帯 ℓ/b ∝ β^{−1/2} に近い —— 広い板ほど差が大きい。
+   *
+   * 実機の «幅反り» は幅いっぱいに定規を当てた隙間なので、プロファイルを 2 回積分した
+   * «形» から読む（rise）。kEq はその隙間と同じ弦の反りを与える «等価の曲率»
+   * （chordRise(kEq, w) = rise）で、記録・計器はこれを従来の kappaW として読む。
+   *
+   * 返り値: { z[], kw[], y[], rise, kEq, ell }  —— y は中央を 0 に置いた形（端 = rise）
+   */
+  anticlasticProfile(kappa, width, h, n = CONFIG.SHAPE.NW) {
+    const nu = CONFIG.SHAPE.POISSON, b = width / 2, N = Math.max(3, n | 1);   // 奇数（中央に点を置く）
+    const z = new Float64Array(N), kw = new Float64Array(N), y = new Float64Array(N);
+    for (let i = 0; i < N; i++) z[i] = -b + width * i / (N - 1);
+    if (!(Math.abs(kappa) > 1e-12) || !(h > 0) || !(width > 0)) return { z, kw, y, rise: 0, kEq: 0, ell: Infinity };
+    const ell = Math.sqrt(h / Math.abs(kappa)) / Math.pow(3 * (1 - nu * nu), 0.25);
+    for (let i = 0; i < N; i++) {
+      const xi = (b - Math.abs(z[i])) / ell;
+      kw[i] = -nu * kappa * Math.exp(-xi) * (Math.cos(xi) + Math.sin(xi));
+    }
+    /* 形: 対称なので中央から片側へ 2 回積分（y(0) = 0, y'(0) = 0）。台形則。 */
+    const mid = (N - 1) >> 1, dz = width / (N - 1);
+    let slope = 0; y[mid] = 0;
+    for (let i = mid + 1; i < N; i++) {
+      slope += (kw[i - 1] + kw[i]) / 2 * dz;
+      y[i] = y[i - 1] + slope * dz - (kw[i - 1] + kw[i]) / 2 * dz * dz / 2;   // 区間内は曲率一定として
+      y[N - 1 - i] = y[i];
+    }
+    const rise = y[N - 1] - y[mid];                     // 端 − 中央（＋ は端が上がる＝樋状）
+    return { z, kw, y, rise, kEq: 8 * rise / (width * width), ell };
+  },
+  /** 幅反りの «等価の曲率»（幅いっぱいの定規の隙間と同じ弦の反りを与える値）。 */
   anticlastic(kappa, width, h) {
-    if (!(Math.abs(kappa) > 1e-12) || !(h > 0) || !(width > 0)) return 0;
-    const b = width / 2, beta = b * b * Math.abs(kappa) / h;
-    return -CONFIG.SHAPE.POISSON * kappa / (1 + beta * beta);
+    return Rolling.anticlasticProfile(kappa, width, h).kEq;
   },
   curlSpan(kappa, h, w, alloy = Rolling.alloy()) {
     const k = Math.abs(kappa);
@@ -6914,6 +7108,54 @@ const Rolling = {
     const q = alloy.RHO * 1e-9 * 9.81 * h * w;               // N/mm
     const L = Math.pow(24 * (EI / q) * delta, 0.25);
     return { L, sigma: 3 * q * L * L / (4 * w * h * h) };
+  },
+  /**
+   * その応力で材料が流れる «ひずみ速度» [1/s]（変形抵抗の式 flowStress の逆関数）。
+   * 二分法（対数軸）。曲げ応力が変形抵抗の «どのひずみ速度» に当たるかを知るためのもので、
+   * 持ち上げの曲げが弾性で済むか（＝クリープで抜けるか）はこれで決まる。
+   */
+  strainRateFor(sigma, T, alloy = Rolling.alloy()) {
+    if (!(sigma > 0)) return 0;
+    let lo = -9, hi = 3;                                    // log10(ε̇): 1e-9 〜 1e3 /s
+    if (Rolling.flowStress(T, Math.pow(10, lo), alloy) >= sigma) return Math.pow(10, lo);
+    if (Rolling.flowStress(T, Math.pow(10, hi), alloy) <= sigma) return Math.pow(10, hi);
+    for (let i = 0; i < 40; i++) {
+      const m = (lo + hi) / 2;
+      if (Rolling.flowStress(T, Math.pow(10, m), alloy) < sigma) lo = m; else hi = m;
+    }
+    return Math.pow(10, (lo + hi) / 2);
+  },
+  /**
+   * 75 mm シャーの下台の持ち上げが «永久の曲がり» としてどれだけ残るか。
+   *
+   * 持ち上げられた板は bedLiftSpan の梁の形に曲がり、その曲げ応力 σ_bend（板厚にも板幅にも
+   * 依らず (3/4)·√(2δEρg)）を持ったまま holdSec のあいだ保持される。熱間のアルミは
+   * この応力でもゆっくり流れる（変形抵抗の式に降伏のしきい値は無い —— 遅いひずみ速度では
+   * 低い応力で流れる）ので、弾性のひずみ ε_e = σ/E はクリープで塑性へ置き換わっていく:
+   *     dε_e/dt = −ε̇_p(σ = E·ε_e)          （全ひずみは下台が押さえているので一定）
+   * これを holdSec だけ積分し、残った弾性ひずみの割合 ε_e(t)/ε_e(0) を «戻る割合»、
+   * 1 − それ を «残る割合» f とする。下台が降りたあと板に残る曲率は f × 梁の曲率
+   *     κ_perm(s) = f · 12·δ·t(1−t)/L²      （t = s/L、中央で最大 3δ/L²）
+   * 実測（既定ロット、65 mm・451 ℃・δ 150・保持 1.7 s）: σ 14.9 MPa に対し ε̇_p 3.5×10⁻⁴ /s、
+   * 応力が抜けるにつれ流れが急に遅くなるので、残るのは 22 %（曲率 2.0×10⁻⁶ /mm ＝
+   * 定尺 1 m で 0.25 mm）。ここは «変形抵抗の式» の精度がそのまま効くので、実機で
+   * «切ったあと反りが増えるか» が分かれば較正する（README 0-4 の «下台の持ち上げが
+   * 永久の曲がりを残すか»。切るなら CONFIG.CROP_SHEAR.BED_SET_ON）。
+   */
+  bedLiftSet(delta, h, w, alloy = Rolling.alloy(), T = CONFIG.MATERIAL.TREF, holdSec = 1.7) {
+    const sp = Rolling.bedLiftSpan(delta, h, w, alloy);
+    if (!(sp.L > 0) || !(sp.sigma > 0)) return { L: 0, sigma: 0, f: 0, kMax: 0, rate: 0, kf: 0, hold: holdSec };
+    const E = alloy.E * 1000, e0 = sp.sigma / E;            // 弾性ひずみ
+    let e = e0;
+    const n = 40, dt = Math.max(holdSec, 0) / n;
+    for (let i = 0; i < n; i++) {                            // 陽解法（e は単調に減るだけ）
+      const rate = Rolling.strainRateFor(e * E, T, alloy);
+      e = Math.max(e - rate * dt, 0);
+    }
+    const f = CONFIG.CROP_SHEAR.BED_SET_ON ? Num.clamp(1 - e / e0, 0, 1) : 0;
+    return { L: sp.L, sigma: sp.sigma, f, kMax: f * 3 * delta / (sp.L * sp.L),
+             rate: Rolling.strainRateFor(sp.sigma, T, alloy), kf: Rolling.flowStress(T, e0 / Math.max(holdSec, 1e-3), alloy),
+             hold: holdSec };
   },
   /**
    * 上の形。d ＝ 下台の «上流側の縁» から上流へ測った距離 [mm]。
@@ -7137,7 +7379,7 @@ const Rolling = {
    * 無負荷ギャップの «形»（研削クラウン ＋ 熱クラウン − 摩耗クラウン）[mm、零平均]。
    * どれも «中央がどれだけ厚くなるか» を µm で持ち、幅方向は放物線で分布させる。
    */
-  rollCrown(zs, w, rollTemp, wear) {
+  rollCrown(zs, w, rollTemp, wear, rollTempZ = null) {
     const M = CONFIG.MILL;
     /* 符号と単位の約束: クラウンはすべて «ロール直径の 中央 − 端»（＝径差。研削仕様と同じ
      * 書き方。正 = 中凸）で持つ。中凸のロールはギャップを中央で «閉じる» ので、
@@ -7153,10 +7395,19 @@ const Rolling = {
     const worn = Num.clamp(M.WEAR_CROWN_K * Math.max(wear, 0), 0, M.WEAR_CROWN_MAX);
     const amp = -(ground + therm - worn) / 1000;                  // µm → mm（板厚の 中央 − 端）
     const out = new Float64Array(zs.length);
-    let m = 0;
+    let m = 0, zoneMax = 0;
     for (let i = 0; i < zs.length; i++) { const t = 2 * zs[i] / w; out[i] = amp * (1 - t * t); m += out[i]; }
+    /* ゾーンコントロールの偏り: あるゾーンだけ冷やしていなければ、そこだけロールが熱く
+     * 径が膨らむ（＝ギャップが閉じる＝板がそこだけ薄い）。平均温度の熱クラウン（上の放物線）は
+     * そのままに、ゾーンの «平均からの偏差» ぶんを重ねる。全ゾーン同じなら 0 で従来どおり。 */
+    if (rollTempZ) {
+      for (let i = 0; i < zs.length; i++) {
+        const dev = M.THERM_CROWN_K * (rollTempZ[Rolling.rollZoneOf(zs[i])] - rollTemp);   // µm（径差）
+        out[i] -= dev / 1000; m -= dev / 1000; zoneMax = Math.max(zoneMax, Math.abs(dev));
+      }
+    }
     m /= zs.length; for (let i = 0; i < zs.length; i++) out[i] -= m;
-    return { prof: out, ground, therm, worn, amp: amp * 1000 };
+    return { prof: out, ground, therm, worn, amp: amp * 1000, zone: zoneMax };
   },
 
   /**
@@ -7229,7 +7480,7 @@ const Rolling = {
     const dpT = new Float64Array(ns);
     for (let i = 0; i < ns; i++)
       dpT[i] = pBar * (this.flowStress(opt.T + wc.prof[i], sr, al) / Math.max(kf0, 1e-6) - 1);
-    const crown = this.rollCrown(zs, w, opt.rollTemp ?? CONFIG.MILL.ROLL_T0, opt.wear ?? 0);
+    const crown = this.rollCrown(zs, w, opt.rollTemp ?? CONFIG.MILL.ROLL_T0, opt.wear ?? 0, opt.rollTempZ ?? null);
     // 右辺 = 平均荷重によるたわみ ＋ 温度差ぶんのたわみ ＋ ベンディング ＋ ロールの形
     /* G の列は «単位 力» に対する応答なので、線荷重を掛けるときは台形則の重みを掛ける
      * （Ĝ_ik = G_ik·w_k）。ここを落とすと荷重が 1/w 倍＝たわみが 2 桁小さくなる。 */
@@ -7730,7 +7981,7 @@ const Rolling = {
     const rollStep = (hIn2, hOut, v, T2, secs) => {
       const chill = Rolling.rollChillK(hIn2, hOut, v, T2, al, width, Troll);
       Troll += chill * rcAl * Vslab / Rolling.rollCapacity();       // 板が失った熱がロールへ入る
-      Troll = Num.approach(Troll, MI.ROLL_T0, MI.ROLL_TAU, secs);   // パス中にクーラントが抜く
+      Troll = Num.approach(Troll, MI.ROLL_T0, Rolling.rollCoolTau(), secs);   // パス中にクーラントが抜く（ゾーンの平均）
       return Troll;
     };
     while (h > hTarget + 0.5 && drafts.length < 30) {
@@ -8087,6 +8338,14 @@ class SlabState {
     this.hProf = new Float32Array(SlabState.NPROF).fill(this.thickness);   // 入側（前パスが残した）
     this._hNext = new Float32Array(SlabState.NPROF).fill(this.thickness);  // 出側（このパスが書く）
     this._hAcc = new Float64Array(SlabState.NPROF); this._hCov = new Float64Array(SlabState.NPROF);   // 出側の重み付き平均
+    /* 反りの長手プロファイル [1/mm]（材料座標、+ は上反り）。板厚と同じ «入側／出側» の 2 本立て:
+     *   kProf  前パスが残した反り（次のパスはこれを入側として読む）
+     *   _kNext このパスが書く反り（重みは _hCov と共用 —— 板厚と «同じ通過» で書くため）
+     * 板全体で 1 つの曲率（kNew）しか持っていなかったのを、材料点ごとに持つ。頭と尻は温度が
+     * 違い（dTProf）、AGC も頭で収束していないので、同じパスでも反りは長手で同じではない。
+     * 75 mm シャーの下台が残す «7 m の区間だけの曲がり» もここに載る（Rolling.bedLiftSet）。 */
+    this.kProf = new Float64Array(SlabState.NPROF); this._kNext = new Float64Array(SlabState.NPROF);
+    this._kSum = new Float64Array(SlabState.NPROF);
     this.dTProf = new Float64Array(SlabState.NPROF);
     /* このパスで «その材料点» に積んだ正味の熱（加工発熱 − ロール抜熱）[K]。dTProf は
      * 通った点にその場で積まれるので、いま噛んでいるセルを dTProf で読むと «この
@@ -8150,6 +8409,37 @@ class SlabState {
     const i = Math.round(Num.clamp(u, 0, 1) * (SlabState.NPROF - 1));
     return this._hCov[i] > 0 ? this._hNext[i] : this.hProf[i];
   }
+  /** 材料座標 u の «いまの» 反り [1/mm]。板厚（hNow）と同じ約束で、もう通った側は出側バッファ。 */
+  kAt(u) {
+    const i = Math.round(Num.clamp(u, 0, 1) * (SlabState.NPROF - 1));
+    return this._hCov[i] > 0 ? this._kNext[i] : this.kProf[i];
+  }
+  /**
+   * 反りの長手分布の読み（計器・形状モニタ・評価器用）。head/tail は端の代表値
+   * （curlAt）、min/max は板全体、prof は «いま» の配列そのもの（読み取り専用で扱うこと）。
+   */
+  get kProfile() {
+    const N = SlabState.NPROF, out = new Float64Array(N);
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < N; i++) { const k = this.kAt(i / (N - 1)); out[i] = k; if (k < lo) lo = k; if (k > hi) hi = k; }
+    return { prof: out, min: lo, max: hi, head: this.curlAt(Num.sign0(this.dir) || 1), tail: this.curlAt(-(Num.sign0(this.dir) || 1)) };
+  }
+  /**
+   * u0〜u1 の区間へ反り [1/mm] を «足す»（fn(t) は区間内の位置 t∈[0,1] での曲率）。
+   * 75 mm シャーの下台が残す曲がりのように «圧延以外で付く» 反りのため。足す先は
+   * そのセルの «いま» のバッファ（通った側は出側、まだの側は入側）—— 次のパスの
+   * 書き込み（writeCurl）はこれを上書きするので、圧延すれば消える。
+   */
+  addCurl(u0, u1, fn) {
+    const N = SlabState.NPROF, a = Num.clamp(Math.min(u0, u1), 0, 1), b = Num.clamp(Math.max(u0, u1), 0, 1);
+    if (!(b > a)) return;
+    const i0 = Math.max(Math.ceil(a * (N - 1)), 0), i1 = Math.min(Math.floor(b * (N - 1)), N - 1);
+    for (let i = i0; i <= i1; i++) {
+      const t = (i / (N - 1) - a) / (b - a), k = fn(t);
+      if (this._hCov[i] > 0) { this._kNext[i] += k; this._kSum[i] = this._kNext[i] * this._hCov[i]; }
+      else this.kProf[i] += k;
+    }
+  }
   /**
    * 板の材料体積 [mm³]。長手プロファイルの積分 × 板幅。
    * «板厚 × 板長» はパスが終わっているときしか正しくない（途中で止めると、もう
@@ -8199,8 +8489,10 @@ class SlabState {
                                return arr[a] * (1 - w) + arr[b] * w; };
     const h = new Float32Array(N), hn = new Float32Array(N);
     const d = new Float64Array(N), q = new Float64Array(N), cov = new Float64Array(N);
+    const kp = new Float64Array(N), kn = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const p = srcOf(i);
+      kp[i] = lerp(this.kProf, p); kn[i] = lerp(this._kNext, p);     // 反りも同じ写像で
       h[i]  = lerp(this.hProf, p);
       /* 【要】出側バッファ（_hNext）は «出側バッファのまま» 付け替える。
        * ここを入側（hProf）から作り直していたため、パスの途中で端を切ると、その
@@ -8220,6 +8512,8 @@ class SlabState {
      * （A と W を別々に補間すると比がずれ、次の書き込みで値が飛ぶ）。 */
     this._hCov.set(cov);
     for (let i = 0; i < N; i++) this._hAcc[i] = hn[i] * cov[i];
+    this.kProf.set(kp); this._kNext.set(kn);
+    for (let i = 0; i < N; i++) this._kSum[i] = kn[i] * cov[i];
     /* 「このパスで書けた範囲」と「前に書いた材料座標」も同じ写像で動かす。
      * 動かさないと、端の埋め戻し（endGauge）が切る前の位置を指す。 */
     const newOf = (p) => (end > 0 ? p / (1 - frac) : (p - frac * (N - 1)) / (1 - frac));
@@ -8280,6 +8574,22 @@ class SlabState {
     }
   }
   /**
+   * u0→u1 の区間へ «出たときの反り» [1/mm] を書き込む。セルの配分は writeGauge と同じ
+   * （通過した割合を重みに平均）。重みは板厚と共用（_hCov）—— 同じ通過で同じセルへ書くので、
+   * 別に持つと «板厚は書けたのに反りは書けていない» セルができる。
+   */
+  writeCurl(u0, u1, k) {
+    const N = SlabState.NPROF, S = this._kSum, W = this._hCov;
+    const p0 = Num.clamp(Math.min(u0, u1), 0, 1) * (N - 1), p1 = Num.clamp(Math.max(u0, u1), 0, 1) * (N - 1);
+    const i0 = Math.max(Math.floor(p0 - 0.5), 0), i1 = Math.min(Math.ceil(p1 + 0.5), N - 1);
+    for (let i = i0; i <= i1; i++) {
+      const ov = Math.max(Math.min(p1, i + 0.5) - Math.max(p0, i - 0.5), 0);
+      const w = p1 > p0 ? ov : (i === Math.round(p0) ? 1e-6 : 0);
+      if (w <= 0) continue;
+      S[i] += k * w; this._kNext[i] = S[i] / Math.max(W[i], 1e-12);
+    }
+  }
+  /**
    * u0→u1 の区間へ «その材料点が受けた加工発熱» [K] を積む。
    *
    * 加工発熱は板全体に一様には入らない。頭は AGC がまだ収束しておらず厚いので圧下が
@@ -8319,6 +8629,7 @@ class SlabState {
   beginGauge() {
     this._hNext.set(this.hProf); this._uPrev = null; this._qProf.fill(0);
     this._hAcc.fill(0); this._hCov.fill(0);
+    this._kNext.set(this.kProf); this._kSum.fill(0);        // 反りも板厚と同じ «入側の写し» から
     this._wLo = SlabState.NPROF; this._wHi = -1;
     this._qLo = 2; this._qHi = -1;                  // 加工発熱を積み終えた材料座標の範囲
   }
@@ -8330,10 +8641,10 @@ class SlabState {
    */
   endGauge() {
     if (this._wHi >= this._wLo) {
-      for (let i = 0; i < this._wLo; i++) this._hNext[i] = this._hNext[this._wLo];
-      for (let i = this._wHi + 1; i < SlabState.NPROF; i++) this._hNext[i] = this._hNext[this._wHi];
+      for (let i = 0; i < this._wLo; i++) { this._hNext[i] = this._hNext[this._wLo]; this._kNext[i] = this._kNext[this._wLo]; }
+      for (let i = this._wHi + 1; i < SlabState.NPROF; i++) { this._hNext[i] = this._hNext[this._wHi]; this._kNext[i] = this._kNext[this._wHi]; }
     }
-    this.hProf.set(this._hNext); this._uPrev = null;
+    this.hProf.set(this._hNext); this.kProf.set(this._kNext); this._uPrev = null;
   }
   /** 端からの距離 [mm]（材料座標 u と現在の板長から）。頭・尻の判定に使う */
   distFromEnd(u) { const L = this.length; return Math.min(u, 1 - u) * L; }
@@ -8366,7 +8677,7 @@ class SlabState {
    * 粗い刻みでも安定。上下差を «均す» のは伝導で、表面からの放熱は両面にほぼ同じだけ効く
    * ので差そのものはあまり動かさない（平均を下げる）。
    */
-  static relax(T, thickness, alloy, secs, step = 5) {
+  static relax(T, thickness, alloy, secs, step = 5, bc = null) {
     const M = CONFIG.MATERIAL, n = T.length, h = thickness / 1000, dz = h / (n - 1);
     const rc = alloy.RHO * alloy.CP, k = alloy.K, K = k / dz;
     const Ta = M.T_AMBIENT, Ak = Ta + 273.15;
@@ -8378,6 +8689,11 @@ class SlabState {
         a[j] = j > 0 ? -K : 0; c[j] = j < n - 1 ? -K : 0;
         b[j] = cap + (j > 0 ? K : 0) + (j < n - 1 ? K : 0); d[j] = cap * T[j];
         if (half) {
+          /* 面の境界。bc があればその面の {h, T}（クーラントなど）に置き換える —— 放射・自然対流は
+           * 液が掛かっている面では桁で小さいので足さない。無ければ従来どおり放射 ＋ 自然対流。 */
+          const face = bc ? (j === 0 ? bc.top : bc.bot) : null;
+          const fb = face ? (typeof face === 'function' ? face(T[j]) : face) : null;
+          if (fb && fb.h > 0) { b[j] += fb.h; d[j] += fb.h * fb.T; continue; }
           const Tk = T[j] + 273.15;
           const hs = M.EMISSIVITY * 5.67e-8 * (Tk * Tk + Ak * Ak) * (Tk + Ak) + M.H_AIR;
           b[j] += hs; d[j] += hs * Ta;
@@ -8388,6 +8704,30 @@ class SlabState {
       for (let j = n - 2; j >= 0; j--) T[j] = (d[j] - c[j] * T[j + 1]) / b[j];
     }
     return T;
+  }
+  /**
+   * スラブ洗浄機（SUPPLY.WASHER）で冷える量。板厚方向の層モデル（relax）に «クーラントの
+   * 境界» を与えて secs 秒だけ解く。面は 400 ℃ 超でライデンフロスト点を大きく超えているので
+   * 膜沸騰（PhysicsEngine.boiling —— 圧延中の板面冷却と同じ 1 式）。上面は掛けた液が溜まる
+   * （WET_TOP）、下面はブラシが液を塗る（WET_BOT）。
+   * 抜ける熱は «液 LITERS が温まって蒸発する» 量を超えられない（超えたら液が尽きたとして
+   * その比で頭打ち）。返り値は冷えたあとの層温度 T と内訳。板の T は書き換えない
+   * （書き換えるかは呼ぶ側 —— SUPPLY.WASHER.COOLS_INPUT）。
+   */
+  static washChill(slab, secs = CONFIG.SUPPLY.WASHER.SEC) {
+    const W = CONFIG.SUPPLY.WASHER, CO = CONFIG.MATERIAL.COOLANT, al = slab.alloy;
+    const T0 = Float64Array.from(slab.T), T = Float64Array.from(slab.T), n = T.length;
+    const mean = (A) => { let q = 0; for (let j = 0; j < n; j++) q += (j === 0 || j === n - 1) ? A[j] / 2 : A[j]; return q / (n - 1); };
+    const face = (wet) => (Ts) => { const bo = PhysicsEngine.boiling(Ts); return { h: bo.h * wet, T: bo.T }; };
+    SlabState.relax(T, slab.thickness, al, secs, 0.25, { top: face(W.WET_TOP), bot: face(W.WET_BOT) });
+    const m0 = mean(T0), m1 = mean(T);
+    const V = slab.thickness * slab.width * Math.max(slab.length, 1) * 1e-9;           // m³
+    const Q = al.RHO * al.CP * V * Math.max(m0 - m1, 0);                                // J
+    const Qcap = W.LITERS * (CO.SPRAY.CP * Math.max(CO.T_SAT - CO.T_BULK, 0) + 2.26e6);   // 液の温まり ＋ 蒸発
+    const capped = Q > Qcap, k = capped ? Qcap / Q : 1;
+    if (capped) for (let j = 0; j < n; j++) T[j] = T0[j] + (T[j] - T0[j]) * k;
+    return { T, dMean: m0 - mean(T), dTop: T0[0] - T[0], dBot: T0[n - 1] - T[n - 1],
+             Q: Q * k / 1e6, Qcap: Qcap / 1e6, capped, secs, liters: W.LITERS };
   }
   /** 板厚方向の上下差 [K]（＋は下面が熱い）。ピット炉の «下から加熱» が残っている量 */
   get soakDT() { return this.T[this.T.length - 1] - this.T[0]; }
@@ -8411,8 +8751,14 @@ class SlabState {
    * 新しい反り、まだ通っていない尾端側が前パスの反りを持つ。
    */
   curlAt(end) {
-    if (this.inBite && this.rollingActive) return end === Num.sign0(this.dir) ? this.kNew : this.kOld;
-    return this.kNew;
+    /* 端の代表値は «端から CURL_END の区間の平均»。板全体の平均（kNew）ではなく
+     * その端の材料点が持つ反りを読む —— 頭と尻で温度も AGC の収束も違うので、同じパスでも
+     * 端の反りは同じではない。噛み込み中の «もう通った側／まだの側» は kAt が振り分ける。 */
+    const N = SlabState.NPROF, n = Math.max(2, Math.round(N * CONFIG.SHAPE.CURL_END));
+    let sum = 0;
+    if (end > 0) for (let i = N - n; i < N; i++) sum += this.kAt(i / (N - 1));
+    else for (let i = 0; i < n; i++) sum += this.kAt(i / (N - 1));
+    return sum / n;
   }
   /**
    * 板の «反りと太り» をひとまとめにした読み取り値。計器・実績・評価器がここだけを見る。
@@ -8424,11 +8770,15 @@ class SlabState {
    */
   get warp() {
     const S = CONFIG.SHAPE, k = this.kNew, h = this.thickness, w = this.width;
-    const kw = Rolling.anticlastic(k, w, h);
+    const ap = Rolling.anticlasticProfile(k, w, h), kw = ap.kEq;
     return { kappa: k, kappaW: kw,
-             len: Rolling.chordRise(k, S.WARP_GAUGE), wid: Rolling.chordRise(kw, w),
+             len: Rolling.chordRise(k, S.WARP_GAUGE), wid: ap.rise,
+             /* 幅方向の «形»（Searle–Ashwell）。形状モニタはこれを描く。 */
+             wProfile: ap,
              prof: this.wShape ? this.wShape.profRatio : null,
-             R: Math.abs(k) > 1e-9 ? 1 / Math.abs(k) / 1000 : Infinity };
+             R: Math.abs(k) > 1e-9 ? 1 / Math.abs(k) / 1000 : Infinity,
+             /* 長手の分布（kProf）。kappa は板全体の平均のまま（記録・計器の意味を変えない）。 */
+             kEnds: [this.curlAt(-1), this.curlAt(1)] };
   }
   /**
    * 端部の張り出し [mm] を «舌» と «ワニ口» に分けて返す。end: +1 = xMax 側 / −1 = xMin 側。
@@ -8638,7 +8988,10 @@ class MillState {
      * coat は厚み [µm]、coatSd はそのムラ。brush* はいまブラシが当たっているかと、その条件。 */
     this.coat = CONFIG.BRUSH.C_NOM; this.coatSd = 0;
     this.brushKey = null; this.brushHz = 0; this.brushOn = false; this.brushPress = null; this.passLen = 0; this.brushAngle = 0;
-    this.rollTemp = CONFIG.MILL.ROLL_T0;       // ワークロール表面温度 [℃]（板から温まる）
+    this.rollTemp = CONFIG.MILL.ROLL_T0;       // ワークロール表面温度 [℃]（板から温まる。ゾーンの平均）
+    /* 幅方向のゾーンごとの WR 温度。板からの熱は板の幅の下のゾーンへ、クーラントの抜熱は
+     * ゾーンの入切・水量で決まる（MILL.ROLL_COOL）。rollTemp はこの平均。 */
+    this.rollTempZ = new Float64Array(CONFIG.MILL.ROLL_COOL.ZONES.N).fill(CONFIG.MILL.ROLL_T0);
     this.brTemp = CONFIG.MILL.ROLL_T0;         // バックアップロール温度 [℃]（WR から熱をもらう）
     this.bendingForce = 0;                     // 3D 表現用（0〜1）
     /* ロールベンディング力 [tonf/対]。形状制御（比例クラウン制御）が動かす。
@@ -8812,6 +9165,7 @@ class SupplyController {
   _sec(key) {
     const fixed = CONFIG.SEQUENCE.find(q => q[1] === key)[2];
     if (typeof fixed === 'number') return fixed;
+    if (typeof fixed === 'string') return fixed.split('.').reduce((o, k) => o?.[k], CONFIG.SUPPLY) || 0.2;   // 'WASHER.SEC' など
     return Math.max(0.2, Layout.moveSec(key, this.slab, this.mill.passLine));
   }
   /** 残り時間 [シミュレーション秒]。工程の秒は距離で決まるので、ここでも同じ _sec を数える。 */
@@ -8825,8 +9179,17 @@ class SupplyController {
   }
   _enter(i) {
     const seq = CONFIG.SEQUENCE, s = this.s, key = seq[i][1];
+    /* 洗浄を抜けるとき: 冷えた量を確定する。持ちかかり温度が «洗浄のあと» の測定なら（既定）
+     * 圧延に掛かる板からは引かない —— 引くと二重に冷やすことになる。 */
+    if (i > 0 && seq[i - 1][1] === 'wash') {
+      const r = SlabState.washChill(this.slab, CONFIG.SUPPLY.WASHER.SEC);
+      s.wash = r;
+      if (CONFIG.SUPPLY.WASHER.COOLS_INPUT) this.slab.T.set(r.T);
+    }
     s.step = i; s.phase = seq[i][0]; s.dur[key] = this._sec(key);
-    this.bus.emit('SYS_MESSAGE', { text: `装入 ${i + 1}/${seq.length}: ${seq[i][3]}`, kind: 'info' });
+    if (key === 'wash') s.wash = SlabState.washChill(this.slab, CONFIG.SUPPLY.WASHER.SEC);   // 見込み（表示用）
+    this.bus.emit('SYS_MESSAGE', { text: `装入 ${i + 1}/${seq.length}: ${seq[i][3]}`
+      + (key === 'wash' && s.wash ? `（板厚平均で ${s.wash.dMean.toFixed(1)} K 冷えます）` : ''), kind: 'info' });
   }
   update(dt) {
     const s = this.s; if (!s.active) return;
@@ -9616,6 +9979,30 @@ class FinishController {
   }
   /** 下台の持ち上げ量 [mm]（cropBlade 0〜1 に対する実位置）。描画と物理でこの 1 式を使う。 */
   bedLift(b = this.s.cropBlade) { return FinishState.liftOf(b); }
+  /**
+   * 下台が上死点に達したとき、持ち上げられていた区間（下台の縁から上流へ浮き上がり長 L）へ
+   * «残る曲がり» を板の長手プロファイルに載せる（Rolling.bedLiftSet）。切り離しのあとに
+   * 呼ぶので、材料座標は切ったあとのもの。次のパスが書き直せば消える（圧延で伸ばされる）。
+   */
+  _bedSet() {
+    const S = CONFIG.CROP_SHEAR, sl = this.slab, F = CONFIG.FLIP;
+    if (!sl.onLine || !(sl.length > 1)) return;
+    const delta = FinishState.liftOf(1);
+    const r = Rolling.bedLiftSet(delta, sl.thickness, sl.width, sl.alloy, sl.temperature, S.T_CUT + S.T_RETURN);
+    /* 同じ端を何度も切る（端部切断は 2〜4 カット）と、同じ区間が何度も持ち上げられる。
+     * 2 度目以降は «まだ弾性で戻っているぶん» にしか効かないので、その端で残した割合を
+     * 積んでおき、残りにだけ f を掛ける（1 − (1−f)ⁿ に飽和する）。切り分けは 1 カットごとに
+     * 区間が違う（定尺 9 m ＞ 浮き上がり長）ので積まない。 */
+    const key = this.s.plateStage === 'DIVIDE' ? `D${this.s.sheetCount}` : `E${this.s.cropEnd}`;
+    const acc = this.s.bedSetAcc?.[key] || 0, fAdd = r.f * (1 - acc);
+    (this.s.bedSetAcc ||= {})[key] = acc + fAdd;
+    this.s.bedSet = { ...r, delta, fAdd, acc: acc + fAdd };   // 計器・評価器が読む
+    if (!(r.L > 0) || !(fAdd > 0)) return;
+    const xEdge = S.X - F * S.BED_L, xFar = xEdge - F * r.L;   // 縁から上流へ L
+    const g = this.mill.gap;
+    const u0 = sl.uAtX(Math.min(xEdge, xFar), g), u1 = sl.uAtX(Math.max(xEdge, xFar), g);
+    sl.addCurl(u0, u1, (t) => fAdd * 12 * delta * t * (1 - t) / (r.L * r.L));
+  }
 
   /**
    * クロップ開始条件。
@@ -9740,7 +10127,7 @@ class FinishController {
         s.cropBlade = Math.min(1, s.cropBlade + dt / S.T_CUT);
         const through = (b) => this.bedLift(b) >= S.UPPER_CLR - th * 0.5;
         if (!through(before) && through(s.cropBlade)) this._sever(s.cropEnd);
-        if (s.cropBlade >= 1) s.cropStage = 'RETURN';
+        if (s.cropBlade >= 1) { s.cropStage = 'RETURN'; this._bedSet(); }
         break;
       }
 
@@ -10173,7 +10560,7 @@ class FinishController {
           const b0 = s.cropBlade, th = sl.thickness; s.cropBlade = Math.min(1, s.cropBlade + dt / S75.T_CUT);
           const through = b => this.bedLift(b) >= S75.UPPER_CLR - th * 0.5;
           if (!through(b0) && through(s.cropBlade)) this._severSheet(sx);
-          if (s.cropBlade >= 1) s.divideStage = 'RETURN';
+          if (s.cropBlade >= 1) { s.divideStage = 'RETURN'; this._bedSet(); }
         }
         break;
       }
@@ -10372,6 +10759,7 @@ class PhysicsEngine {
     CONFIG.SCHEDULE = Rolling.buildSchedule(th, CONFIG.SLAB.TARGET_TH, spec.width, spec.temp,
                         { coil: this.finish.mode === 'COIL', length: spec.length, pass: spec.pass });
     this.mill.rollTemp = CONFIG.MILL.ROLL_T0; this.mill.brTemp = CONFIG.MILL.ROLL_T0;
+    this.mill.rollTempZ.fill(CONFIG.MILL.ROLL_T0);
     this.mill.gap = this.mill.targetGap = this.mill.screw = this.mill.screwCmd = th;
     this.mill.stretch = 0; this.mill.stretchV = 0; this.mill.forceMeas = 0; this.mill.trim = 0; this.mill.gaugeH = null; this.mill._gq.length = 0;
     this.mill._fSum = 0; this.mill._fN = 0;                                  // 学習係数 adapt はロットをまたいで保つ
@@ -11003,12 +11391,15 @@ class PhysicsEngine {
        * 影響係数法は n×n を解くので毎フレームは重い。荷重・板厚・温度が «意味のある量»
        * 動いたときだけ解き直す（弧が満ちてからの 1 回目で必ず解く）。 */
       if (s.biteFill > 0.99) {
-        const sig = `${Math.round(res.forceTon / 20)}:${Math.round(gap * 20)}:${Math.round(s.temperature / 5)}:${Math.round(m.rollTemp / 5)}:${Math.round(m.bendForceT / 10)}:${Math.round(s.width / 5)}`;
+        /* ゾーンの温度の偏り（最大 − 最小）も鍵に入れる —— ゾーンを絞ると平均は同じでも
+         * 幅方向の形が変わるので、解き直しが要る。 */
+        let zLo = Infinity, zHi = -Infinity; for (const t of m.rollTempZ) { if (t < zLo) zLo = t; if (t > zHi) zHi = t; }
+        const sig = `${Math.round(res.forceTon / 20)}:${Math.round(gap * 20)}:${Math.round(s.temperature / 5)}:${Math.round(m.rollTemp / 5)}:${Math.round((zHi - zLo) / 3)}:${Math.round(m.bendForceT / 10)}:${Math.round(s.width / 5)}`;
         if (sig !== s._shapeSig) {
           s._shapeSig = sig;
           s.wShape = Rolling.crown({
             forceT: res.forceTon, width: s.width, hIn: hLoc, hOut: gap, T: s.temperature,
-            speedMpm: m.currentSpeed, bendT: m.bendForceT, rollTemp: m.rollTemp,
+            speedMpm: m.currentSpeed, bendT: m.bendForceT, rollTemp: m.rollTemp, rollTempZ: m.rollTempZ,
             wear: s.rollWork, tPass: Rolling.passTime(s.length, m.currentSpeed), alloy: s.alloy,
             xIn: s.wProf });
         }
@@ -11044,6 +11435,9 @@ class PhysicsEngine {
       const k = kAsym + kDia + Rolling.springback(kPl, gap, res.kf, s.alloy);
       s.kBite = kBite;
       s._kAcc += k * passedFrac; s._kW += passedFrac; s.kNew = s._kAcc / Math.max(s._kW, 1e-9);
+      /* 同じ通過区間（uFrom → u）へ «その材料点の» 反りを書く。板厚（writeGauge）と同じ
+       * セル配分なので、頭の AGC 過渡や尻の冷えがそのまま長手の分布として残る。 */
+      s.writeCurl(uFrom, u, k);
       s.biteOk = res.biteOk;
       s.forwardSlip = res.forwardSlip;
       /* 変形が «表層集中（Δ>1）» から «均一（Δ<1）» へ移った板厚を覚える。
@@ -11202,9 +11596,19 @@ class PhysicsEngine {
    */
   _rollHeat(dTavg, rc) {
     if (!(dTavg > 0)) return;
-    const s = this.slab;
+    const s = this.slab, m = this.mill, RC = CONFIG.MILL.ROLL_COOL, n = RC.ZONES.N;
     const Vslab = s.thickness * s.width * Math.max(s.length, 1) * 1e-9;            // m³
-    this.mill.rollTemp += dTavg * rc * Vslab / Rolling.rollCapacity();
+    const Q = dTavg * rc * Vslab;                                                  // [J]
+    /* 板からの熱は «板の幅の下にあるゾーン» にだけ入る（重なりの割合で配る）。胴長より狭い
+     * 板ではそこだけ熱くなり、蛇行で寄れば片側が熱くなる。ゾーンの平均は従来の rollTemp と
+     * 同じ（熱量は同じ、配り先が違うだけ）。 */
+    const zc = m.rollTempZ, cz = Rolling.rollCapacity() / n;
+    const lo = (s.zOff || 0) - s.width / 2, hi = (s.zOff || 0) + s.width / 2;
+    const ov = new Float64Array(n); let tot = 0;
+    for (let z = 0; z < n; z++) { const [a, b] = Rolling.rollZoneSpan(z); ov[z] = Math.max(0, Math.min(b, hi) - Math.max(a, lo)); tot += ov[z]; }
+    if (tot > 0) for (let z = 0; z < n; z++) zc[z] += Q * (ov[z] / tot) / cz;
+    else for (let z = 0; z < n; z++) zc[z] += Q / n / cz;
+    let mean = 0; for (let z = 0; z < n; z++) mean += zc[z]; m.rollTemp = mean / n;
   }
 
   /**
@@ -11217,15 +11621,20 @@ class PhysicsEngine {
    * 熱は保存する —— WR が失った熱量がそのまま BUR の温度上昇になる。
    */
   _rollCool(dt) {
-    const M = CONFIG.MILL, m = this.mill;
-    // 1) WR → BUR。熱容量の比で温度変化を配る（熱量は保存）
-    const cW = Rolling.rollCapacity(), cB = Rolling.backupCapacity();
+    const M = CONFIG.MILL, m = this.mill, n = M.ROLL_COOL.ZONES.N, zc = m.rollTempZ;
+    // 1) WR → BUR。熱容量の比で温度変化を配る（熱量は保存）。ゾーンごとに BUR と交換する
+    const cW = Rolling.rollCapacity(), cB = Rolling.backupCapacity(), cz = cW / n;
     const k = 1 - Math.exp(-dt / Math.max(M.BR_TAU, 1e-6));
-    const dT = (m.rollTemp - m.brTemp) * k * cB / (cW + cB);     // WR が失う温度
-    m.rollTemp -= dT;
-    m.brTemp += dT * cW / cB;
-    // 2) それぞれのクーラントで待機温度へ
-    m.rollTemp = Num.approach(m.rollTemp, M.ROLL_T0, M.ROLL_TAU, dt);
+    let toB = 0;
+    for (let z = 0; z < n; z++) {
+      const dT = (zc[z] - m.brTemp) * k * cB / (cW + cB);         // そのゾーンが失う温度
+      zc[z] -= dT; toB += dT * cz;                                  // [J/K·K] → BUR へ
+    }
+    m.brTemp += toB / cB;
+    // 2) それぞれのクーラントで待機温度へ。WR はゾーンごとの時定数（ヘッダ・ゾーンの入切と水量）
+    let mean = 0;
+    for (let z = 0; z < n; z++) { zc[z] = Num.approach(zc[z], M.ROLL_T0, Rolling.rollCoolTau(z), dt); mean += zc[z]; }
+    m.rollTemp = mean / n;
     m.brTemp = Num.approach(m.brTemp, M.ROLL_T0, M.BR_TAU0, dt);
   }
 
@@ -11771,6 +12180,7 @@ function initMaterials(envMap) {
     rollFace:  shiny(C.ROLL_FACE, 0.88, 0.22),
     rollNeck:  shiny(C.ROLL_NECK, 0.72, 0.42),
     brushHair: matte(C.BRUSH_HAIR, 0.05, 0.95),
+    hemp:      matte(C.HEMP,       0.02, 0.98),   // 洗浄機の麻ブラシ（黄土色の繊維）
     chock:     matte(C.CHOCK,     0.45, 0.60),
     housing:   matte(C.HOUSING,   0.25, 0.68),
     base:      matte(C.BASE,      0.20, 0.82),
@@ -13132,10 +13542,10 @@ const Parts = {
     return G.merge(parts);
   },
   /* --- トランスファークレーンの吊りビーム（X 方向）とトング --------------------- */
-  /** 吊りビーム。原点＝ビーム中心。両端のハンガーにトング 2 基（別メッシュ）が吊り下がる。 */
+  /** 吊りビーム。原点＝ビーム中心。ハンガーにトング（別メッシュ。本数は TRANSFER.TONG_N）が吊り下がる。 */
   transferBeam() {
     const T = CONFIG.TRANSFER, parts = [G.at(G.box(T.BEAM_L, 420, 600), 0, 0, 0)];
-    for (const sx of [-1, 1]) parts.push(G.at(G.box(360, 360, 900), sx * T.TONG_DX, -300, 0));   // ハンガー（トングの吊り金具）
+    for (const dx of Layout.transferTongXs()) parts.push(G.at(G.box(360, 360, 900), dx, -300, 0));   // ハンガー（トングの吊り金具）
     for (const sx of [-1, 1]) parts.push(G.at(G.box(240, 260, 320), sx * (T.BEAM_L * 0.34), 340, 0));   // ワイヤ受け
     return G.merge(parts);
   },
@@ -14141,9 +14551,20 @@ class MillStandView {
     this.bender = new Instances(Parts.benderBlock(), MAT.hydraulic, 8, { cast: true, dynamic: true, cull: false, name: 'ベンディングシリンダ' });
     this.group.add(this.bender.mesh);
 
-    // --- クーラントヘッダ（入出側 × 上下ロール）---------------------------
-    this.headers = new Instances(G.cyl(180, M.BARREL + 200, 'z', 12), MAT.tableFrame, 4, { dynamic: true, cull: false, name: 'クーラントヘッダ' });
-    this.group.add(this.headers.mesh);
+    // --- クーラントヘッダ（入出側 × 上下ロール）とノズル列 ---------------------
+    // 位置と本数の真実は CONFIG.MILL.ROLL_COOL（物理のゾーンと同じ 1 か所）。
+    {
+      const RC = M.ROLL_COOL;
+      this.headers = new Instances(G.cyl(RC.PIPE_D, M.BARREL + 200, 'z', 12), MAT.tableFrame, 4, { dynamic: true, cull: false, name: 'クーラントヘッダ' });
+      this.group.add(this.headers.mesh);
+      /* ノズル: 胴長に沿って PITCH で並び、WR の軸心へ向く。ゾーンの入切は噴射（SprayView）で
+       * 見せる —— 弁を閉じてもノズルは付いたまま。 */
+      const nPer = Math.floor(M.BARREL / RC.NOZZLE_PITCH);
+      this.nozzles = new Instances(G.cyl(RC.NOZZLE_D, RC.NOZZLE_L, 'y', 8), MAT.tableFrame, 4 * nPer,
+                                   { dynamic: true, cull: false, name: 'クーラントノズル' });
+      this.nozzleZs = Array.from({ length: nPer }, (_, i) => -M.BARREL / 2 + (i + 0.5) * RC.NOZZLE_PITCH);
+      this.group.add(this.nozzles.mesh);
+    }
 
     this.housings.forEach((m, i) => { m.name = i ? 'ハウジング(DS)' : 'ハウジング(OS)'; });
     struct.name = 'スタンド構造'; this.group.name = '圧延機';
@@ -14213,11 +14634,19 @@ class MillStandView {
     // （ロール表面からの距離で置くと、厚板パスでヘッダが板に食い込む）
     // 下側のヘッダは E テーブル（ミル直近の Φ380 ローラ）の «下» をくぐる高さに抑える。
     // ロール軸心から一定量で置くと、パスラインの外には居てもローラの胴に食い込む。
-    const eBot = M.PASS_LINE - CONFIG.TABLE.EROLL.D_END - 130;
+    const eBot = M.PASS_LINE - CONFIG.TABLE.EROLL.D_END - 130, RC = M.ROLL_COOL;
     i = 0;
-    for (const sx of [-1, 1]) for (const [y, dy] of [[wt, -1], [wb, 1]])
-      this.headers.set(i++, sx * 1250, dy > 0 ? Math.min(y + 220, eBot) : y - 220, 0);
-    this.headers.commit();
+    let j = 0;
+    for (const sx of [-1, 1]) for (const [y, dy] of [[wt, -1], [wb, 1]]) {
+      const hx = sx * RC.X, hy = dy > 0 ? Math.min(y + RC.IN, eBot) : y - RC.IN;
+      this.headers.set(i++, hx, hy, 0);
+      /* ノズルはヘッダの表面から WR の軸心（0, y）へ向けて出す。円柱は +Y 軸なので、向きの
+       * 単位ベクトル d に合わせる回転は rz = atan2(−d.x, d.y)。 */
+      const dx = -hx, dy2 = y - hy, len = Math.hypot(dx, dy2) || 1, ux = dx / len, uy = dy2 / len;
+      const r0 = RC.PIPE_D / 2 + RC.NOZZLE_L / 2, rz = Math.atan2(-ux, uy);
+      for (const z of this.nozzleZs) this.nozzles.set(j++, hx + ux * r0, hy + uy * r0, z, 0, 0, rz);
+    }
+    this.headers.commit(); this.nozzles.commit();
   }
 }
 
@@ -15179,7 +15608,7 @@ class SupplyView {
     }
     // トング 2 基（吊りビームの両端）。1 基では長尺スラブが前後に首を振るため 2 点吊りにする。
     // 組み立ても姿勢の解き方も TongRig が持つ（スタッカークレーンのトングと同じ 1 式）。
-    this.tongs = [-1, 1].map((sx) => ({ rig: new TongRig(TR.TONG, this.group, { near }), sx }));
+    this.tongs = Layout.transferTongXs().map((dx) => ({ rig: new TongRig(TR.TONG, this.group, { near }), dx }));
 
     // --- 転倒装置（縦置きスラブを 90° 倒す。ローラは持たない）------------------
     // 転倒軸はベッド面（パスライン）より PIVOT_DROP 下。軸がベッド面から突き出さない
@@ -15214,6 +15643,25 @@ class SupplyView {
     };
     this.bedRolls = mkRolls(Layout.bedSpan, this.tilterArm, '転倒機ベッドローラ');
     this.runoutRolls = mkRolls(Layout.runoutSpan, this.tilterPivot, '受取テーブルローラ');
+    /* --- スラブ洗浄機（受取テーブル上。転倒軸ローカルで置く）------------------------
+     * 門型の架構に、上下 1 対の麻ブラシロール。下ブラシは固定でローラの間に納まり、上ブラシは
+     * 使うときだけ降りてスラブを挟む（開き量 BRUSH.OPEN）。回るのは洗っている間だけ。 */
+    {
+      const W = S.WASHER, B = W.BRUSH, FR = W.FRAME, xw = Layout.washerX, D = S.PIVOT_DROP;
+      const hairGeo = G.cyl(B.D, B.L, 'z', 18), zPost = FR.Z, yTop = D + FR.H_OVER;
+      const yFloor = -(CONFIG.MILL.PASS_LINE - D);
+      const parts = [];
+      for (const sz of [-1, 1]) parts.push(G.at(G.box(FR.POST, yTop - yFloor, FR.POST), xw, (yTop + yFloor) / 2, sz * zPost));   // 柱
+      parts.push(G.at(G.box(FR.W, 260, 2 * zPost + FR.POST), xw, yTop + 130, 0));                                        // 上梁
+      parts.push(G.at(G.box(FR.POST, 200, 2 * zPost - FR.POST), xw, yTop - 100, 0));                                     // ヘッダ受け
+      const frame = new THREE.Mesh(G.merge(parts), MAT.tableFrame); frame.name = 'スラブ洗浄機'; frame.castShadow = true;
+      this.tilterPivot.add(frame);
+      const mk = (name) => { const m = new THREE.Mesh(hairGeo.clone(), MAT.hemp); m.name = name; m.castShadow = true; this.tilterPivot.add(m); return m; };
+      this.washer = { frame, xw, top: mk('洗浄機 上ブラシ'), bot: mk('洗浄機 下ブラシ'), angle: 0, close: 0 };
+      this.washer.bot.position.set(u(xw), u(D - B.D / 2), 0);                 // 下ブラシ: 上面 ＝ パスライン（固定）
+      this.washer.top.position.set(u(xw), u(D + B.D / 2 + B.OPEN), 0);        // 上ブラシ: 開いた位置（板厚は update で）
+      hairGeo.dispose();
+    }
     this.group.add(this.tilterPivot);
 
     // 装入スラブは «角の丸い» 実寸ジオメトリで作る（スケールでは丸みが歪む）。
@@ -15269,9 +15717,15 @@ class SupplyView {
       }
       // 転倒機ベッドのテーブルローラが受取テーブルへ送る（クレーンはまだ触れていない）。
       // 転倒直後の位置（x = TILTER_X + F·L/2）から、クレーンが待つ xFlat まで «コロが» 運ぶ。
-      case 'FEED': {
-        const x0 = S.TILTER_X + F * L / 2;
-        return { x: Num.lerp(x0, xFlat, p.feed), y: P + th / 2, z: S.SIDE_Z, rot: 0, hung: false };
+      /* 送りは 3 段: 洗浄機の手前まで（FEED）→ 洗浄機を通過（WASH。先端が着いてから尾端が抜けるまで）
+       * → クレーンの下まで（FEED2）。X は転倒軸ローカルの «板の中心» で持ち、世界へは xOf で。 */
+      case 'FEED': case 'WASH': case 'FEED2': {
+        const xw = Layout.washerX, xOf = (lx) => S.TILTER_X + F * lx;
+        const lx0 = L / 2, lxW0 = xw - L / 2, lxW1 = xw + L / 2, lxEnd = TR.PARK_DX;
+        const lx = ph === 'FEED' ? Num.lerp(lx0, lxW0, p.feed)
+                 : ph === 'WASH' ? Num.lerp(lxW0, lxW1, p.wash)
+                 :                 Num.lerp(lxW1, lxEnd, p.feed2);
+        return { x: xOf(lx), y: P + th / 2, z: S.SIDE_Z, rot: 0, hung: false, fed: lx - lx0 };
       }
       // トランスファークレーン: トングで掴んで吊り上げ（GRAB）→ 横移動（TRANSFER）→ 降ろす（LOWER）
       case 'GRAB':     return { x: xFlat, y: P + th / 2 + TR.LIFT * mv('grab'), z: S.SIDE_Z, rot: 0, hung: false };
@@ -15322,7 +15776,10 @@ class SupplyView {
     // テーブルローラ: FEED の進捗から «送り距離» を出し、転がり条件 θ = −距離 / 半径 で
     // 回す（角度を積算しないので、コマ落ちや巻き戻しがあっても板とローラがずれない）。
     // 符号は板が +X（ローカル）へ進むとき上面が +X へ動く向き＝ −Z 回り。
-    const fed = Layout.feedDX(slab.length) * Num.clamp(p.feed ?? 0, 0, 1), ang = -fed / (CONFIG.TABLE.ROLL_D_END / 2);
+    const poseNow = this._pose(sup, slab, P);
+    const fed = poseNow.fed !== undefined ? poseNow.fed
+              : (sup.active && ['GRAB', 'TRANSFER', 'LOWER'].includes(sup.phase)) || !sup.active ? Layout.feedDX(slab.length) : 0;
+    const ang = -fed / (CONFIG.TABLE.ROLL_D_END / 2);
     if (ang !== this._rollAng) {
       this._rollAng = ang;
       for (const r of [this.bedRolls, this.runoutRolls]) {
@@ -15340,8 +15797,19 @@ class SupplyView {
 
     const active = sup.active || !slab.onLine;
     this.slab.visible = active;
-    const pose = this._pose(sup, slab, P);
+    const pose = poseNow;
     const th = slab.thickness, w = slab.width, L = slab.length;
+    /* 洗浄機: 洗っている間だけ上ブラシが降りて板を挟み、上下とも回る。板厚は板ごとに違うので
+     * 閉じた高さは «板の上面 ＋ 半径»。閉じる・開くは 0.4 s でなます。 */
+    {
+      const W = S.WASHER, B = W.BRUSH, ws = this.washer, D = S.PIVOT_DROP;
+      const washing = sup.active && sup.phase === 'WASH';
+      ws.close = Num.approach(ws.close, washing ? 1 : 0, 0.15, dt);
+      const yClosed = D + th + B.D / 2, yOpen = D + th + B.D / 2 + B.OPEN;
+      ws.top.position.y = u(Num.lerp(yOpen, yClosed, ws.close));
+      if (washing) ws.angle += 2 * Math.PI * B.RPM / 60 * dt;
+      ws.top.rotation.z = -ws.angle; ws.bot.rotation.z = ws.angle;   // 板を送る向きに逆回り
+    }
 
     // --- 装入クレーン（トロリ・吊具・ワイヤ）: 吊っている間は材料に追従、離したら速度制限で炉へ戻る ---
     const CR = CONFIG.CRANE;
@@ -15409,7 +15877,7 @@ class SupplyView {
     // TongRig が幾何で解く（スタッカークレーンのトングと同じ 1 式）。
     const halfGrip = Num.lerp(w / 2, TG.W_MAX / 2 - TG.JAW_T, t.open);
     let mastTop = 0;
-    for (const tg of this.tongs) mastTop = tg.rig.set(t.x + tg.sx * TR.TONG_DX, t.jawY, t.z, halfGrip).mastTop;
+    for (const tg of this.tongs) mastTop = tg.rig.set(t.x + tg.dx, t.jawY, t.z, halfGrip).mastTop;
     this.girderT.position.x = u(t.x);
     this.trolleyT.position.set(u(t.x), u(this.trolleyYT), u(t.z));
     this.beamT.position.set(u(t.x), u(mastTop + 210), u(t.z));
@@ -15704,13 +16172,30 @@ class SprayView {
     const running = Math.abs(mill.currentSpeed) > 3 && slab.onLine;
 
     if (env.coolant && running) {
-      // 冷却・潤滑エマルジョンをワークロール面へ噴射する（材料への直接噴射ではない）
-      this._emit('coolant', 620, dt, 26, r => {
-        const top = r() < 0.5, sx = r() < 0.5 ? -1 : 1;
+      /* 冷却・潤滑エマルジョンをワークロール面へ噴射する（材料への直接噴射ではない）。
+       * 出るのは «入っているヘッダ» の «入っているゾーン» からだけ、量は実流量に比例
+       * （MILL.ROLL_COOL。物理の抜熱と同じ 1 か所を見る）。 */
+      const RC = M.ROLL_COOL, hs = Object.values(RC.HEADERS).filter(h => h.on && h.flow > 0);
+      const zs = RC.ZONES.STATE.map((q, i) => ({ q, i })).filter(o => o.q.on && o.q.flow > 0);
+      const eff = Rolling.rollCoolFlowLpm() / (RC.FLOW_LPM * 4);
+      if (hs.length && zs.length && eff > 0) this._emit('coolant', 620 * eff, dt, 26, r => {
+        const h = hs[Math.min(hs.length - 1, Math.floor(r() * hs.length))];
+        const zo = zs[Math.min(zs.length - 1, Math.floor(r() * zs.length))];
+        const [z0, z1] = Rolling.rollZoneSpan(zo.i);
+        const top = h.top, sx = h.entry ? 1 : -1;               // 世界 X が正の側が入側（Layout.coolIsEntry）
         const y = (top ? mill.wrTopY : mill.wrBotY) + (top ? 1 : -1) * (M.WR_D / 2 + 400);
-        this.coolant.spawn(sx * 1250 + (r() - .5) * 200, y, (r() - .5) * M.BARREL,
+        this.coolant.spawn(sx * RC.X + (r() - .5) * 200, y, z0 + r() * (z1 - z0),
           -sx * 900 + (r() - .5) * 400, top ? -2600 : 2600, (r() - .5) * 500,
           0.45 + r() * 0.35, 70 + r() * 70);
+      });
+    }
+    /* スラブ洗浄機: 洗っている間だけ、架構のヘッダから板の上面へ落とす（板は転倒機側の Z）。 */
+    if (phys.supply?.active && phys.supply.phase === 'WASH') {
+      const S = CONFIG.SUPPLY, F = CONFIG.FLIP, xw = S.TILTER_X + F * Layout.washerX;
+      const yTop = mill.passLine + slab.thickness + 60;
+      this._emit('coolant', 240, dt, 12, r => {
+        this.coolant.spawn(xw + (r() - .5) * 500, yTop + 700, S.SIDE_Z + (r() - .5) * slab.width,
+          (r() - .5) * 300, -1500 - r() * 800, (r() - .5) * 300, 0.35 + r() * 0.3, 60 + r() * 60);
       });
     }
     this.coolant.update(dt, mill.passLine - 800);
@@ -17896,6 +18381,57 @@ class UIManager {
         coolSide();
       });
     }
+    /* ロール冷却 —— ヘッダ 4 本（入切・水量）と幅方向 7 ゾーン（入切・水量）。
+     * 板面冷却と同じ見た目・同じ操作（押せば入切、スライダで水量）。効きは «ゾーンの時定数» と
+     * «総流量» で見せる。ロール温度のゾーン分布は計器の更新（_rcoolLive）で毎回書く。 */
+    const RC = CONFIG.MILL.ROLL_COOL;
+    const rh = $('rcool-headers'), rz = $('rcool-zones');
+    if (rh && !rh.dataset.built) {
+      rh.dataset.built = '1';
+      rh.innerHTML = Object.entries(RC.HEADERS).map(([k, h]) => `
+        <button class="zbtn" id="rh-${k}" type="button" aria-pressed="true" title="${h.name}ヘッダの弁を開け閉めします（WR と BUR のあいだから WR へ噴く）">${h.name}</button>
+        <input class="zflow" type="range" id="rhf-${k}" min="0" max="150" step="5" value="100" title="${h.name}ヘッダの水量（定格 ${RC.FLOW_LPM.toLocaleString()} L/min に対する %）">
+        <b class="zval" id="rhv-${k}">100 %</b>`).join('');
+      rz.innerHTML = RC.ZONES.NAMES.map((nm, i) => `
+        <button class="zbtn zone" id="rz-${i}" type="button" aria-pressed="true" title="幅方向のゾーン «${nm}» の弁（全ヘッダ共通）">${nm}</button>
+        <input class="zflow" type="range" id="rf-${i}" min="0" max="150" step="5" value="100" title="ゾーン «${nm}» の水量（%）">
+        <b class="zval" id="rv-${i}"><span class="ztemp" id="rt-${i}"></span> 100 %</b>`).join('');
+    }
+    const rcoolSync = () => {
+      for (const [k, h] of Object.entries(RC.HEADERS)) {
+        const b = $('rh-' + k); if (b) { b.setAttribute('aria-pressed', String(h.on)); b.textContent = `${h.name} ${h.on ? 'ON' : 'OFF'}`; }
+        const r = $('rhf-' + k); if (r) r.value = String(Math.round(h.flow * 100));
+        const v = $('rhv-' + k); if (v) v.textContent = `${Math.round(h.flow * 100)} %`;
+      }
+      RC.ZONES.STATE.forEach((q, i) => {
+        const b = $('rz-' + i); if (b) b.setAttribute('aria-pressed', String(q.on));
+        const r = $('rf-' + i); if (r) r.value = String(Math.round(q.flow * 100));
+        const v = $('rv-' + i); if (v) v.innerHTML = `<span class="ztemp" id="rt-${i}"></span> ${Math.round(q.flow * 100)} %`;
+      });
+      const taus = RC.ZONES.STATE.map((_, i) => Rolling.rollCoolTau(i));
+      const fin = taus.filter(Number.isFinite), lpm = Rolling.rollCoolFlowLpm();
+      const onH = Object.values(RC.HEADERS).filter(h => h.on).length, onZ = RC.ZONES.STATE.filter(q => q.on).length;
+      $('lbl-rcool').textContent = `${lpm.toLocaleString(undefined, { maximumFractionDigits: 0 })} L/min`;
+      $('der-rcool').innerHTML =
+        `ヘッダ <b>${onH} / 4 本</b>・ゾーン <b>${onZ} / ${RC.ZONES.N}</b> が開いています。定格は 1 本 ${RC.FLOW_LPM.toLocaleString()} L/min`
+        + `（4 本で ${(RC.FLOW_LPM * 4).toLocaleString()} L/min）。`
+        + `<br>ロールがクーラントで待機温度へ戻る時定数は ${fin.length ? `<b>${Math.min(...fin).toFixed(0)}〜${Math.max(...fin).toFixed(0)} s</b>` : '<b>∞</b>'}`
+        + `（全開で ${CONFIG.MILL.ROLL_TAU} s。効きは流量の ${RC.FLOW_K} 乗）`
+        + (taus.some(t => !Number.isFinite(t)) ? `。<b>閉じたゾーンは冷えません</b> —— そこだけロールが熱くなり、径が膨らんで板がそこだけ薄くなります（熱クラウンの偏り）` : '')
+        + `。<br>板からの熱は <b>板の幅の下のゾーン</b> にだけ入ります（胴長 ${CONFIG.MILL.BARREL.toLocaleString()} mm を ${RC.ZONES.N} 等分）。`;
+      this._summaries();
+    };
+    for (const k of Object.keys(RC.HEADERS)) {
+      on('rh-' + k, 'click', () => { const h = RC.HEADERS[k]; h.on = !h.on; rcoolSync(); });
+      on('rhf-' + k, 'input', (e) => { const h = RC.HEADERS[k]; h.flow = Math.max(0, Number(e.target.value) / 100);
+        if (h.flow === 0) h.on = false; else if (!h.on) h.on = true; rcoolSync(); });
+    }
+    RC.ZONES.STATE.forEach((q, i) => {
+      on('rz-' + i, 'click', () => { q.on = !q.on; rcoolSync(); });
+      on('rf-' + i, 'input', (e) => { q.flow = Math.max(0, Number(e.target.value) / 100);
+        if (q.flow === 0) q.on = false; else if (!q.on) q.on = true; rcoolSync(); });
+    });
+    this._rcoolSync = rcoolSync; rcoolSync();
     on('sm-toggle', 'click', () => this.setShapeMon(!this.shapeMonOn));
     on('sm-close', 'click', () => this.setShapeMon(false));
     for (const b of document.querySelectorAll('#sm-mode button')) {
@@ -18205,9 +18741,11 @@ class UIManager {
      *
      * 反りは板の大きさに対して極小（板幅 1,330 mm に 0.2 mm など）なので、縦だけ拡大する。
      */
-    const drawWarp = (el, kappa, span) => {
+    const drawWarp = (el, kappa, span, shape = null) => {
       if (!el) return;
-      const rise = kappa * span * span / 8;               // 定規と板のあいだの最大隙間（中央）
+      /* shape（中央 0・端 rise の形）が渡されたらそれを描く —— 幅方向は Searle–Ashwell の
+       * 境界層で «縁だけが立つ» ことがあり、放物線では嘘になる。無ければ κ の放物線。 */
+      const rise = shape ? shape[shape.length - 1] - shape[(shape.length - 1) >> 1] : kappa * span * span / 8;
       const amp = Math.abs(rise);
       /* 縦は «図が箱の 7 割» になるよう自動で拡大する。ただし下限を置く ——
        * 置かないと、反りが 0 に近いほど倍率が上がって «ほぼ真っ直ぐな板» が
@@ -18220,10 +18758,10 @@ class UIManager {
       const half = Math.max(amp, FLOOR) / 0.7 / 2, c = rise / 2;
       const py = scaleY(c - half, c + half);
       const cls = flat ? 'flat' : (rise > 0 ? 'up' : 'dn');
-      const N = 41, xs = [], plate = [];
+      const N = shape ? shape.length : 41, xs = [], plate = [];
       for (let i = 0; i < N; i++) {
         const u = i / (N - 1), x = (u - 0.5) * span;
-        xs.push(u); plate.push(kappa * x * x / 2);        // 中央 0・両端 rise
+        xs.push(u); plate.push(shape ? shape[i] - shape[(N - 1) >> 1] : kappa * x * x / 2);   // 中央 0・両端 rise
       }
       const line = plate.map((v, i) => `${i ? 'L' : 'M'}${px(xs[i])} ${py(v)}`).join('');
       const fill = line + `L${px(1)} ${py(rise)}L${px(0)} ${py(rise)}Z`;
@@ -18242,12 +18780,14 @@ class UIManager {
       /* --- 幅方向の反り。板を幅いっぱいの定規で測ったときの隙間（wp.wid）。
        * 圧延では幅方向の反りは丈方向の «裏返し»（アンチクラスティック）で出るので、
        * 向きは丈と逆になるのがふつう。 */
-      const rW = drawWarp($('sm-wid'), wp.kappaW, w) || {};
+      const ap = wp.wProfile, edgeBand = ap && Number.isFinite(ap.ell) ? ap.ell : null;
+      const rW = drawWarp($('sm-wid'), wp.kappaW, w, ap ? ap.y : null) || {};
       const dirW = rW.flat ? '平坦' : (wp.wid > 0 ? '樋状（両耳が上がる）' : '山状（中央が上がる）');
       $('sm-wnum').textContent = `${f2(wp.wid)} mm`;
       $('sm-wnum').title = `幅反り ${wp.wid.toFixed(2)} mm —— 板幅 ${w.toFixed(0)} mm の定規を当てたときの`
-        + `中央の隙間（${dirW}）／ 曲率半径 ${Math.abs(wp.kappaW) > 1e-9 ? (1 / Math.abs(wp.kappaW) / 1000).toFixed(1) + ' m' : '∞'}`
-        + ` ／ 長手の反りに «逆向きに» 従属します（アンチクラスティック）`;
+        + `中央の隙間（${dirW}）／ 等価の曲率半径 ${Math.abs(wp.kappaW) > 1e-9 ? (1 / Math.abs(wp.kappaW) / 1000).toFixed(1) + ' m' : '∞'}`
+        + ` ／ 長手の反りに «逆向きに» 従属します（アンチクラスティック）`
+        + (edgeBand !== null ? ` ／ 立つのは縁から ${edgeBand >= w / 2 ? '全幅' : (edgeBand / 1000).toFixed(2) + ' m の帯'}（Searle–Ashwell）` : '');
       /* --- 丈方向の反り。定尺（WARP_GAUGE）の定規で測った隙間（wp.len）。
        * 実機の «反り» はこの測り方なので、板の全長ではなく定尺で描く。 */
       const rL = drawWarp($('sm-len'), wp.kappa, Math.min(Math.max(s.length, 1), G));
@@ -18257,6 +18797,37 @@ class UIManager {
       $('sm-lnum').title = `丈反り ${wp.len.toFixed(2)} mm —— 定尺 ${(G / 1000).toFixed(0)} m の定規を当てたときの`
         + `中央の隙間（${dirL}）／ 曲率半径 ${wp.R === Infinity ? '∞' : wp.R.toFixed(1) + ' m'}`
         + ` ／ 先端の浮き ${sp.tip.toFixed(0)} mm`;
+      /* --- 長手の分布。材料点ごとの曲率（SlabState.kProfile）を «頭 → 尻» の帯にする。
+       * 色は上の図と同じ約束（上反り＝暖色・下反り＝寒色）、濃さは板の中の最大値に対する比。
+       * 上の 2 段は «代表 1 点» なので、頭だけ跳ねている・7 m だけ曲がっている、といった
+       * «どこが» は、この帯でしか読めない。 */
+      {
+        const el = $('sm-lprof'), row = $('sm-lprof-row');
+        const kp = (typeof s.kAt === 'function' && s.kProfile) ? s.kProfile : null;
+        if (row) row.hidden = !kp;
+        if (el && kp) {
+          const N = kp.prof.length, headLeft = (s.dir || 1) < 0;   // 頭を左に置く（進行方向の先端）
+          const amp = Math.max(Math.abs(kp.min), Math.abs(kp.max), 1e-12);
+          const FLATK = 1e-8;                                       // これ未満は «平坦»（定尺 1 m で 1 µm 級）
+          const cells = Math.min(N, 80), per = N / cells;
+          let html = '';
+          for (let c = 0; c < cells; c++) {
+            let sum = 0, n = 0;
+            for (let i = Math.floor(c * per); i < Math.min(N, Math.floor((c + 1) * per)); i++) { sum += kp.prof[i]; n++; }
+            const k = n ? sum / n : 0, cc = headLeft ? c : cells - 1 - c;
+            const cls = Math.abs(k) < FLATK ? 'flat' : (k > 0 ? 'up' : 'dn');
+            const op = Math.abs(k) < FLATK ? 0.25 : (0.25 + 0.75 * Math.min(Math.abs(k) / amp, 1));
+            html += `<rect class="f-kp ${cls}" x="${(cc * W / cells).toFixed(1)}" y="1" width="${(W / cells + 0.3).toFixed(1)}" height="10" opacity="${op.toFixed(2)}"/>`;
+          }
+          el.innerHTML = html;
+          const G1 = CONFIG.SHAPE.WARP_GAUGE;
+          const lh = Rolling.chordRise(kp.head, G1), lt = Rolling.chordRise(kp.tail, G1);
+          $('sm-lpnum').textContent = `頭 ${f2(lh)} / 尻 ${f2(lt)}`;
+          $('sm-lpnum').title = `長手の分布 —— 頭 ${lh.toFixed(2)} mm ／ 尻 ${lt.toFixed(2)} mm（定尺 ${(G1 / 1000).toFixed(0)} m）`
+            + ` ／ 板の中の最大 ${f2(Rolling.chordRise(Math.abs(kp.max) > Math.abs(kp.min) ? kp.max : kp.min, G1))} mm`
+            + `。左が頭（進行方向の先端）、色は上の図と同じ（暖色＝上反り・寒色＝下反り）、濃いほど大きい`;
+        }
+      }
       $('sm-sub').textContent = `${h.toFixed(h < 30 ? 1 : 0)} × ${w.toFixed(0)} mm`;
       $('sm-ft').innerHTML = `板（実線）に<b>定規</b>（破線）を当てたときの<b>隙間</b>が反りです`
         + ` ・ <b style="color:#e2684a">上反り／樋状</b>（端が上がる）と`
@@ -18265,6 +18836,7 @@ class UIManager {
       return;
     }
 
+    { const lpr = $('sm-lprof-row'); if (lpr) lpr.hidden = true; }   // 長手の分布は反りモードだけ
     /* 板厚方向の倍率。板厚の «変動» が見える大きさになるよう、変動幅から自動で決める
      * （固定倍率だと厚板では潰れ、薄板では振り切れる）。 */
     const K = (dev) => Num.clamp(dev > 1e-6 ? (h * 0.35) / dev : 1, 1, 5000);
@@ -18369,8 +18941,13 @@ class UIManager {
      * その 4 つをそのまま持つ —— «入側 ON» の 1 ビットでは、下面入側だけ入っている
      * 実機の既定（下面は常時 ON）を書き戻せない。
      * entry / exit は古い記録との互換のために残す «読み取り» の値。 */
+    const RC = CONFIG.MILL.ROLL_COOL;
     return { ...this.dims(), cool: SC.MODE, entry: SC.ENTRY, exit: SC.EXIT,
-             zones: Object.fromEntries(Object.entries(SC.ZONES).map(([k, z]) => [k, { on: z.on, flow: z.flow }])) };
+             zones: Object.fromEntries(Object.entries(SC.ZONES).map(([k, z]) => [k, { on: z.on, flow: z.flow }])),
+             /* ロール冷却（ヘッダの入切・水量と幅方向ゾーン）。既定と同じでも持つ —— 記録から
+              * «そのとき何をしていたか» が読めるように。 */
+             rollCool: { headers: Object.fromEntries(Object.entries(RC.HEADERS).map(([k, h]) => [k, { on: h.on, flow: h.flow }])),
+                         zones: RC.ZONES.STATE.map(q => ({ on: q.on, flow: q.flow })) } };
   }
   /** ロットの条件を左メニューへ流し込み、そのまま反映する（画面と運転が食い違わない）。 */
   _applyLot(lot) {
@@ -18404,6 +18981,14 @@ class UIManager {
       const side = (entry, v) => { for (const top of [true, false]) SC.zone(top, entry).on = !!v; };
       if (lot.entry !== undefined) side(true, lot.entry);
       if (lot.exit !== undefined) side(false, lot.exit);
+    }
+    if (lot.rollCool) {                        // ロール冷却。無い記録（古い）は既定のまま
+      const RC = CONFIG.MILL.ROLL_COOL;
+      for (const [k, h] of Object.entries(lot.rollCool.headers || {})) { const t = RC.HEADERS[k]; if (!t || !h) continue;
+        if (h.on !== undefined) t.on = !!h.on; if (h.flow !== undefined) t.flow = Math.max(0, +h.flow); }
+      (lot.rollCool.zones || []).forEach((q, i) => { const t = RC.ZONES.STATE[i]; if (!t || !q) return;
+        if (q.on !== undefined) t.on = !!q.on; if (q.flow !== undefined) t.flow = Math.max(0, +q.flow); });
+      this._rcoolSync?.();
     }
     this._syncStripCool(); this._coolSide();
     this.bus.emit('CMD_SET_SLAB', this.dims());
@@ -19019,6 +19604,8 @@ class UIManager {
         : (Math.abs(kb) > 1e-9 ? `バイト内 ${Rm(kb)} は除荷で戻った` : '平坦');
     }
     this._shapeMon(s);
+    /* ロール冷却のゾーン温度（WR 表面）。絞ったゾーンが熱くなっていくのが数字で見える。 */
+    if (m.rollTempZ) for (let i = 0; i < m.rollTempZ.length; i++) { const el = $('rt-' + i); if (el) el.textContent = `${m.rollTempZ[i].toFixed(0)}℃`; }
     /* 偏芯の状態。«いくつ出ていて、いくつ打ち消しているか» を 1 行で。
      *   熱偏芯 —— 停止時間の抜熱ムラで育つぶん（止めるほど大きい）
      *   荷重の同期成分 —— 同期検波が見ている «ロール 1 回転に 1 周» の荷重の振れ

@@ -22,6 +22,7 @@ const out = await page.evaluate((EPS) => {
   add(SV.pitTong.g);                                            // スタッカークレーンのトング
   for (const t of SV.tongs) add(t.rig.g);                       // トランスファークレーンのトング
   add(SV.bedRolls.inst.mesh); add(SV.runoutRolls.inst.mesh);   // 板が載る側なので当たってよい
+  if (SV.washer) { add(SV.washer.top); add(SV.washer.bot); }      // 洗浄機のブラシは板を挟むのが役目
   const meshes = [];
   SV.group.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && !allow.has(o)) meshes.push(o); });
   for (const z of W.tableView.zones) { meshes.push(z.peds.mesh); }
