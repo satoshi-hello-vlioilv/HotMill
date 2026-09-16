@@ -892,6 +892,55 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
 #dlg-lot .x, #dlg-brush .x, #dlg-req .x { margin-left:auto; width:30px; height:30px; border-radius:8px; border:1px solid var(--line);
   background:var(--s-1); color:var(--ink-3); cursor:pointer; }
 #dlg-lot .x:hover, #dlg-brush .x:hover, #dlg-req .x:hover { color:var(--ink-1); border-color:var(--ink-3); }
+/* --- 沸騰曲線の編集モーダル -------------------------------------------------
+   曲線そのものを «触って» 決める。ハンドル 2 つ（核沸騰の上限・ライデンフロスト点）を
+   ドラッグすると CONFIG が変わり、物理（boiling）が同じ 1 か所を読む。数値欄と双方向。 */
+#dlg-boil { border:none; padding:0; border-radius:var(--r-l); background:var(--s-1); color:var(--ink-1);
+  width:min(880px,95vw); max-height:92vh; box-shadow:var(--shadow-2); }
+#dlg-boil::backdrop { background:rgba(12,18,26,.42); backdrop-filter:blur(2px); }
+#dlg-boil form { display:flex; flex-direction:column; max-height:92vh; }
+#dlg-boil header { flex:none; display:flex; align-items:center; gap:12px; padding:15px 18px; border-bottom:1px solid var(--line); }
+#dlg-boil h2 { margin:0; font-size:14px; font-weight:800; letter-spacing:.04em; }
+#dlg-boil h2 i { opacity:.6; margin-right:5px; }
+#dlg-boil .x { margin-left:auto; width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:var(--s-1); color:var(--ink-3); cursor:pointer; }
+#dlg-boil .x:hover { color:var(--ink-1); border-color:var(--ink-3); }
+#dlg-boil .boil-body { flex:1 1 auto; overflow:auto; padding:14px 18px 16px; display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:14px 18px; }
+#dlg-boil .boil-plot { min-width:0; }
+#dlg-boil svg { width:100%; height:auto; display:block; background:var(--s-2); border:1px solid var(--line); border-radius:var(--r-m); touch-action:none; user-select:none; }
+#dlg-boil .ax { stroke:var(--ink-3); stroke-width:1; }
+#dlg-boil .grid { stroke:var(--line); stroke-width:1; }
+#dlg-boil .grid.minor { stroke:var(--line-2); }
+#dlg-boil .tick { font-size:10px; fill:var(--ink-3); font-variant-numeric:tabular-nums; }
+#dlg-boil .axl { font-size:10.5px; font-weight:700; fill:var(--ink-2); }
+#dlg-boil .cv-base { fill:none; stroke:var(--accent); stroke-width:2.2; }
+#dlg-boil .cv-now { fill:none; stroke:var(--hot); stroke-width:1.6; stroke-dasharray:5 4; }
+#dlg-boil .zone { font-size:10px; fill:var(--ink-3); font-weight:700; }
+#dlg-boil .zone-bg { fill:var(--accent-soft); opacity:.55; }
+#dlg-boil .mark { stroke:var(--ink-2); stroke-width:1; stroke-dasharray:2 3; }
+#dlg-boil .mark-l { font-size:9.5px; fill:var(--ink-2); }
+#dlg-boil .hnd { fill:#fff; stroke:var(--accent); stroke-width:2.5; cursor:grab; }
+#dlg-boil .hnd:hover, #dlg-boil .hnd:focus { stroke:var(--accent-2); stroke-width:3.5; outline:none; }
+#dlg-boil .hnd.drag { cursor:grabbing; fill:var(--accent-soft); }
+#dlg-boil .hnd-l { font-size:10.5px; font-weight:700; fill:var(--accent); pointer-events:none; }
+#dlg-boil .probe { stroke:var(--ink-3); stroke-width:1; stroke-dasharray:3 3; pointer-events:none; }
+#dlg-boil .probe-l { font-size:10.5px; fill:var(--ink-1); font-variant-numeric:tabular-nums; pointer-events:none; }
+#dlg-boil .boil-side { display:flex; flex-direction:column; gap:10px; }
+#dlg-boil .boil-side h3 { margin:0; font-size:11px; font-weight:800; color:var(--ink-2); line-height:1.5; }
+#dlg-boil .boil-side h3 .sw { display:inline-block; vertical-align:middle; width:18px; height:0; border-top:2.2px solid var(--accent); margin-right:6px; }
+#dlg-boil .boil-side h3 span:not(.sw) { font-variant-numeric:tabular-nums; }
+#dlg-boil .boil-side h3 .sw.now { border-top:1.6px dashed var(--hot); }
+#dlg-boil .f { display:flex; flex-direction:column; gap:4px; }
+#dlg-boil .f .lb { font-size:10.5px; font-weight:700; color:var(--ink-3); display:flex; justify-content:space-between; }
+#dlg-boil .f .lb em { font-style:normal; opacity:.75; font-weight:600; }
+#dlg-boil input[type=number] { height:30px; border:1px solid var(--line); border-radius:8px; background:var(--s-1); color:var(--ink-1); font:inherit; font-size:12px; padding:0 9px; width:100%; font-variant-numeric:tabular-nums; }
+#dlg-boil .pair { display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:end; }
+#dlg-boil .pair .f { justify-content:flex-end; }
+#dlg-boil .boil-note { font-size:10.5px; color:var(--ink-3); line-height:1.55; margin:0; }
+#dlg-boil .boil-note b { color:var(--ink-1); font-variant-numeric:tabular-nums; }
+#dlg-boil .boil-est { grid-column:1 / -1; border:1px solid var(--line); border-radius:var(--r-m); background:var(--s-2); padding:10px 13px; font-size:11.5px; line-height:1.6; color:var(--ink-2); }
+#dlg-boil .boil-est b { color:var(--ink-1); font-variant-numeric:tabular-nums; }
+#dlg-boil footer { flex:none; display:flex; gap:8px; padding:12px 18px; border-top:1px solid var(--line); justify-content:flex-end; }
+@media (max-width:760px) { #dlg-boil .boil-body { grid-template-columns:1fr; } }
 #dlg-lot .lot-body, #dlg-brush .lot-body, #dlg-req .lot-body { flex:1 1 auto; overflow:auto; padding:16px 18px; display:flex; flex-direction:column; gap:15px; }
 #dlg-lot .lot-grp h3, #dlg-brush .lot-grp h3, #dlg-req .lot-grp h3 { margin:0 0 9px; font-size:11px; font-weight:800; color:var(--ink-2);
   display:flex; align-items:center; gap:7px; letter-spacing:.06em; }
@@ -1155,6 +1204,15 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
           <div class="top"><span class="k">クーラント劣化度</span><span class="v" id="lbl-age">35<em>%</em></span></div>
           <input type="range" id="rng-age" min="0" max="100" value="35" step="5">
           <div class="derived" id="der-age"></div>
+        </div>
+        <!-- 沸騰曲線そのもの（核沸騰の上限・ライデンフロスト点・膜沸騰の熱伝達率）は、曲線を見ながら
+             ハンドルで決める。ここで動かした値を運転・予測・描画が同じ 1 か所（COOLANT）から読む -->
+        <div class="fld">
+          <div class="top"><span class="k">沸騰曲線</span><span class="v" id="lbl-boil"></span></div>
+          <button class="mini" id="btn-boil" type="button" style="margin-top:6px;"
+                  title="板面温度に対する熱伝達率の曲線を、ハンドルをドラッグして決めます">
+            <i class="fa-solid fa-chart-line"></i> 沸騰曲線を編集…</button>
+          <div class="derived" id="der-boil"></div>
         </div>
       </div>
     </details>
@@ -1611,6 +1669,43 @@ body[data-pill-fit="1"] .tb-run .rb .nm { display:none; }
   </form>
 </dialog>
 
+<dialog id="dlg-boil" aria-labelledby="dlg-boil-ttl">
+  <form method="dialog" id="boil-form">
+    <header>
+      <h2 id="dlg-boil-ttl"><i class="fa-solid fa-chart-line"></i> クーラントの沸騰曲線</h2>
+      <button class="x" value="cancel" type="submit" aria-label="閉じる"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+    <div class="boil-body">
+      <div class="boil-plot">
+        <svg id="boil-svg" viewBox="0 0 680 380" role="img" aria-label="板面温度に対する熱伝達率の曲線。ハンドルをドラッグして核沸騰の上限とライデンフロスト点を動かせます"></svg>
+      </div>
+      <div class="boil-side">
+        <h3><span class="sw"></span> 基準の曲線（濃度 <span id="boil-ref-conc"></span> %・劣化 <span id="boil-ref-age"></span> % で較正）</h3>
+        <div class="pair">
+          <div class="f"><span class="lb">核沸騰の上限 <em>℃</em></span><input type="number" id="boil-tnb" min="106" max="400" step="1"></div>
+          <div class="f"><span class="lb">その熱伝達率 <em>W/m²K</em></span><input type="number" id="boil-hnb" min="200" max="50000" step="100"></div>
+        </div>
+        <div class="pair">
+          <div class="f"><span class="lb">ライデンフロスト点 <em>℃</em></span><input type="number" id="boil-tleid" min="120" max="600" step="1"></div>
+          <div class="f"><span class="lb">膜沸騰の熱伝達率 <em>W/m²K</em></span><input type="number" id="boil-hfilm" min="50" max="20000" step="10"></div>
+        </div>
+        <p class="boil-note">膜沸騰の値は基準サブクール度（<span id="boil-subref"></span> K）での値です。いまの液温では <b id="boil-hfilm-now"></b> W/m²K になります（曲線の右のハンドルはこの値の上にあります）。</p>
+        <h3><span class="sw now"></span> いまの液の状態（濃度 <span id="boil-now-conc"></span> %・劣化 <span id="boil-now-age"></span> %）</h3>
+        <div class="pair">
+          <div class="f"><span class="lb">液温 <em>℃</em></span><input type="number" id="boil-tbulk" min="10" max="100" step="1"></div>
+          <div class="f"><span class="lb">蒸気膜の温度 <em>℃</em></span><input type="number" id="boil-tsat" min="100" max="130" step="1"></div>
+        </div>
+        <p class="boil-note">濃度・劣化度は左のパネルのつまみで動かします。破線はその状態の曲線で、核沸騰 <b id="boil-k-nb"></b>・膜沸騰 <b id="boil-k-film"></b>・ライデンフロスト点 <b id="boil-leid-now"></b> ℃ です。</p>
+      </div>
+      <section class="boil-est" id="boil-est"></section>
+    </div>
+    <footer>
+      <button class="btn btn-ghost" id="boil-reset" type="button">既定に戻す</button>
+      <button class="btn btn-primary" value="ok" type="submit">閉じる</button>
+    </footer>
+  </form>
+</dialog>
+
 <dialog id="dlg-soak">
   <header>
     <div class="hd-t">
@@ -1741,6 +1836,7 @@ const VERSION = {
       { t: 'μ を «場所（中立点の前後）と温度で変わる値» にする必要があるかを測った。すべり速度と表面温度（m(T, ε̇) を通す）で τ(x) を解くせん断層摩擦を Orowan の核に返し（不動点反復・適応緩和）、固定 μ ＋ 固着と同じ入力で比べると荷重 厚板段 +1 %・巻取 −4 %、先進率 −0.2 ポイント、温度依存 0.2 % —— μ 自体の不確かさより小さいので固定値のままとする。違いは速度依存の向きだけで、先進率 2 速度で決まる', w: 'tools/mushear.mjs / docs/圧延荷重に効く要因.md §6 ④′' },
       { t: '較正の仮置き: 起点が 17.7 K 上がると最初の圧下パスの荷重は −8.8 %。4 つの荷重帯は内側のまま（LN_A −1.75 は据え置き）だが、上がり温度が 371 → 376 ℃ と帯（360 ±15）を 1 K 越えるので、合わせ込みノブ H_ROLL を 12,000 → 24,000 W/m²K にして 362 ℃ に戻した（18,000 で 368 ℃。文献域 10〜50 kW/m²K の中）', w: 'CONFIG.MATERIAL.H_ROLL / tools/calib.mjs' },
       { t: '記入表に PICKLAG（洗浄から測るまでの秒）と FWDSLIP2（先進率を 2 速度で）を足し、WASHT の文を «表面» のご回答に合わせた（23 件）', w: 'CONFIG.DATAREQ' },
+      { t: 'クーラントの沸騰曲線を «曲線の上で» 決める編集ダイアログ（ご依頼 2026-09-16）。板面温度 → 熱伝達率（対数）の図に基準の曲線（実線）といまの液の状態の曲線（破線）を boiling() そのもので描き、核沸騰の上限とライデンフロスト点の 2 つのハンドルをドラッグ（矢印キーでも）すると COOLANT の値が変わって運転・予測・描画が同じ 1 か所を読む。数値欄と双方向、圧延中の板の上面・下面の温度を目盛に立て、ホバーで h と熱流束 q。«既定に戻す» つき。左のパネルの «沸騰曲線» 欄から開く', w: 'UIManager.openBoilDialog / _boilDraw / tools/boiltrace.mjs' },
     ] },
     { v: '2.15.0', base: '1688433', date: '2026-09-15', title: '荷重の核を Orowan（不均一変形・すべり／固着）にし、バイト内の温度場・ひずみの過渡・先進率からの μ 同定を入れる', items: [
       { t: '圧力分布の核を Bland–Ford（均一変形・Coulomb）から Orowan の理論へ（柳本「圧延理論（中級）」§2〜3 の式 (27)〜(41) とプログラムを写した）。傾斜 2 平面の係数 ϖ(a)、a ≥ 1 で固着（τ ＝ k\'/2）、前方・後方張力は境界条件、出口側・入口側から 4 次 RK で積んだ 2 本の水平合力の交点が中立点。前進率とトルクは同じ解から。k\'(x)・μ(x) を弧に沿って受ける', w: 'Rolling.orowan / Rolling.arcGrid / Rolling.solve' },
@@ -18808,6 +18904,8 @@ class UIManager {
         `0 % が新液、100 % が更新時期です。遊離油と微粉が増えて乳化が粗くなり、«濡れ» が落ちます。`
         + ` 濃度と同じ向きですが、面に残る堆積物が熱抵抗になるので <b>膜沸騰域にも効きます</b>。`;
       coolFace();
+      this._boilSummary();
+      if ($('dlg-boil')?.open) this._boilDraw();
     };
     on('rng-conc', 'input', coolState);
     on('rng-age', 'input', coolState);
@@ -18932,6 +19030,10 @@ class UIManager {
     on('brush-form', 'submit', (e) => { if (e.submitter?.value === 'ok') this._brushCommit(); });
     on('brush-reset', 'click', () => { this._brushWrite(Brush.rows($('brush-id').value)); this._brushPreview(); });
     on('btn-brush', 'click', () => this.openBrushDialog());
+    on('btn-boil', 'click', () => this.openBoilDialog());
+    on('boil-reset', 'click', () => this._boilReset());
+    for (const id of ['boil-tnb', 'boil-hnb', 'boil-tleid', 'boil-hfilm', 'boil-tbulk', 'boil-tsat']) on(id, 'input', () => this._boilFromFields());
+    this._boilBind();
     on('btn-req', 'click', () => this.openReqDialog());
     on('btn-req-tpl', 'click', () => this.reqTemplate());
     on('btn-req-read', 'click', () => $('req-file').click());
@@ -19665,6 +19767,163 @@ class UIManager {
       $('req-read').hidden = false;
       $('req-read').innerHTML = `<div class="note">△ 読めませんでした: ${escHtml(err.message)}</div>`;
     }
+  }
+  /* ---- 沸騰曲線の編集 -------------------------------------------------------
+   * 物理が読むのは CONFIG.MATERIAL.COOLANT の 1 か所（PhysicsEngine.boiling / coolantCurve）。
+   * ここは «その値を曲線の上で動かす» だけで、曲線そのものも boiling() を呼んで描く ——
+   * 式を 2 か所に書かない。ハンドルは «基準の曲線»（濃度・劣化の基準点での値）に載せ、
+   * いまの液の状態の曲線は破線で添える（つまみは左のパネルにあり、ここでは動かさない）。 */
+  static get BOIL_AX() { return { L: 64, R: 18, T: 18, B: 46, W: 680, H: 380, T0: 20, T1: 600, H0: 100, H1: 50000 }; }
+  _boilX(T) { const A = UIManager.BOIL_AX; return A.L + (A.W - A.L - A.R) * (T - A.T0) / (A.T1 - A.T0); }
+  _boilY(h) { const A = UIManager.BOIL_AX, l0 = Math.log10(A.H0), l1 = Math.log10(A.H1);
+    return A.T + (A.H - A.T - A.B) * (1 - (Math.log10(Math.max(h, A.H0)) - l0) / (l1 - l0)); }
+  _boilTofX(x) { const A = UIManager.BOIL_AX; return A.T0 + (A.T1 - A.T0) * (x - A.L) / (A.W - A.L - A.R); }
+  _boilHofY(y) { const A = UIManager.BOIL_AX, l0 = Math.log10(A.H0), l1 = Math.log10(A.H1);
+    return Math.pow(10, l0 + (l1 - l0) * (1 - (y - A.T) / (A.H - A.T - A.B))); }
+  /** 膜沸騰の «いまの液温での» 係数（boiling() と同じ式。ハンドルの高さ ＝ H_FILM × これ） */
+  _boilSubK() { const C = CONFIG.MATERIAL.COOLANT; const sub = Math.max(C.T_SAT - C.T_BULK, 0) / C.SUB_REF; return C.SUB_K + (1 - C.SUB_K) * sub; }
+  /** 基準の液（CURVE.*_REF）での boiling() —— 濃度・劣化をいったん基準に置いて呼び、戻す */
+  _boilBase(Ts) {
+    const C = CONFIG.MATERIAL.COOLANT, V = C.CURVE, c0 = C.CONC, a0 = C.AGE;
+    C.CONC = V.CONC_REF; C.AGE = V.AGE_REF;
+    const r = PhysicsEngine.boiling(Ts);
+    C.CONC = c0; C.AGE = a0;
+    return r;
+  }
+  openBoilDialog() {
+    const C = CONFIG.MATERIAL.COOLANT;
+    if (!this._boilDefaults) this._boilDefaults = { T_NB: C.T_NB, H_NB: C.H_NB, T_LEID: C.T_LEID, H_FILM: C.H_FILM, T_BULK: C.T_BULK, T_SAT: C.T_SAT };
+    this._boilToFields(); this._boilDraw();
+    $('dlg-boil').showModal();
+  }
+  _boilReset() {
+    const C = CONFIG.MATERIAL.COOLANT, d = this._boilDefaults; if (!d) return;
+    Object.assign(C, d);
+    this._boilToFields(); this._boilDraw(); this._coolState?.();
+  }
+  _boilToFields() {
+    const C = CONFIG.MATERIAL.COOLANT, V = C.CURVE;
+    $('boil-tnb').value = Math.round(C.T_NB); $('boil-hnb').value = Math.round(C.H_NB);
+    $('boil-tleid').value = Math.round(C.T_LEID); $('boil-hfilm').value = Math.round(C.H_FILM);
+    $('boil-tbulk').value = Math.round(C.T_BULK); $('boil-tsat').value = Math.round(C.T_SAT);
+    $('boil-ref-conc').textContent = V.CONC_REF; $('boil-ref-age').textContent = Math.round(V.AGE_REF * 100);
+    $('boil-subref').textContent = C.SUB_REF;
+  }
+  /** 数値欄 → CONFIG（制約: 飽和温度 ＜ 核沸騰の上限 ＜ ライデンフロスト点 − 10） */
+  _boilFromFields() {
+    const C = CONFIG.MATERIAL.COOLANT, num = (id, lo, hi, cur) => { const v = +$(id).value; return Number.isFinite(v) && $(id).value !== '' ? Num.clamp(v, lo, hi) : cur; };
+    C.T_BULK = num('boil-tbulk', 10, 100, C.T_BULK);
+    C.T_SAT = num('boil-tsat', 100, 130, C.T_SAT);
+    C.T_NB = num('boil-tnb', C.T_SAT + 1, 400, C.T_NB);
+    C.T_LEID = num('boil-tleid', C.T_NB + 10, 600, C.T_LEID);
+    C.H_NB = num('boil-hnb', 200, 50000, C.H_NB);
+    C.H_FILM = num('boil-hfilm', 50, 20000, C.H_FILM);
+    this._boilDraw(); this._coolState?.();
+  }
+  /** ハンドルの位置 → CONFIG（ドラッグ・矢印キー共通）。which: 'nb' | 'leid' */
+  _boilSet(which, T, h) {
+    const C = CONFIG.MATERIAL.COOLANT;
+    if (which === 'nb') { C.T_NB = Num.clamp(Math.round(T), C.T_SAT + 1, C.T_LEID - 10); C.H_NB = Num.clamp(Math.round(h / 100) * 100, 200, 50000); }
+    else { C.T_LEID = Num.clamp(Math.round(T), C.T_NB + 10, 600); C.H_FILM = Num.clamp(Math.round(h / this._boilSubK() / 10) * 10, 50, 20000); }
+    this._boilToFields(); this._boilDraw(); this._coolState?.();
+  }
+  _boilBind() {
+    const svg = $('boil-svg'); if (!svg) return;
+    const pt = (e) => { const r = svg.getBoundingClientRect(), A = UIManager.BOIL_AX;
+      return { x: (e.clientX - r.left) * A.W / r.width, y: (e.clientY - r.top) * A.H / r.height }; };
+    let drag = null;
+    svg.addEventListener('pointerdown', (e) => {
+      const h = e.target.closest('.hnd'); if (!h) return;
+      drag = h.dataset.k; h.classList.add('drag'); svg.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    svg.addEventListener('pointermove', (e) => {
+      const q = pt(e);
+      if (drag) { this._boilSet(drag, this._boilTofX(q.x), this._boilHofY(q.y)); return; }
+      this._boilProbe(q.x);
+    });
+    const end = (e) => { if (!drag) return; drag = null; svg.querySelectorAll('.hnd.drag').forEach(h => h.classList.remove('drag')); try { svg.releasePointerCapture(e.pointerId); } catch (_) { /* 取れていなければそれでよい */ } };
+    svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
+    svg.addEventListener('pointerleave', () => { if (!drag) this._boilProbe(null); });
+    // キーボード: 矢印で 1 ℃／2 %、Shift で 10 倍
+    svg.addEventListener('keydown', (e) => {
+      const h = e.target.closest?.('.hnd'); if (!h) return;
+      const C = CONFIG.MATERIAL.COOLANT, k = h.dataset.k, m = e.shiftKey ? 10 : 1;
+      let T = k === 'nb' ? C.T_NB : C.T_LEID, hv = k === 'nb' ? C.H_NB : C.H_FILM * this._boilSubK();
+      if (e.key === 'ArrowLeft') T -= m; else if (e.key === 'ArrowRight') T += m;
+      else if (e.key === 'ArrowUp') hv *= Math.pow(1.02, m); else if (e.key === 'ArrowDown') hv /= Math.pow(1.02, m); else return;
+      e.preventDefault(); this._boilSet(k, T, hv);
+      svg.querySelector(`.hnd[data-k="${k}"]`)?.focus();
+    });
+  }
+  /** ホバー位置の読み取り（板面温度 → h と熱流束 q ＝ h·(Ts − 受け手温度)、いまの液で） */
+  _boilProbe(x) {
+    const g = $('boil-probe'); if (!g) return;
+    const A = UIManager.BOIL_AX;
+    if (x === null || x < A.L || x > A.W - A.R) { g.innerHTML = ''; return; }
+    const Ts = this._boilTofX(x), b = PhysicsEngine.boiling(Ts), q = b.h * (Ts - b.T) / 1e6;
+    const y = this._boilY(b.h), right = x > (A.W - A.R) * 0.62;
+    g.innerHTML = `<line class="probe" x1="${x.toFixed(1)}" y1="${A.T}" x2="${x.toFixed(1)}" y2="${A.H - A.B}"/>`
+      + `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="var(--hot)"/>`
+      + `<text class="probe-l" x="${(x + (right ? -8 : 8)).toFixed(1)}" y="${Math.max(A.T + 12, y - 8).toFixed(1)}" text-anchor="${right ? 'end' : 'start'}">`
+      + `${Ts.toFixed(0)} ℃ → h ${b.h.toFixed(0)} W/m²K・q ${q.toFixed(2)} MW/m²（受け手 ${b.T.toFixed(0)} ℃）</text>`;
+  }
+  _boilSummary() {
+    const el = $('lbl-boil'), d = $('der-boil'); if (!el) return;
+    const C = CONFIG.MATERIAL.COOLANT, cv = PhysicsEngine.coolantCurve();
+    el.innerHTML = `${cv.tLeid.toFixed(0)}<em>℃</em>`;
+    if (d) d.innerHTML = `核沸騰 ${cv.hNB.toFixed(0)} → 膜沸騰 ${(cv.hFilm * this._boilSubK()).toFixed(0)} W/m²K（${C.T_NB} → ${cv.tLeid.toFixed(0)} ℃ で切り替わる）。`
+      + `板面は 300 ℃ 超なので膜沸騰域にいます —— 抜熱を決めるのは右側の高さです。`;
+  }
+  _boilDraw() {
+    const svg = $('boil-svg'); if (!svg) return;
+    const A = UIManager.BOIL_AX, C = CONFIG.MATERIAL.COOLANT, cv = PhysicsEngine.coolantCurve(), subK = this._boilSubK();
+    const X = (T) => this._boilX(T).toFixed(1), Y = (h) => this._boilY(h).toFixed(1);
+    const parts = [];
+    // 軸・目盛
+    for (let T = 100; T <= A.T1; T += 100) parts.push(`<line class="grid" x1="${X(T)}" y1="${A.T}" x2="${X(T)}" y2="${A.H - A.B}"/><text class="tick" x="${X(T)}" y="${A.H - A.B + 14}" text-anchor="middle">${T}</text>`);
+    for (const h of [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000]) {
+      const major = /^[125]0*$/.test(String(h)) && (h === 100 || h === 1000 || h === 10000);
+      parts.push(`<line class="grid${major ? '' : ' minor'}" x1="${A.L}" y1="${Y(h)}" x2="${A.W - A.R}" y2="${Y(h)}"/><text class="tick" x="${A.L - 6}" y="${(+Y(h) + 3.5).toFixed(1)}" text-anchor="end">${h >= 1000 ? (h / 1000) + 'k' : h}</text>`);
+    }
+    parts.push(`<line class="ax" x1="${A.L}" y1="${A.T}" x2="${A.L}" y2="${A.H - A.B}"/><line class="ax" x1="${A.L}" y1="${A.H - A.B}" x2="${A.W - A.R}" y2="${A.H - A.B}"/>`);
+    parts.push(`<text class="axl" x="${(A.L + A.W - A.R) / 2}" y="${A.H - 8}" text-anchor="middle">板面温度 [℃]</text>`);
+    parts.push(`<text class="axl" transform="translate(14 ${(A.T + A.H - A.B) / 2}) rotate(-90)" text-anchor="middle">熱伝達率 h [W/m²K]（対数）</text>`);
+    // 域の背景と名前（基準の曲線の切替点で）
+    parts.push(`<rect class="zone-bg" x="${X(C.T_NB)}" y="${A.T}" width="${(this._boilX(C.T_LEID) - this._boilX(C.T_NB)).toFixed(1)}" height="${A.H - A.T - A.B}"/>`);
+    parts.push(`<text class="zone" x="${((this._boilX(A.T0) + this._boilX(C.T_NB)) / 2).toFixed(1)}" y="${A.T + 13}" text-anchor="middle">核沸騰</text>`);
+    parts.push(`<text class="zone" x="${((this._boilX(C.T_NB) + this._boilX(C.T_LEID)) / 2).toFixed(1)}" y="${A.T + 13}" text-anchor="middle">遷移</text>`);
+    parts.push(`<text class="zone" x="${((this._boilX(C.T_LEID) + this._boilX(A.T1)) / 2).toFixed(1)}" y="${A.T + 13}" text-anchor="middle">膜沸騰（蒸気膜）</text>`);
+    // 曲線: 基準（実線）といまの液（破線）。どちらも boiling() を呼んで描く
+    const path = (fn) => { let d = ''; for (let T = A.T0; T <= A.T1; T += 2) d += `${d ? 'L' : 'M'}${X(T)} ${Y(fn(T).h)}`; return d; };
+    parts.push(`<path class="cv-now" d="${path((T) => PhysicsEngine.boiling(T))}"/>`);
+    parts.push(`<path class="cv-base" d="${path((T) => this._boilBase(T))}"/>`);
+    // 板面温度のマーカー（圧延中の板があれば上面・下面）
+    const sl = window.__phys?.slab;
+    if (sl?.onLine && sl.T) {
+      [['上面', sl.T[0], 28], ['下面', sl.T[sl.T.length - 1], 40]].forEach(([lab, T, dy]) => {
+        if (T < A.T0 || T > A.T1) return;
+        parts.push(`<line class="mark" x1="${X(T)}" y1="${A.T + 18}" x2="${X(T)}" y2="${A.H - A.B}"/><text class="mark-l" x="${X(T)}" y="${A.T + dy}" text-anchor="middle">板 ${lab} ${T.toFixed(0)} ℃</text>`);
+      });
+    }
+    parts.push(`<g id="boil-probe"></g>`);
+    // ハンドル（基準の曲線の上）
+    const hnd = (k, T, h, lab, dx, dy) => `<circle class="hnd" data-k="${k}" tabindex="0" role="slider" aria-label="${lab}" aria-valuetext="${T.toFixed(0)} ℃・${h.toFixed(0)} W/m²K" cx="${X(T)}" cy="${Y(h)}" r="8"/>`
+      + `<text class="hnd-l" x="${(this._boilX(T) + dx).toFixed(1)}" y="${(this._boilY(h) + dy).toFixed(1)}" text-anchor="${dx < 0 ? 'end' : 'start'}">${lab} ${T.toFixed(0)} ℃・${h.toFixed(0)}</text>`;
+    parts.push(hnd('nb', C.T_NB, C.H_NB, '核沸騰の上限', 12, -10));
+    parts.push(hnd('leid', C.T_LEID, C.H_FILM * subK, 'ライデンフロスト点', 12, 18));
+    svg.innerHTML = parts.join('');
+    // 右の欄の «いまの状態» の数字
+    $('boil-hfilm-now').textContent = (C.H_FILM * subK).toFixed(0);
+    $('boil-now-conc').textContent = C.CONC.toFixed(1); $('boil-now-age').textContent = Math.round(C.AGE * 100);
+    const pc = (k) => `${k >= 1 ? '+' : ''}${((k - 1) * 100).toFixed(0)} %`;
+    $('boil-k-nb').textContent = pc(cv.kNB); $('boil-k-film').textContent = pc(cv.kFilm); $('boil-leid-now').textContent = cv.tLeid.toFixed(0);
+    // 見積り: 代表的な板面温度での熱流束と、上がり温度への効き（予測の 1 パスぶん）
+    const rows = [450, 350, 250].map(T => { const b = PhysicsEngine.boiling(T); return `${T} ℃: h <b>${b.h.toFixed(0)}</b>・q <b>${(b.h * (T - b.T) / 1e6).toFixed(2)}</b> MW/m²`; });
+    $('boil-est').innerHTML = `<b>いまの液</b>での抜熱 —— ${rows.join(' ／ ')}。`
+      + `ライデンフロスト点より熱い面は蒸気膜に覆われて液が触れられず、熱伝達率は核沸騰の 1/${(cv.hNB / (cv.hFilm * subK)).toFixed(0)} に落ちます。`
+      + `熱間圧延の板面（300〜500 ℃）はほぼ全部この域なので、<b>効くのは右のハンドル（膜沸騰の高さ）</b>で、左のハンドルは冷え切った尻・クロップ屑にしか効きません。`
+      + `値は運転・予測・描画が同じ 1 か所（COOLANT）から読み、閉じた後も有効です（既定に戻すで元へ）。`;
+    this._boilSummary();
   }
   openBrushDialog() {
     this._buildBrushForm();
